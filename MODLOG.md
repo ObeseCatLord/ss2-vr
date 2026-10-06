@@ -1005,3 +1005,9 @@ to retain both complete shapes without admitting an upright-only query for a
 rotated shape. Added pinned asset/profile audit and failure/cycle/extra-shape
 regressions. Body movement, native ownership and transformed-cover integration
 remain inactive and unfinished; no runtime was launched.
+
+Added an outward-bounded affine image cover for rotated hulls, including centre
+quantization and a caller-owned radius budget. Rotation/shear boundary checks,
+sanitizers, both Windows compile-only fixtures and all41 Debug/Release groups
+pass. This is mathematical cover support; actual native collision-frame binding
+and movement remain unconnected.

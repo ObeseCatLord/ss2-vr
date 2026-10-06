@@ -57,4 +57,35 @@ int main() {
     assert(!placeUprightCover(local,{0,std::numeric_limits<float>::infinity(),0},1).valid);
     assert(!placeUprightCover(local,{0,0,0},0).valid);
 
+    const ss2vr::Matrix34 swim{{1,0,0,3, 0,0,-1,2, 0,1,0,-5}};
+    const auto horizontal=placeAffineCover(local,swim,.32f);
+    assert(horizontal.valid&&horizontal.count==local.count);
+    const ss2vr::Matrix34 shear{{1,.3f,0,19, 0,.8f,.2f,-2, .1f,0,1.2f,7}};
+    for(const auto& transform:{swim,shear}) {
+        const auto transformed=placeAffineCover(local,transform,1);
+        assert(transformed.valid);
+        for(unsigned i=0;i<local.count;++i) for(unsigned j=0;j<257;++j) {
+            const long double z=-1.L+2.L*j/256;
+            const long double angle=static_cast<long double>(j)*2.39996322972865332L;
+            const long double ring=std::sqrt(std::max(0.L,1-z*z));
+            const auto source=local.sphere[i];
+            const long double point[3]={source.centre.x+source.radius*ring*std::cos(angle),
+                source.centre.y+source.radius*ring*std::sin(angle),source.centre.z+source.radius*z};
+            const auto target=transformed.sphere[i];
+            const long double centre[3]={target.centre.x,target.centre.y,target.centre.z};
+            long double distance2=0;
+            for(unsigned r=0;r<3;++r) {
+                long double value=transform.m[r*4+3];
+                for(unsigned c=0;c<3;++c)value+=static_cast<long double>(transform.m[r*4+c])*point[c];
+                distance2+=(value-centre[r])*(value-centre[r]);
+            }
+            assert(distance2<=static_cast<long double>(target.radius)*target.radius);
+        }
+    }
+    auto singular=swim;for(unsigned c=0;c<3;++c)singular.m[4+c]=singular.m[c];
+    assert(!placeAffineCover(local,singular,1).valid);
+    auto nonfinite=swim;nonfinite.m[0]=std::numeric_limits<float>::infinity();
+    assert(!placeAffineCover(local,nonfinite,1).valid);
+    assert(!placeAffineCover(local,swim,.001f).valid);
+
 }

@@ -119,3 +119,21 @@ translated local sphere at positive/negative world offsets through100000.
 A ten-million-unit offset deliberately fails the tested budget. All41 local
 Debug/Release groups, cover ASan/UBSan and both Windows compile-only fixtures
 pass. Native body capture, query ownership and placement are still unconnected.
+
+## Affine image cover for rotated hulls
+
+`placeAffineCover` now encloses the image of each local cover sphere under a
+supplied finite nonsingular3x4 matrix. An outward interval bound on the maximum
+absolute row sum of A-transpose-A bounds the squared operator norm. Query radii
+grow by that scale and the world-centre quantization bound; exceeding the caller's
+radius budget rejects the entire cover. Reflection, rotation and shear are not
+silently normalized away. The existing upright exact-centre shortcut remains.
+
+Independent long-double sphere-boundary checks exercise the90-degree swimming
+orientation and a sheared/stretched matrix, plus singular/nonfinite/budget refusal.
+All41 local Debug/Release groups, cover ASan/UBSan and both Windows compile-only
+fixtures pass. This does not yet bind an actual native hull matrix: the native
+primitive path expands the raw quaternion with particular float spills, while
+the general presentation `matrix(Pose)` helper normalizes it. That presentation
+helper must not be substituted as evidence of the exact native collision frame.
+Native transform admission and full movement integration remain unfinished.

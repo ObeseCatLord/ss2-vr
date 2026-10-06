@@ -1,5 +1,6 @@
 #pragma once
 #include "roomscale_primitive_query.hpp"
+#include "math.hpp"
 #include <array>
 
 namespace ss2vr::roomscale {
@@ -103,6 +104,69 @@ inline CapsuleCover placeUprightCover(const CapsuleCover& local,Vector worldOrig
         const auto radius=outwardFloat(plus(exact(sphere.radius),exact(error)).hi);
         if (!radius||radius>maximumRadius) return {};
         result.sphere[result.count++]={{worldOrigin.x,y,worldOrigin.z},radius};
+    }
+    result.valid=true;
+    return result;
+}
+// Enclose the affine image of every local sphere under a COPIED actual matrix.
+// This is a mathematical cover, not permission to invent the native transform.
+// The caller must establish that this matrix describes the queried hull and
+// that all captured hulls are included. No native query or pose is changed.
+inline CapsuleCover placeAffineCover(const CapsuleCover& local,const ss2vr::Matrix34& matrix,
+                                     float maximumRadius) {
+    using namespace detail;
+    CapsuleCover result;
+    if (!arithmeticSupported()||!local.valid||!local.count||local.count>local.sphere.size()||
+        !std::isfinite(maximumRadius)||maximumRadius<=0) return result;
+    for(float v:matrix.m) if(!std::isfinite(v)) return result;
+    std::array<IntervalVector,3> rows{};
+    for(unsigned r=0;r<3;++r) for(unsigned c=0;c<3;++c)
+        rows[r][c]=exact(matrix.m[r*4+c]);
+    const IntervalVector crossRows{
+        minus(times(rows[1][1],rows[2][2]),times(rows[1][2],rows[2][1])),
+        minus(times(rows[1][2],rows[2][0]),times(rows[1][0],rows[2][2])),
+        minus(times(rows[1][0],rows[2][1]),times(rows[1][1],rows[2][0]))};
+    const auto determinant=inner(rows[0],crossRows);
+    if (!valid(determinant)||(determinant.lo<=0&&determinant.hi>=0)) return result;
+    // ||A||_2^2 = lambda_max(A^T A) <= ||A^T A||_infinity. Interval
+    // products/sums and outward sqrt enclose rounding in the spectral bound.
+    double squaredScale=0;
+    for(unsigned r=0;r<3;++r) {
+        auto rowSum=exact(0);
+        for(unsigned c=0;c<3;++c) {
+            auto dotProduct=exact(0);
+            for(unsigned k=0;k<3;++k)
+                dotProduct=plus(dotProduct,times(rows[k][r],rows[k][c]));
+            if(!valid(dotProduct)) return {};
+            rowSum=plus(rowSum,exact(std::max(std::abs(dotProduct.lo),std::abs(dotProduct.hi))));
+        }
+        if(!valid(rowSum)) return {};
+        squaredScale=std::max(squaredScale,rowSum.hi);
+    }
+    const double scale=up(std::sqrt(squaredScale));
+    if(!std::isfinite(scale)||scale<=0) return {};
+    for(unsigned i=0;i<local.count;++i) {
+        const auto& sphere=local.sphere[i];
+        if(!detail::finite(convert(sphere.centre))||!std::isfinite(sphere.radius)||sphere.radius<=0)
+            return {};
+        const auto input=interval(convert(sphere.centre));
+        std::array<float,3> centre{};
+        IntervalVector errors{};
+        for(unsigned r=0;r<3;++r) {
+            const auto world=plus(inner(rows[r],input),exact(matrix.m[r*4+3]));
+            const double nominal=double(matrix.m[r*4])*sphere.centre.x+
+                double(matrix.m[r*4+1])*sphere.centre.y+
+                double(matrix.m[r*4+2])*sphere.centre.z+matrix.m[r*4+3];
+            centre[r]=static_cast<float>(nominal);
+            if(!valid(world)||!std::isfinite(centre[r])) return {};
+            errors[r]=minus(world,exact(centre[r]));
+        }
+        const auto error=length(errors);
+        if(!valid(error)) return {};
+        const auto needed=plus(times(exact(sphere.radius),exact(scale)),exact(error.hi));
+        const float radius=valid(needed)?outwardFloat(needed.hi):0;
+        if(!radius||radius>maximumRadius) return {};
+        result.sphere[result.count++]={{centre[0],centre[1],centre[2]},radius};
     }
     result.valid=true;
     return result;
