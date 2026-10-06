@@ -1,13 +1,32 @@
-# Implementation status — 2026-10-05
+# Implementation status — 2026-10-06
 
-## Paused by user
+## Active cloud implementation
 
-Implementation is paused. [HANDOFF.md](HANDOFF.md) is the current entry point:
-it records scope, source/archive/worktree boundaries, the final two Astra
-findings received before pause, and exact next proof obligations. No new source
-change, build, package or deployment was made for this documentation handoff.
-The sections below retain historical checkpoints; counts and older limitations
-must be read in that context. The goal remains incomplete, not active.
+Development is active. Start with [CLOUD_CONTINUATION.md](CLOUD_CONTINUATION.md)
+and [PLATFORM_SUPPORT.md](PLATFORM_SUPPORT.md); HANDOFF.md and the records below
+are historical evidence, not the current pause state or feature count.
+
+Windows and Linux via Proton are required. Native magnified scope source views
+and ordered cap imagery are connected in source, alongside native zoom, mounted
+controls/turret lasers, native flat/world overlays and multiplayer integration.
+The current offline suite has41 groups. Native products cross-build; no Windows,
+Wine, game, headset or network runtime has been executed. The owner explicitly
+requires coding to finish first and will perform device testing afterward.
+GitHub Actions is disabled at the owner's request; checks remain local.
+
+Full implementation is NOT complete: roomscale body collision/authoritative
+settlement, physical melee consumption/observer delivery, broader vehicle
+coverage and complete remote-head lifetime/enablement remain open. Optional
+roomscale resource cancellation, primitive contact, bounded body reader and capsule-volume cover
+components are compiled but not activated; they supply
+no body movement or certified collision result. See roomscale notes linked from
+the continuation record. Do not substitute test counts for these integrations.
+
+## Historical checkpoint record
+
+The following sections retain their original scope and conclusions. References
+to “current”, “paused”, old ABI/test counts or absent scope images apply to those
+historical checkpoints only.
 
 ## Unaccepted physical-melee worktree
 

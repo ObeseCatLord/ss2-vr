@@ -397,3 +397,32 @@ All37 Debug/Release groups pass after integrating that regression. This gate
 prevents publishing the private development ancestry; source trees are transferred
 into fresh anonymous publication history instead. It does not claim deletion of
 GitHub caches or third-party copies.
+
+## Optional roomscale query cancellation component
+
+Added a compiled, inactive native resource-cancellation adapter. Inspection found
+two material-getter replacement callbacks beyond the earlier six model-preparer
+sites; both and their caller are covered. Ten resource branches and five native
+post-call propagation/cleanup gates preserve native state outside an explicit
+mod-owned scope. This is not activated body movement. Current design, assembly
+contracts, evidence and remaining owner/geometry/settlement gates are recorded
+in ROOMSCALE_RESOURCE_CANCELLATION_SOURCE.md.
+
+## Primitive initial-contact component
+
+Implemented the inactive primitive counterpart to the triangle query adapter.
+It uses bounded support-plane checks for the exact admitted sphere/box/capsule/
+cylinder descriptors, repairs initial-contact admission without inventing hit
+normals, and preserves native positive-entry execution. Type4 remains unadmitted.
+The hidden-output/native axis contract and compiled entry are verified; all39
+local groups pass both configurations, plus sanitizer and Windows compile-only
+checks. See ROOMSCALE_PRIMITIVE_CONTACT_SOURCE.md for evidence and remaining
+query-owner/geometry/placement/multiplayer gates. Roomscale is not yet connected.
+
+Physical CModelHull collision uses a separate CB3B0 path, reached through CBF90,
+not only the earlier rendered-model preparation route. Its eight resource
+branches now have cancellation gates with native profiler/SEH/ret8 cleanup;
+none cancels while its optional vertex buffer is locked. The adapter now covers
+18 resource branches plus five propagation points. Both x86 products and all40
+local groups still pass; normal provider/collider closure and the actual query
+owner remain pending. See the resource-cancellation source record.

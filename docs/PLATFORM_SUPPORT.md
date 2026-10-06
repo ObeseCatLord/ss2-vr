@@ -84,11 +84,9 @@ Synthetic fixtures cover these failures and retry, without using a game install.
 This is not a guarantee against a separate process maliciously changing directory
 links or files concurrently; stop such activity before installing or removing.
 
-The public `Offline source checks` workflow builds and tests portable helpers in
-Debug and Release on Linux. It also verifies public branch commit privacy and
-requires the Python regression inventory. It uses read-only repository access,
-a commit-pinned checkout action and no retained credentials. No proprietary game
-inputs, Windows executable, Wine, graphics API or headset are used. A green
-workflow is offline regression evidence only, not a native mod build or platform
-runtime certification. Native PE/ABI checks continue separately with private
-owned inputs.
+GitHub Actions is disabled at the owner's request; validation stays local.
+Configure `SS2VR_COMPONENT=core` in Debug and Release, build, then run CTest.
+These portable helper checks use no proprietary game inputs, Windows executable,
+Wine, graphics API or headset. Passing them is offline regression evidence only,
+not a native mod build or platform runtime certification. Native PE/ABI checks
+continue separately with private owned inputs.

@@ -914,3 +914,84 @@ publication metadata, with an explicit required Python-test inventory. A fresh
 local Release configure/build passes all37 groups. This workflow does not build
 or run the Windows mod and has no private game inputs. Remote results are not
 claimed until the published workflow completes.
+
+The first public CI run exposed two runner-compiler fixture assignments that GCC14/16
+accepted. Made the OrderedPosePolicy reset type explicit without changing the
+production policy or assertions. Also advanced the pinned official checkout
+action to its Node24-based v6 to remove the runner deprecation warning. Both
+local configurations still pass all37 tests; remote compatibility has not been
+rechecked because the owner subsequently requested Actions disabled.
+
+
+## 2026-10-06 — Owner-requested local-only checks
+
+Removed the Actions workflow after the owner requested CI disabled for this
+repository. Continue local offline checks and anonymous source publishing. No
+GitHub Actions rerun is requested; the fixture reset fix remains verified only
+with the local compilers. Game/device testing remains the owner's responsibility
+after implementation, per their explicit renewed no-runtime instruction.
+
+## 2026-10-06 — Optional roomscale resource-cancellation boundary
+
+Implemented and cross-built inactive native gates for ten replacement branches
+and five cancellation propagation points. Static inspection found two additional
+material-getter callbacks beyond the prior model-preparer inventory. No hook is
+queued by engine attach; body movement/query ownership remain unfinished. The
+ABI verifier checks pinned native prefixes/cleanup and compiled save/TLS/stack
+boundaries; all38 portable groups pass Debug/Release, with decision sanitizers
+and both Windows compile-only fixtures. No runtime was executed.
+
+## 2026-10-06 — Primitive contact portion of roomscale query
+
+Added an inactive primitive-kernel adapter for bounded nondeepening initial
+contact on native sphere/box/capsule/cylinder descriptors. Preserves original
+unscoped calls and hidden-output ABI; unsupported/deepening/uncertain contacts
+invalidate the entire optional query. All39 local groups pass Debug/Release;
+8000 generated geometry cases, ASan/UBSan, both Windows compile-only fixtures,
+pinned native/compiled ABI and x86 product builds pass. Full roomscale query
+ownership, placement and multiplayer settlement remain unfinished; no runtime.
+
+Added a bounded, outward-rounded local capsule cover using the copied actual
+primitive dimensions, with a caller-supplied query inflation budget and at most
+34 spheres. It covers continuous volume rather than sparse point samples;
+unsupported shapes/budgets fail closed. All40 local groups and cover sanitizers/
+both Windows compile-only checks pass. Native body movement is still unconnected.
+
+## 2026-10-06 — Physical model-hull cancellation coverage
+
+Static inspection found the distinct CModelHull→CBF90→CB3B0 collision path and
+its eight resource-replacement branches. Added exact optional-query gates and
+native false-return cleanup, bringing the inactive adapter to23 bindings. The
+pinned native/compiler verifier, x86 product builds and all40 local Debug/Release
+groups pass. No hook activation, native query or body movement is claimed.
+
+Combined resource/triangle/primitive scope entry now shares one sticky failure
+flag instead of requiring the eventual caller to join two independent results.
+It requires both math bindings, preserves native-finally ownership, and remains
+inactive until the actual query owner is connected. Existing compiled ABI and
+all40 local Debug/Release groups pass with a resource-to-math failure regression.
+
+## 2026-10-06 — Inactive body geometry reader
+
+Added a bounded single-hybrid/single-primitive body reader with generation and
+owner comparisons, separate model/hull placement and fail-closed graph/shape
+validation. The 41st portable group checks synthetic memory and per-read failure;
+all41 Debug/Release groups, reader ASan/UBSan and both Windows compile-only checks
+pass. No live reader, query owner, placement transaction or movement is enabled.
+
+The primitive-hull hit-material path also conditionally replaces a smart object
+after its math result. Added the24th inactive resource/propagation gate, retaining
+the native false-return cleanup and invalidating the whole optional query. Native
+and compiled ABI checks plus x86 products pass. Dummy hulls use a thin kernel;
+complete thick-query hull admission remains open rather than silently ignored.
+
+Bounded optional native hull dispatch to four exact inspected class tables and
+unchanged virtual targets. Unknown/dummy/derived targets cancel the whole query
+through native traversal continuation rather than disappearing from collision.
+The25th inactive gate passes native/compiled ABI checks, both x86 builds and
+all41 local Debug/Release groups. Native query ownership remains unconnected.
+
+Upright capsule-cover placement now accounts conservatively for native world
+float-grid quantization and refuses a radius-budget overflow. Zero-offset sphere
+placement remains exact. All41 local groups plus cover sanitizer and both Windows
+compile-only fixtures pass. This is geometry support, not enabled body movement.

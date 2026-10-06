@@ -917,12 +917,12 @@ int main() {
     check(replaced.receive(first, 2500, ack) && replaced.freeze(2510, sample) &&
               replaced.finishInterval(ack) && ack.clientNonce == 11 && ack.serverNonce == 22,
           "HELLO replacing a staged interval explicitly discards the original immutable token");
-    replaced = {};
+    replaced = OrderedPosePolicy{};
     replaced.validation.bindCapability(31, 32);
     check(!replaced.finishInterval(ack), "new HELLO peer has no old consumption token to acknowledge");
     check(replaced.receive(latest, 2520, ack) == false,
           "old-capability snapshot remains rejected after staged peer replacement");
-    replaced = {};
+    replaced = OrderedPosePolicy{};
     replaced.validation.bindCapability(11, 22);
     check(replaced.receive(first, 2530, ack) && replaced.discardPending(ack) && ack.clientNonce == 11 &&
               ack.acceptedSequence == 1 && !replaced.discardPending(ack),

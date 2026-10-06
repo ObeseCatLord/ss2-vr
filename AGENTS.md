@@ -39,6 +39,12 @@ compilation or an inactive helper. Reopen designs when evidence contradicts
 them, and preserve engine/lifetime/ABI requirements even without an outside
 review step.
 
+## Local-only validation
+The owner explicitly requires implementation to finish before they test on their
+device. Do not launch the game, Windows/Wine host, headset or network sessions,
+and do not ask again for runtime testing before coding is complete. GitHub
+Actions must remain disabled for this repository; run checks locally instead.
+
 ## Build conventions
 C++20, explicit x86 calling conventions at the engine boundary, fixed-width pointer-free IPC structures and bounded waits. Use pinned upstream dependencies with license notices. Use rg for searches. Test behavior and protocol invariants, not copies of implementation. No TODO, stub or guessed ABI may be represented as a complete feature.
 
