@@ -1,23 +1,39 @@
 #include "roomscale_query.hpp"
 #include "native_finally.hpp"
 #include "roomscale_resource_gate.hpp"
+#include "native_memory.hpp"
+#include <cstring>
 
 namespace ss2vr::game {
 static RoomscaleTriangleKernel originalTriangle=nullptr;
 static RoomscalePrimitiveKernel originalPrimitive=nullptr;
 static thread_local roomscale::QueryScope* activeScope=nullptr;
+static uintptr_t triangleEntry=0,primitiveEntry=0;
+static bool installedKernel(uintptr_t entry,uintptr_t target) noexcept {
+    if(!entry||!target||!readableMemory(reinterpret_cast<void*>(entry),5))return false;
+    const auto* bytes=reinterpret_cast<const unsigned char*>(entry);
+    int32_t relative=0;std::memcpy(&relative,bytes+1,4);
+    return bytes[0]==0xe9 && uint32_t(entry+5+uint32_t(relative))==uint32_t(target);
+}
+bool roomscaleCollisionKernelsUsable() noexcept {
+    return originalTriangle&&originalPrimitive&&
+        installedKernel(triangleEntry,reinterpret_cast<uintptr_t>(&ss2vrRoomscaleTriangleQuery))&&
+        installedKernel(primitiveEntry,reinterpret_cast<uintptr_t>(&ss2vrRoomscalePrimitiveQuery));
+}
 
 bool queueRoomscaleTriangleHook(HMODULE core,RoomscaleQueueHook registrar) {
     if (!core||!registrar||originalTriangle) return false;
+    triangleEntry=reinterpret_cast<uintptr_t>(GetProcAddress(core,RoomscaleTriangleExport));
     return registrar(core,RoomscaleTriangleExport,reinterpret_cast<void*>(&ss2vrRoomscaleTriangleQuery),
                      reinterpret_cast<void**>(&originalTriangle)) && originalTriangle;
 }
 bool queueRoomscalePrimitiveHook(HMODULE core,RoomscaleQueueHook registrar) {
     if (!core||!registrar||originalPrimitive) return false;
+    primitiveEntry=reinterpret_cast<uintptr_t>(GetProcAddress(core,RoomscalePrimitiveExport));
     return registrar(core,RoomscalePrimitiveExport,reinterpret_cast<void*>(&ss2vrRoomscalePrimitiveQuery),
                      reinterpret_cast<void**>(&originalPrimitive)) && originalPrimitive;
 }
-void resetRoomscaleTriangleHookAfterRemoval() noexcept { originalTriangle=nullptr; originalPrimitive=nullptr; }
+void resetRoomscaleTriangleHookAfterRemoval() noexcept { originalTriangle=nullptr; originalPrimitive=nullptr; triangleEntry=primitiveEntry=0; }
 
 bool runRoomscaleModelQueryScope(roomscale::QueryScope& scope,DWORD recognizedSimulationThread,
                                 RoomscaleQueryBody body,void* context) noexcept {
@@ -43,7 +59,7 @@ bool runRoomscaleModelQueryScope(roomscale::QueryScope& scope,DWORD recognizedSi
 
 bool runRoomscaleCollisionScope(roomscale::QueryScope& scope,DWORD recognizedSimulationThread,
                                RoomscaleQueryBody body,void* context) noexcept {
-    if (!originalTriangle||!originalPrimitive||!body||!scope.requireWholePathClear||!roomscale::validScope(scope)) {
+    if (!roomscaleCollisionKernelsUsable()||!body||!scope.requireWholePathClear||!roomscale::validScope(scope)) {
         scope.failed=true;
         return false;
     }

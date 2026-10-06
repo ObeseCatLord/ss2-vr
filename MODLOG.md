@@ -1099,3 +1099,14 @@ groups pass Debug/Release; changed geometry tests pass ASan/UBSan and compile fo
 Windows x86/x64. Expanded pinned propagation layout checks pass normally/-O.
 The owner/query/commit/settlement path is still inactive and unfinished. See
 ROOMSCALE_BODY_SWEEP_GEOMETRY.md; no runtime behavior is claimed.
+
+## 2026-10-06 — Native sweep-query driver and enabled-gate admission
+
+Added the inactive native per-sphere sweep driver with whole-cover acceptance,
+actual hull categories and owner/resource revalidation. Query entry now verifies
+that the mathematical detours and all26 resource gates are actually installed,
+not merely queued. Added a bounded copied cleanup-list validator and pinned
+post-simulation/worker-join/scalar-cleanup evidence. All47 Debug/Release groups,
+cleanup ASan/UBSan, x86 products and native/compiled boundary checks pass. A wrong
+radius-argument fixture is rejected. See ROOMSCALE_NATIVE_SWEEP_DRIVER.md; the
+simulation controller/settlement is still unconnected and no runtime was run.

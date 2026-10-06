@@ -1,5 +1,6 @@
 #include "roomscale_resource_gate.hpp"
 #include "native_finally.hpp"
+#include "native_memory.hpp"
 #include "common/optional_query.hpp"
 #include <array>
 #include <cstring>
@@ -14,6 +15,18 @@ thread_local bool *unavailable = nullptr;
 bool gatesQueued = false;
 uintptr_t primitiveHullTable=0,modelHullTable=0,fluidHullTable=0,forceHullTable=0;
 uintptr_t hullEngineBase=0;
+struct InstalledGate { uintptr_t address=0,target=0; };
+std::array<InstalledGate,26> installedGates{};
+bool resourceGatesEnabled() noexcept {
+    if(!gatesQueued)return false;
+    for(const auto& gate:installedGates) {
+        if(!gate.address||!gate.target||!readableMemory(reinterpret_cast<void*>(gate.address),5))return false;
+        const auto* bytes=reinterpret_cast<const unsigned char*>(gate.address);
+        int32_t relative=0;std::memcpy(&relative,bytes+1,4);
+        if(bytes[0]!=0xe9||uint32_t(gate.address+5+uint32_t(relative))!=uint32_t(gate.target))return false;
+    }
+    return true;
+}
 }
 // Called inside a full register/flags/FP save. No native call, allocation,
 // exception, resource mutation, or output publication is permitted here.
@@ -194,10 +207,13 @@ bool queueRoomscaleResourceGates(HMODULE engine, RoomscaleInternalHook registrar
     resourcePrepareCleanup=base+0xe263e;
     resourceScratchReset=base+0xdad90;
     resourceQueryCleanup=base+0xda4f9;
+    static_assert(bindings.size()==installedGates.size());
+    unsigned installed=0;
     for (const auto &binding:bindings) {
         *binding.cancel=binding.cancelEntry?binding.cancelEntry:base+binding.cancelRva;
         *binding.clear=binding.clearRva?base+binding.clearRva:nullptr;
         if (!registrar(engine,binding.rva,binding.entry,binding.original)) return false;
+        installedGates[installed++]={reinterpret_cast<uintptr_t>(base+binding.rva),reinterpret_cast<uintptr_t>(binding.entry)};
     }
     gatesQueued=true;
     return true;
@@ -205,9 +221,10 @@ bool queueRoomscaleResourceGates(HMODULE engine, RoomscaleInternalHook registrar
 void resetRoomscaleResourceGatesAfterRemoval() noexcept {
     // The caller removes every queued detour, including partial registration,
     // and quiesces callers before this reset. No callback may remain active.
-    gatesQueued=false;
+    gatesQueued=false;installedGates={};
     primitiveHullTable=modelHullTable=fluidHullTable=forceHullTable=hullEngineBase=0;
 }
+bool roomscaleResourceScopeUsable() noexcept { return unavailable && !*unavailable; }
 bool finishRoomscaleResourceScopeForCommit(bool &failed) noexcept {
     if (unavailable!=&failed || failed) return false;
     unavailable=nullptr;
@@ -215,7 +232,7 @@ bool finishRoomscaleResourceScopeForCommit(bool &failed) noexcept {
 }
 bool runRoomscaleResourceScope(bool &failed, DWORD thread, RoomscaleResourceBody body, void *context) noexcept {
     if (unavailable) { *unavailable=true; failed=true; return false; }
-    if (!gatesQueued || !thread || GetCurrentThreadId()!=thread || !body || failed) {
+    if (!resourceGatesEnabled() || !thread || GetCurrentThreadId()!=thread || !body || failed) {
         failed=true; return false;
     }
     const bool completed=withNativeFinally([&] {

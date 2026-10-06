@@ -26,6 +26,7 @@ bool queueRoomscaleTriangleHook(HMODULE core,RoomscaleQueueHook registrar);
 bool queueRoomscalePrimitiveHook(HMODULE core,RoomscaleQueueHook registrar);
 // Only after all detours are disabled and removed, with callers quiescent.
 void resetRoomscaleTriangleHookAfterRemoval() noexcept;
+bool roomscaleCollisionKernelsUsable() noexcept;
 
 // Explicit experimental admission, NOT proof of shared native scratch ownership.
 // The caller must separately establish exclusive query scratch / stopped worker
