@@ -1011,3 +1011,11 @@ quantization and a caller-owned radius budget. Rotation/shear boundary checks,
 sanitizers, both Windows compile-only fixtures and all41 Debug/Release groups
 pass. This is mathematical cover support; actual native collision-frame binding
 and movement remain unconnected.
+
+Bounded the actual raw native quaternion expansion and its float spills rather
+than using normalized presentation math. The cover includes finite-precision
+forward/inverse-transpose geometry and now prepares both captured hulls as one
+all-or-nothing result. Two thousand independent reconstruction cases and all41
+local groups pass, alongside body/cover sanitizers, x86/x64 compile-only and
+pinned native layout checks. Native query ownership, movement and settlement
+remain unfinished; no runtime or hook activation.

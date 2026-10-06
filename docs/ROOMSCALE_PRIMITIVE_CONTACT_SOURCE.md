@@ -137,3 +137,31 @@ primitive path expands the raw quaternion with particular float spills, while
 the general presentation `matrix(Pose)` helper normalizes it. That presentation
 helper must not be substituted as evidence of the exact native collision frame.
 Native transform admission and full movement integration remain unfinished.
+
+## Raw native-quaternion envelope and complete copied-body cover
+
+The new `roomscale_hull_transform.hpp` follows the pinned primitive-hull matrix
+expansion, including its four intermediate binary32 spills and final coefficient
+stores. It bounds the raw quaternion rather than normalizing it. The body-layout
+verifier now pins those stores and the identity scalar. Interval cofactors also
+bound the inverse transpose: the native local-ray path uses M-transpose, and
+finite-precision M must not simply be assumed exactly orthogonal. The resulting
+envelope contains both forward-placement and transpose-inverse query geometry.
+
+The affine cover now accepts a coefficient envelope and covers every matrix
+within it, including world-centre quantization. `coverBodyGeometry` builds the
+complete captured one/two-hull union, reserving half the caller's explicit radius
+allowance for frame/position uncertainty. Every final radius still obeys the
+original total allowance. Any failed shape discards the entire result; no partial
+body cover is usable and no native body is resized. A sphere descriptor is handled
+as a spherical capsule with its actual diameter.
+
+Two thousand generated normalized input quaternions are rounded to native float
+storage and checked against an independent long-double reconstruction of the
+spill sequence and inverse transpose. Both must fit the envelope. Tests also
+cover the rotated two-hull body and all-or-nothing failure on its second hull.
+All41 local Debug/Release groups, both cover/body sanitizer fixtures and both
+Windows compile-only fixtures pass; native layout checks pass normally and with
+Python optimization. This remains inactive geometry preparation. It does not
+certify native floating-point TOI, acquire shared query scratch, move a body or
+settle multiplayer origin changes. Unsupported FP environments still reject.

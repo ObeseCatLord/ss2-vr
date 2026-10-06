@@ -1,4 +1,5 @@
 #include "common/roomscale_body_geometry.hpp"
+#include "common/roomscale_hull_transform.hpp"
 #include <array>
 #include <cassert>
 #include <cstring>
@@ -77,6 +78,14 @@ int main() {
     swimming.write(0x682c,Pose{Quat{.70710677f,0,0,.70710677f},{1,2,3}});
     assert(swimming.capture(b)&&b.hullCount==2&&b.hulls[1].address==0x6800);
     auto both=b;
+    const auto complete=roomscale::coverBodyGeometry(both,.04f);
+    assert(complete.valid&&complete.hullCount==2&&complete.queryCount==
+        complete.hulls[0].count+complete.hulls[1].count);
+    auto invalidSecond=both;invalidSecond.hulls[1].primitive.kind=4;
+    const auto rejected=roomscale::coverBodyGeometry(invalidSecond,.04f);
+    assert(!rejected.valid&&rejected.hullCount==0&&rejected.queryCount==0);
+    assert(!roomscale::coverBodyGeometry(both,0).valid);
+
     size_t compoundReads=0;assert(swimming.capture(b,0,&compoundReads));
     for(size_t fail=1;fail<=compoundReads;++fail) {
         b=both;assert(!swimming.capture(b,fail)&&b.player==0&&b.hullCount==0);

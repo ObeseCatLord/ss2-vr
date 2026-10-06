@@ -112,16 +112,17 @@ inline CapsuleCover placeUprightCover(const CapsuleCover& local,Vector worldOrig
 // This is a mathematical cover, not permission to invent the native transform.
 // The caller must establish that this matrix describes the queried hull and
 // that all captured hulls are included. No native query or pose is changed.
-inline CapsuleCover placeAffineCover(const CapsuleCover& local,const ss2vr::Matrix34& matrix,
-                                     float maximumRadius) {
+using AffineEnvelope=std::array<detail::Interval,12>;
+inline CapsuleCover placeAffineEnvelope(const CapsuleCover& local,const AffineEnvelope& matrix,
+                                        float maximumRadius) {
     using namespace detail;
     CapsuleCover result;
     if (!arithmeticSupported()||!local.valid||!local.count||local.count>local.sphere.size()||
         !std::isfinite(maximumRadius)||maximumRadius<=0) return result;
-    for(float v:matrix.m) if(!std::isfinite(v)) return result;
+    for(auto v:matrix) if(!valid(v)) return result;
     std::array<IntervalVector,3> rows{};
     for(unsigned r=0;r<3;++r) for(unsigned c=0;c<3;++c)
-        rows[r][c]=exact(matrix.m[r*4+c]);
+        rows[r][c]=matrix[r*4+c];
     const IntervalVector crossRows{
         minus(times(rows[1][1],rows[2][2]),times(rows[1][2],rows[2][1])),
         minus(times(rows[1][2],rows[2][0]),times(rows[1][0],rows[2][2])),
@@ -153,12 +154,10 @@ inline CapsuleCover placeAffineCover(const CapsuleCover& local,const ss2vr::Matr
         std::array<float,3> centre{};
         IntervalVector errors{};
         for(unsigned r=0;r<3;++r) {
-            const auto world=plus(inner(rows[r],input),exact(matrix.m[r*4+3]));
-            const double nominal=double(matrix.m[r*4])*sphere.centre.x+
-                double(matrix.m[r*4+1])*sphere.centre.y+
-                double(matrix.m[r*4+2])*sphere.centre.z+matrix.m[r*4+3];
-            centre[r]=static_cast<float>(nominal);
-            if(!valid(world)||!std::isfinite(centre[r])) return {};
+            const auto world=plus(inner(rows[r],input),matrix[r*4+3]);
+            if(!valid(world)) return {};
+            centre[r]=static_cast<float>(world.lo*.5+world.hi*.5);
+            if(!std::isfinite(centre[r])) return {};
             errors[r]=minus(world,exact(centre[r]));
         }
         const auto error=length(errors);
@@ -170,5 +169,11 @@ inline CapsuleCover placeAffineCover(const CapsuleCover& local,const ss2vr::Matr
     }
     result.valid=true;
     return result;
+}
+inline CapsuleCover placeAffineCover(const CapsuleCover& local,const ss2vr::Matrix34& matrix,
+                                     float maximumRadius) {
+    AffineEnvelope exactMatrix{};
+    for(unsigned i=0;i<12;++i) exactMatrix[i]=detail::exact(matrix.m[i]);
+    return placeAffineEnvelope(local,exactMatrix,maximumRadius);
 }
 } // namespace ss2vr::roomscale

@@ -6,6 +6,7 @@ No game execution, live pointer access, shape admission or movement occurs.
 import argparse
 import hashlib
 import json
+import struct
 from pathlib import Path
 import capstone
 import pefile
@@ -61,6 +62,27 @@ def verify(game):
         0x5210e:('mov','edx, dword ptr [edi + 0x70]'),
         0x52117:('mov','eax, dword ptr [edi + 0x54]'),
     })
+    require(struct.unpack('<d',engine.get_data(0x208d70,8))[0]==1.,'Quaternion matrix identity scalar changed')
+    check(engine,[(0x525b0,0xc6)],{
+        0x525be:('lea','esi, [ebx + 0x2c]'),
+        0x525c1:('mov','ecx, 7'),
+        0x525eb:('fstp','dword ptr [ebp - 4]'),
+        0x525f6:('fstp','dword ptr [ebp - 0x10]'),
+        0x52609:('fstp','dword ptr [ebp - 0x60]'),
+        0x52614:('fstp','dword ptr [ebp - 0x5c]'),
+        0x5262a:('fstp','dword ptr [ebp - 0x3c]'),
+        0x52631:('fstp','dword ptr [ebp - 0x38]'),
+        0x52639:('fstp','dword ptr [ebp - 0x34]'),
+        0x5263e:('fstp','dword ptr [ebp - 0x30]'),
+        0x52649:('fstp','dword ptr [ebp - 0x2c]'),
+        0x52652:('fstp','dword ptr [ebp - 0x28]'),
+        0x52658:('fstp','dword ptr [ebp - 0x24]'),
+        0x52663:('fstp','dword ptr [ebp - 0x20]'),
+        0x52671:('fstp','dword ptr [ebp - 0x1c]'),
+    })
+    expansion=list(md.disasm(engine.get_data(0x525cb,0xaa),0x100525cb))
+    require(not any(i.mnemonic in ('call','jmp','ret') for i in expansion),
+            'Raw quaternion expansion gained a normalization/callback boundary')
     check(sam,[(0x83b90,0x2e0)],{
         0x83cf1:('mov','dword ptr [ebx + 0x114], eax'),
         0x83cf9:('mov','edx, dword ptr [ebx + 0x120]'),

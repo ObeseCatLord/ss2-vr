@@ -46,3 +46,25 @@ Native server receive-slot/avatar mapping, lifecycle invalidation and a dedicate
 The0.2.4 follow-up adds default-disabled source for native remote head palette adaptation shared by CPU/GPU skinning, with full XYZ/quaternion delta and preserved native animation. Complete worker/model lifetime, normals/extra-pass appearance and anatomical IK remain unproven. Remote pair consistency now freezes age admission and protects publication against lifecycle/history changes. Astra reviewed architecture, source and targeted fixes. Nine offline groups pass, both architectures build, and static verification includes the optional palette entry. See HEAD_ANIMATION_REVIEW_DISPOSITION.md.
 
 The early source0.2.6 follow-ups retained IPC6 and used wire5 for immutable per-shot zoom context. At that checkpoint the native zoom producer was zero and scope optics/native zoom were unfinished; the current native zoom adapter supersedes that limitation. Exact stock alternative-route suppression and17-slot getter admission were Astra-approved native fixes. A shared compile-only predicate entry and incremental all-mode pre-weapon local preparation received separate Astra source reviews. Eleven offline groups passed without runtime execution. The0.2.5 archive remains immutable, wire4 and predates these source changes.
+
+## Swimming control choice — owner requirement, 2026-10-06
+
+Immersive arm-stroke swimming must be optional. Head-directed joystick swimming
+is the baseline and must remain usable without arm gestures; enabling immersive
+input must not remove that fallback. Keep this input choice independent of the
+native swimming/diving collision shapes, water physics, buoyancy and authority.
+Default to the non-gesture mode unless the owner selects immersive swimming.
+
+This is an active implementation requirement, not an already delivered setting.
+There is currently no immersive-swimming consumer. Do not publish a nonfunctional
+configuration toggle or equate the new two-hull geometry capture with arm-stroke
+locomotion. The ordinary native input/RPC/physics path must consume the selected
+movement intent; no direct avatar translation or separate swimming solver.
+
+Static input inspection found native Y+ minus Y- collection at F2F5D/F2F6C,
+followed by positive-Y quantization at F2F78..F2F85, before the complete movement
+vector reaches native ProcessPlayerControls EE0F0 (thiscall,ret1C). Simply putting
+head pitch into the existing Y+ command value is therefore not an established
+analog swimming adapter. Pose+610 values3/4 participate in native swim wobbling,
+but complete movement-frame and mode admission must still be established before
+adding a head-directed water-input hook. Preserve land jumping and mounted input.

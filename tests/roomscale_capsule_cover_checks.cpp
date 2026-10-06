@@ -1,4 +1,5 @@
 #include "common/roomscale_capsule_cover.hpp"
+#include "common/roomscale_hull_transform.hpp"
 #include <cassert>
 #include <limits>
 using namespace ss2vr::roomscale;
@@ -87,5 +88,33 @@ int main() {
     auto nonfinite=swim;nonfinite.m[0]=std::numeric_limits<float>::infinity();
     assert(!placeAffineCover(local,nonfinite,1).valid);
     assert(!placeAffineCover(local,swim,.001f).valid);
+
+    // Independent long-double reconstruction of the native float-store recipe.
+    uint32_t random=0x4321abcd;
+    auto sample=[&]() {random=random*1664525u+1013904223u;return double(int32_t(random))/2147483648.;};
+    for(unsigned test=0;test<2000;++test) {
+        double q[4]={sample(),sample(),sample(),sample()};
+        const double n=std::sqrt(q[0]*q[0]+q[1]*q[1]+q[2]*q[2]+q[3]*q[3]);
+        ss2vr::Pose pose{{float(q[0]/n),float(q[1]/n),float(q[2]/n),float(q[3]/n)},{13,-7,5}};
+        const auto envelope=nativeHullTransformEnvelope(pose);assert(envelope.valid);
+        const long double x=pose.q.x,y=pose.q.y,z=pose.q.z,w=pose.q.w;
+        const long double a=2*x*x,b=2*y*x,c=2*z*x,d=float(2*y*y),e=float(2*z*y),f=2*z*z;
+        const long double g=float(2*w*x),h=float(2*w*y),i=2*w*z;
+        const long double m[3][3]={{float(1-(f+d)),float(b-i),float(h+c)},
+            {float(i+b),float(1-(a+f)),float(e-g)},{float(c-h),float(g+e),float(1-(d+a))}};
+        long double cofactor[3][3]{};
+        for(unsigned row=0;row<3;++row)for(unsigned col=0;col<3;++col)
+            cofactor[row][col]=m[(row+1)%3][(col+1)%3]*m[(row+2)%3][(col+2)%3]-
+                               m[(row+1)%3][(col+2)%3]*m[(row+2)%3][(col+1)%3];
+        const long double determinant=m[0][0]*cofactor[0][0]+m[0][1]*cofactor[0][1]+m[0][2]*cofactor[0][2];
+        for(unsigned row=0;row<3;++row)for(unsigned col=0;col<3;++col) {
+            const auto bound=envelope.matrix[row*4+col];const long double inverse=cofactor[row][col]/determinant;
+            assert(bound.lo<=m[row][col]&&m[row][col]<=bound.hi);
+            assert(bound.lo<=inverse&&inverse<=bound.hi);
+        }
+        assert(placeAffineEnvelope(local,envelope.matrix,.32f).valid);
+    }
+    assert(!nativeHullTransformEnvelope({{0,0,0,0},{}}).valid);
+    assert(!nativeHullTransformEnvelope({{0,0,0,1.01f},{}}).valid);
 
 }
