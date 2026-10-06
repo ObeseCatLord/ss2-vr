@@ -37,6 +37,12 @@ def inspect(core_path):
         # Verify the earlier callback as well as the eventual conExit call.
         require(0x451c, 'call', 'eax')
         require(0x457a, 'call', f'0x{base + 0x41e0:x}')
+        require(0x4573, 'call', f'0x{base + 0x6afc0:x}')
+        require(0x6afc3, 'call', f'0x{base + 0x6c390:x}')
+        require(0x6afd8, 'call', f'dword ptr [0x{base + 0x80234:x}]')
+        require(0x6afdf, 'jmp', f'0x{base + 0x6c3a0:x}')
+        require(0x6c390, 'inc', f'dword ptr [0x{base + 0xc10ac:x}]')
+        require(0x6c3a0, 'dec', f'dword ptr [0x{base + 0xc10ac:x}]')
         require(0x41fd, 'call', 'eax')
         require(0x421a, 'call', 'dword ptr [eax + esi*8]')
         require(0x4234, 'call', 'eax')
@@ -46,6 +52,8 @@ def inspect(core_path):
                    for dll in pe.DIRECTORY_ENTRY_IMPORT for entry in dll.imports}
         if imports.get(base + 0x801f0) != ('MSVCR71.dll', 'exit'):
             raise ValueError('sysExit no longer resolves to the audited CRT exit import')
+        if imports.get(base + 0x80234) != ('USER32.dll', 'MessageBoxA'):
+            raise ValueError('Fatal reporting message-box import changed')
         exports = {e.name.decode(): e.address for e in pe.DIRECTORY_ENTRY_EXPORT.symbols if e.name}
         registrations = {name: rva for name, rva in exports.items()
                          if any(name.startswith('?' + key + '@') for key in REGISTRATION_NAMES)}
@@ -59,6 +67,8 @@ def inspect(core_path):
             'fatal_to_con_exit_rva': '457a',
             'exit_callbacks': {'pre': '41fd', 'list': '421a', 'post': '4234'},
             'terminal_import': 'MSVCR71.dll!exit',
+            'pre_exit_modal_report': {'call_rva': '4573', 'import': 'USER32.dll!MessageBoxA',
+                                     'paint_lock_counter_rva': 'c10ac'},
             'registration_exports': {name: f'{rva:x}' for name, rva in registrations.items()},
             'limits': [
                 'Registered callback targets and descendants are not certified non-reentrant',

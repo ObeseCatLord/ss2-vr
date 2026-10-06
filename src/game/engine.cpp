@@ -78,6 +78,46 @@ static RayInit originalRayInit = nullptr;
 static void(__cdecl *setRay)(const NativeRay &) = nullptr;
 static RayFloat rayMaximum = nullptr, rayMinimum = nullptr, rayRadius = nullptr;
 static int(__cdecl *checkRay)() = nullptr, (__cdecl * rayHit)() = nullptr;
+static int(__cdecl *originalCheckRay)() = nullptr, (__cdecl *originalContinueRay)() = nullptr;
+using ModelCheckRay = int(__cdecl *)(void *, const Matrix34 &, int);
+static ModelCheckRay originalModelCheckRay = nullptr;
+struct NativeRayFrame { const NativeRayFrame *previous; };
+static thread_local const NativeRayFrame *activeNativeRay = nullptr;
+static thread_local bool laserQuerying = false;
+static std::atomic<bool> nativeRayFaulted{false};
+// Observe native query extents without serializing or changing their results.
+// This records same-thread nesting only; worker ownership is a separate gate.
+template<class Body> static void observeNativeRay(Body &&body) noexcept {
+    NativeRayFrame frame{activeNativeRay};
+    const bool priorLaserQuerying = laserQuerying;
+    withNativeFinally([&] {
+        activeNativeRay = &frame;
+        body();
+    }, [&](bool aborted) noexcept {
+        activeNativeRay = frame.previous;
+        laserQuerying = priorLaserQuerying;
+        if (aborted) {
+            nativeRayFaulted.store(true, std::memory_order_release);
+            nativeInputFailed();
+        }
+    });
+}
+static int __cdecl observedCheckRay() {
+    int result = 0;
+    observeNativeRay([&] { result = originalCheckRay(); });
+    return result;
+}
+static int __cdecl observedContinueRay() {
+    int result = 0;
+    observeNativeRay([&] { result = originalContinueRay(); });
+    return result;
+}
+static int __cdecl observedModelCheckRay(void *model, const Matrix34 &placement, int mode) {
+    int result = 0;
+    observeNativeRay([&] { result = originalModelCheckRay(model, placement, mode); });
+    return result;
+}
+
 static float(__cdecl *hitDistance)() = nullptr;
 static void(__cdecl *rayCategory)(uint32_t) = nullptr, (__cdecl * thickCategory)(uint32_t) = nullptr;
 static void(__cdecl *rayAvatar)(void *) = nullptr, (__cdecl * rayMechanism)(void *) = nullptr;
@@ -1916,7 +1956,7 @@ bool beginStereo(void *p, const Request &request) {
                  nativeTrackingAnchor(p, eyeAnchor, &eyeSnapshot.rider) && finite(eyeNativeCamera);
     if (ready) {
         freezeLasers(request);
-        if (settings.headFade) {
+        if (settings.headFade && !nativeRayFaulted.load(std::memory_order_acquire)) {
             const Pose head =
                 worldHeadTracking(eyeAnchor, eyeSnapshot.origin, eyeSnapshot.turn, request.input.head);
             AcquireSRWLockShared(&laserLock);
@@ -2430,18 +2470,13 @@ static bool vehicleLaserMuzzle(const Snapshot &s, const Request &request, Vehicl
     reinterpret_cast<ShootDirection>(table[0x5a4 / 4])(ride, &direction);
     return vehicleLaserCurrent(s, request, source) && nativeLaserPose(origin, direction, muzzle, &rayDirection);
 }
-static void __cdecl trackedRayInit() {
+static void trackedRayInitBody(uintptr_t caller, bool outermost) {
     // The native caller is intentionally beginning a new query. Retire its old
     // query first, use the same native lifecycle for our rays, then leave a fresh
     // baseline for that caller. Never restore dangling native hit/cleanup state.
     originalRayInit();
-#ifdef _MSC_VER
-    auto caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
-#else
-    auto caller = reinterpret_cast<uintptr_t>(__builtin_return_address(0));
-#endif
-    static thread_local bool querying = false;
-    if (querying || eyeIndex >= 0 || scopeSource.active || caller != allowedRayReturn ||
+    if (!outermost || nativeRayFaulted.load(std::memory_order_acquire) || laserQuerying ||
+        eyeIndex >= 0 || scopeSource.active || caller != allowedRayReturn ||
         simulationThread.load(std::memory_order_relaxed) != GetCurrentThreadId() || !nativeMainThread())
         return;
     auto s = copySnapshot();
@@ -2472,7 +2507,7 @@ static void __cdecl trackedRayInit() {
     AcquireSRWLockShared(&laserLock);
     memcpy(existing, laserAim, sizeof(existing));
     ReleaseSRWLockShared(&laserLock);
-    querying = true;
+    laserQuerying = true;
     HeadObstruction sampledHead;
     if (settings.headFade) {
         const Pose head = worldHeadTracking(body, s.origin, s.turn, s.input.head);
@@ -2566,7 +2601,7 @@ static void __cdecl trackedRayInit() {
         sampled[h].requestSequence = queryRequest.sequence;
     }
     originalRayInit(); // Runs native collision cleanup and resets all native ray state.
-    querying = false;
+    laserQuerying = false;
     const auto live = copySnapshot();
     if (!laserSampleCurrent(s, queryRequest)) {
         sampledHead = {};
@@ -2583,7 +2618,20 @@ static void __cdecl trackedRayInit() {
         laserAim[h] = sampled[h];
     ReleaseSRWLockExclusive(&laserLock);
 }
+static void __cdecl trackedRayInit() {
+#ifdef _MSC_VER
+    const auto caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
+#else
+    const auto caller = reinterpret_cast<uintptr_t>(__builtin_return_address(0));
+#endif
+    const bool outermost = activeNativeRay == nullptr;
+    observeNativeRay([&] { trackedRayInitBody(caller, outermost); });
+}
 static void freezeLasers(const Request &request) {
+    if (nativeRayFaulted.load(std::memory_order_acquire)) {
+        eyeLasers[0] = eyeLasers[1] = {};
+        return;
+    }
     LaserFrame frame;
     frame.body = eyeAnchor;
     frame.owner = eyeSnapshot.playerHandle;
@@ -3769,8 +3817,12 @@ bool attach(bool headless) {
         H(e, "?Prepare@CViewRenCmd@SeriousEngine@@QAEXABVMatrix34f@2@ABVMatrix44f@2@ABVBox1f@2@K@Z",
           viewPrepare, originalViewPrepare);
         H(e, "?Execute@CViewRenCmd@SeriousEngine@@UAEXXZ", viewExecute, originalViewExecute);
-        H(e, "?rayInit@SeriousEngine@@YAXXZ", trackedRayInit, originalRayInit);
     }
+    H(e, "?rayInit@SeriousEngine@@YAXXZ", trackedRayInit, originalRayInit);
+    H(e, "?cldCheckRay@SeriousEngine@@YAHXZ", observedCheckRay, originalCheckRay);
+    H(e, "?cldContinueRay@SeriousEngine@@YAHXZ", observedContinueRay, originalContinueRay);
+    H(e, "?mdlModelCheckRay@SeriousEngine@@YAHPAVCModelInstance@1@ABVMatrix34f@1@H@Z",
+      observedModelCheckRay, originalModelCheckRay);
     H(g, "?OnStep@CPlayerPuppetEntity@SeriousEngine@@UAEXXZ", step, originalStep);
     H(g, "?OnDelete@CPlayerPuppetEntity@SeriousEngine@@UAEXXZ", deleted, originalDelete);
     H(g, "?OnDelete@CBaseWeaponEntity@SeriousEngine@@UAEXXZ", weaponDeleted, originalWeaponDelete);

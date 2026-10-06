@@ -1049,3 +1049,16 @@ and cancels before unknown/GPU providers, preserving native unlock/cleanup.
 All42 portable groups and both x86 builds pass; the expanded26-gate native and
 compiled-register/TLS/FP verifier passes normally and with Python optimization.
 Whole-query ownership/allocation and placement remain open.
+
+Added same-thread native ray-extent observation and native-finally cleanup around
+query initialization/check/continuation/model queries. Existing laser/head
+probes now reject nested native-query entry and are quarantined after abort,
+without trying to repair native traversal or suppress stock queries. This
+connects an ownership observation boundary, not roomscale movement. Also pinned
+the fatal-report MessageBox/paint-lock path as additional static evidence;
+shutdown and saw-consumption closure remain unproved.
+
+Both x86 products, all42 Debug/Release groups, native-finally product checks,
+artifact/export/IPC checks and normal/-O production query-observer ABI checks
+pass. A deliberately corrupted model-argument slot is rejected. The swimming
+compiled ABI still passes after the observer change. No runtime was executed.

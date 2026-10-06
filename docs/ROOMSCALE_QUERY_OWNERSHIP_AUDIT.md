@@ -53,3 +53,24 @@ Next: establish a fresh-query lifecycle at the joined main-thread boundary,
 with native normal cleanup and actual callback ownership. Preserve native
 physics/world traversal. Native float TOI accuracy, body coverage, checked
 placement and authoritative multiplayer settlement remain unproved.
+
+## Root continuation: native query extent observation
+
+The source now observes same-thread extents of rayInit, cldCheckRay,
+cldContinueRay and mdlModelCheckRay, using stack-owned frames above the existing
+native-finally boundary. Native calls/arguments/results remain intact. Normal
+return and native unwind restore the parent mod frame and laser-query flag;
+unwind does not attempt to repair native traversal or cleanup lists.
+
+This also fixes the existing extra-ray adapter: it no longer starts optional
+laser/head probes inside another observed native query, and its querying flag
+cannot remain stuck after a crossing unwind. A process-lifetime fault latch
+quarantines further optional probes and their presentation after a query abort.
+Stock ray initialization/checks still execute. This is observation, not a global
+lock, worker exclusion, a private copy of native ray state or enabled roomscale.
+
+The compiled observer ABI verifier checks four cdecl wrappers, the actual
+three-argument model forwarding/result, retained native caller address and
+native-finally/TLS boundaries. Generic native-finally binary checks remain in
+use. Windows exception execution and complete body-query ownership are untested
+and unfinished respectively.

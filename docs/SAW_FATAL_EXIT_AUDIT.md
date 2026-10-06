@@ -64,3 +64,14 @@ DLLs and Sam2.exe, that is 45 inspected native files. This rules out a direct
 named import in this supplied set, not a dynamic lookup, reflected invocation,
 CRT destructor callback, arbitrary extension, or live callback registration.
 The native gate is still unproved; no further files are requested on that basis.
+
+## Fatal reporting also enters a native modal window
+
+Further pinned inspection establishes an additional boundary before conExit:
+FatalError calls sysErrorBox6AFC0 at4573. It brackets USER32 MessageBoxA6AFD8
+with wndLockPaintEvents6C390 and wndUnlockPaintEvents6C3A0, incrementing and
+decrementing CoreC10AC. The read-only verifier now pins that call/import/counter.
+This is not evidence of gameplay reentry or its absence. The paint-event lock
+must not be generalized to all window messages or arbitrary fatal/exit callbacks.
+No global shutdown hook, native callback suppression or receipt activation was
+introduced. Native UI/error handling remains unchanged.
