@@ -41,5 +41,6 @@ recenter/intent reset on every step. Existing frame and weapon lifetime rules
 remain in force. Multiplayer body/origin pairing needs its own authoritative
 sequence and cannot be inferred from reliable ACK order.
 
-This helper is not connected to engine.cpp. No body controller has been enabled,
+The helper is now used by the development-gated single-player controller in
+engine.cpp; see ROOMSCALE_LOCAL_CONTROLLER.md. The default remains disabled,
 and no game, Wine, OpenXR, headset or multiplayer process was run.

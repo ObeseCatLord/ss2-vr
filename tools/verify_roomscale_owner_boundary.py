@@ -77,6 +77,20 @@ def verify(game):
         0x1b35fa:('lea','esi, [eax - 4]'),
         0x1b3601:('call','dword ptr [eax + 4]'),
         0x1b3607:('call','ebx'),0x1b36a4:('ret','')})
+    # Ordinary render ownership: an active external camera takes precedence
+    # over the player's view. The controller admits only an exact null handle.
+    for table,slot,target in ((0x29ddf0,0x200,0xddd50),(0x29be90,0x1f0,0x55f50)):
+        require(struct.unpack('<I',sam.get_data(table+slot,4))[0]==0x10000000+target,
+                'World-camera/brain dispatch changed')
+    check(sam,0xddd50,0xe,{0xddd50:('mov','eax, dword ptr [ecx + 0x6c]'),
+                          0xddd54:('call','dword ptr [0x102941d0]'),0xddd5d:('ret','')})
+    check(sam,0xeb7b0,0xcc,{
+        0xeb7c2:('call','0x1020a6f0'),0xeb7d5:('call','dword ptr [edx + 0x200]'),
+        0xeb7ec:('je','0x100eb819'),0xeb807:('call','dword ptr [eax + 0x1c8]'),
+        0xeb833:('call','dword ptr [edx + 0x610]')})
+    check(engine,0x1b7a90,0x90,{0x1b7b07:('mov','eax, dword ptr [ecx + 0x64]')})
+    check(core,0xc450,0x59,{0xc47e:('test','edi, edi'),0xc487:('jne','0x1000c4a9'),
+                           0xc498:('xor','eax, eax'),0xc4a8:('ret','')})
     return {'fingerprints':PINS,'native_simulation_caller_return':'Sam2Game+258de',
             'post_physics_tail_has_no_callbacks':True,'known_scalar_cleanup_callbacks':2,
             'runtime_executed':False,'live_worker_or_callback_exclusion_proven':False}

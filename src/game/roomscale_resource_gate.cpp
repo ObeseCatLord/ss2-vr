@@ -224,6 +224,7 @@ void resetRoomscaleResourceGatesAfterRemoval() noexcept {
     gatesQueued=false;installedGates={};
     primitiveHullTable=modelHullTable=fluidHullTable=forceHullTable=hullEngineBase=0;
 }
+bool roomscaleResourceGatesUsable() noexcept { return resourceGatesEnabled(); }
 bool roomscaleResourceScopeUsable() noexcept { return unavailable && !*unavailable; }
 bool finishRoomscaleResourceScopeForCommit(bool &failed) noexcept {
     if (unavailable!=&failed || failed) return false;

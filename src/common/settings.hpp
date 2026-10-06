@@ -10,6 +10,7 @@ struct VrSettings {
     float laserDistance = 100.f;
     float scopeEyeRelief = .1f; // Optical presentation parameter, not native zoom timing.
     bool immersiveSwimming = false;
+    bool roomscale = false; // Development gate until controller/replication completion.
     bool headFade = false;
     bool remoteHeadTracking = false;
     float headRadius = .12f, headFadeDepth = .05f;

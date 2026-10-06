@@ -1130,3 +1130,19 @@ The controller does not begin any transition yet; normal revisions stay stable
 and body movement remains disabled. All49 Debug/Release groups, revision-helper
 ASan/UBSan and x86 builds pass; query/swimming ABIs remain valid. No wire/input
 history generation changed. See RIG_PUBLICATION_REVISION.md.
+
+## 2026-10-06 — Development-gated local roomscale integration
+
+Connected the single-player post-simulation controller to captured body geometry,
+whole-cover native queries, the original checked setter and actual-anchor origin
+settlement. Added world-camera/brain guards, reentered-simulation detection,
+metadata-only uncertain-mutation quarantine, transactional hook enable/reset and
+a fixed readability cache limited to the owned read-only extent. Integer CAS
+reads keep rig metadata cleanup off the x87 stack. The Roomscale setting stays
+0 by default; multiplayer movement remains excluded.
+
+All 51 portable Debug/Release groups, x86 game products and x64 host build. Static
+controller checks verify native phase/camera boundaries and compiled call/order/
+cleanup obligations; normal/-O and a corrupted-cleanup negative fixture pass.
+No native runtime was executed. See ROOMSCALE_LOCAL_CONTROLLER.md. The full mod
+and final device-test package remain unfinished.

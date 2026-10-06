@@ -9,10 +9,16 @@ namespace ss2vr {
 // This does not lock native state. The owner holds the existing snapshot lock
 // while changing snapshot fields and completing/recovering a transition.
 class RigRevision {
-    std::atomic<uint64_t> revision{0};
+    mutable std::atomic<uint64_t> revision{0};
 public:
     explicit constexpr RigRevision(uint64_t initial=0) noexcept:revision(initial) {}
-    uint64_t current() const noexcept {return revision.load(std::memory_order_acquire);}
+    uint64_t current() const noexcept {
+        // A plain i686 atomic 64-bit load can use the x87 stack. This read is
+        // also used during native unwind cleanup, so force an integer CAS.
+        uint64_t observed=0;
+        revision.compare_exchange_strong(observed,0,std::memory_order_acquire,std::memory_order_acquire);
+        return observed;
+    }
     bool usable(uint64_t captured) const noexcept {return !(captured&1u)&&captured==current();}
     uint64_t begin(uint64_t expected) noexcept {
         if((expected&1u)||expected>=std::numeric_limits<uint64_t>::max()-1)return 0;

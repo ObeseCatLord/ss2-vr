@@ -4,8 +4,8 @@ The driver resolves the existing Engine ray/filter functions and applies the
 complete prepared body cover one sphere at a time. It preserves native world
 traversal, hull filtering and ordinary cleanup. Every sphere must complete with
 no hit and no adapter/owner/resource failure; a partial successful cover cannot
-approve movement. This component is compiled but not called by the simulation
-owner or enabled as roomscale gameplay.
+approve movement. The component is now called by the development-gated single-player controller;
+the default remains disabled. See ROOMSCALE_LOCAL_CONTROLLER.md.
 
 Each sphere follows init, six-float ray, maximum parameter, zero minimum,
 positive radius, both actual source-hull categories, avatar/mechanism exclusion,
@@ -56,6 +56,7 @@ pass; replacing the radius argument with its adjacent coordinate is rejected.
 The native owner/cleanup verifier, resource-gate verifier, triangle/primitive
 ABI checks, native-finally checks and artifact/export/IPC checks pass.
 
-Controller ownership, fresh native scratch admission, actual checked setter
-connection, post-commit origin settlement and multiplayer pairing remain open.
+The single-player controller now supplies bounded phase/scratch admission,
+checked-setter connection and origin settlement. Default enablement and
+authoritative multiplayer pairing remain open.
 No Windows, Wine, game, headset, OpenXR or network session was run.

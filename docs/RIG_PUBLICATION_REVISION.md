@@ -22,12 +22,12 @@ lease is held. A read-only bridge admission checks the entire pending stereo/UI
 extent, including gaps between eyes, scope previews and deferred retirement;
 checking only the current eye index would be insufficient.
 
-No production code begins or finishes a body transition yet. The controller is
-still unconnected, revisions remain stable during ordinary operation, and no
-body movement is enabled. This avoids claiming the numerical origin helper or
-metadata gate as a finished roomscale feature.
+The development-gated single-player controller now owns transition begin/finish.
+The default remains disabled; ordinary operation retains a stable revision. See
+ROOMSCALE_LOCAL_CONTROLLER.md for the connected path and remaining limits. This
+is not a finished or runtime-verified roomscale release.
 
-49 portable groups pass Debug/Release, the production revision helper passes
+At the initial metadata checkpoint,49 portable groups passed Debug/Release, the production revision helper passes
 ASan/UBSan with workspace leak checking disabled, and both x86 products build.
 The query observer and swimming ABI checks still pass after the private snapshot
 layout change. No IPC/wire layout or manual input-history generation changed.

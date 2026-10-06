@@ -71,6 +71,6 @@ for Windows x86 and x64 without execution. Native layout verification passes
 normally and with Python optimization.
 
 These samples supplement the interval construction; they are not an exhaustive
-native-geometry or runtime proof. Query ownership, actual native traversal,
-checked setter integration, post-commit readback and local/network origin
-settlement remain required. No Windows/Wine/game/headset session was run.
+native-geometry or runtime proof. Those caller requirements are connected in the development-gated local
+controller described in ROOMSCALE_LOCAL_CONTROLLER.md. Runtime validation and
+authoritative network origin settlement remain outstanding. No Windows/Wine/game/headset session was run.

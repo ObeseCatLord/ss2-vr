@@ -454,3 +454,19 @@ check passes normally and with Python optimization. See
 ROOMSCALE_BODY_SWEEP_GEOMETRY.md. The separately added FP math frame preserves
 native caller state and is likewise inactive; see ROOMSCALE_MATH_FRAME.md. No
 runtime verification is claimed, and this does not complete the full mod.
+
+## Local controller integration — 2026-10-06
+
+The source now connects a development-gated single-player roomscale controller
+at the checked post-simulation boundary. It supplies camera/brain/actor, native
+scratch, presentation and reentry checks; complete body sweeps; the original
+checked setter; actual-anchor origin correction; and rig-revision publication.
+The fixed readability cache is bounded to that admitted read-only extent and
+retired before native commit callbacks. The packaged Roomscale setting remains
+0, and multiplayer movement remains excluded until body/origin pairing is done.
+
+51 portable groups pass Debug/Release. Game x86 and host x64 cross-builds pass;
+controller, query/swimming, placement/resource/math, native-finally and artifact
+checks pass. Metadata/readability helpers pass sanitizers and Windows compile
+checks. A corrupted FP cleanup is rejected. No game or headset process was run.
+See ROOMSCALE_LOCAL_CONTROLLER.md for the exact connected scope and limits.

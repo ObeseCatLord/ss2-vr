@@ -1,5 +1,11 @@
 #include "common/controls.hpp"
 #include "common/rig_revision.hpp"
+#include "common/native_ray_cleanup.hpp"
+#include "common/roomscale_origin.hpp"
+#include "common/roomscale_publication.hpp"
+#include "roomscale_math_frame.hpp"
+#include "roomscale_placement.hpp"
+#include "roomscale_sweep_query.hpp"
 #include "common/swimming_input.hpp"
 #include "common/native_zoom.hpp"
 #include "common/native_primary_projection.hpp"
@@ -86,6 +92,12 @@ struct NativeRayFrame { const NativeRayFrame *previous; };
 static thread_local const NativeRayFrame *activeNativeRay = nullptr;
 static thread_local bool laserQuerying = false;
 static std::atomic<bool> nativeRayFaulted{false};
+static uintptr_t roomscaleEngineBase=0,roomscaleSimulationReturn=0;
+static uintptr_t roomscaleWorldInfoTable=0,roomscaleBrainTable=0;
+static bool roomscaleConfigured=false;
+static thread_local bool roomscaleBusy=false;
+static thread_local uint64_t simulationRevision=0;
+static std::atomic<bool> roomscaleFaulted{false};
 // Observe native query extents without serializing or changing their results.
 // This records same-thread nesting only; worker ownership is a separate gate.
 template<class Body> static void observeNativeRay(Body &&body) noexcept {
@@ -205,6 +217,7 @@ struct Calibration {
 };
 static RigRevision rigPublication;
 static thread_local unsigned snapshotNativeReadDepth=0;
+static thread_local bool rigMutationActive=false;
 struct Snapshot {
     void *player = nullptr;
     RiderIdentity rider;
@@ -651,7 +664,7 @@ static void publishSnapshot(const Snapshot &s) {
     }
 }
 static void update(void *p) {
-    if (!hooksReady.load(std::memory_order_acquire) || !channel.shared || !local(p))
+    if (rigMutationActive || !hooksReady.load(std::memory_order_acquire) || !channel.shared || !local(p))
         return;
     simulationThread.store(GetCurrentThreadId(), std::memory_order_relaxed);
     auto s = copySnapshot();
@@ -907,7 +920,10 @@ struct SimulationInterval {
     SimulationInterval *previous;
     bool failed = false;
     bool *failure = nullptr;
+    void *preparedWorld=nullptr,*preparedManager=nullptr;
+    uintptr_t nativeCaller=0;
 };
+static void runPostSimulationRoomscale(SimulationInterval &);
 static thread_local SimulationInterval *simulationInterval = nullptr;
 static thread_local const NativePrimaryInvocation *primaryInvocation = nullptr;
 static PreparedPlayer *preparedPrimary(void *subject) noexcept {
@@ -1209,16 +1225,21 @@ static void invalidateInterruptedInput() noexcept {
     ReleaseSRWLockExclusive(&snapshotLock);
 }
 static void __fastcall simulationStep(void *simulation, void *) {
+    const auto caller=reinterpret_cast<uintptr_t>(__builtin_return_address(0));
     if (!hooksReady.load(std::memory_order_acquire)) {
         originalSimulationStep(simulation);
         return;
     }
+    if(simulationRevision==UINT64_MAX) roomscaleFaulted.store(true);
+    else ++simulationRevision;
     SimulationInterval interval{simulation, false, false, {}, simulationInterval};
+    interval.nativeCaller=caller;
     interval.failure = interval.previous ? interval.previous->failure : &interval.failed;
     simulationInterval = &interval;
     withNativeFinally([&] {
         remote_render::noteSimulationThread();
         originalSimulationStep(simulation);
+        runPostSimulationRoomscale(interval);
         // Retire input only after all original entity/script/physics work.
         if (interval.networkPrepared && nativeInputHealthy())
             multiplayer::completeTick();
@@ -1277,6 +1298,8 @@ static void __fastcall entityStep(void *manager, void *) {
                 // entering this entity manager. Freeze every player before ANY weapon's
                 // OnStep, regardless of the native entity ordering within the loop.
                 interval->managerPrepared = true;
+                interval->preparedWorld=world;
+                interval->preparedManager=manager;
                 interval->networkPrepared = !singlePlayer() && multiplayer::server() && multiplayer::beginTick();
                 const auto players = multiplayer::activePlayers();
                 const auto snapshot = copySnapshot();
@@ -3584,6 +3607,266 @@ static int __fastcall commandReleased(void *b, void *, uint32_t id) {
 static int __fastcall commandRepeated(void *b, void *, uint32_t id) {
     return query(b, id, 1, originalRepeated);
 }
+struct LocalRoomscaleAttempt {
+    SimulationInterval *interval=nullptr;
+    Snapshot snapshot;
+    DWORD thread=0;
+    uintptr_t world=0;
+    uint32_t physics=0,worldInfoHandle=0,brainHandle=0;
+    uintptr_t worldInfo=0,brain=0;
+    uint64_t simulationSequence=0,ticket=0;
+    roomscale::BodyGeometry body;
+    roomscale::BodySweepCover cover;
+    Pose anchorBefore{},anchorAfter{},targetModel{},candidateRoot{};
+    roomscale::OriginSettlement settlement;
+    float maximumMove=0,contactBudget=0,errorBudget=0;
+    bool failed=false,prepared=false;
+    NativeReadLease reads;
+};
+static bool roomscaleWord(uintptr_t object,uintptr_t offset,uint32_t &value) noexcept {
+    if(!object||offset>UINTPTR_MAX-object||object+offset>UINTPTR_MAX-4||
+       !readableMemory(reinterpret_cast<void*>(object+offset),4))return false;
+    std::memcpy(&value,reinterpret_cast<void*>(object+offset),4);return true;
+}
+static bool roomscaleOwnedWord(const LocalRoomscaleAttempt& c,uintptr_t object,uintptr_t offset,uint32_t& value) noexcept {
+    if(!object||offset>UINTPTR_MAX-object||object+offset>UINTPTR_MAX-4||
+       !c.reads.contains(reinterpret_cast<void*>(object+offset),4))return false;
+    std::memcpy(&value,reinterpret_cast<void*>(object+offset),4);return true;
+}
+static bool roomscaleCleanupReady(const LocalRoomscaleAttempt& c) noexcept {
+    if(!roomscaleEngineBase)return false;
+    const uint32_t base=uint32_t(roomscaleEngineBase);
+    NativeRayCleanupList list;
+    list.head=base+0x2f1a14;
+    if(!roomscaleOwnedWord(c,list.head,0,list.first)||!roomscaleOwnedWord(c,list.head,4,list.sentinelNext)||
+       !roomscaleOwnedWord(c,list.head,8,list.last))return false;
+    const std::array<uint32_t,2> links{base+0x2d9754,base+0x2eab2c};
+    const std::array<uint32_t,2> tables{base+0x209260,base+0x214700};
+    const std::array<uint32_t,2> callbacks{base+0x28b50,base+0xd8880};
+    for(unsigned i=0;i<2;++i) {
+        auto& node=list.nodes[i];node.link=links[i];
+        if(!roomscaleOwnedWord(c,links[i]-4,0,node.vtable)||node.vtable!=tables[i]||
+           !roomscaleOwnedWord(c,tables[i],4,node.callback)||
+           !roomscaleOwnedWord(c,links[i],0,node.next)||!roomscaleOwnedWord(c,links[i],4,node.previous))return false;
+    }
+    if(!knownNativeRayCleanup(list,links,tables,callbacks))return false;
+    // Normal cld traversal releases its visited array. Cleanup callbacks do not
+    // repair an interrupted traversal, so a retained pointer/count is refused.
+    for(uintptr_t offset:{0x2d9708u,0x2d970cu,0x2d9710u}) {
+        uint32_t value=0;if(!roomscaleOwnedWord(c,base,offset,value)||value)return false;
+    }
+    return laserModelScratchIdle();
+}
+static bool roomscalePhaseCurrent(const LocalRoomscaleAttempt& c,bool checkControls=true) noexcept {
+    if(!roomscaleConfigured||!roomscaleBusy||roomscaleFaulted.load()||
+       nativeRayFaulted.load(std::memory_order_acquire)||!hooksReady.load(std::memory_order_acquire)||
+       !nativeMainThread||!nativeMainThread()||GetCurrentThreadId()!=c.thread||
+       simulationThread.load()!=c.thread||simulationInterval!=c.interval||!c.interval||
+       c.interval->previous||!c.interval->managerPrepared||!c.interval->failure||*c.interval->failure||
+       c.interval->nativeCaller!=roomscaleSimulationReturn||simulationRevision!=c.simulationSequence||
+       !c.world||!c.physics||activeNativeRay||laserQuerying||snapshotNativeReadDepth||
+       eyeIndex>=0||scopeSource.active||physicalWeapon||nativeShotDepth||primaryInvocation||
+       zoomManagerFrame||zoomContext||uiOwnerDepth||uiOverlayDepth||executingView||
+       !nativePresentationIdleForBodyMove())return false;
+    uint32_t value=0,pool=0;
+    const bool phase=roomscaleOwnedWord(c,roomscaleEngineBase,0x2f1a70,value)&&value==reinterpret_cast<uintptr_t>(c.interval->simulation)&&
+        roomscaleOwnedWord(c,reinterpret_cast<uintptr_t>(c.interval->simulation),0x4c,value)&&value==0&&
+        roomscaleOwnedWord(c,roomscaleEngineBase,0x2f1b3c,value)&&value==c.world&&
+        c.world==reinterpret_cast<uintptr_t>(c.interval->preparedWorld)&&
+        roomscaleOwnedWord(c,c.world,4,value)&&!(value&1u)&&
+        roomscaleOwnedWord(c,c.world,0x74,value)&&value==reinterpret_cast<uintptr_t>(c.interval->preparedManager)&&
+        roomscaleOwnedWord(c,c.world,0x6c,value)&&value==c.physics&&
+        roomscaleOwnedWord(c,roomscaleEngineBase,0x2ec948,pool)&&pool&&
+        roomscaleOwnedWord(c,pool,0x10,value)&&value==0;
+    if(!phase||!checkControls)return phase;
+    // Brain RenderView selects an external world camera before the player's
+    // view. Refuse even a stale nonzero camera handle, rather than move the
+    // puppet behind a cinematic or take over an unrecognized controller.
+    return c.worldInfoHandle&&c.worldInfo&&c.brainHandle&&c.brain&&
+        roomscaleOwnedWord(c,c.world,0x64,value)&&value==c.worldInfoHandle&&
+        resolve(value)==reinterpret_cast<void*>(c.worldInfo)&&
+        roomscaleOwnedWord(c,c.worldInfo,0,value)&&value==roomscaleWorldInfoTable&&
+        roomscaleOwnedWord(c,c.worldInfo,0x10,value)&&!(value&2u)&&
+        roomscaleOwnedWord(c,c.worldInfo,0x6c,value)&&value==0&&
+        roomscaleOwnedWord(c,reinterpret_cast<uintptr_t>(c.snapshot.player),0x38c,value)&&value==c.brainHandle&&
+        resolve(value)==reinterpret_cast<void*>(c.brain)&&
+        roomscaleOwnedWord(c,c.brain,0,value)&&value==roomscaleBrainTable&&
+        roomscaleOwnedWord(c,c.brain,0x10,value)&&!(value&2u)&&
+        roomscaleOwnedWord(c,c.brain,0x28,value)&&value==c.snapshot.playerHandle;
+}
+static bool roomscaleSnapshotMatches(const Snapshot& a,const Snapshot& b) noexcept {
+    return a.player==b.player&&a.playerHandle==b.playerHandle&&a.rider==b.rider&&
+        a.generation==b.generation&&a.rigRevision==b.rigRevision&&
+        a.inputProducer==b.inputProducer&&a.input.session==b.input.session&&
+        a.input.reference==b.input.reference&&a.input.sequence==b.input.sequence&&
+        a.turn==b.turn&&std::memcmp(&a.origin,&b.origin,sizeof(Pose))==0;
+}
+static bool captureRoomscaleBody(const LocalRoomscaleAttempt& c,roomscale::BodyGeometry& body) {
+    const roomscale::BodyLayout layout{uint32_t(roomscaleEngineBase+0x217af0),
+                                       uint32_t(roomscaleEngineBase+0x209268)};
+    return roomscale::readBodyGeometry([&](uint32_t address,void* target,size_t size) {
+        if(!c.reads.contains(reinterpret_cast<void*>(address),size))return false;
+        std::memcpy(target,reinterpret_cast<void*>(address),size);return true;
+    },[](uint32_t handle) {return uint32_t(reinterpret_cast<uintptr_t>(resolve(handle)));},
+       layout,c.snapshot.playerHandle,body);
+}
+static bool __cdecl roomscaleOwnerCurrent(void *opaque) noexcept {
+    auto& c=*static_cast<LocalRoomscaleAttempt*>(opaque);
+    if(c.failed||!roomscalePhaseCurrent(c)||!roomscaleCleanupReady(c))return false;
+    const auto live=copySnapshot();
+    if(!roomscaleSnapshotMatches(c.snapshot,live)||!vrSession(live)||!fresh(live.input)||
+       !live.ui.gameplay||!live.rider.handheld()||recenterHeld(live.input)||!livePlayer(live))return false;
+    roomscale::BodyGeometry body;
+    return captureRoomscaleBody(c,body)&&roomscale::sameBodyGeometry(c.body,body);
+}
+static bool __cdecl prepareRoomscaleMove(void *opaque) {
+    auto& c=*static_cast<LocalRoomscaleAttempt*>(opaque);
+    if(!roomscalePhaseCurrent(c)||!roomscaleCleanupReady(c)||!captureRoomscaleBody(c,c.body))return false;
+    const auto relative=relativeTracking(c.snapshot.origin,c.snapshot.input.head);
+    if(!finite(relative)||!finite(c.anchorBefore))return false;
+    const auto bounded=boundHeadTranslation(relative.p);
+    if(bounded.x!=relative.p.x||bounded.y!=relative.p.y||bounded.z!=relative.p.z)return false;
+    const auto head=worldHeadTracking(c.anchorBefore,c.snapshot.origin,c.snapshot.turn,c.snapshot.input.head);
+    Vec3 delta=head.p-c.anchorBefore.p;delta.y=0;
+    const double distance=std::sqrt(double(delta.x)*delta.x+double(delta.z)*delta.z);
+    float minimumRadius=std::numeric_limits<float>::max();
+    for(unsigned i=0;i<c.body.hullCount;++i)minimumRadius=std::min(minimumRadius,c.body.hulls[i].primitive.width*.5f);
+    if(!std::isfinite(distance)||!std::isfinite(minimumRadius)||minimumRadius<=0||distance<=minimumRadius*.002f)return false;
+    const float limit=std::min(.25f,minimumRadius*.5f);
+    if(distance>limit)delta=delta*float(double(limit)/distance);
+    c.maximumMove=limit+minimumRadius*.02f;
+    c.contactBudget=minimumRadius*.002f;
+    c.errorBudget=std::max(.00003f,minimumRadius*.004f);
+    c.targetModel=c.body.modelPose;c.targetModel.p=c.targetModel.p+delta;
+    c.prepared=finite(c.targetModel)&&roomscaleOwnerCurrent(&c);
+    if(c.prepared)c.reads.seal();
+    return c.prepared;
+}
+static bool __cdecl checkRoomscaleTargetMath(void *opaque) {
+    auto& c=*static_cast<LocalRoomscaleAttempt*>(opaque);
+    if(!roomscaleOwnerCurrent(&c))return false;
+    const Vec3 delta=c.candidateRoot.p-c.body.rootPose.p;
+    const double distance=std::sqrt(double(delta.x)*delta.x+double(delta.y)*delta.y+double(delta.z)*delta.z);
+    if(!std::isfinite(distance)||distance>c.maximumMove)return false;
+    c.cover=roomscale::coverBodyRootSweep(c.body,c.candidateRoot,.04f);
+    if(!c.cover.valid)return false;
+    Pose predicted=c.anchorBefore;
+    predicted.p=predicted.p+(c.targetModel.p-c.body.modelPose.p);
+    if(!roomscale::settleTranslatedAnchor(c.snapshot.origin,c.snapshot.turn,c.snapshot.input.head,
+        c.anchorBefore,predicted,c.maximumMove,c.errorBudget).valid)return false;
+    if(!runRoomscaleSweepQueries(c.body,c.cover,c.contactBudget,c.thread,roomscaleOwnerCurrent,&c,c.failed)||
+       !roomscaleOwnerCurrent(&c))return false;
+    AcquireSRWLockExclusive(&snapshotLock);
+    if(roomscaleSnapshotMatches(c.snapshot,current)&&rigPublication.usable(current.rigRevision)&&
+       c.interval->failure&&!*c.interval->failure) {
+        c.ticket=rigPublication.begin(current.rigRevision);
+        if(c.ticket) {current.rigRevision=c.ticket;rigMutationActive=true;}
+    }
+    ReleaseSRWLockExclusive(&snapshotLock);
+    if(c.ticket)c.reads.clear(); // The original commit is outside the read-only lease.
+    return c.ticket!=0;
+}
+static bool __cdecl checkRoomscaleTarget(void *opaque,const Pose& target) noexcept {
+    auto& c=*static_cast<LocalRoomscaleAttempt*>(opaque);
+    std::memcpy(&c.candidateRoot,&target,sizeof(target));
+    return runRoomscaleMathFrame(c.failed,c.thread,checkRoomscaleTargetMath,&c);
+}
+static bool sameRoomscalePose(const Pose& a,const Pose& b) noexcept {
+    return a.q.x==b.q.x&&a.q.y==b.q.y&&a.q.z==b.q.z&&a.q.w==b.q.w&&
+        a.p.x==b.p.x&&a.p.y==b.p.y&&a.p.z==b.p.z;
+}
+static bool __cdecl settleRoomscaleMoveMath(void *opaque) {
+    auto& c=*static_cast<LocalRoomscaleAttempt*>(opaque);
+    if(!roomscalePhaseCurrent(c,false))return false;
+    roomscale::BodyGeometry after;
+    if(!captureRoomscaleBody(c,after)||after.player!=c.body.player||after.playerHandle!=c.body.playerHandle||
+       after.mechanism!=c.body.mechanism||after.mechanismHandle!=c.body.mechanismHandle||
+       after.root!=c.body.root||after.rootHandle!=c.body.rootHandle||after.parts!=c.body.parts||
+       after.model!=c.body.model||after.modelHandle!=c.body.modelHandle||
+       after.rootFlags!=c.body.rootFlags||after.hullCount!=c.body.hullCount||
+       !sameRoomscalePose(after.rootPose,c.candidateRoot))return false;
+    for(unsigned i=0;i<after.hullCount;++i) {
+        const auto& a=after.hulls[i];const auto& b=c.body.hulls[i];
+        if(a.address!=b.address||a.category!=b.category||a.flags!=b.flags||
+           std::memcmp(&a.primitive,&b.primitive,sizeof(a.primitive))||
+           std::memcmp(&a.relativePose,&b.relativePose,sizeof(a.relativePose)))return false;
+    }
+    c.settlement=roomscale::settleTranslatedAnchor(c.snapshot.origin,c.snapshot.turn,c.snapshot.input.head,
+        c.anchorBefore,c.anchorAfter,c.maximumMove,c.errorBudget);
+    return c.settlement.valid;
+}
+static void finishRoomscaleRevision(LocalRoomscaleAttempt& c,bool moved,bool settled) noexcept {
+    if(!c.ticket)return;
+    AcquireSRWLockExclusive(&snapshotLock);
+    if(rigPublication.current()==c.ticket&&current.rigRevision==c.ticket) {
+        const bool resetOwner=!current.initialized||current.player!=c.snapshot.player||
+            current.playerHandle!=c.snapshot.playerHandle;
+        const bool sameOrigin=current.inputProducer==c.snapshot.inputProducer&&
+            current.input.session==c.snapshot.input.session&&current.input.reference==c.snapshot.input.reference&&
+            std::memcmp(&current.turn,&c.snapshot.turn,sizeof(float))==0&&
+            std::memcmp(&current.origin,&c.snapshot.origin,sizeof(Pose))==0;
+        const auto action=roomscale::publicationAction(true,moved,resetOwner,settled,sameOrigin);
+        if(action==roomscale::PublicationAction::retireWithoutOrigin||
+           action==roomscale::PublicationAction::publishOrigin) {
+            if(action==roomscale::PublicationAction::publishOrigin)
+                std::memcpy(&current.origin,&c.settlement.origin,sizeof(Pose));
+            current.rigRevision=c.ticket+1;
+            if(!rigPublication.finish(c.ticket)) {
+                current.rigRevision=rigPublication.current();roomscaleFaulted.store(true);nativeInputFailed();
+            }
+        } else {
+            // No native getters, rollback or retry in this path, including on
+            // native unwind. Ordinary fresh-origin recovery follows the existing
+            // interrupted-input epoch boundary; further body moves stay off.
+            roomscaleFaulted.store(true);nativeInputFailed();
+            current.generation=advanceEpochUnlocked();
+            current.ui.trackingGeneration=current.generation;
+            current.ui.gameplay=0;
+        }
+    }
+    ReleaseSRWLockExclusive(&snapshotLock);
+}
+static __attribute__((noinline)) void runPostSimulationRoomscale(SimulationInterval &interval) {
+    if(!settings.roomscale||!roomscaleConfigured||roomscaleBusy||roomscaleFaulted.load()||
+       interval.previous||!interval.managerPrepared||!nativeInputHealthy()||!singlePlayer())return;
+    LocalRoomscaleAttempt c;
+    c.interval=&interval;c.snapshot=copySnapshot();c.thread=GetCurrentThreadId();
+    c.simulationSequence=simulationRevision;c.world=reinterpret_cast<uintptr_t>(interval.preparedWorld);
+    if(!vrSession(c.snapshot)||!fresh(c.snapshot.input)||!c.snapshot.ui.gameplay||
+       !c.snapshot.rider.handheld()||c.snapshot.ui.wheel[0].open||c.snapshot.ui.wheel[1].open||
+       recenterHeld(c.snapshot.input)||!livePlayer(c.snapshot)||
+       !roomscaleWord(c.world,0x6c,c.physics)||!c.physics)return;
+    auto* prepared=preparedPrimary(c.snapshot.player);
+    if(!prepared||!prepared->prepared||prepared->revoked||!prepared->recognized||
+       prepared->handle!=c.snapshot.playerHandle||prepared->rider!=c.snapshot.rider)return;
+    uint32_t table=0;
+    if(!roomscaleWord(reinterpret_cast<uintptr_t>(c.snapshot.player),0,table)||table!=swimmingPlayerVtable)return;
+    RoomscalePlacementOutcome outcome;
+    bool settled=false;
+    withNativeFinally([&] {
+        roomscaleBusy=true;
+        if(!roomscalePhaseCurrent(c,false)||!roomscaleWord(c.world,0x64,c.worldInfoHandle)||
+           !roomscaleWord(reinterpret_cast<uintptr_t>(c.snapshot.player),0x38c,c.brainHandle))return;
+        c.worldInfo=reinterpret_cast<uintptr_t>(resolve(c.worldInfoHandle));
+        c.brain=reinterpret_cast<uintptr_t>(resolve(c.brainHandle));
+        if(!roomscalePhaseCurrent(c)||!trackingEligible(c.snapshot.player)||!isAlive(c.snapshot.player)||
+           !nativeTrackingAnchor(c.snapshot.player,c.anchorBefore,&c.snapshot.rider)||
+           !runRoomscaleMathFrame(c.failed,c.thread,prepareRoomscaleMove,&c))return;
+        outcome=runCheckedRoomscalePlacement(reinterpret_cast<void*>(c.body.mechanism),
+            reinterpret_cast<void*>(c.body.parts),reinterpret_cast<void*>(c.body.root),
+            c.targetModel,c.thread,checkRoomscaleTarget,&c);
+        c.reads.clear(); // Native commit callbacks ran outside the read-only query lease.
+        if(outcome.completed&&outcome.mayHaveMoved&&c.ticket&&roomscalePhaseCurrent(c,false)&&
+           livePlayer(c.snapshot)&&isAlive(c.snapshot.player)&&
+           nativeTrackingAnchor(c.snapshot.player,c.anchorAfter,&c.snapshot.rider))
+            settled=runRoomscaleMathFrame(c.failed,c.thread,settleRoomscaleMoveMath,&c);
+    },[&](bool aborted) noexcept {
+        if(aborted) {roomscaleFaulted.store(true);nativeInputFailed();}
+        finishRoomscaleRevision(c,aborted||outcome.mayHaveMoved,settled&&!aborted);
+        rigMutationActive=false;roomscaleBusy=false;
+    });
+}
+
 static std::vector<void *> ownedHooks;
 static bool attachPoisoned = false;
 static bool rollbackNativeHooks() {
@@ -3606,6 +3889,14 @@ static bool rollbackNativeHooks() {
                 log("Hook removal rollback failed: %d", int(status));
             return status == MH_OK;
         });
+    if(result) {
+        resetRoomscaleSweepQueriesAfterQuiescence();
+        resetRoomscalePlacementHooksAfterRemoval();
+        resetRoomscaleTriangleHookAfterRemoval();
+        resetRoomscaleResourceGatesAfterRemoval();
+        roomscaleConfigured=false;roomscaleEngineBase=roomscaleSimulationReturn=0;
+        roomscaleWorldInfoTable=roomscaleBrainTable=0;
+    }
     attachPoisoned = !result;
     return result;
 }
@@ -3648,6 +3939,11 @@ bool attach(bool headless) {
     auto g = GetModuleHandleW(L"Sam2Game.dll"), e = GetModuleHandleW(L"Engine.dll"),
          c = GetModuleHandleW(L"Core.dll");
     const auto graphics = headless ? nullptr : GetModuleHandleW(L"GfxD3D.dll");
+    roomscaleConfigured=false;
+    roomscaleEngineBase=reinterpret_cast<uintptr_t>(e);
+    roomscaleSimulationReturn=reinterpret_cast<uintptr_t>(g)+0x258de;
+    roomscaleWorldInfoTable=reinterpret_cast<uintptr_t>(g)+0x29ddf0;
+    roomscaleBrainTable=reinterpret_cast<uintptr_t>(g)+0x29be90;
     // Cached function addresses and trampolines belong to these exact modules.
     // Keep their mappings resident rather than accepting a stale reload target.
     for (auto module : {g, e, c, graphics}) {
@@ -3900,6 +4196,11 @@ bool attach(bool headless) {
     ok = internalHook(g,0x172854,reinterpret_cast<void *>(zoomInterpolatePredicate),&zoomInterpolatePredicate_original) && ok;
     ok = internalHook(g,0x17297f,reinterpret_cast<void *>(zoomSoundStartPredicate),&zoomSoundStartPredicate_original) && ok;
     ok = internalHook(g,0x172a3c,reinterpret_cast<void *>(zoomSoundStopPredicate),&zoomSoundStopPredicate_original) && ok;
+    if(ok&&settings.roomscale&&!headless) {
+        ok=configureRoomscaleSweepQueries(e)&&queueRoomscaleTriangleHook(c,hook)&&
+            queueRoomscalePrimitiveHook(c,hook)&&queueRoomscaleResourceGates(e,internalHook)&&
+            queueRoomscalePlacementHooks(e,hook,internalHook);
+    }
     ok = multiplayer::initialize(e, c, g, hook) && ok;
     ok = internalHook(e, 0x1b3b60, reinterpret_cast<void *>(entityStep),
                       reinterpret_cast<void **>(&originalEntityStep)) &&
@@ -3913,6 +4214,11 @@ bool attach(bool headless) {
         return false;
     }
     ok = MH_ApplyQueued() == MH_OK;
+    if(ok&&settings.roomscale&&!headless) {
+        roomscaleConfigured=armRoomscalePlacementAfterEnable()&&roomscaleCollisionKernelsUsable()&&
+            roomscaleResourceGatesUsable();
+        ok=roomscaleConfigured;
+    }
     if (!ok)
         rollbackNativeHooks();
     hooksReady = ok;
