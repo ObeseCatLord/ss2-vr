@@ -1,0 +1,93 @@
+#include "common/weapon_view.hpp"
+#include <array>
+#include <cstdlib>
+#include <cstring>
+#include <iostream>
+#include <limits>
+using namespace ss2vr;
+static void check(bool ok, const char *message) {
+    if (!ok) { std::cerr << message << '\n'; std::exit(1); }
+}
+static std::array<float, 3> projected(const WeaponWorldView &camera, Vec3 world) {
+    float input[4]{world.x, world.y, world.z, 1}, view[4]{0,0,0,1}, clip[4]{};
+    for (unsigned r=0;r!=3;++r)
+        for (unsigned c=0;c!=4;++c) view[r] += camera.view.m[r*4+c]*input[c];
+    for (unsigned r=0;r!=4;++r)
+        for (unsigned c=0;c!=4;++c) clip[r] += camera.projection.m[r*4+c]*view[c];
+    const float z = (clip[2]/clip[3]+1)*.5f;
+    return {clip[0]/clip[3], clip[1]/clip[3], camera.nearDepth+z*(camera.farDepth-camera.nearDepth)};
+}
+int main() {
+    const Pose center{normalize(multiply(yaw(.6f), Quat{.12f,.02f,.15f,.98f})), {8,2,-11}};
+    for (unsigned eye=0; eye!=2; ++eye) {
+        const Pose camera=compose(center, Pose{{}, {eye ? .032f : -.032f,0,0}});
+        const Fov fov=eye ? Fov{-.72f,.91f,.87f,-.81f} : Fov{-.91f,.72f,.87f,-.81f};
+        WeaponWorldView prepared{matrix(inverse(camera)),projection(fov,.05f,10000),.1f,.9f,true};
+        const Matrix44 executionP=projection(fov,.19f,71);
+        const auto executed=executedWeaponView(prepared,prepared.view,executionP,.1f,.9f);
+        check(executed.valid, "Native execution clip-distance changes retain eye provenance");
+        WeaponViewPass pass{executed};
+        Matrix44 gunP{}; Matrix34 gunView{}; float nz=0, fz=.1f;
+        check(pass.projection(gunP) && pass.view(gunView) && pass.depth(nz,fz) && pass.placed(true),
+              "A gun must admit projection/view/depth/hand placement together");
+        WeaponWorldView gun{gunView,gunP,nz,fz,true};
+        for (Vec3 local : {Vec3{.2f,-.1f,-.8f},Vec3{.2f,-.1f,-1.1f},Vec3{-.4f,.7f,-6}}) {
+            const Vec3 point=camera.p+rotate(camera.q,local);
+            const auto expected=projected(executed,point), actual=projected(gun,point);
+            for (unsigned i=0;i!=3;++i) check(expected[i]==actual[i],
+                "Physical gun and world must share XY and Z for translated/rotated asymmetric eyes");
+        }
+        const Vec3 nearPoint=camera.p+rotate(camera.q,{0,0,-.8f});
+        const Vec3 behind=camera.p+rotate(camera.q,{0,0,-1.1f});
+        const float wallDepth=projected(executed,nearPoint)[2], gunDepth=projected(gun,behind)[2];
+        WeaponWorldView compressed=gun; compressed.nearDepth=0; compressed.farDepth=.1f;
+        check(gunDepth>wallDepth && projected(compressed,behind)[2]<wallDepth,
+              "World-depth gun behind a wall rejects the old compressed foreground mapping");
+        check(pass.restored() && pass.complete(), "Observed native restoration completes the invocation");
+        auto wrongEye=prepared; wrongEye.projection=projection(eye ? Fov{-.91f,.72f,.87f,-.81f} : Fov{-.72f,.91f,.87f,-.81f});
+        check(!executedWeaponView(wrongEye,prepared.view,executionP,.1f,.9f).valid,
+              "Another eye cannot supply this gun's projection");
+        auto moved=prepared.view; moved.m[3]+=.02f;
+        check(!executedWeaponView(prepared,moved,executionP,.1f,.9f).valid,
+              "Another view cannot inherit root preparation provenance");
+        check(!executedWeaponView(prepared,prepared.view,executionP,0,.1f).valid,
+              "Root execution depth must match the prepared native depth range");
+        WeaponViewPass failed{executed};
+        check(failed.projection(gunP) && failed.view(gunView) && failed.depth(nz,fz) &&
+              !failed.placed(false) && failed.cleanupRequired() && !failed.complete(),
+              "Placement failure after mutation requires cleanup and pair rejection");
+        WeaponViewPass reordered{executed};
+        check(!reordered.view(gunView) && reordered.failed && !reordered.complete(),
+              "Missing/reordered native stages cannot start a physical view");
+        WeaponViewPass incomplete{executed};
+        check(incomplete.projection(gunP) && !incomplete.complete(),
+              "An early native return after projection cannot silently complete");
+        WeaponViewPass faultBeforeSetup{executed};
+        faultBeforeSetup.failed = true; // Nested native render faults the outer before its frustum.
+        check(!faultBeforeSetup.cleanupRequired(), "Failure before any graphics setup needs no cleanup");
+        check(!faultBeforeSetup.projection(gunP) && !faultBeforeSetup.view(gunView) &&
+              !faultBeforeSetup.depth(nz,fz) && !faultBeforeSetup.placed(false) &&
+              faultBeforeSetup.stage == 0 && faultBeforeSetup.cleanupRequired(),
+              "Rejected substitutions still reach native setup/fallback and require saved state restoration");
+        WeaponViewPass untouched{executed};
+        check(untouched.complete() && !untouched.cleanupRequired(),
+              "Native early return before mutation needs no fabricated draw or cleanup");
+    }
+    WeaponViewPass outer, inner; WeaponViewPass *active=&outer;
+    try {
+        ScopedWeaponContext<WeaponViewPass> nested(active,&inner);
+        check(active==&inner,"Owned nested calls use their own context");
+        {
+            ScopedWeaponContext<WeaponViewPass> unowned(active,nullptr);
+            check(!active,"Unowned nested calls suppress inherited physical adaptation");
+        }
+        check(active==&inner,"Suppression restores the immediate parent context");
+        throw 1;
+    } catch (int) {}
+    check(active==&outer,"Supported C++ unwind restores context without swallowing native exceptions");
+    auto invalid=projection({-.8f,.8f,.8f,-.8f});
+    invalid.m[0]=std::numeric_limits<float>::quiet_NaN();
+    check(!finiteProjection(invalid) && !validDepthRange(0,0) && !validDepthRange(-.1f,1),
+          "Nonfinite projection and invalid native depth ranges cannot be admitted");
+    std::cout << "Physical weapon view/depth checks passed; no native runtime executed\n";
+}

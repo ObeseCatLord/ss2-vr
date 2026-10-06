@@ -1,0 +1,103 @@
+#pragma once
+#include <cstddef>
+#include <cstdint>
+#include <type_traits>
+namespace ss2vr {
+constexpr uint32_t Magic = 0x32565253, Abi = 8, MaxDimension = 2048, WeaponCount = 17;
+constexpr size_t EyeBytes = size_t(MaxDimension) * MaxDimension * 4;
+enum Button : uint32_t { Wheel = 1, Use = 2, Jump = 4, Menu = 8, Recenter = 16, Sprint = 32 };
+enum FramePresentation : uint32_t { NativeUiComplete = 1 };
+enum class SlotState : uint32_t { Empty, Requested, Rendering, Ready };
+#pragma pack(push, 8)
+struct Vec3 {
+    float x = 0, y = 0, z = 0;
+};
+struct Quat {
+    float x = 0, y = 0, z = 0, w = 1;
+};
+struct Pose {
+    Quat q;
+    Vec3 p;
+};
+struct Fov {
+    float left = 0, right = 0, up = 0, down = 0;
+};
+struct Input {
+    uint64_t sequence = 0, tickMs = 0;
+    uint32_t session = 0, reference = 0, focused = 0, headValid = 0;
+    Pose head, hand[2];
+    uint32_t handValid[2]{};
+    float trigger[2]{}, axis[2][2]{};
+    uint32_t buttons[2]{};
+    Pose grip[2];
+    uint32_t gripValid[2]{}, blockedWheels = 0;
+    // Logical action provenance from the same xrSyncActions sample. An inactive
+    // action is unavailable, not a physical release. No runtime paths cross IPC.
+    uint32_t primaryActiveMask = 0, zoomActiveMask = 0, zoomDownMask = 0;
+    uint32_t primaryInputGeneration[2]{}, zoomInputGeneration[2]{};
+    uint32_t zoomSourceButton[2]{};
+};
+struct Request {
+    uint64_t sequence = 0;
+    int64_t predictedTime = 0;
+    uint32_t session = 0, reference = 0, width = 0, height = 0;
+    uint32_t trackingGeneration = 0, reserved = 0;
+    Pose eye[2];
+    Fov fov[2];
+    Input input;
+    // One host comfort anchor frozen with the actual requested eye poses.
+    Pose uiPanel;
+    float uiWidth = 0, uiHeight = 0;
+    uint32_t uiRequested = 0;
+};
+struct WheelUi {
+    uint32_t open = 0, count = 0;
+    int32_t hover = -1;
+    int32_t weapon[WeaponCount]{};
+    int32_t ammo[WeaponCount]{};
+};
+struct Ui {
+    uint64_t tickMs = 0;
+    uint32_t gameplay = 0, trackingGeneration = 0;
+    int32_t health = 0, armor = 0, currentWeapon[2]{-1, -1}, currentAmmo[2]{};
+    uint32_t fireSequence[2]{}, damageSequence = 0;
+    WheelUi wheel[2];
+};
+struct Slot {
+    SlotState state = SlotState::Empty;
+    uint32_t cancelled = 0;
+    // Response capability belongs to the actual image pair, not its request.
+    uint32_t presentation = 0, presentationReserved = 0;
+    Request request;
+    uint8_t pixels[2][EyeBytes];
+};
+// Explicitly mono menu/loading frame; never eligible for a projection layer.
+struct MenuFrame {
+    uint64_t sequence = 0, tickMs = 0;
+    uint32_t visible = 0, width = 0, height = 0, interactionGeneration = 0;
+    uint8_t pixels[EyeBytes];
+};
+struct MenuPointer {
+    uint64_t inputSequence = 0, tickMs = 0, menuSequence = 0;
+    uint32_t session = 0, reference = 0, interactionGeneration = 0, active = 0, hand = 0;
+    float u = 0, v = 0, trigger = 0;
+    uint32_t primaryInputGeneration = 0;
+};
+struct Shared {
+    uint32_t magic = Magic, abi = Abi, bytes = sizeof(Shared), gamePid = 0;
+    uint32_t hostPid = 0, width = 0, height = 0, shutdown = 0, rendererReady = 0, error = 0;
+    // Win32 Interlocked publication; invalidation does not wait for the IPC mutex.
+    uint32_t trackingGeneration = 0;
+    Input latest;
+    Ui ui;
+    Slot slot[2];
+    MenuFrame menu;
+    MenuPointer pointer;
+};
+#pragma pack(pop)
+static_assert(sizeof(Vec3) == 12 && sizeof(Quat) == 16 && sizeof(Pose) == 28);
+static_assert(std::is_trivially_copyable_v<Request> && std::is_standard_layout_v<Shared>);
+static_assert(offsetof(Shared, latest) == 48);
+static_assert(sizeof(Input) == 264 && sizeof(Request) == 432);
+static_assert(sizeof(MenuPointer) == 64);
+} // namespace ss2vr

@@ -1,0 +1,256 @@
+#pragma once
+#include "math.hpp"
+namespace ss2vr {
+// Input provenance only: native gameplay still owns firing and zoom. A lost
+// action or changed logical stream cannot reuse an earlier neutral witness.
+struct ActionStream {
+    uint32_t generation = 1;
+    bool active = false;
+    void invalidate() {
+        generation = generation && generation != UINT32_MAX ? generation + 1 : 0;
+        active = false;
+    }
+    bool sample(bool available) {
+        if (active && !available)
+            invalidate();
+        active = available && generation != 0;
+        return active;
+    }
+};
+inline bool primaryActionEligible(const Input &input, unsigned hand) {
+    return hand < 2 && (input.primaryActiveMask & (1u << hand)) && input.primaryInputGeneration[hand];
+}
+// A causal sample boundary, not another control gate. Existing gates must see
+// a new eligible release; rereading cached neutral cannot arm after interruption.
+struct InputSampleBoundary {
+    uint64_t session = 0, reference = 0, sequence = 0, tickMs = 0;
+    uint32_t producer = 0;
+    bool permits(const Input &input, uint64_t now, uint32_t currentProducer) const {
+        return !tickMs || (input.tickMs > tickMs && input.tickMs <= now &&
+            ((currentProducer != producer || input.session != session || input.reference != reference) ||
+             input.sequence > sequence));
+    }
+};
+inline int nativeCommandQuery(float value, float previous, int mode, bool compatible) {
+    if (!compatible)
+        return 0; // Both halves of an edge belong to the same native transaction.
+    const bool active = value > 0;
+    return mode == 0 ? active : mode == 1 ? (active && previous <= 0) : (!active && previous > 0);
+}
+inline bool primaryCommandHistoryCompatible(const Input &previous, const Input &current, unsigned hand,
+                                             uint32_t previousEpoch, uint32_t currentEpoch, bool handheld) {
+    return primaryActionEligible(previous, hand) && primaryActionEligible(current, hand) &&
+           previous.primaryInputGeneration[hand] == current.primaryInputGeneration[hand] &&
+           (!handheld || previousEpoch == currentEpoch);
+}
+inline bool recenterHeld(const Input &input) {
+    return ((input.buttons[0] | input.buttons[1]) & Button::Recenter) != 0;
+}
+// Coordinates and trigger belong to the same submitted XR input sample.
+// Newer input may invalidate focus/tracking, but cannot supply another click.
+inline bool menuPointerEligible(const MenuPointer &pointer, const Input &input, uint64_t menuSequence,
+                                uint32_t generation, uint64_t now) {
+    return pointer.active && pointer.hand < 2 && pointer.inputSequence && pointer.menuSequence &&
+           pointer.menuSequence == menuSequence && generation &&
+           pointer.interactionGeneration == generation && input.focused && input.headValid &&
+           input.handValid[pointer.hand] && primaryActionEligible(input, pointer.hand) &&
+           pointer.primaryInputGeneration == input.primaryInputGeneration[pointer.hand] &&
+           !recenterHeld(input) && pointer.session == input.session &&
+           pointer.reference == input.reference && pointer.inputSequence <= input.sequence &&
+           pointer.tickMs <= now && input.tickMs <= now && now - pointer.tickMs < 150 &&
+           now - input.tickMs < 150 && std::isfinite(pointer.trigger) && pointer.trigger >= 0 &&
+           pointer.trigger <= 1 && std::isfinite(pointer.u) && std::isfinite(pointer.v) && pointer.u >= 0 &&
+           pointer.u <= 1 && pointer.v >= 0 && pointer.v <= 1;
+}
+inline void applyRecenterChord(Input &input, bool clicked) {
+    if (input.focused && (input.buttons[0] & Wheel) && (input.buttons[1] & Wheel) && clicked) {
+        input.buttons[0] = (input.buttons[0] & ~Sprint) | Recenter;
+        input.buttons[1] &= ~Sprint;
+        // Keep physical trigger and grip state: neither a fake trigger release
+        // nor a fake new grip press may be synthesized when the chord ends.
+    }
+}
+// Observe raw input independently of gated intent. Hysteresis in [.2,.65]
+// preserves the latch, but is never evidence of a new physical release.
+inline bool samplePrimaryNeutral(float value, bool eligible, bool newSample,
+                                 bool &physicalDown, uint32_t &releasedSerial) {
+    if (!eligible || !newSample || !std::isfinite(value))
+        return false;
+    if (value > .65f)
+        physicalDown = true;
+    else if (value < .2f) {
+        physicalDown = false;
+        if (releasedSerial != UINT32_MAX)
+            ++releasedSerial;
+        return true;
+    }
+    return false;
+}
+struct TriggerGate {
+    bool armed = false, down = false;
+    bool update(float value, bool allowed) {
+        if (!allowed || !std::isfinite(value)) {
+            armed = false;
+            down = false;
+            return false;
+        }
+        if (value < .2f) {
+            armed = true;
+            down = false;
+        } else if (armed && value > .65f)
+            down = true;
+        return down;
+    }
+};
+// The existing neutral gate with per-weapon sample provenance. Re-reading an
+// old neutral after equip, action loss or a blocked wheel cannot arm zoom.
+struct HeldZoomInput {
+    TriggerGate gate;
+    InputSampleBoundary boundary;
+    uint32_t weapon = 0, rig = 0, action = 0, session = 0, reference = 0, producer = 0;
+    uint64_t sampledSequence = 0;
+    bool sample(const Input &input, unsigned hand, bool allowed, uint32_t nativeWeapon,
+                uint32_t trackingGeneration, uint32_t inputProducer, uint64_t now) {
+        if (hand >= 2) return false;
+        const bool changed = weapon != nativeWeapon || rig != trackingGeneration ||
+            action != input.zoomInputGeneration[hand] || session != input.session ||
+            reference != input.reference || producer != inputProducer;
+        weapon = nativeWeapon; rig = trackingGeneration; action = input.zoomInputGeneration[hand];
+        session = input.session; reference = input.reference; producer = inputProducer;
+        allowed = allowed && nativeWeapon && trackingGeneration && action && input.session &&
+            input.focused && input.headValid && input.handValid[hand] &&
+            (input.zoomActiveMask & (1u << hand)) && input.tickMs <= now;
+        if (changed || !allowed) {
+            gate = {};
+            boundary = {input.session, input.reference, input.sequence, now, inputProducer};
+            sampledSequence = input.sequence;
+            return false;
+        }
+        if (!boundary.permits(input, now, inputProducer)) return false;
+        if (sampledSequence != input.sequence) {
+            sampledSequence = input.sequence;
+            return gate.update((input.zoomDownMask & (1u << hand)) ? 1.f : 0.f, true);
+        }
+        return gate.down;
+    }
+};
+// The host's source button is the exact SAME logical action sampled for zoom.
+// Consume only that action on an admitted native sniper hand; another hand or
+// a distinct jump/use action remains available even before zoom has rearmed.
+inline uint32_t contextualSniperButtons(const Input &input, unsigned hand, bool nativeSniper) {
+    if (hand >= 2) return 0;
+    const uint32_t source = input.zoomSourceButton[hand];
+    const bool known = source == Sprint || source == Jump;
+    return input.buttons[hand] & ~(nativeSniper && known ? source : 0u);
+}
+struct PressGate {
+    bool armed = false, down = false;
+    bool pressed(bool held, bool allowed) {
+        if (!allowed) {
+            armed = down = false;
+            return false;
+        }
+        if (!held) {
+            armed = true;
+            down = false;
+            return false;
+        }
+        bool result = armed && !down;
+        down = true;
+        return result;
+    }
+};
+enum class MenuAction { None, Back, Confirm, Up, Down, Left, Right };
+struct MenuNavigation {
+    PressGate back, use;
+    TriggerGate trigger;
+    bool triggerDown = false, axisArmed = false, axisDown = false;
+    bool wasMenu = false;
+    uint32_t primaryGeneration[2]{};
+    MenuAction sample(const Input &input, bool menuVisible, bool allowed, bool pointerMode = false) {
+        if (!allowed || menuVisible != wasMenu) {
+            back = {};
+            use = {};
+            trigger = {};
+            triggerDown = axisArmed = axisDown = false;
+        }
+        wasMenu = menuVisible;
+        for (unsigned hand = 0; hand != 2; ++hand)
+            if (primaryGeneration[hand] != input.primaryInputGeneration[hand]) {
+                primaryGeneration[hand] = input.primaryInputGeneration[hand];
+                trigger = {};
+                triggerDown = false;
+            }
+        const auto buttons = input.buttons[0] | input.buttons[1];
+        bool goBack = back.pressed((buttons & Menu) != 0, allowed);
+        bool confirm = use.pressed((buttons & Use) != 0, allowed && menuVisible);
+        const bool leftActive = primaryActionEligible(input, 0), rightActive = primaryActionEligible(input, 1);
+        bool fire = trigger.update(std::max(leftActive ? input.trigger[0] : 0.f,
+                                           rightActive ? input.trigger[1] : 0.f),
+                                   allowed && menuVisible && !pointerMode && (leftActive || rightActive));
+        confirm = confirm || (fire && !triggerDown);
+        triggerDown = fire;
+        MenuAction direction = MenuAction::None;
+        const float x = input.axis[0][0], y = input.axis[0][1];
+        if (allowed && menuVisible && std::isfinite(x) && std::isfinite(y)) {
+            float extent = std::max(std::abs(x), std::abs(y));
+            if (extent < .3f) {
+                axisArmed = true;
+                axisDown = false;
+            } else if (extent > .75f && axisArmed && !axisDown) {
+                direction = std::abs(y) >= std::abs(x) ? (y > 0 ? MenuAction::Up : MenuAction::Down)
+                                                       : (x > 0 ? MenuAction::Right : MenuAction::Left);
+                axisDown = true;
+            }
+        } else
+            axisArmed = axisDown = false;
+        // At most one native key tap per presentation; no truncated simultaneous taps.
+        if (goBack)
+            return MenuAction::Back;
+        if (confirm)
+            return MenuAction::Confirm;
+        return direction;
+    }
+};
+struct WeaponWheel {
+    bool open = false, previousHold = false;
+    int hover = -1;
+    int selected = -1;
+    void cancel() {
+        open = false;
+        hover = -1;
+        selected = -1;
+    }
+    int update(bool held, float x, float y, const int *ids, uint32_t count, bool allowed) {
+        selected = -1;
+        if (!allowed || !std::isfinite(x) || !std::isfinite(y) || count > WeaponCount) {
+            cancel();
+            previousHold = held;
+            return -1;
+        }
+        if (held && !previousHold) {
+            open = true;
+            hover = -1;
+        }
+        if (open) {
+            float r = std::sqrt(x * x + y * y);
+            if (r < .3f || !count)
+                hover = -1;
+            else {
+                float a = std::atan2(x, y);
+                if (a < 0)
+                    a += 2 * Pi;
+                hover = int(std::floor((a + Pi / count) / (2 * Pi / count))) % int(count);
+            }
+        }
+        if (!held && previousHold && open) {
+            if (hover >= 0 && uint32_t(hover) < count)
+                selected = ids[hover];
+            open = false;
+            hover = -1;
+        }
+        previousHold = held;
+        return selected;
+    }
+};
+} // namespace ss2vr

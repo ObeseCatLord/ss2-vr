@@ -1,0 +1,896 @@
+#include "native_memory.hpp"
+#include "native_finally.hpp"
+#include "remote_render.hpp"
+
+#include "common/model_tree.hpp"
+#include "common/head_palette.hpp"
+#include "common/palette_provenance.hpp"
+#include "common/presentation_identity.hpp"
+#include "common/frame_policy.hpp"
+#include "common/winproc.hpp"
+#include "game.hpp"
+#include "multiplayer.hpp"
+#include "native_tracking.hpp"
+#include "scope_observer.hpp"
+#include <array>
+#include <atomic>
+#include <cstring>
+#include <span>
+#include <vector>
+
+namespace ss2vr::game::remote_render {
+namespace {
+
+constexpr size_t MaxBindings = 18;
+constexpr size_t MaxModelRecords = 2048;
+constexpr size_t LeftWeaponHandle = 0x804;
+constexpr size_t RightWeaponHandle = 0x800;
+constexpr size_t WeaponId = 0xb4;
+constexpr size_t WeaponPropertiesResource = 0x64;
+
+using StringId = uint32_t *(__cdecl *)(uint32_t *, const char *);
+using VoidCdecl = void(__cdecl *)();
+using HandleResolve = void *(__cdecl *)(uint32_t);
+using PointerHandle = uint32_t(__cdecl *)(void *);
+using IntThis = int(__thiscall *)(void *);
+using ModelRenderable = void *(__thiscall *)(void *);
+using ModelInstance = void *(__thiscall *)(void *);
+using WeaponTool = void *(__thiscall *)(void *, int);
+using ToolFileStemId = uint32_t *(__thiscall *)(void *, uint32_t *);
+using ChildName = uint32_t *(__cdecl *)(uint32_t *, const void *);
+using ChildOffset = Pose *(__cdecl *)(Pose *, const void *);
+using ChildInstance = void *(__cdecl *)(const void *);
+
+// Engine's render-list item. Only world is ever written, after a complete
+// portable subtree retarget succeeds.
+struct NativeModelRecord {
+    uint32_t unused;
+    int32_t parent;
+    uint8_t beforeWorld[0x1c];
+    Matrix34 world;
+    void *instance;
+    void *descriptor;
+    uint8_t tail[0x0c];
+};
+static_assert(offsetof(NativeModelRecord, parent) == 0x04);
+static_assert(offsetof(NativeModelRecord, world) == 0x24);
+static_assert(offsetof(NativeModelRecord, instance) == 0x54);
+static_assert(offsetof(NativeModelRecord, descriptor) == 0x58);
+static_assert(sizeof(NativeModelRecord) == 0x68);
+
+struct Binding {
+    uint32_t playerHandle = 0;
+    uint32_t handHandle[2]{};
+    int16_t nativeId[2]{-1, -1};
+    uint32_t toolId[2]{};
+    bool handEligible[2]{};
+    void *bodyModelInstance = nullptr;
+    RiderIdentity rider;
+    multiplayer::Sample sample;
+};
+
+struct FrozenBinding {
+    Binding binding;
+    Pose body;
+    bool bodyValid = false;
+};
+
+template <class T> bool symbol(HMODULE module, const char *name, T &out) {
+    out = loadProc<T>(module, name);
+    return out != nullptr;
+}
+
+static VoidCdecl originalModelPass = nullptr, originalPalettePass = nullptr;
+static uint32_t headName = 0;
+static uint32_t scopeName = 0, scopeBoneName = 0;
+static bool headTrackingEnabled = false;
+static StringId stringId = nullptr;
+static int(__cdecl *isMainThread)() = nullptr;
+static const uint32_t *invalidId = nullptr;
+static thread_local bool paletteReentrant = false, paletteInvalidated = false;
+static HandleResolve resolve = nullptr;
+static PointerHandle pointerHandle = nullptr;
+static IntThis isLocal = nullptr, isAlive = nullptr;
+static ModelRenderable getModelRenderable = nullptr;
+static ModelInstance getModelInstance = nullptr;
+static WeaponTool getWeaponTool = nullptr;
+static ToolFileStemId toolFileStemId = nullptr;
+static ChildName getChildName = nullptr;
+static ChildOffset getChildOffset = nullptr;
+static ChildInstance getChildInstance = nullptr;
+static uintptr_t engineBase = 0;
+static std::atomic<bool> ready = false;
+static SRWLOCK bindingLock = SRWLOCK_INIT;
+static std::array<Binding, MaxBindings> bindings;
+static std::array<FrozenBinding, MaxBindings> frozen;
+static std::atomic<bool> pairInvalid = false;
+static std::atomic<bool> pairActive = false; // bindingLock protects the transaction bank.
+static std::atomic<DWORD> simulationThread = 0; // observations establish native object ownership.
+static DWORD pairThread = 0;
+struct ExclusiveBindings {
+    ExclusiveBindings() { AcquireSRWLockExclusive(&bindingLock); }
+    ~ExclusiveBindings() { ReleaseSRWLockExclusive(&bindingLock); }
+};
+struct SharedBindings {
+    SharedBindings() { AcquireSRWLockShared(&bindingLock); }
+    ~SharedBindings() { ReleaseSRWLockShared(&bindingLock); }
+};
+static thread_local bool frozenPair = false;
+static thread_local bool reentrant = false;
+
+static uint32_t read32(const void *object, size_t offset) {
+    uint32_t value = 0;
+    std::memcpy(&value, static_cast<const uint8_t *>(object) + offset, sizeof(value));
+    return value;
+}
+
+static int nativeWeaponId(void *weapon) {
+    int value = -1;
+    if (weapon)
+        std::memcpy(&value, static_cast<uint8_t *>(weapon) + WeaponId, sizeof(value));
+    return value;
+}
+
+static uint32_t nativeHandHandle(void *player, unsigned hand) {
+    return read32(player, hand == 0 ? LeftWeaponHandle : RightWeaponHandle);
+}
+
+static bool validNativeId(int value) {
+    return value >= 0 && value < int(WeaponCount) && value != 14;
+}
+
+static bool validSample(const Binding &binding, const multiplayer::Sample &sample) {
+    if (!sample.negotiated || !sample.valid || !sample.avatar || !sample.incarnation ||
+        sample.avatar != binding.playerHandle || sample.incarnation != binding.sample.incarnation ||
+        GetTickCount64() - sample.receivedMs > network::MaxPoseAgeMs)
+        return false;
+    return true;
+}
+
+static bool bodyAnchor(void *player, const RiderIdentity &rider, Pose &body) {
+    return player && nativeTrackingAnchor(player, body, &rider);
+}
+
+static bool currentBinding(const Binding &binding, const multiplayer::Sample &sample, void *&player,
+                           const multiplayer::PresentationReadGuard *guard = nullptr) {
+    player = binding.playerHandle ? resolve(binding.playerHandle) : nullptr;
+    if (!player || !nativeRiderCurrent(player, binding.rider))
+        return false;
+    const bool local = isLocal(player);
+    if (!nativeRiderCurrent(player, binding.rider))
+        return false;
+    const bool alive = !local && isAlive(player);
+    if (!nativeRiderCurrent(player, binding.rider) || local || !alive)
+        return false;
+    auto renderable = getModelRenderable(player);
+    if (!nativeRiderCurrent(player, binding.rider) || !renderable)
+        return false;
+    const auto modelInstance = getModelInstance(renderable);
+    if (!nativeRiderCurrent(player, binding.rider) || modelInstance != binding.bodyModelInstance)
+        return false;
+    if (!guard)
+        return validSample(binding, sample);
+    const auto now = guard->sample(binding.playerHandle);
+    if (!sample.presentationRevision || sample.presentationRevision != now.presentationRevision ||
+        !samePresentationIdentity(binding.playerHandle, sample.incarnation, sample.pose, now.avatar,
+                                  now.incarnation, now.pose, now.negotiated, now.valid))
+        return false;
+    for (unsigned hand = 0; hand < 2; ++hand)
+        if (binding.rider.handheld() && binding.handEligible[hand] &&
+            nativeHandHandle(player, hand) != binding.handHandle[hand])
+            return false;
+    return true;
+}
+
+static bool compatibleBinding(const Binding &a, const Binding &b) {
+    return a.sample.presentationRevision && a.sample.presentationRevision == b.sample.presentationRevision &&
+           a.playerHandle == b.playerHandle && a.bodyModelInstance == b.bodyModelInstance && a.rider == b.rider &&
+           samePresentationIdentity(a.playerHandle, a.sample.incarnation, a.sample.pose, b.sample.avatar,
+                                    b.sample.incarnation, b.sample.pose, b.sample.negotiated, b.sample.valid) &&
+           !std::memcmp(a.handHandle, b.handHandle, sizeof(a.handHandle)) &&
+           !std::memcmp(a.nativeId, b.nativeId, sizeof(a.nativeId)) &&
+           !std::memcmp(a.toolId, b.toolId, sizeof(a.toolId)) &&
+           !std::memcmp(a.handEligible, b.handEligible, sizeof(a.handEligible));
+}
+static bool validatePair(const multiplayer::PresentationReadGuard &guard) {
+    bool admitted = false;
+    for (const auto &entry : frozen)
+        admitted |= entry.bodyValid;
+    if (!eligiblePresentationPair(pairActive.load(std::memory_order_acquire),
+                                  pairThread == GetCurrentThreadId(), admitted,
+                                  pairInvalid.load(std::memory_order_acquire), [] { return checkNativeThread(); }))
+        return false;
+    for (const auto &entry : frozen) {
+        if (!entry.bodyValid)
+            continue;
+        void *player = nullptr;
+        if (!currentBinding(entry.binding, entry.binding.sample, player, &guard)) {
+            pairInvalid.store(true, std::memory_order_release);
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool eligibleHand(const Binding &binding, const multiplayer::Sample &sample, void *player, unsigned hand) {
+    return binding.rider.handheld() && binding.handEligible[hand] && binding.handHandle[hand] &&
+           nativeHandHandle(player, hand) == binding.handHandle[hand] && validNativeId(binding.nativeId[hand]) &&
+           sample.pose.nativeWeaponId[hand] == binding.nativeId[hand] &&
+           (sample.pose.validMask & (1u << (hand + 1))) && finite(sample.pose.grip[hand]);
+}
+
+static bool lineageContainsBody(std::span<const ModelRecord> records, size_t root, void *body) {
+    for (size_t i = 1; i < records.size(); ++i) {
+        if (records[i].instance != reinterpret_cast<uintptr_t>(body))
+            continue;
+        bool contains = false;
+        if (!ancestorContains(records, root, i, contains))
+            return false;
+        if (contains)
+            return true;
+    }
+    return false;
+}
+
+static bool descendantOf(std::span<const ModelRecord> records, size_t child, size_t root) {
+    bool contains = false;
+    return ancestorContains(records, child, root, contains) && contains;
+}
+
+static bool selectRoot(std::span<const NativeModelRecord> native, std::span<const ModelRecord> records,
+                       const Binding &binding, unsigned hand, size_t &root, Pose &offset) {
+    size_t found = records.size();
+    for (size_t index = 1; index < native.size(); ++index) {
+        const void *descriptor = native[index].descriptor;
+        uint32_t name = 0;
+        Pose candidateOffset;
+        if (!descriptor)
+            continue;
+        getChildName(&name, descriptor);
+        getChildOffset(&candidateOffset, descriptor);
+        if (name != binding.toolId[hand] || native[index].instance != getChildInstance(descriptor) ||
+            !lineageContainsBody(records, index, binding.bodyModelInstance))
+            continue;
+        if (found != records.size())
+            return false; // Descriptor/name collisions must not select an arbitrary tool.
+        found = index;
+        offset = candidateOffset;
+    }
+    if (found == records.size() || !finite(offset))
+        return false;
+    root = found;
+    return true;
+}
+
+static void postModelPass() {
+    if (!hooksReady.load(std::memory_order_acquire) || !ready.load(std::memory_order_acquire))
+        return;
+    SharedBindings bindingGuard;
+    multiplayer::PresentationReadGuard presentationGuard;
+    if (frozenPair && !validatePair(presentationGuard))
+        return;
+    if (!checkNativeThread())
+        return;
+
+    NativeModelRecord *native = nullptr;
+    int32_t count = 0, capacity = 0;
+    std::memcpy(&native, reinterpret_cast<void *>(engineBase + 0x2eac24), sizeof(native));
+    std::memcpy(&count, reinterpret_cast<void *>(engineBase + 0x2eac28), sizeof(count));
+    std::memcpy(&capacity, reinterpret_cast<void *>(engineBase + 0x2eac20), sizeof(capacity));
+    if (!native || count < 1 || count > int(MaxModelRecords) || capacity < count || native[0].instance)
+        return;
+
+    std::array<FrozenBinding, MaxBindings> bank{};
+    if (frozenPair) {
+        bank = frozen;
+    } else {
+        for (size_t i = 0; i < bindings.size(); ++i)
+            bank[i].binding = bindings[i];
+    }
+
+    std::vector<ModelRecord> records;
+    records.reserve(size_t(count));
+    for (int32_t i = 0; i < count; ++i)
+        records.push_back({native[i].parent, reinterpret_cast<uintptr_t>(native[i].instance), native[i].world});
+    std::vector<ModelRecord> changed = records;
+    std::array<size_t, MaxBindings * 2> selected{};
+    size_t selectedCount = 0;
+
+    for (const auto &entry : bank) {
+        const Binding &binding = entry.binding;
+        if (!binding.playerHandle || !binding.bodyModelInstance)
+            continue;
+        void *player = nullptr;
+        multiplayer::Sample sample = binding.sample;
+        if (!frozenPair) {
+            player = resolve(binding.playerHandle);
+            if (!player)
+                continue;
+            sample = presentationGuard.sample(binding.playerHandle);
+        }
+        if (!currentBinding(binding, sample, player, frozenPair ? &presentationGuard : nullptr))
+            continue;
+        Pose body;
+        if (frozenPair) {
+            if (!entry.bodyValid)
+                continue;
+            body = entry.body;
+        } else if (!bodyAnchor(player, binding.rider, body)) {
+            continue;
+        }
+        for (unsigned hand = 0; hand < 2; ++hand) {
+            if (!eligibleHand(binding, sample, player, hand))
+                continue;
+            size_t root = 0;
+            Pose offset;
+            if (!selectRoot(std::span<const NativeModelRecord>(native, size_t(count)), records, binding, hand,
+                            root, offset))
+                continue;
+            bool collision = false;
+            for (size_t i = 0; i < selectedCount; ++i)
+                collision |= root == selected[i] || descendantOf(records, root, selected[i]) ||
+                             descendantOf(records, selected[i], root);
+            if (collision)
+                continue;
+            Matrix34 desiredRigid = affineMultiply(matrix(compose(body, sample.pose.grip[hand])), matrix(offset));
+            Matrix34 desired;
+            if (!retainNativeStretch(records[root].world, desiredRigid, desired) ||
+                !retargetModelSubtree(std::span<ModelRecord>(changed), root, desired))
+                continue;
+            selected[selectedCount++] = root;
+        }
+    }
+
+    for (size_t i = 0; i < records.size(); ++i)
+        if (std::memcmp(&records[i].world, &changed[i].world, sizeof(Matrix34)))
+            native[i].world = changed[i].world;
+}
+
+// Engine renderer arrays, read only after DDE30 has finished reallocating/copying.
+struct NativeMeshRecord { int32_t owner, first, count; uint8_t tail[0x14]; };
+struct NativeDrawEntry { int32_t mesh, first, count; uint8_t tail[0x14]; };
+struct NativeBone { int32_t owner, parent; uint8_t evaluated[0x1c]; void *definition; };
+static_assert(sizeof(NativeMeshRecord) == 0x20);
+static_assert(sizeof(NativeDrawEntry) == 0x20);
+static_assert(sizeof(NativeBone) == 0x28 && offsetof(NativeBone, definition) == 0x24);
+constexpr size_t MaxNativeBones = 8192, MaxNativeEntries = 8192, MaxPaletteMatrices = 32768;
+
+template<class T> static bool rendererArray(size_t arrayRva, size_t maximum, std::span<T> &out,
+                                            bool writable = false) {
+    T *pointer = nullptr;
+    int32_t capacity = 0, count = 0;
+    std::memcpy(&capacity, reinterpret_cast<void *>(engineBase + arrayRva), 4);
+    std::memcpy(&pointer, reinterpret_cast<void *>(engineBase + arrayRva + 4), 4);
+    std::memcpy(&count, reinterpret_cast<void *>(engineBase + arrayRva + 8), 4);
+    if (count < 0 || size_t(count) > maximum || capacity < count || count > INT32_MAX / int32_t(sizeof(T)))
+        return false;
+    if (count && !readableMemory(pointer, size_t(count) * sizeof(T), writable))
+        return false;
+    out = {pointer, size_t(count)};
+    return true;
+}
+static void paletteFault() {
+    if (frozenPair)
+        pairInvalid.store(true, std::memory_order_release);
+}
+static void postPalette() {
+    if (!hooksReady.load(std::memory_order_acquire) || !ready.load(std::memory_order_acquire))
+        return;
+    SharedBindings bindingsGuard;
+    multiplayer::PresentationReadGuard presentationGuard;
+    if (!checkNativeThread() || (frozenPair && !validatePair(presentationGuard))) {
+        paletteFault();
+        return;
+    }
+    std::array<FrozenBinding, MaxBindings> bank{};
+    if (frozenPair)
+        bank = frozen;
+    else {
+        for (size_t i = 0; i < bindings.size(); ++i) {
+            auto &entry = bank[i];
+            entry.binding = bindings[i];
+            entry.binding.sample = presentationGuard.sample(entry.binding.playerHandle);
+            void *player = nullptr;
+            entry.bodyValid = currentBinding(entry.binding, entry.binding.sample, player) &&
+                              bodyAnchor(player, entry.binding.rider, entry.body);
+        }
+    }
+    bool eligible = false;
+    for (const auto &entry : bank)
+        eligible |= entry.bodyValid && (entry.binding.sample.pose.validMask & 1) &&
+                    !identityTrackingDelta(entry.binding.sample.pose.head);
+    if (!eligible)
+        return;
+    std::span<NativeModelRecord> records;
+    std::span<NativeMeshRecord> meshes;
+    std::span<NativeDrawEntry> draws;
+    std::span<NativeBone> bones;
+    std::span<PaletteMap> mappings;
+    std::span<Matrix34> palette;
+    if (!rendererArray(0x2eac20, MaxModelRecords, records) || records.empty() || records[0].instance) {
+        paletteFault();
+        return;
+    }
+    std::vector<uintptr_t> instances;
+    for (const auto &record : records)
+        instances.push_back(reinterpret_cast<uintptr_t>(record.instance));
+    std::array<int32_t, MaxBindings> bodyOwners;
+    bodyOwners.fill(-1);
+    bool relevantBody = false;
+    for (size_t i = 0; i < bank.size(); ++i) {
+        const auto &entry = bank[i];
+        if (!entry.bodyValid || !(entry.binding.sample.pose.validMask & 1) ||
+            identityTrackingDelta(entry.binding.sample.pose.head))
+            continue;
+        bodyOwners[i] = paletteBodyOwner(instances, reinterpret_cast<uintptr_t>(entry.binding.bodyModelInstance));
+        if (bodyOwners[i] == -2) { paletteFault(); return; }
+        relevantBody |= bodyOwners[i] >= 0;
+    }
+    if (!relevantBody)
+        return; // Unrelated static/no-morph models have no head-specific requirements.
+    if (!rendererArray(0x2eac70, MaxPaletteMatrices, mappings)) { paletteFault(); return; }
+    if (mappings.empty())
+        return; // Native unskinned/empty-LOD draw; canonical evaluation may be null.
+    if (!rendererArray(0x2eac30, MaxNativeEntries, meshes) ||
+        !rendererArray(0x2eac50, MaxNativeEntries, draws) ||
+        !rendererArray(0x2eac60, MaxNativeBones, bones) ||
+        !rendererArray(0x2eac90, MaxPaletteMatrices, palette, true) || palette.size() < mappings.size()) {
+        paletteFault();
+        return;
+    }
+    std::vector<PaletteModelRange> models;
+    std::vector<PaletteMeshRange> meshRanges;
+    std::vector<PaletteDrawRange> drawRanges;
+    std::vector<Matrix34> worlds;
+    for (const auto &record : records) {
+        int32_t first = 0, count = 0;
+        std::memcpy(&first, reinterpret_cast<const uint8_t *>(&record) + 8, 4);
+        std::memcpy(&count, reinterpret_cast<const uint8_t *>(&record) + 0xc, 4);
+        models.push_back({first, count});
+        worlds.push_back(record.world);
+    }
+    for (const auto &mesh : meshes) meshRanges.push_back({mesh.owner, mesh.first, mesh.count});
+    for (const auto &draw : draws) drawRanges.push_back({draw.mesh, draw.first, draw.count});
+    std::vector<int32_t> drawOwners;
+    if (!paletteDrawOwners(models, meshRanges, drawRanges, mappings, drawOwners)) {
+        paletteFault();
+        return;
+    }
+    std::vector<PaletteBone> boneViews;
+    for (const auto &bone : bones) {
+        uint32_t name = 0;
+        if (bone.definition) {
+            if (!readableMemory(bone.definition, 4)) { paletteFault(); return; }
+            std::memcpy(&name, bone.definition, 4);
+        }
+        boneViews.push_back({bone.owner, bone.parent, name, bone.definition != nullptr});
+    }
+    std::vector<Matrix34> changed(palette.begin(), palette.begin() + mappings.size()), next;
+    std::vector<uint8_t> ownersUsed(records.size(), 0);
+    bool changedHead = false;
+    for (size_t i = 0; i < bank.size(); ++i) {
+        const auto &entry = bank[i];
+        if (bodyOwners[i] < 0)
+            continue;
+        const size_t owner = size_t(bodyOwners[i]);
+        if (ownersUsed[owner]) { paletteFault(); return; }
+        ownersUsed[owner] = 1;
+        const auto result = retargetHeadPalette(boneViews, mappings, drawOwners, worlds, int32_t(owner), headName,
+                                                entry.body, entry.binding.sample.pose.head, changed, next);
+        if (result == HeadPaletteResult::Invalid) { paletteFault(); return; }
+        if (result == HeadPaletteResult::Changed) {
+            changedHead = true;
+            changed.swap(next);
+        }
+    }
+    if (!changedHead)
+        return; // Headless/unmapped LOD preserves native draw, even without evaluation.
+    if (paletteInvalidated)
+        return; // Outer invocation faults late nesting; no adapter writes have happened.
+    void *evaluated = nullptr;
+    Matrix34 *canonical = nullptr;
+    int32_t canonicalCount = 0;
+    std::memcpy(&evaluated, reinterpret_cast<void *>(engineBase + 0x2eab68), 4);
+    if (!readableMemory(evaluated, 0x28)) { paletteFault(); return; }
+    std::memcpy(&canonical, static_cast<uint8_t *>(evaluated) + 0x20, 4);
+    std::memcpy(&canonicalCount, static_cast<uint8_t *>(evaluated) + 0x24, 4);
+    if (canonicalCount < 0 || size_t(canonicalCount) < bones.size() || size_t(canonicalCount) > MaxNativeBones ||
+        !disjointMatrixStorage(reinterpret_cast<uintptr_t>(palette.data()), mappings.size(),
+                               reinterpret_cast<uintptr_t>(canonical), size_t(canonicalCount))) {
+        paletteFault();
+        return;
+    }
+    // Atomic adapter phase: all validation/allocation precedes every write.
+    if (paletteInvalidated)
+        return;
+    for (size_t i = 0; i < mappings.size(); ++i)
+        if (std::memcmp(&palette[i], &changed[i], sizeof(Matrix34)))
+            palette[i] = changed[i];
+}
+static ScopeSurfaceLayout scopeSurfaceLayout(const uint8_t *bytes) {
+    ScopeSurfaceLayout layout;
+    std::memcpy(&layout.triangles, bytes+8, 4);
+    std::memcpy(&layout.vertices, bytes+0xc, 4);
+    const size_t offsets[]{0x20,0x18,0x38,0x40};
+    for (size_t i=0;i<layout.channels.size();++i) {
+        layout.channels[i].format = bytes[offsets[i]];
+        layout.channels[i].buffer = bytes[offsets[i]+1];
+        std::memcpy(&layout.channels[i].offset,bytes+offsets[i]+4,4);
+    }
+    return layout;
+}
+static ScopeRasterStatus readScopeRaster(void *instance, Matrix34 &affine, ScopeSurfaceLayout &layout) {
+    affine = {}; layout = {};
+    if (!instance || !hooksReady.load(std::memory_order_acquire) || !ready.load(std::memory_order_acquire) ||
+        !ownsNativeThread() || paletteInvalidated) return ScopeRasterStatus::Rejected;
+    NativeModelRecord *model = nullptr;
+    NativeDrawEntry *draw = nullptr;
+    const uint8_t *surface = nullptr;
+    int32_t softwarePosition = 0;
+    std::memcpy(&model,reinterpret_cast<void *>(engineBase+0x2eab50),4);
+    std::memcpy(&draw,reinterpret_cast<void *>(engineBase+0x2eab48),4);
+    std::memcpy(&surface,reinterpret_cast<void *>(engineBase+0x2eab44),4);
+    std::memcpy(&softwarePosition,reinterpret_cast<void *>(engineBase+0x2c7f88),4);
+    if (!readableMemory(model,sizeof(*model)) || !readableMemory(surface,4)) return ScopeRasterStatus::Rejected;
+    const void *drawSurface = nullptr;
+    uint32_t name = 0;
+    std::memcpy(&name,surface,4);
+    if (model->instance != instance || name != scopeName) return ScopeRasterStatus::Unrelated;
+    if (softwarePosition != -1 || !readableMemory(draw,sizeof(*draw)) || !readableMemory(surface,0x130) ||
+        draw->count != 1 || draw->first < 0) return ScopeRasterStatus::Rejected;
+    std::memcpy(&drawSurface,reinterpret_cast<const uint8_t *>(draw)+0x18,4);
+    if (drawSurface != surface) return ScopeRasterStatus::Rejected;
+    std::span<Matrix34> palette;
+    if (!rendererArray(0x2eac90,MaxPaletteMatrices,palette) || size_t(draw->first) >= palette.size()) return ScopeRasterStatus::Rejected;
+    const Matrix34 candidate = affineMultiply(model->world,palette[size_t(draw->first)]);
+    Matrix34 inverse;
+    if (!finiteMatrix(model->world) || !finiteMatrix(palette[size_t(draw->first)]) ||
+        !affineInverse(candidate,inverse)) return ScopeRasterStatus::Rejected;
+    affine = candidate;
+    layout = scopeSurfaceLayout(surface);
+    return ScopeRasterStatus::Observed; // No native pointer or index escapes this synchronous read.
+}
+static void observeLocalScope() {
+    ScopeDrawBinding binding;
+    if (!hooksReady.load(std::memory_order_acquire) || !ready.load(std::memory_order_acquire) ||
+        !ownsNativeThread() || !currentScopeDraw(binding) || paletteInvalidated)
+        return;
+    std::span<NativeModelRecord> records;
+    std::span<NativeMeshRecord> meshes;
+    std::span<NativeDrawEntry> draws;
+    std::span<NativeBone> bones;
+    std::span<PaletteMap> mappings;
+    std::span<Matrix34> palette;
+    if (!rendererArray(0x2eac20, MaxModelRecords, records) || records.empty() || records[0].instance ||
+        !rendererArray(0x2eac30, MaxNativeEntries, meshes) ||
+        !rendererArray(0x2eac50, MaxNativeEntries, draws) ||
+        !rendererArray(0x2eac60, MaxNativeBones, bones) ||
+        !rendererArray(0x2eac70, MaxPaletteMatrices, mappings) ||
+        !rendererArray(0x2eac90, MaxPaletteMatrices, palette))
+        return;
+    std::vector<uintptr_t> instances;
+    std::vector<PaletteModelRange> modelRanges;
+    std::vector<Matrix34> worlds;
+    for (const auto &record : records) {
+        int32_t first = 0, count = 0;
+        std::memcpy(&first, reinterpret_cast<const uint8_t *>(&record) + 8, 4);
+        std::memcpy(&count, reinterpret_cast<const uint8_t *>(&record) + 0xc, 4);
+        modelRanges.push_back({first, count});
+        instances.push_back(reinterpret_cast<uintptr_t>(record.instance));
+        worlds.push_back(record.world);
+    }
+    std::vector<PaletteMeshRange> meshRanges;
+    std::vector<PaletteDrawRange> drawRanges;
+    std::vector<uint32_t> surfaceNames;
+    for (const auto &mesh : meshes)
+        meshRanges.push_back({mesh.owner, mesh.first, mesh.count});
+    for (const auto &draw : draws) {
+        const void *surface = nullptr;
+        uint32_t name = 0;
+        std::memcpy(&surface, reinterpret_cast<const uint8_t *>(&draw) + 0x18, 4);
+        if (!readableMemory(surface, 0x130))
+            return;
+        std::memcpy(&name, surface, 4);
+        drawRanges.push_back({draw.mesh, draw.first, draw.count});
+        surfaceNames.push_back(name);
+    }
+    std::vector<PaletteBone> boneViews;
+    for (const auto &bone : bones) {
+        uint32_t name = 0;
+        if (bone.definition) {
+            if (!readableMemory(bone.definition, 4))
+                return;
+            std::memcpy(&name, bone.definition, 4);
+        }
+        boneViews.push_back({bone.owner, bone.parent, name, bone.definition != nullptr});
+    }
+    ScopeDrawSelection selected;
+    const ScopePaletteView view{instances, modelRanges, meshRanges, drawRanges, surfaceNames,
+                                boneViews, mappings, worlds, palette};
+    if (paletteInvalidated || !selectScopeDraw(view, reinterpret_cast<uintptr_t>(binding.modelInstance),
+                                               scopeName, scopeBoneName, selected)) return;
+    // Reuse the exact association selected by the affine producer. Do not
+    // search by name again or retain native indices/pointers beyond this call.
+    const void *surface = nullptr;
+    std::memcpy(&surface, reinterpret_cast<const uint8_t *>(&draws[size_t(selected.draw)]) + 0x18, 4);
+    if (!readableMemory(surface, 0x130)) return;
+    const auto bytes = static_cast<const uint8_t *>(surface);
+    uint32_t currentName = 0;
+    std::memcpy(&currentName, bytes, 4);
+    if (currentName != scopeName) return;
+    const auto layout = scopeSurfaceLayout(bytes);
+    if (!paletteInvalidated) recordScopeObservation(binding, selected.affine, layout);
+}
+static void __cdecl palettePass() {
+#ifdef _MSC_VER
+    const auto caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
+#else
+    const auto caller = reinterpret_cast<uintptr_t>(__builtin_return_address(0));
+#endif
+    withFreshNativePalette(caller == engineBase + 0xe2e06, paletteReentrant, paletteInvalidated,
+                           [] { originalPalettePass(); }, [] {
+                               if (headTrackingEnabled) {
+                                   try { postPalette(); } catch (...) { paletteFault(); }
+                               }
+                               // Independent of remote-player presence and head option.
+                               // Invalid observations never alter native palettes/world eligibility.
+                               try { observeLocalScope(); } catch (...) {}
+                           }, [] { if (headTrackingEnabled) paletteFault(); });
+}
+
+static void __cdecl modelPass() {
+    if (reentrant) {
+        originalModelPass();
+        return;
+    }
+    reentrant = true;
+    originalModelPass(); // Engine+DBC90 populates the render records before the adapter changes them.
+    try { postModelPass(); } catch (...) { paletteFault(); }
+    reentrant = false;
+}
+
+static void clearBinding(uint32_t handle) {
+    AcquireSRWLockExclusive(&bindingLock);
+    for (auto &binding : bindings)
+        if (!handle || binding.playerHandle == handle)
+            binding = {};
+    // Keep the immutable bank until commit; invalidity survives desktop restore.
+    for (const auto &entry : frozen)
+        if (pairActive && entry.bodyValid && (!handle || entry.binding.playerHandle == handle))
+            pairInvalid.store(true, std::memory_order_release);
+    ReleaseSRWLockExclusive(&bindingLock);
+}
+
+} // namespace
+
+bool initialize(HMODULE engine, HMODULE core, HMODULE sam, HookInstallerRva install, bool enableHeadTracking) {
+    if (ready.load(std::memory_order_acquire))
+        return true;
+    if (!engine || !core || !sam || !install)
+        return false;
+    bool ok = true;
+#define S(module, name, out) ok = symbol(module, name, out) && ok
+    S(core, "?thrIsThisMainThread@SeriousEngine@@YAHXZ", isMainThread);
+    S(core, "?_st_idInvalid@SeriousEngine@@3UInvalidIdent@1@B", invalidId);
+    S(core, "?strConvertStringToID@SeriousEngine@@YA?AVIDENT@1@PBD@Z", stringId);
+    S(core, "?hvHandleToPointer@SeriousEngine@@YAPAXK@Z", resolve);
+    S(core, "?hvPointerToHandle@SeriousEngine@@YAKPAX@Z", pointerHandle);
+    S(sam, "?IsLocal@CPuppetEntity@SeriousEngine@@QAEHXZ", isLocal);
+    S(sam, "?IsAlive@CPuppetEntity@SeriousEngine@@UAEHXZ", isAlive);
+    S(sam, "?GetModelRenderable@CPuppetEntity@SeriousEngine@@UAEPAVCModelRenderable@2@XZ", getModelRenderable);
+    S(engine, "?GetModelInstance@CModelRenderable@SeriousEngine@@QAEPAVCModelInstance@2@XZ", getModelInstance);
+    S(engine, "?mdlGetChildName@SeriousEngine@@YA?AVIDENT@1@PBVCModelConfigChild@1@@Z", getChildName);
+    S(engine, "?mdlGetChildOffset@SeriousEngine@@YA?AVQuatVect@1@PBVCModelConfigChild@1@@Z", getChildOffset);
+    S(engine, "?mdlGetChildInstance@SeriousEngine@@YAPAVCModelInstance@1@PAVCModelConfigChild@1@@Z", getChildInstance);
+    S(sam, "?GetWeaponTool@CBaseWeaponEntity@SeriousEngine@@QAEPAVCCharacterTool@2@W4PlayerHand@2@@Z", getWeaponTool);
+#undef S
+    toolFileStemId = reinterpret_cast<ToolFileStemId>(reinterpret_cast<uintptr_t>(sam) + 0x1fd4f0);
+    engineBase = reinterpret_cast<uintptr_t>(engine);
+    if (!ok || !toolFileStemId ||
+        !install(engine, 0xdbc90, reinterpret_cast<void *>(modelPass), reinterpret_cast<void **>(&originalModelPass)) ||
+        !originalModelPass)
+        return false;
+    if (enableHeadTracking) {
+        stringId(&headName, "Head");
+        if (!invalidId || headName == *invalidId)
+            return false;
+    }
+    stringId(&scopeName, "Scope");
+    stringId(&scopeBoneName, "Sniper");
+    if (!invalidId || scopeName == *invalidId || scopeBoneName == *invalidId ||
+        !install(engine, 0xdde30, reinterpret_cast<void *>(palettePass),
+                 reinterpret_cast<void **>(&originalPalettePass)) || !originalPalettePass)
+        return false;
+    headTrackingEnabled = enableHeadTracking; // Head mutation remains default disabled.
+    ready.store(true, std::memory_order_release);
+    return true;
+}
+
+void observePlayer(void *player) {
+    if (!checkNativeThread()) {
+        clearBinding(0);
+        return;
+    }
+    if (!ready.load(std::memory_order_acquire) || !player) {
+        invalidatePlayer(player);
+        return;
+    }
+    Binding next;
+    next.playerHandle = pointerHandle(player);
+    if (!next.playerHandle || !readNativeRider(player, next.rider)) {
+        invalidatePlayer(player);
+        return;
+    }
+    const bool local = isLocal(player);
+    const bool alive = !local && isAlive(player);
+    if (!nativeRiderCurrent(player, next.rider) || local || !alive) {
+        invalidatePlayer(player);
+        return;
+    }
+    next.sample = multiplayer::presentation(player);
+    if (!validSample(next, next.sample)) {
+        invalidatePlayer(player);
+        return;
+    }
+    auto renderable = getModelRenderable(player);
+    if (!nativeRiderCurrent(player, next.rider) || !renderable) {
+        invalidatePlayer(player);
+        return;
+    }
+    next.bodyModelInstance = getModelInstance(renderable);
+    if (!nativeRiderCurrent(player, next.rider) || !next.bodyModelInstance) {
+        invalidatePlayer(player);
+        return;
+    }
+    if (next.rider.handheld()) {
+        for (unsigned hand = 0; hand < 2; ++hand) {
+            if (!nativeRiderCurrent(player, next.rider)) {
+                invalidatePlayer(player);
+                return;
+            }
+            uint32_t handle = nativeHandHandle(player, hand);
+            void *weapon = handle ? resolve(handle) : nullptr;
+            if (!weapon || !read32(weapon, WeaponPropertiesResource))
+                continue;
+            int nativeId = nativeWeaponId(weapon);
+            void *tool = getWeaponTool(weapon, int(hand));
+            if (!nativeRiderCurrent(player, next.rider)) {
+                invalidatePlayer(player);
+                return;
+            }
+            uint32_t toolId = 0;
+            const bool named = tool && toolFileStemId(tool, &toolId);
+            if (!nativeRiderCurrent(player, next.rider)) {
+                invalidatePlayer(player);
+                return;
+            }
+            if (!validNativeId(nativeId) || !named || next.sample.pose.nativeWeaponId[hand] != nativeId || !toolId)
+                continue;
+            next.handHandle[hand] = handle;
+            next.nativeId[hand] = int16_t(nativeId);
+            next.toolId[hand] = toolId;
+            next.handEligible[hand] = true;
+        }
+    }
+    if (!nativeRiderCurrent(player, next.rider)) {
+        invalidatePlayer(player);
+        return;
+    }
+    AcquireSRWLockExclusive(&bindingLock);
+    Binding *destination = nullptr;
+    for (auto &binding : bindings)
+        if (binding.playerHandle == next.playerHandle) {
+            destination = &binding;
+            break;
+        }
+    if (!destination)
+        for (auto &binding : bindings)
+            if (!binding.playerHandle) {
+                destination = &binding;
+                break;
+            }
+    if (destination) {
+        for (const auto &entry : frozen)
+            if (pairActive && entry.bodyValid && entry.binding.playerHandle == next.playerHandle &&
+                !compatibleBinding(entry.binding, next))
+                pairInvalid.store(true, std::memory_order_release);
+        *destination = next;
+    }
+    ReleaseSRWLockExclusive(&bindingLock);
+}
+
+void noteSimulationThread() {
+    if (!ready.load(std::memory_order_acquire))
+        return;
+    if (!isMainThread || !isMainThread()) {
+        simulationThread.store(MAXDWORD, std::memory_order_release);
+        pairInvalid.store(true, std::memory_order_release);
+        return;
+    }
+    const DWORD current = GetCurrentThreadId();
+    DWORD unknown = 0;
+    simulationThread.compare_exchange_strong(unknown, current, std::memory_order_acq_rel);
+    checkNativeThread();
+}
+bool checkNativeThread() {
+    const DWORD owner = simulationThread.load(std::memory_order_acquire);
+    if (owner == GetCurrentThreadId() && isMainThread && isMainThread())
+        return true;
+    if (owner) {
+        simulationThread.store(MAXDWORD, std::memory_order_release);
+        pairInvalid.store(true, std::memory_order_release);
+    }
+    return false;
+}
+bool ownsNativeThread() {
+    const DWORD owner = simulationThread.load(std::memory_order_acquire);
+    return scopeObservationThread(owner, GetCurrentThreadId(), isMainThread && isMainThread());
+}
+ScopeRasterStatus copyScopeRaster(void *instance, Matrix34 &affine, ScopeSurfaceLayout &layout) {
+    return readScopeRaster(instance,affine,layout);
+}
+void invalidatePlayer(void *player) {
+    if (!checkNativeThread()) {
+        clearBinding(0);
+        return;
+    }
+    if (!player || !pointerHandle)
+        return;
+    clearBinding(pointerHandle(player));
+}
+
+void freezePair() {
+    ExclusiveBindings bindingGuard;
+    multiplayer::PresentationReadGuard guard;
+    frozen = {};
+    pairThread = GetCurrentThreadId();
+    pairActive = true;
+    pairInvalid.store(false, std::memory_order_release);
+    // Native model/handle access stays on the established simulation thread.
+    // A bank with no admissible remote players is a valid native-only pair.
+    if (ready.load(std::memory_order_acquire) && checkNativeThread()) {
+        const uint64_t now = GetTickCount64();
+        for (size_t i = 0; i < bindings.size(); ++i) {
+            auto &entry = frozen[i];
+            entry.binding = bindings[i];
+            auto sample = guard.sample(entry.binding.playerHandle);
+            if (!sample.negotiated || !sample.valid || !sample.avatar || !sample.incarnation ||
+                sample.avatar != entry.binding.playerHandle ||
+                sample.incarnation != entry.binding.sample.incarnation || now < sample.receivedMs ||
+                now - sample.receivedMs > network::MaxPoseAgeMs) {
+                entry = {};
+                continue;
+            }
+            entry.binding.sample = sample;
+            void *player = nullptr;
+            entry.bodyValid = currentBinding(entry.binding, sample, player, &guard) &&
+                              bodyAnchor(player, entry.binding.rider, entry.body);
+            if (!entry.bodyValid)
+                entry = {};
+        }
+    }
+}
+
+bool commitPair(Slot &slot, const Request &request, bool localEligible) {
+    // Compute native role before any lock; acquire in the original binding->MP order.
+    multiplayer::PresentationReadGuard presentationGuard(false);
+    AcquireSRWLockShared(&bindingLock);
+    presentationGuard.acquire();
+    // Both remote locks remain held through Ready; local caller holds snapshotLock.
+    bool committed = false;
+    withNativeFinally([&] {
+        committed = commitNativeFrame(slot, request, localEligible && validatePair(presentationGuard));
+    },[&](bool aborted) noexcept {
+        if (aborted) nativeUiFault();
+        pairActive.store(false, std::memory_order_release);
+        presentationGuard.release();
+        ReleaseSRWLockShared(&bindingLock);
+    });
+    return committed;
+}
+
+void useFrozenPair(bool enabled) {
+    frozenPair = enabled;
+}
+
+} // namespace ss2vr::game::remote_render

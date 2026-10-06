@@ -1,0 +1,23 @@
+{
+  "scope": "immutable current-primary read substitution; native history/blocking/FSM retained",
+  "module": "Sam2Game.dll",
+  "module_sha256": "5628b4ed30a966f10c8e8ea46bf0789257a35ea80127bacacebe28b1ce5303df",
+  "managed_mask": "0x03",
+  "runtime_executed": false,
+  "boundaries": [
+    {"role": "operator down", "load_rva": "0x8e5b4", "site_rva": "0x8e5bb", "register": "EDI", "subject": "ESI", "stolen_hex": "8a8648030000"},
+    {"role": "operator press", "load_rva": "0x8e5da", "site_rva": "0x8e5e0", "register": "CL", "subject": "ESI", "stolen_hex": "83c40484cb"},
+    {"role": "operator release", "load_rva": "0x8e60a", "site_rva": "0x8e610", "register": "CL", "subject": "ESI", "stolen_hex": "83c40484cb"},
+    {"role": "native history current", "load_rva": "0x8e750", "site_rva": "0x8e75a", "register": "CL", "subject": "ESI", "stolen_hex": "888e48030000"},
+    {"role": "held current", "load_rva": "0x8e4d6", "site_rva": "0x8e4dd", "register": "EAX", "subject": "ESI", "stolen_hex": "83c40423c3"}
+  ],
+  "ordinary_consumers": [
+    {"role": "operator", "entry_rva": "0x8e580", "entry_hex": "558bec83ec18", "caller_return_rva": "0xa6e09", "abi": "void thiscall(Puppet*), plain ret"},
+    {"role": "held", "entry_rva": "0x8e480", "entry_hex": "558bec568bf1", "caller_return_rva": "0xf6f1f", "abi": "int thiscall(Puppet*, int32 rawIndex), ret4"}
+  ],
+  "limits": [
+    "actual source declarations and compiled boundaries require independent verification",
+    "no native execution or full callback/replication equivalence proof",
+    "same-pawn active immutable value wins ordinary caller rejection"
+  ]
+}

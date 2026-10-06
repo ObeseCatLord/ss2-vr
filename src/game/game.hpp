@@ -1,0 +1,38 @@
+#pragma once
+#include "common/ipc.hpp"
+#include "common/math.hpp"
+#include <atomic>
+#include <d3d9.h>
+namespace ss2vr::game {
+extern Channel channel;
+extern std::atomic<bool> hooksReady;
+void log(const char *fmt, ...);
+bool attach(bool headless = false);
+// Metadata only; reentered input boundaries contain GNU errors before crossing
+// native frames. The enclosing simulation finally owns interval retirement.
+void nativeInputFailed() noexcept;
+bool nativeInputHealthy() noexcept;
+bool supported(bool headless = false);
+bool foregroundGame();
+void deviceReady(IDirect3DDevice9 *device);
+void deviceCreated(IDirect3DDevice9 *device);
+void deviceResetSucceeded(IDirect3DDevice9 *device);
+bool nativeUiDeviceCurrent(IDirect3DDevice9 *device);
+void deviceLost();
+void invalidateRenderer();
+void present();
+bool nativeUiProgramsCurrent(IDirect3DVertexShader9 *, IDirect3DPixelShader9 *);
+bool copyExecutedUiProjection(void *player, const Request &, int index, Matrix44 &out);
+bool nativeUiFrameCurrent(void *player, const Request &);
+bool nativeUiOwnerCurrent(void *player);
+void nativeUiFault() noexcept;
+bool nativeUiBeginOverlay(void *player, bool admitted);
+void nativeUiEndOverlay(bool completed) noexcept;
+bool nativeUiBeginFade();
+void nativeUiEndFade(bool completed) noexcept;
+void nativeUiFinishOwner();
+void nativeUiEndOwner(bool aborted) noexcept;
+using EyePostRender = bool (*)(void *, const Request &, int);
+void stereo(void *puppet, void(__thiscall *original)(void *), EyePostRender postRender = nullptr);
+void shutdown();
+} // namespace ss2vr::game

@@ -1,0 +1,21 @@
+#pragma once
+#include "ui.hpp"
+namespace ss2vr {
+struct VrSettings {
+    ComfortConfig comfort;
+    float menuDistance = 2.2f, menuWidth = 2.2f;
+    float hudDistance = 1.5f, hudWidth = 1.05f;
+    float fireHaptic = .35f, damageHaptic = .55f;
+    bool lasers = true;
+    float laserDistance = 100.f;
+    float scopeEyeRelief = .1f; // Optical presentation parameter, not native zoom timing.
+    bool headFade = false;
+    bool remoteHeadTracking = false;
+    float headRadius = .12f, headFadeDepth = .05f;
+    Pose gripOffset[WeaponCount];
+};
+inline Pose calibratedGrip(const Input &input, unsigned hand, int weapon, const VrSettings &settings) {
+    Pose tracked = weaponTracking(input, hand);
+    return weapon >= 0 && weapon < int(WeaponCount) ? compose(tracked, settings.gripOffset[weapon]) : tracked;
+}
+} // namespace ss2vr

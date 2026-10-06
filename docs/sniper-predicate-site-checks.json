@@ -1,0 +1,210 @@
+{
+  "schema": 1,
+  "native_sha256": "5628b4ed30a966f10c8e8ea46bf0789257a35ea80127bacacebe28b1ce5303df",
+  "image_base": 268435456,
+  "method": "read-only PE32 executable-section direct-branch and HIGHLOW-relocation scan; pinned MinHook x86 trampoline model; portable host build of pinned HDE32 decodes stolen and continuation instructions; no native bytes or decoded text retained",
+  "pinned_minhook": {
+    "commit": "c3fcafdc10146beb5919319d0683e44e3c30d537",
+    "source_sha256": {
+      "trampoline_c_sha256": "f13a169f803ff5a8e45c58ce668b4377a9878c0fc4452369b8a1325065186b2b",
+      "trampoline_h_sha256": "53ed9934492320617a27bfd952ffe7f5b7a4a1d09963d4512447082fe7b727b4",
+      "hde32_c_sha256": "5da4941e9044f7b325c7f952b5840089e365f374740b7fe7318805d08c0d6c32",
+      "hde32_h_sha256": "5132de5be8ac7a9d054420f5caef0fb01437faa892f03b3cdc77f795973bf15a",
+      "hde32_pstdint_sha256": "604d1cdf45c5a95bc9cf1bbf39ca05ef83013541101d34971c5cd7577e3d5247",
+      "hde32_table_sha256": "43bf687a9fff071b5f46070db4d36c846f8e069cdc57485ee897c499aacdde23"
+    }
+  },
+  "pinned_hde32_host": {
+    "hde32s_size": 28,
+    "site_count": 8,
+    "stolen_instruction_count": 18,
+    "continuation_instruction_count": 8
+  },
+  "scan": {
+    "executable_section_count": 3,
+    "direct_branch_instruction_count": 63373,
+    "indirect_branch_instruction_count": 69623,
+    "executable_highlow_relocation_count": 102597
+  },
+  "sites": [
+    {
+      "role": "activate",
+      "site_rva": "0x171d00",
+      "stolen_sha256": "3788ed3b598ba45c8bfbbb1dc1341df420b3da9ae33435479f4905b91f47d41c",
+      "instruction_sha256": "3280de830650600132f84e65f7c7cdfb8d4a903f9f91e0e23014be97f0be3c68",
+      "instruction_lengths": [2, 1, 10],
+      "stolen_bytes": 13,
+      "continuation_rva": "0x171d0d",
+      "old_instruction_offsets": [0, 2, 3, 13],
+      "new_instruction_offsets": [0, 2, 3, 13],
+      "relocation_decisions": ["copy", "copy", "copy", "append_continuation_jmp_rel32"],
+      "trampoline_bytes": 18,
+      "patch_above_required": false,
+      "hde32_host": {
+        "hde32s_size": 28,
+        "stolen_instruction_count": 3,
+        "stolen_facts_sha256": "e249a156f99c8433430b0d0addbf2b0a74b9ac6548395597f3df1e9e600506b6",
+        "continuation_instruction_count": 1,
+        "continuation_facts_sha256": "0f8d904805030f392e22cde14105f0146538d236c5339709235f8e44073b2dbe"
+      },
+      "interior_references": {
+        "direct_branch_sources": [],
+        "highlow_relocation_operands": []
+      }
+    },
+    {
+      "role": "deactivate_owner",
+      "site_rva": "0x171e05",
+      "stolen_sha256": "6d79a209fcaf3e74d2ae022af674869dece32e833a6a443874f991f29f04ec84",
+      "instruction_sha256": "549fa99396c34f5e172587828f18f9ddfe101f1b09b37ebd9d2d6c8913758f67",
+      "instruction_lengths": [2, 2, 3],
+      "stolen_bytes": 7,
+      "continuation_rva": "0x171e0c",
+      "old_instruction_offsets": [0, 2, 4, 7],
+      "new_instruction_offsets": [0, 2, 8, 11],
+      "relocation_decisions": ["copy", "relocate_jcc_rel32", "copy", "append_continuation_jmp_rel32"],
+      "trampoline_bytes": 16,
+      "patch_above_required": false,
+      "hde32_host": {
+        "hde32s_size": 28,
+        "stolen_instruction_count": 3,
+        "stolen_facts_sha256": "1b02bd400b186975c0ed421d98f153ba1c6e27e8e6e027cdac67b06e1b101aa4",
+        "continuation_instruction_count": 1,
+        "continuation_facts_sha256": "f7bacb3881794767ca3cc2417b443e0d354ed9bbe74db491926b3541e641fa17"
+      },
+      "interior_references": {"direct_branch_sources": [], "highlow_relocation_operands": []}
+    },
+    {
+      "role": "deactivate_fov",
+      "site_rva": "0x171e7b",
+      "stolen_sha256": "63a805ba3cb3102dd5673c5810862e5d3c6e031b9729faed2668d587a0eb865b",
+      "instruction_sha256": "47be641da277eabcc6731c017a0b04c2104500fbb541178757f51990702cf2a8",
+      "instruction_lengths": [2, 2, 1],
+      "stolen_bytes": 5,
+      "continuation_rva": "0x171e80",
+      "old_instruction_offsets": [0, 2, 4, 5],
+      "new_instruction_offsets": [0, 2, 8, 9],
+      "relocation_decisions": ["copy", "relocate_jcc_rel32", "copy", "append_continuation_jmp_rel32"],
+      "trampoline_bytes": 14,
+      "patch_above_required": false,
+      "hde32_host": {
+        "hde32s_size": 28,
+        "stolen_instruction_count": 3,
+        "stolen_facts_sha256": "ab9b415a16af7a34bc081a11988d64ff5dd9f60660d7a9df9e289fbb57973de9",
+        "continuation_instruction_count": 1,
+        "continuation_facts_sha256": "15dcf19bd908980a18b56d539eef070894248f39e6a58c0fa46d70dc9f616c02"
+      },
+      "interior_references": {"direct_branch_sources": [], "highlow_relocation_operands": []}
+    },
+    {
+      "role": "interpolate",
+      "site_rva": "0x172854",
+      "stolen_sha256": "c06ada48270d38853f4cd3c7d9805786138df0472c37db836e3caf9573f166a1",
+      "instruction_sha256": "f3d29be89f3b4c66c844529b7be80695d146ab4120e470cb6294c6536343b9c6",
+      "instruction_lengths": [2, 6],
+      "stolen_bytes": 8,
+      "continuation_rva": "0x17285c",
+      "old_instruction_offsets": [0, 2, 8],
+      "new_instruction_offsets": [0, 2, 8],
+      "relocation_decisions": ["copy", "relocate_jcc_rel32", "append_continuation_jmp_rel32"],
+      "trampoline_bytes": 13,
+      "patch_above_required": false,
+      "hde32_host": {
+        "hde32s_size": 28,
+        "stolen_instruction_count": 2,
+        "stolen_facts_sha256": "d3b43f6fbb3d1ec7131bcceb47338e4fdfadcb6b09d806845f9dfd8d6726e644",
+        "continuation_instruction_count": 1,
+        "continuation_facts_sha256": "27432fce02b1f4c99cbbf61bd6402661c37a4f754731ed533786b47b81b4ab0c"
+      },
+      "interior_references": {"direct_branch_sources": [], "highlow_relocation_operands": []}
+    },
+    {
+      "role": "sound_start",
+      "site_rva": "0x17297f",
+      "stolen_sha256": "f13e9a26ab8ac0eba9a81aede5fb77087064c73ae52c39b3dad5696451e8b297",
+      "instruction_sha256": "dd12e9e50deee65e4fe529fbeb1828c7b386ec8bad007ec561c77fae5a2cddfd",
+      "instruction_lengths": [2, 6],
+      "stolen_bytes": 8,
+      "continuation_rva": "0x172987",
+      "old_instruction_offsets": [0, 2, 8],
+      "new_instruction_offsets": [0, 2, 8],
+      "relocation_decisions": ["copy", "relocate_jcc_rel32", "append_continuation_jmp_rel32"],
+      "trampoline_bytes": 13,
+      "patch_above_required": false,
+      "hde32_host": {
+        "hde32s_size": 28,
+        "stolen_instruction_count": 2,
+        "stolen_facts_sha256": "d3b43f6fbb3d1ec7131bcceb47338e4fdfadcb6b09d806845f9dfd8d6726e644",
+        "continuation_instruction_count": 1,
+        "continuation_facts_sha256": "27432fce02b1f4c99cbbf61bd6402661c37a4f754731ed533786b47b81b4ab0c"
+      },
+      "interior_references": {"direct_branch_sources": [], "highlow_relocation_operands": []}
+    },
+    {
+      "role": "sound_stop",
+      "site_rva": "0x172a3c",
+      "stolen_sha256": "e6e646577f3e608a82128a34df9401b30013e52d21a0f664306325e487ea0e6b",
+      "instruction_sha256": "576ab872fab75862bf835a1f5b067f6780e5418c2f45007766d5ac3f0d1c6821",
+      "instruction_lengths": [2, 2, 6],
+      "stolen_bytes": 10,
+      "continuation_rva": "0x172a46",
+      "old_instruction_offsets": [0, 2, 4, 10],
+      "new_instruction_offsets": [0, 2, 8, 14],
+      "relocation_decisions": ["copy", "relocate_jcc_rel32", "copy", "append_continuation_jmp_rel32"],
+      "trampoline_bytes": 19,
+      "patch_above_required": false,
+      "hde32_host": {
+        "hde32s_size": 28,
+        "stolen_instruction_count": 3,
+        "stolen_facts_sha256": "a61e67b3799a1724b0a915e7bfcc61bddf9a50ba86452619e7e962ed42de56a7",
+        "continuation_instruction_count": 1,
+        "continuation_facts_sha256": "2550ced60583d53582be66ee89bad9e827313ed080f2a37b7dc551d8a17f4c5b"
+      },
+      "interior_references": {"direct_branch_sources": [], "highlow_relocation_operands": []}
+    },
+    {
+      "role": "before_view_toggle",
+      "site_rva": "0x800e8",
+      "stolen_sha256": "6c54765ea200296cdd3c7fb9336eb5978eea0c1e18d0bf7eabcd8c6421b3b62d",
+      "instruction_sha256": "b4a900429b4a4c500c1e1453f92b12ba7a36c2f5031dfb1a69414c90e0a294ff",
+      "instruction_lengths": [6],
+      "stolen_bytes": 6,
+      "continuation_rva": "0x800ee",
+      "old_instruction_offsets": [0, 6],
+      "new_instruction_offsets": [0, 6],
+      "relocation_decisions": ["copy", "append_continuation_jmp_rel32"],
+      "trampoline_bytes": 11,
+      "patch_above_required": false,
+      "hde32_host": {
+        "hde32s_size": 28,
+        "stolen_instruction_count": 1,
+        "stolen_facts_sha256": "f7bacb3881794767ca3cc2417b443e0d354ed9bbe74db491926b3541e641fa17",
+        "continuation_instruction_count": 1,
+        "continuation_facts_sha256": "53e68e5a51b67b27db2de9645bcbdcd088bafc6cbd581338dafe0e2984595363"
+      },
+      "interior_references": {"direct_branch_sources": [], "highlow_relocation_operands": []}
+    },
+    {
+      "role": "after_base_step",
+      "site_rva": "0x172830",
+      "stolen_sha256": "0f35f87093810286887af9abcf0fa3a620e0e20087c567633c43b9132a134db8",
+      "instruction_sha256": "2dd9c4c30adf0933793cbc9387eb672960b6f35dfd6764e8e8d513a677ab1025",
+      "instruction_lengths": [6],
+      "stolen_bytes": 6,
+      "continuation_rva": "0x172836",
+      "old_instruction_offsets": [0, 6],
+      "new_instruction_offsets": [0, 6],
+      "relocation_decisions": ["copy", "append_continuation_jmp_rel32"],
+      "trampoline_bytes": 11,
+      "patch_above_required": false,
+      "hde32_host": {
+        "hde32s_size": 28,
+        "stolen_instruction_count": 1,
+        "stolen_facts_sha256": "f7bacb3881794767ca3cc2417b443e0d354ed9bbe74db491926b3541e641fa17",
+        "continuation_instruction_count": 1,
+        "continuation_facts_sha256": "53e68e5a51b67b27db2de9645bcbdcd088bafc6cbd581338dafe0e2984595363"
+      },
+      "interior_references": {"direct_branch_sources": [], "highlow_relocation_operands": []}
+    }
+  ]
+}

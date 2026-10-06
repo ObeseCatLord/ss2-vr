@@ -1,0 +1,141 @@
+{
+  "native_sha256": "5628b4ed30a966f10c8e8ea46bf0789257a35ea80127bacacebe28b1ce5303df",
+  "runtime_executed": false,
+  "hooks_installed": false,
+  "emitted_stub_abi_verified": false,
+  "minhook_relocation_executed": false,
+  "method": "bounded native instruction boundaries and direct branch targets only",
+  "candidates": [
+    {
+      "role": "activate",
+      "site_rva": "0x171d00",
+      "stolen_instruction_bytes": [
+        2,
+        1,
+        10
+      ],
+      "stolen_bytes": 13,
+      "continuation_rva": "0x171d0d",
+      "stolen_sha256": "3788ed3b598ba45c8bfbbb1dc1341df420b3da9ae33435479f4905b91f47d41c",
+      "stolen_direct_branches": [],
+      "in_function_branches_into_window": 0
+    },
+    {
+      "role": "deactivate_owner",
+      "site_rva": "0x171e05",
+      "stolen_instruction_bytes": [
+        2,
+        2,
+        3
+      ],
+      "stolen_bytes": 7,
+      "continuation_rva": "0x171e0c",
+      "stolen_sha256": "6d79a209fcaf3e74d2ae022af674869dece32e833a6a443874f991f29f04ec84",
+      "stolen_direct_branches": [
+        {
+          "from_rva": "0x171e07",
+          "target_rva": "0x171e26"
+        }
+      ],
+      "in_function_branches_into_window": 0
+    },
+    {
+      "role": "deactivate_fov",
+      "site_rva": "0x171e7b",
+      "stolen_instruction_bytes": [
+        2,
+        2,
+        1
+      ],
+      "stolen_bytes": 5,
+      "continuation_rva": "0x171e80",
+      "stolen_sha256": "63a805ba3cb3102dd5673c5810862e5d3c6e031b9729faed2668d587a0eb865b",
+      "stolen_direct_branches": [
+        {
+          "from_rva": "0x171e7d",
+          "target_rva": "0x171e94"
+        }
+      ],
+      "in_function_branches_into_window": 0
+    },
+    {
+      "role": "interpolate",
+      "site_rva": "0x172854",
+      "stolen_instruction_bytes": [
+        2,
+        6
+      ],
+      "stolen_bytes": 8,
+      "continuation_rva": "0x17285c",
+      "stolen_sha256": "c06ada48270d38853f4cd3c7d9805786138df0472c37db836e3caf9573f166a1",
+      "stolen_direct_branches": [
+        {
+          "from_rva": "0x172856",
+          "target_rva": "0x172a23"
+        }
+      ],
+      "in_function_branches_into_window": 0
+    },
+    {
+      "role": "sound_start",
+      "site_rva": "0x17297f",
+      "stolen_instruction_bytes": [
+        2,
+        6
+      ],
+      "stolen_bytes": 8,
+      "continuation_rva": "0x172987",
+      "stolen_sha256": "f13e9a26ab8ac0eba9a81aede5fb77087064c73ae52c39b3dad5696451e8b297",
+      "stolen_direct_branches": [
+        {
+          "from_rva": "0x172981",
+          "target_rva": "0x172a2e"
+        }
+      ],
+      "in_function_branches_into_window": 0
+    },
+    {
+      "role": "sound_stop",
+      "site_rva": "0x172a3c",
+      "stolen_instruction_bytes": [
+        2,
+        2,
+        6
+      ],
+      "stolen_bytes": 10,
+      "continuation_rva": "0x172a46",
+      "stolen_sha256": "e6e646577f3e608a82128a34df9401b30013e52d21a0f664306325e487ea0e6b",
+      "stolen_direct_branches": [
+        {
+          "from_rva": "0x172a3e",
+          "target_rva": "0x172a55"
+        }
+      ],
+      "in_function_branches_into_window": 0
+    },
+    {
+      "role": "before_view_toggle",
+      "site_rva": "0x800e8",
+      "stolen_instruction_bytes": [
+        6
+      ],
+      "stolen_bytes": 6,
+      "continuation_rva": "0x800ee",
+      "stolen_sha256": "6c54765ea200296cdd3c7fb9336eb5978eea0c1e18d0bf7eabcd8c6421b3b62d",
+      "stolen_direct_branches": [],
+      "in_function_branches_into_window": 0
+    },
+    {
+      "role": "after_base_step",
+      "site_rva": "0x172830",
+      "stolen_instruction_bytes": [
+        6
+      ],
+      "stolen_bytes": 6,
+      "continuation_rva": "0x172836",
+      "stolen_sha256": "0f35f87093810286887af9abcf0fa3a620e0e20087c567633c43b9132a134db8",
+      "stolen_direct_branches": [],
+      "in_function_branches_into_window": 0
+    }
+  ]
+}

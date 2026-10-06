@@ -1,0 +1,68 @@
+#pragma once
+#include "common/network.hpp"
+#include <array>
+#include <windows.h>
+namespace ss2vr::game::multiplayer {
+using HookInstaller = bool (*)(HMODULE, const char *, void *, void **);
+bool initialize(HMODULE engine, HMODULE core, HMODULE sam, HookInstaller install);
+bool remoteClient();
+bool server();
+bool negotiatedLocal();
+// Authoritative negotiated-peer recognition only, including invalid intent.
+// Local XR ownership comes from Snapshot.initialized, never a local nonce.
+// No native getter, transport operation, freeze or admission grant.
+bool knownVrAvatar(uint32_t avatar) noexcept;
+// True when the latest pose or a bounded physical pulse was retained locally,
+// or a reliable Pose entered native transport. The in/out pose also returns
+// current admission independently of transport credit or send success.
+bool submit(void *player, network::PosePacket &pose, bool reliableEdge,
+            uint64_t inputSequence, uint64_t inputTickMs);
+// Recheck a captured native-client firing intent against current ACK/input
+// admission. This borrows existing Local/Pending state, not another scheduler.
+bool localPrimaryAllowed(void *player, unsigned hand, uint32_t intentEpoch,
+                         uint32_t primaryGeneration, uint64_t inputSequence, bool requireFire = true);
+// Read the existing ACK/pose ownership at native zoom use; no second gate.
+bool localZoomAllowed(void *player,unsigned hand,uint32_t intentEpoch,
+                      uint32_t zoomGeneration,uint64_t inputSequence);
+struct Sample {
+    bool negotiated = false, valid = false;
+    uint32_t avatar = 0, incarnation = 0;
+    uint64_t receivedMs = 0;
+    network::PosePacket pose;
+    uint32_t liveIntentEpoch[2]{}; // Validation metadata, never a restamped pose.
+    uint64_t presentationRevision = 0; // Local invalidation history; never serialized.
+};
+Sample freeze(void *player);
+// Returns native player objects from the current game-info player slots. This
+// works for single-player, clients and the listen host before negotiation.
+std::array<void *, 18> activePlayers();
+// Opens one authoritative simulation interval before freezing any peers or
+// stepping weapon entities. Pair a true result with completeTick after the
+// complete native entity/script/physics interval.
+bool beginTick();
+// Pair with a successful beginTick after the scheduler completes the full
+// entity/script/physics interval; this retires only packets staged in it.
+void completeTick();
+// No native callbacks or sends on abort. Existing tokens are discarded by a
+// later normal interval or the existing peer invalidation path.
+void abortTick() noexcept;
+Sample authority(void *player);
+Sample presentation(void *player);
+// Narrow read transaction for remote frame publication. Acquired after the
+// renderer binding lock; sample() omits age, which is checked at pair admission.
+// All presentation lifecycle writers use the exclusive side of this lock.
+class PresentationReadGuard {
+    bool server_;
+    bool held_ = false;
+  public:
+    explicit PresentationReadGuard(bool acquireNow = true);
+    ~PresentationReadGuard();
+    void release() noexcept;
+    void acquire() noexcept;
+    PresentationReadGuard(const PresentationReadGuard &) = delete;
+    PresentationReadGuard &operator=(const PresentationReadGuard &) = delete;
+    Sample sample(uint32_t avatar) const;
+};
+void invalidatePlayer(void *player);
+void invalidateWeapons(void *player, uint32_t generation, uint8_t handMask = network::HandMask);
+} // namespace ss2vr::game::multiplayer
