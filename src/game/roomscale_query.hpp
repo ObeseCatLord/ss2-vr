@@ -42,7 +42,8 @@ bool runRoomscaleModelQueryScope(roomscale::QueryScope& scope,DWORD recognizedSi
 // Combined entry for the eventual native owner. Resource cancellation and both
 // mathematical kernels share scope.failed, so earlier hits cannot survive a
 // pending-resource cancellation. Requires all three hook components enabled by
-// the caller. It still does not acquire/clean native ray state or move a body.
+// the caller and requireWholePathClear=true: native TOI misses alone are not
+// clearance. It still does not acquire/clean native ray state or move a body.
 bool runRoomscaleCollisionScope(roomscale::QueryScope& scope,DWORD recognizedSimulationThread,
                                RoomscaleQueryBody body,void* context) noexcept;
 extern "C" roomscale::PrimitiveInterval* __cdecl ss2vrRoomscalePrimitiveQuery(

@@ -15,7 +15,7 @@ void check(bool ok,const char* expression,int line) {
 #define CHECK(x) check(bool(x),#x,__LINE__)
 bool near(double a,double b,double epsilon=1e-12) { return std::abs(a-b)<=epsilon; }
 constexpr Vector A{0,0,0},B{4,0,0},C{0,4,0},N{0,0,1};
-QueryScope scope(double maximum=4,double budget=1e-9) { return {maximum,budget,false}; }
+QueryScope scope(double maximum=4,double budget=1e-9) { return {maximum,budget,false,false}; }
 Plan plan(QueryScope& s,Ray ray,float radius=1) { return classify(s,ray,A,B,C,N,radius); }
 void encloses(const Plan& p,double distance) {
     CHECK(p.distanceLower<=distance);
@@ -236,5 +236,24 @@ int main() {
     CHECK(arithmeticSupported());
     projectionChecks(); contactChecks(); parameterAndBudgetChecks(); invalidChecks(); forwardingChecks();
     facingCancellationChecks();
+    unsigned strictCalls=0;
+    auto miss=[&](const Ray&,const Vector&,const Vector&,const Vector&,const Vector&,float) {
+        ++strictCalls;return NativeMiss;
+    };
+    QueryScope strictFree{1,1e-6,false,true};
+    CHECK(dispatch(&strictFree,miss,{{1,1,3},{0,0,-1}},A,B,C,N,.5f)==NativeMiss);
+    CHECK(!strictFree.failed&&strictCalls==1);
+    QueryScope strictCrossing{4,1e-6,false,true};
+    dispatch(&strictCrossing,miss,{{1,1,3},{0,0,-1}},A,B,C,N,.5f);
+    CHECK(strictCrossing.failed&&strictCalls==1); // A hypothetical native miss cannot clear a crossing.
+
+    for(unsigned k=1;k<=200;++k) {
+        const double travel=double(k)/50;
+        QueryScope whole{travel,1e-6,false,true};
+        const auto proof=classify(whole,{{1,1,3},{0,0,-1}},A,B,C,N,.5f);
+        if(travel<2.5) CHECK(proof.decision==Decision::nativeToi&&!whole.failed);
+        else CHECK(whole.failed&&proof.decision==Decision::invalid);
+    }
+
     std::cout<<checks<<" portable triangle checks passed; native TOI not executed\n";
 }

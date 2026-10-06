@@ -43,7 +43,7 @@ bool runRoomscaleModelQueryScope(roomscale::QueryScope& scope,DWORD recognizedSi
 
 bool runRoomscaleCollisionScope(roomscale::QueryScope& scope,DWORD recognizedSimulationThread,
                                RoomscaleQueryBody body,void* context) noexcept {
-    if (!originalTriangle||!originalPrimitive||!body||!roomscale::validScope(scope)) {
+    if (!originalTriangle||!originalPrimitive||!body||!scope.requireWholePathClear||!roomscale::validScope(scope)) {
         scope.failed=true;
         return false;
     }

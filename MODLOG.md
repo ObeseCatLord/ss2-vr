@@ -1019,3 +1019,10 @@ all-or-nothing result. Two thousand independent reconstruction cases and all41
 local groups pass, alongside body/cover sanitizers, x86/x64 compile-only and
 pinned native layout checks. Native query ownership, movement and settlement
 remain unfinished; no runtime or hook activation.
+
+Added mandatory whole-path clearance mode to the combined body-query scope.
+Initially separated candidates need an outward finite-path supporting-plane
+certificate; an unproved native miss cannot authorize movement. False-miss
+controls, generated primitive oracles, all41 local groups, x86 builds, kernel
+ABI checks, sanitizers and both Windows compile-only fixtures pass. This remains
+inactive pending native query ownership and checked movement integration.

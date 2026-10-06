@@ -165,3 +165,27 @@ Windows compile-only fixtures pass; native layout checks pass normally and with
 Python optimization. This remains inactive geometry preparation. It does not
 certify native floating-point TOI, acquire shared query scratch, move a body or
 settle multiplayer origin changes. Unsupported FP environments still reject.
+
+## Whole-finite-path clearance mode
+
+The combined resource/triangle/primitive entry now requires an explicit
+`requireWholePathClear` scope. For initially separated triangle and primitive
+candidates, the existing outward supporting-plane bound must keep the entire
+finite path beyond the query radius. An uncertain path invalidates the whole
+query before a native floating-point miss could clear it. Existing initial
+contact skips retain their complete nondeepening/budget proof. Unscoped native
+calls and explicitly selected legacy contact-only fixtures remain unchanged.
+
+This deliberately conservative mode can reject some genuinely free paths when
+its chosen supporting plane cannot certify them. It does not compute a clipped
+movement fraction, replace native traversal, certify broad-phase coverage or
+supply shared scratch/body ownership. The future movement owner must still
+consume the complete native query result and sticky failure together. It cannot
+interpret a scope return alone as permission to move.
+
+Regression controls use an intentionally false native-miss stub on paths that
+cross a triangle or primitive; neither path is admitted. Two hundred plane-bound
+cases and the existing8000 generated primitive paths check strict certificates
+against independent long-double distances. All41 local Debug/Release groups,
+x86 products, both kernel ABI verifiers, both kernel sanitizer fixtures and
+x86/x64 compile-only fixtures pass. No native/game runtime was executed.

@@ -102,7 +102,10 @@ inline PrimitivePlan classifyPrimitive(QueryScope& scope,const Ray& ray,
     const auto travel=plus(exact(separation.lo),times({std::min(0.,derivative.lo),0},exact(scope.maxRayParameter)));
     if (!valid(separation)||!valid(derivative)||!valid(travel)||distance.hi<separation.lo) return invalid();
     PrimitivePlan plan{Decision::nativeToi,separation.lo,distance.hi,travel.lo};
-    if (separation.lo>radius) return plan;
+    if (separation.lo>radius) {
+        if (scope.requireWholePathClear && !(travel.lo>radius)) return invalid();
+        return plan;
+    }
     if (up(distance.hi-separation.lo)>scope.contactDepthBudget) return invalid();
     if (travel.lo>=up(distance.hi-scope.contactDepthBudget)) {
         plan.decision=Decision::ignoreNondeepening;

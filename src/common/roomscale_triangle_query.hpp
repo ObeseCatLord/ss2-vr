@@ -30,6 +30,9 @@ struct QueryScope {
     double maxRayParameter;
     double contactDepthBudget;
     bool failed;
+    // Body-movement requests cannot treat an unproved binary32 native miss as
+    // clearance. Legacy contact-only experiments leave this false explicitly.
+    bool requireWholePathClear;
 };
 static_assert(std::is_trivial_v<QueryScope> && std::is_standard_layout_v<QueryScope>);
 enum class Decision { nativeToi, ignoreNondeepening, block, invalid };
@@ -201,7 +204,11 @@ inline Plan classify(QueryScope& scope,const Ray& ray,const Vector& a,const Vect
     if (!valid(travel)) return invalid();
     Plan plan{Decision::nativeToi,false,projection.q,start.lo,distance.hi,
               derivative.lo,derivative.hi,travel.lo};
-    if (start.lo>radius) { // Proven initially separated; native TOI will run.
+    if (start.lo>radius) { // Proven initially separated.
+        // This supporting plane separates the ENTIRE finite ray from every
+        // triangle point. Unknown/deepening paths fail; a native miss alone
+        // cannot clear them. Rejection may conservatively block a free path.
+        if (scope.requireWholePathClear && !(travel.lo>radius)) return invalid();
         if (!nativeFacing(d,supplied,plan.reverseWinding)) return invalid();
         return plan;
     }
