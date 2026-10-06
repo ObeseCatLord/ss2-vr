@@ -8,6 +8,7 @@
 #include "common/muzzle.hpp"
 #include "common/win_settings.hpp"
 #include "common/winproc.hpp"
+#include "common/winpath.hpp"
 #include "common/weapon_view.hpp"
 #include "common/world_markers.hpp"
 #include "game.hpp"
@@ -3472,13 +3473,9 @@ bool attach(bool headless) {
     }
     if (!supported(headless))
         return false;
-    wchar_t executable[MAX_PATH];
-    if (GetModuleFileNameW(nullptr, executable, MAX_PATH)) {
-        std::wstring path(executable);
-        auto slash = path.find_last_of(L"\\/");
-        if (slash != std::wstring::npos)
-            settings = loadSettings(path.substr(0, slash + 1) + L"SS2VR\\SS2VR.ini");
-    }
+    std::wstring settingsDirectory;
+    if (moduleDirectory(nullptr,settingsDirectory))
+        settings=loadSettings(settingsDirectory+L"SS2VR\\SS2VR.ini");
     auto g = GetModuleHandleW(L"Sam2Game.dll"), e = GetModuleHandleW(L"Engine.dll"),
          c = GetModuleHandleW(L"Core.dll");
     const auto graphics = headless ? nullptr : GetModuleHandleW(L"GfxD3D.dll");

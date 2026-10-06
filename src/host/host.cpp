@@ -1037,6 +1037,9 @@ struct Host {
     }
     void initialize(const std::wstring &directory) {
         settings = loadSettings(directory + L"SS2VR.ini");
+        const bool wine=GetProcAddress(GetModuleHandleW(L"ntdll.dll"),"wine_get_version")!=nullptr;
+        log.write(wine ? "Wine environment: host inherits the game's prefix; Proton OpenXR uses its native runtime bridge" :
+                         "Windows environment: using the packaged loader and selected Windows OpenXR runtime");
         api.open(directory);
         uint32_t count = 0;
         api.check(api.EnumerateInstanceExtensionProperties(nullptr, 0, &count, nullptr),
@@ -1048,8 +1051,10 @@ struct Host {
         const bool supported = std::any_of(extensions.begin(), extensions.end(), [](const auto &e) {
             return !std::strcmp(e.extensionName, XR_KHR_D3D11_ENABLE_EXTENSION_NAME);
         });
-        if (!supported)
+        if (!supported) {
+            if (wine) log.write("Proton: check wineopenxr registration, DXVK and native OpenXR runtime visibility in Steam's container");
             throw std::runtime_error("Runtime does not offer XR_KHR_D3D11_enable");
+        }
         const char *enabled[] = {XR_KHR_D3D11_ENABLE_EXTENSION_NAME};
         XrInstanceCreateInfo create{XR_TYPE_INSTANCE_CREATE_INFO};
         std::strcpy(create.applicationInfo.applicationName, "Serious Sam 2 VR");
@@ -1104,7 +1109,10 @@ struct Host {
         XrSessionCreateInfo sessionInfo{XR_TYPE_SESSION_CREATE_INFO};
         sessionInfo.next = &binding;
         sessionInfo.systemId = system;
-        api.check(api.CreateSession(instance, &sessionInfo, &session), "xrCreateSession D3D11");
+        const XrResult sessionResult=api.CreateSession(instance,&sessionInfo,&session);
+        if (XR_FAILED(sessionResult) && wine)
+            log.write("Proton D3D11 OpenXR requires DXVK interop; forcing WineD3D/OpenGL is not this bridge's supported path");
+        api.check(sessionResult,"xrCreateSession D3D11");
         XrReferenceSpaceCreateInfo space{XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
         space.poseInReferenceSpace.orientation.w = 1;
         space.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_LOCAL;

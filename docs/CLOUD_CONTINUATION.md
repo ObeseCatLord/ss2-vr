@@ -369,3 +369,31 @@ GitHub was connected successfully in the parent cloud conversation. Direct
 repository publishing is now available; the earlier manual bundle-download
 wait is superseded. Public checkpoints contain source only. Private game inputs
 and all generated/native build products remain outside the publication tree.
+
+## 2026-10-06 — Windows/Proton startup hardening
+
+Both platforms remain required, with runtime execution still excluded. Replaced
+unchecked fixed-size module/system path buffers with bounded UTF-16 retrieval;
+invalid/truncated paths fail closed. Host startup now specifies its executable
+explicitly and inherits the game's environment and prefix. The D3D9 proxy uses
+an absolute system path and restricted dependency search, rejecting self-aliases
+and missing mandatory exports. Host diagnostics identify the Wine/DXVK OpenXR
+boundary without changing runtime registration or logging sensitive paths.
+See PLATFORM_SUPPORT.md for the architecture, upstream evidence and setup limits.
+
+All36 portable groups pass Debug and Release; x86 game/server and x64 host/loader
+builds pass. Artifact, primary/zoom/predicate/native-finally/weapon/world-marker/
+vehicle/scope-capture/scope-view/scope-GPU ABI checks pass. Path checks also pass
+ASan/UBSan (leak checking disabled) and compile for both Windows architectures.
+No Windows, Wine, graphics, game, headset or network runtime was executed.
+
+Publication now has an explicit read-only privacy gate for every outgoing ref.
+It walks raw commit parents with replacement objects disabled, requires anonymous
+project identities with empty email fields, rejects possible embedded addresses,
+shallow histories, annotated tags and embedded signatures/tags. Its temporary
+repository regression covers hidden dirty ancestors, replacement/graft tricks,
+invalid ranges, private names, message addresses and clean duplicate refs.
+All37 Debug/Release groups pass after integrating that regression. This gate
+prevents publishing the private development ancestry; source trees are transferred
+into fresh anonymous publication history instead. It does not claim deletion of
+GitHub caches or third-party copies.

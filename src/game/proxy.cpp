@@ -1,5 +1,6 @@
 #define WIN32_LEAN_AND_MEAN
 #include "common/winproc.hpp"
+#include "common/winpath.hpp"
 #include "game.hpp"
 #include <MinHook.h>
 #include <atomic>
@@ -43,14 +44,23 @@ static BOOL CALLBACK init(PINIT_ONCE, PVOID, PVOID *) {
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
                             reinterpret_cast<LPCWSTR>(&init), &self))
         return FALSE;
-    wchar_t path[MAX_PATH];
-    GetSystemDirectoryW(path, MAX_PATH);
-    wcscat(path, L"\\d3d9.dll");
-    realDll = LoadLibraryW(path);
-    if (!realDll)
-        return FALSE;
+    std::wstring directory;
+    if (!ss2vr::systemDirectory(directory)) return FALSE;
+    try {
+        const auto path=directory+L"\\d3d9.dll";
+        realDll=LoadLibraryExW(path.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);
+    } catch (...) { return FALSE; }
+    if (!realDll) return FALSE;
+    if (realDll==self) {
+        FreeLibrary(realDll); realDll=nullptr;
+        return FALSE; // Never recurse into this proxy after a loader/override alias.
+    }
     create9 = ss2vr::loadProc<Create9>(realDll, "Direct3DCreate9");
     create9ex = ss2vr::loadProc<Create9Ex>(realDll, "Direct3DCreate9Ex");
+    if (!create9) {
+        FreeLibrary(realDll); realDll=nullptr; create9ex=nullptr;
+        return FALSE;
+    }
     vrEnabled = MH_Initialize() == MH_OK;
     if (vrEnabled) {
         HANDLE thread = CreateThread(nullptr, 0, hookThread, nullptr, 0, nullptr);

@@ -59,6 +59,8 @@ python install.py uninstall --game "/path/to/Serious Sam 2"
 
 Only mod-owned files are removed. Added logs remain. This task created a separate package and did not deploy into the installed game's Bin folder or alter its settings.
 
+Both Windows and Linux through Proton are required targets. See [platform setup and verification limits](docs/PLATFORM_SUPPORT.md).
+
 ## Linux / Proton
 
 The products are Windows PE binaries and the host must inherit the game's Proton prefix. The game starts its host through CreateProcess; do not run it in an unrelated Wine prefix. Steam launch options need the proxy override:

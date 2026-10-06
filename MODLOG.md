@@ -887,3 +887,13 @@ claim of compatibility with arbitrary HDR/postprocess/modded content. No game,
 Windows, headset or multiplayer runtime was executed. Roomscale body collision,
 physical melee and remaining vehicle/head requirements remain open; broader
 research and the requested full-project self-review still follow implementation.
+
+## 2026-10-06 — Windows/Proton startup hardening
+
+Bounded UTF-16 module/system path reads replace unchecked MAX_PATH buffers.
+Host launch now uses an explicit image path with inherited prefix/environment;
+system D3D9 loading rejects proxy aliases and absent mandatory exports. Added
+Wine/DXVK OpenXR failure diagnostics and documented both target platforms.
+All36 Debug/Release groups, both architecture builds, artifact/affected ABI
+checks, path sanitizers and Windows compile-only checks pass. Runtime support
+remains unverified under the no-runtime-testing constraint.

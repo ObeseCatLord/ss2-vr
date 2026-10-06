@@ -1,5 +1,6 @@
 #include "common/color.hpp"
 #include "common/controls.hpp"
+#include "common/winpath.hpp"
 #include "common/frame_policy.hpp"
 #include "common/native_ui.hpp"
 #include "common/native_ui_finish.hpp"
@@ -26,11 +27,10 @@ static FILE *logfile = nullptr;
 void log(const char *fmt, ...) {
     AcquireSRWLockExclusive(&logLock);
     if (!logfile) {
-        wchar_t p[MAX_PATH];
-        GetModuleFileNameW(nullptr, p, MAX_PATH);
-        auto s = std::wstring(p);
-        s = s.substr(0, s.find_last_of(L"\\/")) + L"\\SS2VR.log";
-        logfile = _wfopen(s.c_str(), L"a");
+        try {
+            std::wstring directory;
+            if (moduleDirectory(nullptr,directory)) logfile=_wfopen((directory+L"SS2VR.log").c_str(),L"a");
+        } catch (...) {} // Logging failure must not strand the lock or cross native callbacks.
     }
     if (logfile) {
         va_list a;
@@ -43,10 +43,9 @@ void log(const char *fmt, ...) {
     ReleaseSRWLockExclusive(&logLock);
 }
 static bool matches(HMODULE module, const char *hash) {
-    wchar_t path[MAX_PATH];
-    if (!GetModuleFileNameW(module, path, MAX_PATH))
-        return false;
-    HANDLE f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+    std::wstring path;
+    if (!modulePath(module,path)) return false;
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
     if (f == INVALID_HANDLE_VALUE)
         return false;
     BCRYPT_ALG_HANDLE alg = nullptr;
@@ -716,17 +715,21 @@ void deviceReady(IDirect3DDevice9 *d) {
             log("IPC create failed");
             return;
         }
-        wchar_t p[MAX_PATH];
-        GetModuleFileNameW(nullptr, p, MAX_PATH);
-        auto root = std::wstring(p);
-        root = root.substr(0, root.find_last_of(L"\\/"));
-        auto cmd = L"\"" + root + L"\\SS2VR\\ss2vr_host.exe\" --channel " + token;
+        std::wstring root;
+        if (!moduleDirectory(nullptr,root)) {
+            log("Cannot locate game directory for OpenXR host");
+            return;
+        }
+        const auto executable=root+L"SS2VR\\ss2vr_host.exe";
+        auto cmd=L"\""+executable+L"\" --channel "+token;
         STARTUPINFOW si{};
         si.cb = sizeof(si);
         PROCESS_INFORMATION pi{};
         std::vector<wchar_t> arg(cmd.begin(), cmd.end());
         arg.push_back(0);
-        if (CreateProcessW(nullptr, arg.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr,
+        // Explicit image path prevents whitespace-based executable search.
+        // Null environment preserves Steam/Proton's prefix and runtime context.
+        if (CreateProcessW(executable.c_str(), arg.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr,
                            root.c_str(), &si, &pi)) {
             CloseHandle(pi.hThread);
             CloseHandle(pi.hProcess);

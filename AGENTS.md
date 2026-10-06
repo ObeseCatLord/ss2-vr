@@ -41,3 +41,15 @@ review step.
 
 ## Build conventions
 C++20, explicit x86 calling conventions at the engine boundary, fixed-width pointer-free IPC structures and bounded waits. Use pinned upstream dependencies with license notices. Use rg for searches. Test behavior and protocol invariants, not copies of implementation. No TODO, stub or guessed ABI may be represented as a complete feature.
+
+## Publication metadata privacy
+Public commits must not expose personal email addresses. Use an anonymous project
+author/committer name with empty email fields, and inspect the actual outgoing
+commit metadata before publishing. Do not rely on a publishing API's default
+author identity. Source trees may be transferred independently of commit metadata.
+Never merge old email-bearing history back into a sanitized public branch.
+Before any push, run `python tools/verify_publication_history.py <outgoing-ref>`
+in the isolated publication checkout for every outgoing ref. It checks complete
+raw ancestry with replacement objects disabled, not just the tip; it rejects
+shallow histories and annotated tags. Inspect source contents and messages
+separately. Never bypass a failure by limiting the gate to a revision range.
