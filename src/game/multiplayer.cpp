@@ -399,8 +399,8 @@ static void __fastcall closeClient(void *client, void *) {
     originalClientClose(client);
 }
 // Client wrapper has already mapped the RPC target before this virtual call.
-static void __fastcall executeClient(void *unusedThis, void *, int h, uint32_t brain, int j, int length,
-                                     uint8_t *data) {
+static void executeClientBody(void *unusedThis, int h, uint32_t brain, int j, int length,
+                              uint8_t *data) {
     if (!hooksReady.load(std::memory_order_acquire)) {
         originalClient(unusedThis, h, brain, j, length, data);
         return;
@@ -415,81 +415,99 @@ static void __fastcall executeClient(void *unusedThis, void *, int h, uint32_t b
         clientContext->data != data || clientContext->length != length)
         return;
     void *client = clientContext->client;
-    AcquireSRWLockExclusive(&lock);
-    if (client == local.net && brain == local.brain && avatarFor(brain) == local.avatar) {
-        if (message.kind == network::Kind::Ack) {
-            const uint64_t now = GetTickCount64();
-            if (local.credits.acknowledge(message.ack, local.clientNonce, local.serverNonce,
-                                         !local.serverNonce || now - local.lastAck <= 500)) {
-                if (!message.ack.intentEpoch[0] || !message.ack.intentEpoch[1]) {
-                    ReleaseSRWLockExclusive(&lock);
-                    return; // Retired/exhausted metadata can retire credit, never grant a lease.
+    withPeerLock([&] {
+        if (client == local.net && brain == local.brain && avatarFor(brain) == local.avatar) {
+            if (message.kind == network::Kind::Ack) {
+                const uint64_t now = GetTickCount64();
+                if (local.credits.acknowledge(message.ack, local.clientNonce, local.serverNonce,
+                                             !local.serverNonce || now - local.lastAck <= 500)) {
+                    if (!message.ack.intentEpoch[0] || !message.ack.intentEpoch[1]) {
+                        return; // Retired/exhausted metadata can retire credit, never grant a lease.
+                    }
+                    if (!message.ack.acceptedSequence && local.serverNonce != message.ack.serverNonce)
+                        local.pending.requireNeutral();
+                    if (!message.ack.acceptedSequence)
+                        local.serverNonce = message.ack.serverNonce;
+                    if (local.serverNonce == message.ack.serverNonce)
+                        local.lastAck = now;
+                    installIntentEpochs(message.ack.intentEpoch, now);
                 }
-                if (!message.ack.acceptedSequence && local.serverNonce != message.ack.serverNonce)
-                    local.pending.requireNeutral();
-                if (!message.ack.acceptedSequence)
-                    local.serverNonce = message.ack.serverNonce;
-                if (local.serverNonce == message.ack.serverNonce)
-                    local.lastAck = now;
-                installIntentEpochs(message.ack.intentEpoch, now);
             }
-        }
-        if (message.kind == network::Kind::Relay && local.serverNonce &&
-            message.relay.pose.clientNonce == local.clientNonce &&
-            message.relay.pose.serverNonce == local.serverNonce) {
-            // Same native mapper and stack order as ExecuteRRPC's target lookup.
-            using MapEntity = int(__thiscall *)(void *, uint32_t, uint32_t *);
-            auto table = *reinterpret_cast<void ***>(client);
-            auto mapper = reinterpret_cast<MapEntity>(table[0xc8 / 4]);
-            uint32_t mapped[3]{};
-            if (mapper(client, message.relay.subjectAvatar, mapped) >= 0 && resolve(mapped[1])) {
-                bool player = false;
-                for (int slot = 0; slot < 18; ++slot)
-                    player |= avatarFor(brainFor(slot)) == mapped[1];
-                if (player && mapped[1] != local.avatar) {
-                    Remote *destination = nullptr;
-                    for (auto &remote : remotes)
-                        if (remote.avatar == mapped[1]) {
-                            destination = &remote;
-                            break;
-                        }
-                    if (!destination)
+            if (message.kind == network::Kind::Relay && local.serverNonce &&
+                message.relay.pose.clientNonce == local.clientNonce &&
+                message.relay.pose.serverNonce == local.serverNonce) {
+                // Same native mapper and stack order as ExecuteRRPC's target lookup.
+                using MapEntity = int(__thiscall *)(void *, uint32_t, uint32_t *);
+                auto table = *reinterpret_cast<void ***>(client);
+                auto mapper = reinterpret_cast<MapEntity>(table[0xc8 / 4]);
+                uint32_t mapped[3]{};
+                if (mapper(client, message.relay.subjectAvatar, mapped) >= 0 && resolve(mapped[1])) {
+                    bool player = false;
+                    for (int slot = 0; slot < 18; ++slot)
+                        player |= avatarFor(brainFor(slot)) == mapped[1];
+                    if (player && mapped[1] != local.avatar) {
+                        Remote *destination = nullptr;
                         for (auto &remote : remotes)
-                            if (!remote.avatar || GetTickCount64() - remote.sample.receivedMs > 1000) {
+                            if (remote.avatar == mapped[1]) {
                                 destination = &remote;
                                 break;
                             }
-                    if (destination) {
-                        auto &remote = *destination;
-                        const auto &relay = message.relay;
-                        bool same =
-                            remote.avatar == mapped[1] && remote.incarnation == relay.subjectIncarnation;
-                        if ((!same && (!remote.avatar || remote.avatar != mapped[1] ||
-                                       network::newer(relay.subjectIncarnation, remote.incarnation))) ||
-                            (same && network::newer(relay.pose.sequence, remote.sample.pose.sequence))) {
-                            const uint64_t revision = same && remote.sample.valid &&
-                                compatiblePose(remote.sample.pose, relay.pose) ?
-                                remote.sample.presentationRevision : advancePresentationRevision();
-                            remote.avatar = mapped[1];
-                            remote.incarnation = relay.subjectIncarnation;
-                            remote.sample = {
-                                true,      true, mapped[1], relay.subjectIncarnation, GetTickCount64(),
-                                relay.pose, {}, revision};
+                        if (!destination)
+                            for (auto &remote : remotes)
+                                if (!remote.avatar || GetTickCount64() - remote.sample.receivedMs > 1000) {
+                                    destination = &remote;
+                                    break;
+                                }
+                        if (destination) {
+                            auto &remote = *destination;
+                            const auto &relay = message.relay;
+                            bool same =
+                                remote.avatar == mapped[1] && remote.incarnation == relay.subjectIncarnation;
+                            if ((!same && (!remote.avatar || remote.avatar != mapped[1] ||
+                                           network::newer(relay.subjectIncarnation, remote.incarnation))) ||
+                                (same && network::newer(relay.pose.sequence, remote.sample.pose.sequence))) {
+                                const uint64_t revision = same && remote.sample.valid &&
+                                    compatiblePose(remote.sample.pose, relay.pose) ?
+                                    remote.sample.presentationRevision : advancePresentationRevision();
+                                remote.avatar = mapped[1];
+                                remote.incarnation = relay.subjectIncarnation;
+                                remote.sample = {
+                                    true,      true, mapped[1], relay.subjectIncarnation, GetTickCount64(),
+                                    relay.pose, {}, revision};
+                            }
                         }
                     }
                 }
             }
         }
-    }
-    ReleaseSRWLockExclusive(&lock);
+    });
+}
+static void __fastcall executeClient(void *unusedThis, void *, int h, uint32_t brain, int j, int length,
+                                     uint8_t *data) {
+    // Decode may allocate. Contain GNU failures in this reentered mod callback,
+    // before they can cross the native ExecuteRPC frame. Native unwind remains
+    // native; inner peer-lock ownership is retired by its own finally extent.
+    withNativeFinally([&] {
+        executeClientBody(unusedThis, h, brain, j, length, data);
+    }, [](bool aborted) noexcept {
+        if (aborted)
+            nativeInputFailed();
+    });
 }
 static void dispatchClient(void *client, void *rpc, Rpc original) {
     auto data = reinterpret_cast<uint8_t *>(uintptr_t(read32(rpc, 0x20)));
     int length = int(read32(rpc, 0x1c));
     ClientContext context{client, data, length, clientContext};
-    clientContext = &context;
-    original(client, rpc); // Preserve native raw-to-local target remapping.
-    clientContext = context.previous;
+    // This stack record lives above the foreign finally frame. A native
+    // exception must not leave TLS pointing into an unwound dispatch stack.
+    withNativeFinally([&] {
+        clientContext = &context;
+        original(client, rpc); // Preserve native raw-to-local target remapping.
+    }, [&](bool aborted) noexcept {
+        clientContext = context.previous;
+        if (aborted)
+            nativeInputFailed();
+    });
 }
 static void __fastcall clientReliable(void *client, void *, void *rpc) {
     dispatchClient(client, rpc, originalClientReliable);

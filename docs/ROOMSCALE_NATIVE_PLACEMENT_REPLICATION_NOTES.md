@@ -1,8 +1,9 @@
 # Roomscale placement and replication boundaries under investigation
 
 2026-10-06. Static inspection of the pinned owned Engine/Sam2Game modules only.
-No native body reader, placement transaction or network settlement is enabled by
-these notes. The implemented query components are still inactive.
+These notes include historical inactive-component checkpoints. Current
+single-player integration is documented in ROOMSCALE_LOCAL_CONTROLLER.md;
+multiplayer body/origin settlement remains unfinished.
 
 ## Exact native placement/shape sources
 
@@ -142,3 +143,58 @@ remain open. No body movement or new hooks are enabled.
 Verification for this capture change: all41 local Debug/Release groups pass,
 as do reader ASan/UBSan and x86/x64 Windows compile-only fixtures. These checks
 do not replace native gameplay or headset validation.
+
+## Packet identity and error-completion follow-up
+
+The single-player controller is now connected behind the default-off Roomscale
+setting; see ROOMSCALE_LOCAL_CONTROLLER.md. Earlier inactive-reader/query status
+above records the investigation sequence, not the current single-player wiring.
+Multiplayer roomscale remains excluded.
+
+Further pinned inspection closes two important negative assumptions:
+
+- CNMUpdateEntity serializes a one-byte property-payload length and at most255
+  bytes. Pack108600 writes the target and length before copying those bytes;
+  Unpack108820 reads the same framing. GetMaxSize1085F0 returns payload+6.
+  Appending arbitrary mod data to this property buffer is not a free extension.
+- The incoming actor sequence is inherited from its containing native packet:
+  packet unpackED388..ED391 copies packet+0C/+10 to message+8/+0C. SetData does
+  not itself assign the eventual received sequence. Any sideband pairing must
+  identify the actual submitted packet and exact actor payload, not merely the
+  time when the native property serializer ran.
+- LastUpdateSequence is not a sufficient successful-property-application receipt.
+  UpdateEntity's pinned MSVC C++ exception descriptor has a CException handler
+  atF3274 for its protected copy interval. Its normal continuation isF3296,
+  which rejoins before PostReceiveUpdateF32B3 and the sequence writeF32CA.
+  Thus the sequence can advance after a reported copy exception. Native update
+  completion must be checked with its actual outcome and owned body state;
+  neither a mod ACK nor the sequence field alone certifies a paired correction.
+
+The expanded replication-boundary verifier checks the framing, packet-derived
+sequence and actual EH descriptor/type/continuation. No new packet kind,
+serializer, queue, client body mutation or origin correction is enabled here.
+
+## Existing client RPC lifetime correction
+
+During integration work, the existing native client RPC adapter had two uncovered
+unwind extents: its TLS context was restored only on normal return, and a peer
+metadata lock surrounded native mapper/getter calls without native-finally
+retirement. A native exception crossing either extent could leave a dangling
+stack context or a permanently held lock. Direct GNU decoding/allocation errors
+also needed containment inside the reentered mod callback.
+
+Both reliable and unreliable client dispatch now use the existing native-finally
+boundary to restore their prior TLS context. The reentered ExecuteRPC adapter
+contains its own GNU errors, and its peer metadata work uses the established
+withPeerLock helper. Aborted paths mark native input unhealthy; they do not send
+packets, retry gameplay or fabricate ACKs. Normal native mapping and unknown-RPC
+forwarding remain unchanged. This fixes an existing integration boundary; it
+is not multiplayer roomscale implementation or native exception runtime proof.
+
+Verification: all51 existing portable groups pass in Debug and Release, both
+x86 products build, and native-finally/artifact checks pass. The new compiled
+client-dispatch ABI check passes for game/server objects and with Python
+optimization. A modified-object fixture removing one actual TLS-restoration
+store is rejected. The expanded native replication check also passes normally
+and with Python optimization. These checks do not execute native SEH or a
+network session.

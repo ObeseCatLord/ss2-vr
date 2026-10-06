@@ -1146,3 +1146,17 @@ controller checks verify native phase/camera boundaries and compiled call/order/
 cleanup obligations; normal/-O and a corrupted-cleanup negative fixture pass.
 No native runtime was executed. See ROOMSCALE_LOCAL_CONTROLLER.md. The full mod
 and final device-test package remain unfinished.
+
+## 2026-10-06 — Multiplayer receive lifetime and packet evidence
+
+Fixed existing client RPC TLS and peer-lock lifetime across native unwind, and
+contained GNU decode errors inside the reentered mod callback. Native mapping,
+unknown RPC forwarding and wire6 remain unchanged. Added compiled-boundary checks
+and a rejected missing-TLS-store fixture. All51 Debug/Release groups, both x86
+products and native-finally/artifact gates pass.
+
+Pinned packet inspection additionally establishes that actor sequence IDs come
+from the containing packet and that native LastUpdateSequence can advance after
+a caught property-copy CException. Expanded static verification checks the real
+EH descriptor and continuation. MP body/origin pairing remains unfinished; no
+new packet or movement is enabled. See ROOMSCALE_NATIVE_PLACEMENT_REPLICATION_NOTES.md.

@@ -55,13 +55,46 @@ def verify(game):
         0xf32bf:('mov','ecx, dword ptr [edi + 8]'),
         0xf32ca:('call','dword ptr [edx + 0x8c]'),
         0x124846:('mov','dword ptr [ecx + 0x18], eax'),
+        # Update sequence comes from the containing native packet, not SetData.
+        0xed388:('mov','eax, dword ptr [ebx + 0xc]'),
+        0xed38b:('mov','dword ptr [esi + 8], eax'),
+        0xed38e:('mov','ecx, dword ptr [ebx + 0x10]'),
+        0xed391:('mov','dword ptr [esi + 0xc], ecx'),
+        # Exactly one byte of property payload length is serialized.
+        0x1085f3:('add','eax, 6'),
+        0x108633:('mov','cl, byte ptr [esi + 0x18]'),
+        0x108638:('mov','byte ptr [eax], cl'),
+        0x108849:('movzx','eax, byte ptr [eax]'),
+        0x10884c:('mov','dword ptr [esi + 0x18], eax'),
+        0x108a28:('cmp','eax, 0xff'),
+        0x108a2d:('jle','0x10108a7b'),
+        # A native property-copy exception handler rejoins before PostReceive.
+        # The last-update marker therefore is not a success receipt by itself.
+        0xf3263:('call','0x100ec8e0'),
+        0xf3290:('mov','eax, 0x100f3296'),
+        0xf3295:('ret',''),
+        0xf3296:('mov','edi, dword ptr [ebp + 8]'),
     }
     for address,value in expected.items():
         instruction=next(md.disasm(pe.get_data(address,15),base+address))
         require((instruction.mnemonic,instruction.op_str)==value,'Native boundary changed: '+hex(address))
+    # Pinned MSVC C++ EH metadata: protected state0 has one CException handler.
+    # Its normal continuation joins before PostReceiveUpdate/last-sequence write.
+    require(pe.get_data(0x1ead80,5)==bytes.fromhex('b824192310'),'Update EH thunk changed')
+    require(struct.unpack('<5I',pe.get_data(0x231924,20))==
+            (0x19930520,2,base+0x2318f0,1,base+0x231910),'Update EH descriptor changed')
+    require(struct.unpack('<5I',pe.get_data(0x231910,20))==
+            (0,0,1,1,base+0x231900),'Update catch range changed')
+    require(struct.unpack('<4I',pe.get_data(0x231900,16))==
+            (8,base+0x2c26ac,0xffffffe8,base+0xf3274),'Update CException catch changed')
+    require(pe.get_string_at_rva(0x2c26b4)==b'.?AVCException@SeriousEngine@@',
+            'Update caught type changed')
     return {'engine_sha256':PIN,'runtime_executed':False,
             'native_actor_update_reliable':False,'mod_rpc_reliable':True,
             'receive_can_select_unreliable_without_next_reliable':True,
+            'actor_sequence_inherited_from_packet':True,
+            'native_property_payload_max_bytes':255,
+            'last_update_marker_alone_proves_success':False,
             'roomscale_settlement_implemented':False}
 
 
