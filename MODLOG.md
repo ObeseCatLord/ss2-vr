@@ -1026,3 +1026,19 @@ certificate; an unproved native miss cannot authorize movement. False-miss
 controls, generated primitive oracles, all41 local groups, x86 builds, kernel
 ABI checks, sanitizers and both Windows compile-only fixtures pass. This remains
 inactive pending native query ownership and checked movement integration.
+
+## 2026-10-06 — Optional immersive swimming and joystick baseline
+
+Connected a caller-scoped native water-input adapter. Head-directed joystick
+swimming is the default; `[Swimming] Immersive=1` enables bounded arm pulls while
+joystick/jump input is idle. The native control/RPC/physics path remains in use,
+with unchanged look/fire, no body writes and no new wire fields. Strokes reset
+on focus/tracking/menu/wheel/reference/identity/water-mode interruptions. Exact
+native pose records, movement basis, RPC vector and compiled calling convention
+have new static checks. See SWIMMING_CONTROLS.md. Runtime behavior and comfort
+are unverified on Windows and Proton; no game or headset session was launched.
+
+All42 portable groups pass Debug/Release; production swimming helpers pass
+ASan/UBSan. Both x86 products and the x64 host build. Native/compiled ABI checks
+pass normally and under Python -O; a wrong-cleanup object is rejected. Artifact,
+export and matching IPC-layout checks pass. No runtime verification is claimed.

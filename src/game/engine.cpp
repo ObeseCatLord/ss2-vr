@@ -1,4 +1,5 @@
 #include "common/controls.hpp"
+#include "common/swimming_input.hpp"
 #include "common/native_zoom.hpp"
 #include "common/native_primary_projection.hpp"
 #include "common/frame_policy.hpp"
@@ -3238,6 +3239,13 @@ using LookClamp = void(__thiscall *)(void *, Vec3 &);
 using QuaternionEuler = Vec3 *(__cdecl *)(Vec3 *, const Quat &);
 static LookClamp originalLookClamp = nullptr;
 static QuaternionEuler quaternionEuler = nullptr;
+using PlayerControls = void(__thiscall *)(void *, uint8_t, Vec3, Vec3);
+using OperatorMoveDir = Vec3 *(__thiscall *)(void *, Vec3 *, Vec3, Vec3);
+static PlayerControls originalPlayerControls = nullptr;
+static OperatorMoveDir nativeOperatorMoveDir = nullptr;
+static uintptr_t playerControlsReturn = 0, swimmingPlayerVtable = 0;
+static SwimmingStrokes swimmingStrokes;
+
 static bool currentControls(int index, const Snapshot &snapshot, const ControlSample &captured,
                             bool active = true) {
     if (index < 0)
@@ -3263,6 +3271,97 @@ static bool currentControls(int index, const Snapshot &snapshot, const ControlSa
     return captured.input.sequence == snapshot.input.sequence &&
         multiplayer::localPrimaryAllowed(snapshot.player, hand, captured.intentEpoch[hand],
             captured.input.primaryInputGeneration[hand], captured.input.sequence, active);
+}
+// Adapt only the local native control producer. The native ClientAction RPC
+// transports the resulting full Vec3 unchanged, including on stock servers.
+// Do not hook the authority's movement consumer or alter its physics state.
+static void __fastcall waterPlayerControls(void *brain, void *, uint8_t fire, Vec3 look, Vec3 move) {
+#ifdef _MSC_VER
+    const auto caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
+#else
+    const auto caller = reinterpret_cast<uintptr_t>(__builtin_return_address(0));
+#endif
+    // This state belongs solely to the audited main-thread input producer.
+    // Other callers pass through without reading or resetting stroke history.
+    if (!hooksReady.load(std::memory_order_acquire) || caller != playerControlsReturn ||
+        !nativeMainThread || !nativeMainThread()) {
+        originalPlayerControls(brain, fire, look, move);
+        return;
+    }
+    ControlSample captured;
+    AcquireSRWLockShared(&controlsLock);
+    captured = sampledControls;
+    ReleaseSRWLockShared(&controlsLock);
+    const auto snapshot = copySnapshot();
+    const auto waterState = [&](uint32_t &flags, uint32_t &pose) {
+        if (!snapshot.player || !nativeRiderCurrent(snapshot.player, captured.rider)) return false;
+        uintptr_t table = 0;
+        memcpy(&table, snapshot.player, sizeof(table));
+        if (table != swimmingPlayerVtable) return false;
+        memcpy(&flags, static_cast<uint8_t *>(snapshot.player) + 0x4cc, 4);
+        memcpy(&pose, static_cast<uint8_t *>(snapshot.player) + 0x610, 4);
+        return nativeWaterInputMode(flags, pose);
+    };
+    const bool finiteControls = std::isfinite(look.x) && std::isfinite(look.y) && std::isfinite(look.z) &&
+        std::isfinite(move.x) && std::isfinite(move.y) && std::isfinite(move.z) &&
+        std::abs(move.x) <= 2.f && std::abs(move.y) <= 2.f && std::abs(move.z) <= 2.f;
+    bool waterAdapted = false;
+    uint32_t flags = 0, pose = 0;
+    if (finiteControls && hooksReady.load(std::memory_order_acquire) && caller == playerControlsReturn &&
+        nativeMainThread && nativeMainThread() && captured.rider.handheld() &&
+        nativeOperatorMoveDir && quaternionEuler && livePlayer(snapshot) && snapshot.ui.gameplay &&
+        snapshot.ui.tickMs <= GetTickCount64() && GetTickCount64() - snapshot.ui.tickMs < 200 &&
+        currentControls(0, snapshot, captured) &&
+        validNativeBodyPose(captured.input.head) && validNativeBodyPose(captured.origin) &&
+        std::isfinite(captured.turn) && waterState(flags, pose)) {
+        const auto brainHandle = pointerHandle(brain);
+        uint32_t playerHandle = 0, ownedBrain = 0;
+        if (brainHandle && resolve(brainHandle) == brain) {
+            memcpy(&playerHandle, static_cast<uint8_t *>(brain) + 0x28, 4);
+            memcpy(&ownedBrain, static_cast<uint8_t *>(snapshot.player) + 0x38c, 4);
+        }
+        Pose anchor;
+        if (playerHandle == captured.rider.player && ownedBrain == brainHandle &&
+            nativeTrackingAnchor(snapshot.player, anchor, &captured.rider)) {
+            const Pose head = worldHeadTracking(anchor, captured.origin, captured.turn, captured.input.head);
+            Vec3 headLook;
+            if (validNativeBodyPose(head) && quaternionEuler(&headLook, head.q) == &headLook &&
+                std::isfinite(headLook.x) && std::isfinite(headLook.y)) {
+                headLook.z = 0; // Head roll must not turn a lateral stroke into climbing.
+                // Poll already applied snap/smooth turn to the control vector.
+                // Remove it once; worldHeadTracking includes that same turn.
+                Vec3 local = rotate(yaw(-captured.turn), move);
+                const bool joystickActive = !swimmingJoystickIdle(local);
+                const bool currentHands = snapshot.input.gripValid[0] && snapshot.input.gripValid[1] &&
+                    finite(snapshot.input.grip[0]) && finite(snapshot.input.grip[1]);
+                const float stroke = swimmingStrokes.sample(captured.input, captured.rider.player,
+                    captured.generation, pose, GetTickCount64(), settings.immersiveSwimming &&
+                    !joystickActive && currentHands && !snapshot.ui.wheel[0].open && !snapshot.ui.wheel[1].open);
+                local.z -= stroke;
+                std::array<Vec3, 3> basis{};
+                Vec3 desired{}, mapped{};
+                const bool returned =
+                    nativeOperatorMoveDir(snapshot.player, &basis[0], look, {1,0,0}) == &basis[0] &&
+                    nativeOperatorMoveDir(snapshot.player, &basis[1], look, {0,1,0}) == &basis[1] &&
+                    nativeOperatorMoveDir(snapshot.player, &basis[2], look, {0,0,1}) == &basis[2] &&
+                    nativeOperatorMoveDir(snapshot.player, &desired, headLook, local) == &desired;
+                uint32_t finalFlags = 0, finalPose = 0;
+                const auto latest = copySnapshot();
+                const bool strokeStillValid = stroke == 0 ||
+                    (latest.input.gripValid[0] && latest.input.gripValid[1] &&
+                     finite(latest.input.grip[0]) && finite(latest.input.grip[1]) &&
+                     !latest.ui.wheel[0].open && !latest.ui.wheel[1].open);
+                if (livePlayer(latest) && latest.ui.gameplay && strokeStillValid && returned && swimmingInputInBasis(basis, desired, mapped) &&
+                    waterState(finalFlags, finalPose) && finalFlags == flags && finalPose == pose &&
+                    resolve(brainHandle) == brain && currentControls(0, latest, captured)) {
+                    move = mapped;
+                    waterAdapted = true;
+                }
+            }
+        }
+    }
+    if (!waterAdapted) swimmingStrokes.reset();
+    originalPlayerControls(brain, fire, look, move);
 }
 static void __fastcall mountedLookClamp(void *brain, void *, Vec3 &look) {
 #ifdef _MSC_VER
@@ -3522,6 +3621,8 @@ bool attach(bool headless) {
     sniperCrossDeleteReturn = reinterpret_cast<uintptr_t>(g)+0x171a54;
     mountedAvatarReturn = reinterpret_cast<uintptr_t>(g) + 0x943b6;
     mountedClampReturn = reinterpret_cast<uintptr_t>(g) + 0xf3255;
+    playerControlsReturn = reinterpret_cast<uintptr_t>(g) + 0xf35d3;
+    swimmingPlayerVtable = reinterpret_cast<uintptr_t>(g) + 0x29e878;
     if (!headless) {
         expectedDepthRange = reinterpret_cast<DepthRange>(reinterpret_cast<uint8_t *>(graphics) + 0x56a0);
         expectedProjectionSet = reinterpret_cast<ProjectionSet>(reinterpret_cast<uint8_t *>(graphics) + 0x69a0);
@@ -3532,8 +3633,10 @@ bool attach(bool headless) {
     S(c, "?hvPointerToHandle@SeriousEngine@@YAKPAX@Z", pointerHandle);
     S(c, "?thrIsThisMainThread@SeriousEngine@@YAHXZ", nativeMainThread);
     S(c, "?_st_idInvalid@SeriousEngine@@3UInvalidIdent@1@B", invalidSeatIdent);
-    if (!headless)
+    if (!headless) {
         S(c, "?mthQuaternionToEuler@SeriousEngine@@YA?AVVector3f@1@ABVQuaternion4f@1@@Z", quaternionEuler);
+        S(g, "?GetOperatorMoveDir@CLeggedPuppetEntity@SeriousEngine@@UAE?AVVector3f@2@V32@0@Z", nativeOperatorMoveDir);
+    }
     S(c, "?mthMatrixToQuatVect@SeriousEngine@@YA?AVQuatVect@1@ABVMatrix34f@1@@Z", matrixPose);
     S(c, "?strConvertStringToID@SeriousEngine@@YA?AVIDENT@1@PBD@Z", toId);
     S(e, "?simGetCurrent@SeriousEngine@@YAPAVCSimulation@1@XZ", currentSimulation);
@@ -3698,6 +3801,8 @@ bool attach(bool headless) {
           originalMatrixInverse);
         ok = internalHook(graphics, 0x56a0, reinterpret_cast<void *>(weaponDepthRange),
                           reinterpret_cast<void **>(&originalDepthRange)) && ok;
+        H(g, "?ProcessPlayerControls@CPlayerBrainEntity@SeriousEngine@@UAEXEVVector3f@2@0@Z",
+          waterPlayerControls, originalPlayerControls);
         H(e, "?PollValues@CInputBindings@SeriousEngine@@QAEXXZ", poll, originalPoll);
         H(e, "?GetCommandValue@CInputBindings@SeriousEngine@@QAEMVIDENT@2@@Z", commandValue, originalValue);
         H(e, "?IsCommandDown@CInputBindings@SeriousEngine@@QAEHVIDENT@2@@Z", commandDown, originalDown);

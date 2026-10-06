@@ -55,16 +55,10 @@ input must not remove that fallback. Keep this input choice independent of the
 native swimming/diving collision shapes, water physics, buoyancy and authority.
 Default to the non-gesture mode unless the owner selects immersive swimming.
 
-This is an active implementation requirement, not an already delivered setting.
-There is currently no immersive-swimming consumer. Do not publish a nonfunctional
-configuration toggle or equate the new two-hull geometry capture with arm-stroke
-locomotion. The ordinary native input/RPC/physics path must consume the selected
-movement intent; no direct avatar translation or separate swimming solver.
-
-Static input inspection found native Y+ minus Y- collection at F2F5D/F2F6C,
-followed by positive-Y quantization at F2F78..F2F85, before the complete movement
-vector reaches native ProcessPlayerControls EE0F0 (thiscall,ret1C). Simply putting
-head pitch into the existing Y+ command value is therefore not an established
-analog swimming adapter. Pose+610 values3/4 participate in native swim wobbling,
-but complete movement-frame and mode admission must still be established before
-adding a head-directed water-input hook. Preserve land jumping and mounted input.
+Source now connects this choice through the local native control producer; see
+[SWIMMING_CONTROLS.md](SWIMMING_CONTROLS.md). `[Swimming] Immersive=0` defaults to
+head-directed joystick input. Setting1 adds bounded forward arm-pull input only
+while the joystick/jump vector is idle. Both modes retain the native three-axis
+ClientAction RPC and movement consumer, with no direct body writes or new wire
+fields. This has source/offline/static verification only; water transitions,
+comfort and Windows/Proton runtime behavior still need the owner's later tests.

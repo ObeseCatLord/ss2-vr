@@ -426,3 +426,13 @@ none cancels while its optional vertex buffer is locked. The adapter now covers
 18 resource branches plus five propagation points. Both x86 products and all40
 local groups still pass; normal provider/collider closure and the actual query
 owner remain pending. See the resource-cancellation source record.
+
+## Optional immersive swimming — 2026-10-06
+
+The requested choice is now connected in source, with default head-directed
+joystick water input and optional bounded forward arm pulls. Nonzero joystick
+input retains priority in either mode. It uses native ProcessPlayerControls and
+ClientAction rather than a movement rewrite or direct pose writes. See
+[SWIMMING_CONTROLS.md](SWIMMING_CONTROLS.md) for admission, native ABI evidence,
+configuration and explicit runtime limitations. Other unfinished roomscale,
+melee and multiplayer settlement work remains open.
