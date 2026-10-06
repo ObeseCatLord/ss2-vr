@@ -208,6 +208,11 @@ void resetRoomscaleResourceGatesAfterRemoval() noexcept {
     gatesQueued=false;
     primitiveHullTable=modelHullTable=fluidHullTable=forceHullTable=hullEngineBase=0;
 }
+bool finishRoomscaleResourceScopeForCommit(bool &failed) noexcept {
+    if (unavailable!=&failed || failed) return false;
+    unavailable=nullptr;
+    return true;
+}
 bool runRoomscaleResourceScope(bool &failed, DWORD thread, RoomscaleResourceBody body, void *context) noexcept {
     if (unavailable) { *unavailable=true; failed=true; return false; }
     if (!gatesQueued || !thread || GetCurrentThreadId()!=thread || !body || failed) {

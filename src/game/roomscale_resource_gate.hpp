@@ -14,4 +14,7 @@ bool queueRoomscaleResourceGates(HMODULE engine, RoomscaleInternalHook registrar
 void resetRoomscaleResourceGatesAfterRemoval() noexcept;
 bool runRoomscaleResourceScope(bool &unavailable, DWORD simulationThread,
                                RoomscaleResourceBody body, void *context) noexcept;
+// Only the checked-placement adapter may end filtering immediately before its
+// first approved native write. Subsequent native commit callbacks stay native.
+bool finishRoomscaleResourceScopeForCommit(bool &unavailable) noexcept;
 } // namespace ss2vr::game

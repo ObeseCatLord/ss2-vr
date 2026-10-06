@@ -1062,3 +1062,19 @@ Both x86 products, all42 Debug/Release groups, native-finally product checks,
 artifact/export/IPC checks and normal/-O production query-observer ABI checks
 pass. A deliberately corrupted model-argument slot is rejected. The swimming
 compiled ABI still passes after the observer change. No runtime was executed.
+
+## 2026-10-06 — Checked-placement pre-write boundary
+
+Added an inactive typed native placement adapter and two cancellation gates.
+Its collision-check callback sees the actual composed root target before any
+root write; refusal returns through the original checked-setter failure suffix
+before joint/model callbacks. Commit entry is tracked separately from successful
+return so an uncertain mutation cannot be blindly retried. Arming and each
+request verify installed guard JMPs, including relocated CALL provenance.
+
+All43 portable groups pass Debug/Release, the production progress helper passes
+ASan/UBSan, both x86 products build, and normal/-O native/compiled placement ABI,
+resource, native-finally and artifact checks pass. A wrong cancellation-frame
+fixture is rejected. The component remains inactive until actual swept geometry,
+query ownership and origin/replication settlement are connected. See
+ROOMSCALE_CHECKED_PLACEMENT_BOUNDARY.md; no runtime was executed.
