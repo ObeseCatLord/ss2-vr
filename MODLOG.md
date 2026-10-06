@@ -1078,3 +1078,13 @@ resource, native-finally and artifact checks pass. A wrong cancellation-frame
 fixture is rejected. The component remains inactive until actual swept geometry,
 query ownership and origin/replication settlement are connected. See
 ROOMSCALE_CHECKED_PLACEMENT_BOUNDARY.md; no runtime was executed.
+
+## 2026-10-06 — Isolated extra-query arithmetic mode
+
+Added an inactive bounded FP frame for roomscale math/query work. It saves the
+caller FX image, installs explicit x87/SSE controls, checks entry/exit modes and
+restores through native-finally cleanup. Native commit and ordinary gameplay
+must remain outside it. All44 Debug/Release groups, FP-helper ASan/UBSan, both
+x86 builds and normal/-O compiled boundary checks pass; a restore-as-save
+negative fixture is rejected. See ROOMSCALE_MATH_FRAME.md. No runtime testing
+or roomscale activation is claimed.
