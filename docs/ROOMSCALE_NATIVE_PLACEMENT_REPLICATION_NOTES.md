@@ -116,3 +116,29 @@ movement-query owner/mechanism/category loads. Run
 `tools/verify_roomscale_body_layout.py --game <private-game-root>`; normal and
 optimized Python runs pass. This confirms binary layout roles, not the actual
 loaded player model's shape or safe live body ownership.
+
+## Owned player assets: complete native shape capture
+
+The privately transferred player model directly references Player.mch. The
+fingerprinted mechanism asset establishes three relevant hybrid-root profiles:
+Default has one capsule (template width1,height2.2, centreY1.1); Crouch has one
+capsule (width1,height1.5, centreY0.75); Swimming has two capsules, including one
+rotated90 degrees around X. Each of these profiles has zero child mechanism
+parts. These are serialized template measurements, not hardcoded live dimensions.
+`verify_player_collision_asset.py` checks the exact asset, name/type framing,
+profile/body references and complete shape/child arrays; it passes normally and
+with Python optimization. No proprietary asset bytes are redistributed.
+
+The inactive body reader now captures the complete leaf-hull chain, bounded to
+these two-hull configurations. It retains each hull's own pose, shape and query
+category; rejects cycles, excess hulls, descendants and identity mismatches;
+and compares both shapes during revalidation. Every read failure is tested for
+both one- and two-hull cases. Rotated-hull capture is only metadata: the current
+upright cover cannot be used on that rotated hull. A native query must cover all
+captured shapes under their real transforms or reject the entire movement.
+General rotated-cover integration, native query ownership and body settlement
+remain open. No body movement or new hooks are enabled.
+
+Verification for this capture change: all41 local Debug/Release groups pass,
+as do reader ASan/UBSan and x86/x64 Windows compile-only fixtures. These checks
+do not replace native gameplay or headset validation.

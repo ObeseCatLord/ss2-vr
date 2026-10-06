@@ -1,6 +1,7 @@
 #pragma once
 #include "math.hpp"
 #include "roomscale_primitive_query.hpp"
+#include <array>
 #include <cstdint>
 #include <cstring>
 #include <limits>
@@ -15,15 +16,32 @@ static_assert(std::is_trivially_copyable_v<ss2vr::Pose>);
 // Addresses are comparison tokens within ONE already-owned native extent.
 // They are not retained references and must never be serialized or used after
 // a native callback without a fresh read and full identity comparison.
-struct BodyGeometry {
-    uint32_t playerHandle=0,player=0,mechanismHandle=0,mechanism=0;
-    uint32_t rootHandle=0,root=0,modelHandle=0,model=0,parts=0,hull=0,category=0;
-    ss2vr::Pose modelPose{},hullPose{};
+struct BodyHullGeometry {
+    uint32_t address=0,category=0;
+    ss2vr::Pose pose{};
     Primitive primitive{};
 };
+struct BodyGeometry {
+    // The installed standing/crouching rig has one hull; swimming has two.
+    // More shapes are rejected as a whole, never truncated or silently ignored.
+    static constexpr unsigned MaximumHulls=2;
+    uint32_t playerHandle=0,player=0,mechanismHandle=0,mechanism=0;
+    uint32_t rootHandle=0,root=0,modelHandle=0,model=0,parts=0;
+    ss2vr::Pose modelPose{};
+    std::array<BodyHullGeometry,MaximumHulls> hulls{};
+    unsigned hullCount=0;
+};
+inline bool bodyUnitQuaternion(ss2vr::Quat rotation) {
+    const double norm=double(rotation.x)*rotation.x+double(rotation.y)*rotation.y+
+                      double(rotation.z)*rotation.z+double(rotation.w)*rotation.w;
+    return std::isfinite(norm)&&std::abs(norm-1)<=16*std::numeric_limits<float>::epsilon();
+}
 
-// A narrow complete-shape reader for one native hybrid body with one sphere or
-// capsule hull. It does not certify the caller's worker/lifetime ownership.
+// A narrow complete-shape reader for one native hybrid body with up to two sphere or
+// capsule hulls, including the installed swimming rig. It does not certify the
+// caller's worker/lifetime ownership. Capturing a rotated hull does not authorize
+// using an upright-only cover: the eventual query must cover EVERY captured hull
+// under its actual transform or reject the complete movement request.
 // Read must copy exactly the requested bytes or fail; resolve returns a current
 // generation-checked native address. Neither operation may run gameplay code.
 template<class Read,class Resolve>
@@ -50,36 +68,37 @@ inline bool readBodyGeometry(Read&& read,Resolve&& resolve,const BodyLayout& lay
     value.mechanism=resolve(value.mechanismHandle);
     value.root=resolve(value.rootHandle);
     value.model=resolve(value.modelHandle);
-    uint32_t count=0,root=0,modelHandle=0,vtable=0,owner=0;
+    uint32_t count=0,root=0,modelHandle=0,vtable=0,owner=0,hullAddress=0;
     if (!word(value.mechanism,8,count)||count!=1||!word(value.mechanism,4,value.parts)||
         !word(value.parts,8,root)||root!=value.root||!root||
         !word(value.mechanism,0x38,modelHandle)||modelHandle!=value.modelHandle||
         !word(value.root,0,vtable)||vtable!=layout.hybridBodyVtable||
         !word(value.root,0x48,owner)||owner!=value.player||
-        !word(value.root,8,value.hull)||!value.hull) return false;
-    uint32_t parent=0,children=0,sibling=0,mechanism=0;
-    if (!word(value.hull,0,vtable)||vtable!=layout.primitiveHullVtable||
-        !word(value.hull,4,parent)||parent!=value.root||
-        !word(value.hull,8,children)||children||!word(value.hull,0xc,sibling)||sibling||
-        !word(value.hull,0x48,owner)||owner!=value.player||
-        !word(value.hull,0x70,mechanism)||mechanism!=value.mechanism||
-        !word(value.hull,0x54,value.category)||
-        !copy(value.hull,0x78,&value.primitive,sizeof(value.primitive))||
-        !copy(value.hull,0x2c,&value.hullPose,sizeof(value.hullPose))||
-        !copy(value.model,0x2c,&value.modelPose,sizeof(value.modelPose))) return false;
-    const auto& shape=value.primitive;
-    if ((shape.kind!=0&&shape.kind!=2)||!std::isfinite(shape.width)||shape.width<=0||
-        (shape.kind==2&&(!std::isfinite(shape.height)||shape.height<shape.width))||
-        !ss2vr::finite(value.hullPose)||!ss2vr::finite(value.modelPose)) return false;
-    // This first placement adapter is for an upright hybrid avatar, not ragdoll
-    // or vehicle/body rotation. No quaternion normalization changes native data.
-    const auto q=value.hullPose.q;
-    auto unit=[](ss2vr::Quat rotation) {
-        const double norm=double(rotation.x)*rotation.x+double(rotation.y)*rotation.y+
-                          double(rotation.z)*rotation.z+double(rotation.w)*rotation.w;
-        return std::abs(norm-1)<=16*std::numeric_limits<float>::epsilon();
-    };
-    if (q.x!=0||q.z!=0||!unit(q)||!unit(value.modelPose.q)) return false;
+        !word(value.root,8,hullAddress)||!hullAddress||
+        !copy(value.model,0x2c,&value.modelPose,sizeof(value.modelPose))||
+        !ss2vr::finite(value.modelPose)||!bodyUnitQuaternion(value.modelPose.q)) return false;
+    while (hullAddress) {
+        if (value.hullCount==BodyGeometry::MaximumHulls) return false;
+        for (unsigned i=0;i<value.hullCount;++i)
+            if (value.hulls[i].address==hullAddress) return false;
+        auto& hull=value.hulls[value.hullCount];
+        hull.address=hullAddress;
+        uint32_t parent=0,children=0,sibling=0,mechanism=0;
+        if (!word(hullAddress,0,vtable)||vtable!=layout.primitiveHullVtable||
+            !word(hullAddress,4,parent)||parent!=value.root||
+            !word(hullAddress,8,children)||children||!word(hullAddress,0xc,sibling)||
+            !word(hullAddress,0x48,owner)||owner!=value.player||
+            !word(hullAddress,0x70,mechanism)||mechanism!=value.mechanism||
+            !word(hullAddress,0x54,hull.category)||
+            !copy(hullAddress,0x78,&hull.primitive,sizeof(hull.primitive))||
+            !copy(hullAddress,0x2c,&hull.pose,sizeof(hull.pose))) return false;
+        const auto& shape=hull.primitive;
+        if ((shape.kind!=0&&shape.kind!=2)||!std::isfinite(shape.width)||shape.width<=0||
+            (shape.kind==2&&(!std::isfinite(shape.height)||shape.height<shape.width))||
+            !ss2vr::finite(hull.pose)||!bodyUnitQuaternion(hull.pose.q)) return false;
+        ++value.hullCount;
+        hullAddress=sibling;
+    }
     // Re-resolve every owner after copying. The enclosing native phase must
     // still prohibit deletion/worker mutation; readability is not a lease.
     if (resolve(playerHandle)!=value.player||resolve(value.mechanismHandle)!=value.mechanism||
@@ -88,17 +107,26 @@ inline bool readBodyGeometry(Read&& read,Resolve&& resolve,const BodyLayout& lay
     if (!word(value.player,0x114,current)||current!=value.mechanismHandle||
         !word(value.player,0x118,current)||current!=value.rootHandle||
         !word(value.player,0x120,current)||current!=value.modelHandle||
-        !word(value.root,8,current)||current!=value.hull) return false;
+        !word(value.root,8,current)||current!=value.hulls[0].address) return false;
+    for (unsigned i=0;i<value.hullCount;++i) {
+        const uint32_t next=i+1<value.hullCount?value.hulls[i+1].address:0;
+        if (!word(value.hulls[i].address,0xc,current)||current!=next) return false;
+    }
     output=value;
     return true;
 }
 inline bool sameBodyGeometry(const BodyGeometry& a,const BodyGeometry& b) {
-    return a.playerHandle==b.playerHandle&&a.player==b.player&&
-        a.mechanismHandle==b.mechanismHandle&&a.mechanism==b.mechanism&&
-        a.rootHandle==b.rootHandle&&a.root==b.root&&a.modelHandle==b.modelHandle&&a.model==b.model&&
-        a.parts==b.parts&&a.hull==b.hull&&a.category==b.category&&
-        std::memcmp(&a.primitive,&b.primitive,sizeof(a.primitive))==0&&
-        std::memcmp(&a.modelPose,&b.modelPose,sizeof(a.modelPose))==0&&
-        std::memcmp(&a.hullPose,&b.hullPose,sizeof(a.hullPose))==0;
+    if (a.hullCount>BodyGeometry::MaximumHulls || b.hullCount!=a.hullCount ||
+        a.playerHandle!=b.playerHandle||a.player!=b.player||
+        a.mechanismHandle!=b.mechanismHandle||a.mechanism!=b.mechanism||
+        a.rootHandle!=b.rootHandle||a.root!=b.root||a.modelHandle!=b.modelHandle||a.model!=b.model||
+        a.parts!=b.parts||std::memcmp(&a.modelPose,&b.modelPose,sizeof(a.modelPose))) return false;
+    for (unsigned i=0;i<a.hullCount;++i) {
+        const auto& x=a.hulls[i];const auto& y=b.hulls[i];
+        if (x.address!=y.address||x.category!=y.category||
+            std::memcmp(&x.primitive,&y.primitive,sizeof(x.primitive))||
+            std::memcmp(&x.pose,&y.pose,sizeof(x.pose))) return false;
+    }
+    return true;
 }
 } // namespace ss2vr::roomscale

@@ -995,3 +995,13 @@ Upright capsule-cover placement now accounts conservatively for native world
 float-grid quantization and refuses a radius-budget overflow. Zero-offset sphere
 placement remains exact. All41 local groups plus cover sanitizer and both Windows
 compile-only fixtures pass. This is geometry support, not enabled body movement.
+
+## 2026-10-06 — Actual player collision assets and two-hull capture
+
+Verified the privately supplied player model and its mechanism/skeleton/mesh
+inputs. The native Swimming profile has two capsules, one rotated; the previous
+single-hull reader intentionally rejected it. Extended bounded geometry capture
+to retain both complete shapes without admitting an upright-only query for a
+rotated shape. Added pinned asset/profile audit and failure/cycle/extra-shape
+regressions. Body movement, native ownership and transformed-cover integration
+remain inactive and unfinished; no runtime was launched.

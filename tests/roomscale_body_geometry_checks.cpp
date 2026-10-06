@@ -39,7 +39,7 @@ struct Memory {
 };
 int main() {
     Memory valid;roomscale::BodyGeometry a,b;
-    assert(valid.capture(a)&&a.root!=a.model&&a.category==0x12345678);
+    assert(valid.capture(a)&&a.root!=a.model&&a.hullCount==1&&a.hulls[0].category==0x12345678);
     assert(valid.capture(b)&&roomscale::sameBodyGeometry(a,b));
     for(auto [address,value]:std::array<std::pair<uint32_t,uint32_t>,13>{{
         {0x1010,2},{0x1564,7},{0x1544,7},{0x1114,0},{0x2008,2},{0x5008,0x4000},
@@ -49,7 +49,7 @@ int main() {
         assert(!bad.capture(b)&&b.player==0);
     }
     Memory tilted;tilted.write(0x602c,Pose{Quat{.1f,0,0,.9949874f},{1,2,3}});
-    assert(!tilted.capture(b));
+    assert(tilted.capture(b)); // Swimming includes an independently rotated hull.
     Memory recycled;recycled.handle[3]=0x5000;assert(!recycled.capture(b));
     size_t reads=0;assert(valid.capture(b,0,&reads));
     for(size_t fail=1;fail<=reads;++fail) {
@@ -71,4 +71,21 @@ int main() {
     Memory moved;moved.write(0x402c,Pose{Quat{0,0,0,1},{2,1,3}});
     assert(moved.capture(b)&&!roomscale::sameBodyGeometry(a,b));
     valid.word(0x6054,0xabcdef);assert(valid.capture(b)&&!roomscale::sameBodyGeometry(a,b));
+    Memory swimming;
+    std::memcpy(swimming.bytes.data()+0x6800,swimming.bytes.data()+0x6000,0x90);
+    swimming.word(0x600c,0x6800);
+    swimming.write(0x682c,Pose{Quat{.70710677f,0,0,.70710677f},{1,2,3}});
+    assert(swimming.capture(b)&&b.hullCount==2&&b.hulls[1].address==0x6800);
+    auto both=b;
+    size_t compoundReads=0;assert(swimming.capture(b,0,&compoundReads));
+    for(size_t fail=1;fail<=compoundReads;++fail) {
+        b=both;assert(!swimming.capture(b,fail)&&b.player==0&&b.hullCount==0);
+    }
+
+    swimming.word(0x6854,0x89abcdef);
+    assert(swimming.capture(b)&&!roomscale::sameBodyGeometry(both,b));
+    swimming.word(0x680c,0x6000);assert(!swimming.capture(b)&&b.player==0); // Cycle.
+    swimming.word(0x680c,0x7000);assert(!swimming.capture(b)&&b.player==0); // Never truncate a third shape.
+    Memory selfCycle;selfCycle.word(0x600c,0x6000);assert(!selfCycle.capture(b));
+
 }
