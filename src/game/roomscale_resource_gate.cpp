@@ -20,6 +20,30 @@ uintptr_t hullEngineBase=0;
 // 0 forwards native instructions; 1 takes a normal cancellation suffix;
 // 2 skips an originally clear replacement branch using its native destination.
 extern "C" int __cdecl ss2vrResourceDecision(const uint8_t *resource, unsigned kind) noexcept {
+    if (kind==3) {
+        if (!unavailable) return static_cast<int>(OptionalQueryDecision::original);
+        if (*unavailable) return static_cast<int>(OptionalQueryDecision::cancel);
+        if (!resource) return static_cast<int>(optionalQueryTargetDecision(unavailable,false));
+        bool supported=false;
+        // PUSHAD's saved ESP points to the pushed flags word. The four native
+        // cdecl arguments start one word above it, before the call instruction.
+        const auto *args=reinterpret_cast<volatile const int32_t*>(resource+4);
+        const int32_t handle=args[0];
+        if (hullEngineBase && handle>0 && args[1]==0x93) {
+            const auto table=*reinterpret_cast<volatile const uintptr_t*>(hullEngineBase+0x2e68e4);
+            const int32_t count=*reinterpret_cast<volatile const int32_t*>(hullEngineBase+0x2e68e8);
+            const uint64_t offset=uint64_t(uint32_t(handle)-1u)*12u;
+            if (table && handle<=count && uint64_t(table)+offset+12u<=(uint64_t(1)<<32)) {
+                const auto entry=table+static_cast<uintptr_t>(offset);
+                supported=optionalQueryBufferReadable(
+                    *reinterpret_cast<volatile const uint32_t*>(entry),
+                    *reinterpret_cast<volatile const int32_t*>(entry+4),
+                    *reinterpret_cast<volatile const int16_t*>(entry+8),
+                    *reinterpret_cast<volatile const uint8_t*>(entry+10),args[2],args[3]);
+            }
+        }
+        return static_cast<int>(optionalQueryTargetDecision(unavailable,supported));
+    }
     if (kind==2) {
         if (!unavailable) return static_cast<int>(OptionalQueryDecision::original);
         if (*unavailable) return static_cast<int>(OptionalQueryDecision::cancel);
@@ -42,7 +66,7 @@ extern "C" int __cdecl ss2vrResourceDecision(const uint8_t *resource, unsigned k
 
 #define STRING_(x) #x
 #define STRING(x) STRING_(x)
-// Slots in pushal: EDI0, ESI4, EBP8, EBX16, EDX20, ECX24, EAX28.
+// Slots in pushal: EDI0, ESI4, EBP8, savedESP12, EBX16, EDX20, ECX24, EAX28.
 // The native instruction's FP stack and flags survive both continuations.
 // Branch on the helper result BEFORE restoring the original flags. Two restore
 // suffixes avoid modifying a native return address or relying on a fake RET.
@@ -58,6 +82,7 @@ extern "C" int __cdecl ss2vrResourceDecision(const uint8_t *resource, unsigned k
         "2: fxrstor (%esp)\n\tmovl %ebp,%esp\n\tpopal\n\tpopfl\n\tjmp *_" STRING(name) "_clear\n\t"); }
 
 RESOURCE_GATE(resourceHullDispatch,20,2)
+RESOURCE_GATE(resourceCollisionBuffer,12,3)
 RESOURCE_GATE(resourceWorld,24,0)
 RESOURCE_GATE(resourceModel,24,0)
 RESOURCE_GATE(resourceConfiguration,0,0)
@@ -120,6 +145,7 @@ bool queueRoomscaleResourceGates(HMODULE engine, RoomscaleInternalHook registrar
     auto *collisionAbort=reinterpret_cast<void*>(&resourceCancelCollisionQuery);
     auto *materialAbort=reinterpret_cast<void*>(&resourceCancelMaterialGetter);
     const std::array bindings{
+        BIND(resourceCollisionBuffer,0xcba9f,0,BYTES(0xe8,0x3c,0x3e,0xfc,0xff),5,collisionAbort,0),
         BIND(resourceHullDispatch,0x2f9d1,0,BYTES(0xff,0x52,0x40,0x85,0xc0),5,nullptr,0x2f9de),
         BIND(resourceWorld,0x29114,0x29146,BYTES(0xf6,0x41,0x04,0x01,0x74,0x2c),6,nullptr,0x29160),
         BIND(resourceModel,0xda419,0xda439,BYTES(0xf6,0x41,0x04,0x01,0x74,0x1a),6,nullptr,0xda476),

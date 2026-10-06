@@ -149,3 +149,26 @@ one hull-dispatch admission. Both x86 products and all41 local Debug/Release
 groups pass; pinned native and emitted-register/FP/TLS gate checks pass normally
 and with Python optimization. This bounds the virtual hull target set, but does
 not close all downstream callbacks, native query ownership or placement.
+
+## Physical collision vertex-buffer provider boundary
+
+Added a26th inactive gate at CBA9F, immediately before the native
+`gfxLockVertexBuffer` call8F8E0. The four pending native arguments are captured
+from PUSHAD's saved ESP plus the flags word. Unscoped calls retain the original
+call. Scoped calls admit only a valid, unlocked system-memory buffer and a
+bounded read range; unknown/GPU-backed providers cancel the entire query through
+the existing CBF5F cleanup before a lock is acquired.
+
+The pinned native table has12-byte records (data, byte count, signed lock count,
+format, access flags). Format low6 bits31 dispatches through the graphics
+provider at Engine2E6324; its unlock uses2E6328. The admitted non31 path instead
+returns data+offset and increments the native lock count without a provider
+call. The ordinary matching CBB29 unlock still decrements it. Negative/held
+locks, null data, invalid handle/range and32-bit address overflow are rejected.
+No driver callback is replaced and no fabricated buffer is returned.
+
+Normal/-O static checks pin both provider branch sites, native lock/unlock
+contracts, exact new call prefix and the compiled call-free TLS decision leaf.
+Portable range/format/lock/overflow regressions and both x86 products pass.
+Native whole-query ownership and allocation behavior remain separate gates;
+this does not activate movement or certify the rendered-model query route.

@@ -75,13 +75,18 @@ def verify(game):
     source=(ROOT/'src/game/roomscale_resource_gate.cpp').read_text()
     pattern=r'BIND\((\w+),(0x[0-9a-f]+),(0x[0-9a-f]+|0),BYTES\(([^)]+)\),(\d+),'
     bindings=re.findall(pattern,source)
-    require(len(bindings)==25,'Binding inventory changed')
+    require(len(bindings)==26,'Binding inventory changed')
     found=set()
     for name,rva,clear,raw,size in bindings:
         address=int(rva,16);expected=bytes(int(x,16) for x in raw.split(','))
         require(len(expected)==int(size) and pe.get_data(address,len(expected))==expected,'Native prefix differs: '+name)
         found.add(name)
-        if name=='resourceHullDispatch':
+        if name=='resourceCollisionBuffer':
+            require(address==0xcba9f and clear=='0','Vertex-buffer admission mapping differs')
+            require('RESOURCE_GATE(resourceCollisionBuffer,12,3)' in source,'Native argument capture differs')
+            require([(i.mnemonic,i.op_str) for i in md.disasm(expected,base+address)]==
+                    [('call','0x1008f8e0')],'Vertex-buffer call target differs')
+        elif name=='resourceHullDispatch':
             require(address==0x2f9d1 and clear=='0','Hull dispatch mapping differs')
             require('RESOURCE_GATE(resourceHullDispatch,20,2)' in source,'Hull table register differs')
             require(pe.get_data(0x2f9c6,11)==bytes.fromhex('8b168bce c7466c01000000'),
@@ -100,11 +105,36 @@ def verify(game):
         else:
             require(address==RETURN_SITES[name] and clear=='0','Post-call mapping differs')
             require(f'RESOURCE_GATE({name},0,1)' in source,'Post-call kind differs')
-    require(found==set(RESOURCE_SITES)|set(RETURN_SITES)|{'resourceHullDispatch'},'Missing gate')
+    require(found==set(RESOURCE_SITES)|set(RETURN_SITES)|{'resourceHullDispatch','resourceCollisionBuffer'},'Missing gate')
     for table,target in [(0x209268,0x525b0),(0x2094b8,0x51430),
                          (0x209308,0x4fa20),(0x2093b8,0x111f80)]:
         require(struct.unpack('<I',pe.get_data(table+0x40,4))[0]==base+target,
                 'Admitted hull dispatch target changed')
+    # The admitted system-memory lock/unlock route contains no provider call.
+    lock_instructions={i.address-base:(i.mnemonic,i.op_str)
+                       for start,length in [(0x8f8e0,0x12e),(0x8fa20,0x64),(0xcba84,0x30)]
+                       for i in md.disasm(pe.get_data(start,length),base+start)}
+    for rva,instruction in {
+        0x8f8f4:('cmp','eax, dword ptr [0x102e68e8]'),
+        0x8f900:('mov','ecx, dword ptr [0x102e68e4]'),
+        0x8f90a:('lea','esi, [ecx + eax*4 - 0xc]'),
+        0x8f923:('movzx','edx, byte ptr [esi + 0xa]'),
+        0x8f929:('and','ecx, 0xffffff3f'),
+        0x8f94d:('cmp','word ptr [esi + 8], bx'),
+        0x8f96e:('cmp','dword ptr [ebp + 8], 0x1f'),
+        0x8f972:('jne','0x1008f9f3'),
+        0x8f992:('call','dword ptr [0x102e6324]'),
+        0x8f9f3:('mov','eax, dword ptr [esi]'),
+        0x8f9f5:('mov','edx, dword ptr [ebp + 0x14]'),
+        0x8f9f9:('add','eax, edx'),
+        0x8f9fb:('inc','word ptr [esi + 8]'),
+        0x8fa52:('and','dl, 0x3f'),
+        0x8fa55:('cmp','dl, 0x1f'),
+        0x8fa58:('jne','0x1008fa72'),
+        0x8fa69:('call','dword ptr [0x102e6328]'),
+        0x8fa72:('dec','word ptr [esi + 8]'),
+        0xcba99:('push','0x93'),0xcba9e:('push','edi'),
+    }.items():require(lock_instructions.get(rva)==instruction,'Vertex-buffer route changed: '+hex(rva))
     # Native save/cleanup contracts; no recovery from arbitrary allocator faults.
     suffixes={
         0x52918:'5f5e33c05b8be55dc3',
@@ -169,7 +199,7 @@ def verify(game):
         require(not any(x.startswith('call ') for x in code(decision)),'Decision must be a call-free leaf')
         object_hash=hashlib.sha256(obj.read_bytes()).hexdigest()
     return {'runtime_executed':False,'hooks_activated':False,'native_resource_branches':len(RESOURCE_SITES),
-            'hull_dispatch_gates':1,'post_call_cancellation_sites':len(RETURN_SITES),'engine_sha256':ENGINE_SHA,'compiled_object_sha256':object_hash,
+            'hull_dispatch_gates':1,'vertex_buffer_admission_gates':1,'post_call_cancellation_sites':len(RETURN_SITES),'engine_sha256':ENGINE_SHA,'compiled_object_sha256':object_hash,
             'source_sha256':hashlib.sha256(source.encode()).hexdigest(),
             'query_ownership_complete':False,'body_movement_implemented':False}
 

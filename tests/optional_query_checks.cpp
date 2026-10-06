@@ -30,4 +30,18 @@ int main() {
     assert(optionalQueryTargetDecision(&query,false)==D::cancel && query);
     assert(optionalQueryTargetDecision(&query,true)==D::cancel && query);
 
+    assert(optionalQueryBufferReadable(0x1000,120,0,0,120,0));
+    assert(optionalQueryBufferReadable(0x1000,120,0,0x40,12,108));
+    assert(optionalQueryBufferReadable(0x1000,120,0,0,0,0));
+    assert(!optionalQueryBufferReadable(0x1000,120,0,0,0,1));
+    assert(!optionalQueryBufferReadable(0x1000,120,1,0,12,0));
+    assert(!optionalQueryBufferReadable(0x1000,120,-1,0,12,0));
+    assert(!optionalQueryBufferReadable(0x1000,120,0,0x1f,12,0));
+    assert(!optionalQueryBufferReadable(0x1000,120,0,0xdf,12,0));
+    assert(!optionalQueryBufferReadable(0x1000,120,0,0,12,109));
+    assert(!optionalQueryBufferReadable(0x1000,120,0,0,12,-1));
+    assert(!optionalQueryBufferReadable(0,120,0,0,12,0));
+    assert(!optionalQueryBufferReadable(0xfffffff0u,120,0,0,12,0));
+    assert(optionalQueryBufferReadable(0xfffffff0u,16,0,0,16,0));
+    assert(!optionalQueryBufferReadable(0x1000,-1,0,0,12,0));
 }

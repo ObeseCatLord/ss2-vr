@@ -1042,3 +1042,10 @@ All42 portable groups pass Debug/Release; production swimming helpers pass
 ASan/UBSan. Both x86 products and the x64 host build. Native/compiled ABI checks
 pass normally and under Python -O; a wrong-cleanup object is rejected. Artifact,
 export and matching IPC-layout checks pass. No runtime verification is claimed.
+
+Bounded the physical-model vertex-buffer provider route for optional roomscale
+queries. A new inactive pre-lock gate admits only unlocked system-memory reads
+and cancels before unknown/GPU providers, preserving native unlock/cleanup.
+All42 portable groups and both x86 builds pass; the expanded26-gate native and
+compiled-register/TLS/FP verifier passes normally and with Python optimization.
+Whole-query ownership/allocation and placement remain open.
