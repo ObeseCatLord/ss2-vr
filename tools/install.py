@@ -12,14 +12,31 @@ def digest(path): return hashlib.sha256(path.read_bytes()).hexdigest()
 
 def paths(manifest):
     entries = manifest['files']
+    if not isinstance(entries, dict) or not entries:
+        raise ValueError('Package file list must be a nonempty object')
+    seen = set()
+    devices = {'CON', 'PRN', 'AUX', 'NUL', 'CONIN$', 'CONOUT$'} | {
+        prefix + suffix for prefix in ('COM', 'LPT') for suffix in '123456789¹²³'}
     for relative, expected in entries.items():
+        if not isinstance(relative, str) or not isinstance(expected, str):
+            raise ValueError('Invalid package entry')
         p = PurePosixPath(relative)
-        if p.is_absolute() or '..' in p.parts or '\\' in relative or ':' in relative:
+        if (p.is_absolute() or str(p) != relative or '..' in p.parts or '\\' in relative or
+            any(ord(c) < 32 or c in '<>:"|?*' for c in relative) or
+            any(part.endswith((' ', '.')) or part.split('.')[0].rstrip(' ').upper() in devices for part in p.parts)):
             raise ValueError('Unsafe package path')
         if relative not in ('Bin/d3d9.dll', 'Bin/SS2VRServer.dll', 'Content/SS2VR.mod') and p.parts[:2] != ('Bin', 'SS2VR'):
             raise ValueError('File outside mod ownership')
+        folded = relative.casefold()
+        if folded in seen or (folded + '/').startswith(str(RECEIPT).replace('\\', '/').casefold() + '/') or relative == 'Bin/SS2VR':
+            raise ValueError('Duplicate/reserved package path')
+        seen.add(folded)
         if len(expected) != 64 or any(c not in '0123456789abcdef' for c in expected):
             raise ValueError('Invalid manifest hash')
+    for path in seen:
+        parts = path.split('/')
+        if any('/'.join(parts[:count]) in seen for count in range(1, len(parts))):
+            raise ValueError('Package file is also a parent directory')
     return entries
 
 def destination(game, relative):
@@ -46,14 +63,27 @@ def install(game, package, dry):
     if dry:
         print('Preflight passed: matching game, verified package, no collisions. No files changed.'); return
     created = []
+    created_directories = []
     receipt_created=False
     try:
         for relative in entries:
             target = destination(game, relative)
-            target.parent.mkdir(parents=True, exist_ok=True)
+            missing = []
+            parent = target.parent
+            while not parent.exists():
+                missing.append(parent)
+                parent = parent.parent
+            for parent in reversed(missing):
+                try:
+                    parent.mkdir()
+                    created_directories.append(parent)
+                except FileExistsError:
+                    if not parent.is_dir(): raise
             # Exclusive creation prevents a race from overwriting another mod.
             with target.open('xb') as output, (package/relative).open('rb') as source:
                 created.append(target); shutil.copyfileobj(source, output)
+            if digest(target) != entries[relative]:
+                raise ValueError('Copied package content changed: ' + relative)
         with destination(game, str(RECEIPT)).open('x') as output:
             receipt_created=True
             json.dump({'files':entries, 'version':manifest['version']}, output, indent=2)
@@ -62,6 +92,9 @@ def install(game, package, dry):
         # Roll back only newly-created payload files, never existing files.
         for target in created:
             if target.is_file() and not target.is_symlink(): target.unlink()
+        for folder in reversed(created_directories):
+            try: folder.rmdir()
+            except OSError: pass
         raise
     print('Installed SS2VR development build. No game/runtime was launched.')
 

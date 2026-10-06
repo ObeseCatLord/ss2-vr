@@ -72,3 +72,23 @@ Eventual runtime acceptance still needs the complete installation/startup path,
 real stereo/controller input, scope/UI output, loss/reset/restart behavior and
 performance on both Windows and the selected Proton/native-runtime combination.
 Those tests require a separate change to the current no-runtime-testing scope.
+
+Installer preflight also applies Windows filename rules when run on Linux:
+reserved device names, trailing-dot/space aliases, case-colliding payloads,
+noncanonical paths, alternate streams and the installer's own receipt path are
+rejected before mutation. See [Microsoft's filename rules](https://learn.microsoft.com/en-us/windows/desktop/fileio/naming-a-file).
+Copied payloads are rehashed before the receipt is written. A copy-integrity
+failure removes only the attempted payload and newly created empty directories,
+so a normal retry can proceed; existing game files remain outside ownership.
+Synthetic fixtures cover these failures and retry, without using a game install.
+This is not a guarantee against a separate process maliciously changing directory
+links or files concurrently; stop such activity before installing or removing.
+
+The public `Offline source checks` workflow builds and tests portable helpers in
+Debug and Release on Linux. It also verifies public branch commit privacy and
+requires the Python regression inventory. It uses read-only repository access,
+a commit-pinned checkout action and no retained credentials. No proprietary game
+inputs, Windows executable, Wine, graphics API or headset are used. A green
+workflow is offline regression evidence only, not a native mod build or platform
+runtime certification. Native PE/ABI checks continue separately with private
+owned inputs.

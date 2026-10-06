@@ -897,3 +897,20 @@ Wine/DXVK OpenXR failure diagnostics and documented both target platforms.
 All36 Debug/Release groups, both architecture builds, artifact/affected ABI
 checks, path sanitizers and Windows compile-only checks pass. Runtime support
 remains unverified under the no-runtime-testing constraint.
+
+## 2026-10-06 — Cross-platform installer failure recovery
+
+Installer preflight rejects Windows device/path aliases and case/file-directory
+collisions even on Linux. Reserved receipt paths cannot enter the payload.
+A copied payload is rehashed before receipt creation; copy-integrity failures
+roll back generated files and newly-created empty folders, allowing retry.
+Synthetic regression covers corrupted copies, retry and platform path hazards;
+all37 offline groups pass Debug/Release. No installed game was modified.
+
+## 2026-10-06 — Public offline CI
+
+Added read-only, commit-pinned Linux CI for Debug/Release portable helpers and
+publication metadata, with an explicit required Python-test inventory. A fresh
+local Release configure/build passes all37 groups. This workflow does not build
+or run the Windows mod and has no private game inputs. Remote results are not
+claimed until the published workflow completes.
