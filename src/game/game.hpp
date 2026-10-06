@@ -18,6 +18,8 @@ void deviceReady(IDirect3DDevice9 *device);
 void deviceCreated(IDirect3DDevice9 *device);
 void deviceResetSucceeded(IDirect3DDevice9 *device);
 bool nativeUiDeviceCurrent(IDirect3DDevice9 *device);
+// Read-only presentation extent gate for a separately proven main-thread body owner.
+bool nativePresentationIdleForBodyMove() noexcept;
 void deviceLost();
 void invalidateRenderer();
 void present();

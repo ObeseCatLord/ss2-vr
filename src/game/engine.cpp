@@ -1,4 +1,5 @@
 #include "common/controls.hpp"
+#include "common/rig_revision.hpp"
 #include "common/swimming_input.hpp"
 #include "common/native_zoom.hpp"
 #include "common/native_primary_projection.hpp"
@@ -202,6 +203,8 @@ struct Calibration {
     Pose nativeModelLocal;
     uint64_t tickMs = 0;
 };
+static RigRevision rigPublication;
+static thread_local unsigned snapshotNativeReadDepth=0;
 struct Snapshot {
     void *player = nullptr;
     RiderIdentity rider;
@@ -212,6 +215,7 @@ struct Snapshot {
     InputSampleBoundary interruption;
     uint32_t inputProducer = 0;
     Pose origin;
+    uint64_t rigRevision = 0;
     float turn = 0;
     bool initialized = false, fire[2]{}, use = false, jump = false, sprint = false;
     bool selecting[2]{}, zoom[2]{};
@@ -234,6 +238,11 @@ static uint32_t advanceEpochUnlocked() {
 static void advanceGeneration(Snapshot &s) {
     AcquireSRWLockExclusive(&snapshotLock);
     s.generation = advanceEpochUnlocked();
+    ReleaseSRWLockExclusive(&snapshotLock);
+}
+static void recoverRigForNewOrigin(Snapshot &s) {
+    AcquireSRWLockExclusive(&snapshotLock);
+    s.rigRevision = rigPublication.recoverForNewOrigin();
     ReleaseSRWLockExclusive(&snapshotLock);
 }
 static Calibration calibration[2];
@@ -287,7 +296,8 @@ static bool fresh(const Input &i) {
     return i.focused && i.headValid && GetTickCount64() - i.tickMs < 200 && finite(i.head);
 }
 static bool vrSession(const Snapshot &s) {
-    return hooksReady.load(std::memory_order_acquire) && s.initialized && validTrackingEpoch(s.generation) &&
+    return hooksReady.load(std::memory_order_acquire) && s.initialized && rigPublication.usable(s.rigRevision) &&
+           validTrackingEpoch(s.generation) &&
            channel.shared && trackingEpoch(*channel.shared) == s.generation && s.input.session &&
            GetTickCount64() - s.input.tickMs < 1000;
 }
@@ -625,7 +635,7 @@ static void refreshOwnership(Snapshot &s, void *p) {
 }
 static void publishSnapshot(const Snapshot &s) {
     AcquireSRWLockExclusive(&snapshotLock);
-    if (!channel.shared ||
+    if (!channel.shared || s.rigRevision != rigPublication.current() ||
         !mayPublishSnapshot(s.generation, trackingEpoch(*channel.shared), current.generation)) {
         ReleaseSRWLockExclusive(&snapshotLock);
         return; // A deletion/transition superseded this copied snapshot.
@@ -664,6 +674,7 @@ static void update(void *p) {
     if (changed) {
         const auto interruption = s.interruption;
         s = Snapshot{};
+        s.rigRevision = rigPublication.current();
         s.interruption = interruption;
         s.player = p;
         s.playerHandle = pointerHandle(p);
@@ -697,12 +708,14 @@ static void update(void *p) {
     if (enabled && hadHealth && s.ui.health < previousHealth)
         damageFeedback.fetch_add(1, std::memory_order_relaxed);
     if (enabled && !s.initialized) {
+        recoverRigForNewOrigin(s);
         s.origin = {yaw(yawAngle(input.head.q)), input.head.p};
         s.initialized = true;
     }
     bool resettingControls = enabled && recenterHeld(input);
     bool recenter = resettingControls && !((lastButtons[0] | lastButtons[1]) & Button::Recenter);
     if (recenter) {
+        recoverRigForNewOrigin(s);
         s.origin = {yaw(yawAngle(input.head.q)), input.head.p};
         s.turn = 0;
         s.networkGeneration = networkGenerations.advance();
@@ -1706,6 +1719,7 @@ static void __fastcall deleted(void *p, void *) {
         uint32_t epoch = advanceEpochUnlocked();
         const auto interruption = current.interruption;
         current = {};
+        current.rigRevision = rigPublication.current();
         current.interruption = interruption;
         current.generation = epoch;
         current.ui.trackingGeneration = epoch;
@@ -1729,6 +1743,7 @@ void invalidateRenderer() {
     uint32_t epoch = advanceEpochUnlocked();
     const auto interruption = current.interruption;
     current = {};
+    current.rigRevision = rigPublication.current();
     current.interruption = interruption;
     current.generation = epoch;
     current.ui.trackingGeneration = epoch;
@@ -1968,20 +1983,23 @@ bool beginStereo(void *p, const Request &request) {
         }
         remote_render::freezePair();
     }
-    return ready;
+    return ready && rigPublication.usable(eyeSnapshot.rigRevision);
 }
 bool commitStereo(void *p,const Request &request,Slot &slot) {
     // Same existing snapshot lock, now explicitly retired on native unwind too.
-    AcquireSRWLockShared(&snapshotLock);
-    bool committed=false;
+    bool committed=false,held=false,counted=false;
     withNativeFinally([&] {
+        ++snapshotNativeReadDepth;counted=true;
+        AcquireSRWLockShared(&snapshotLock);held=true;
         const bool eligible=nativeFrameIdentity(request,current.input,current.generation,current.initialized,
             current.ui.gameplay,p==current.player && livePlayer(current)) && vrSession(current) &&
+            eyeSnapshot.rigRevision==current.rigRevision &&
             fresh(current.input) && trackingEligible(p) && nativeRiderCurrent(p,current.rider) && !weaponPairFault;
         committed=remote_render::commitPair(slot,request,eligible);
     },[&](bool aborted) noexcept {
         if(aborted) nativeUiFault();
-        ReleaseSRWLockShared(&snapshotLock);
+        if(held) ReleaseSRWLockShared(&snapshotLock);
+        if(counted) --snapshotNativeReadDepth;
     });
     return committed;
 }
@@ -2429,7 +2447,8 @@ static bool readVehicleLaserSource(const Snapshot &s, VehicleLaserSource &out) {
 }
 static bool laserSampleCurrent(const Snapshot &s, const Request &request) {
     const auto live = copySnapshot();
-    if (!vrSession(live) || !livePlayer(live) || live.player != s.player ||
+    if (!vrSession(live) || s.rigRevision != live.rigRevision ||
+        !livePlayer(live) || live.player != s.player ||
         !compatibleRiderInput(s.rider, live.rider, s.input, live.input, s.generation, live.generation,
                               GetTickCount64()) || !nativeRiderCurrent(s.player, s.rider) ||
         !nativeFrameIdentity(request, live.input, live.generation, live.initialized, live.ui.gameplay, true))
@@ -2715,7 +2734,8 @@ static bool trackedWeaponSession(const Snapshot &s) {
         return vrSession(s);
     // Pair age is checked at admission/commit. Presentation never switches
     // back to a native camera between its frozen left and right eyes.
-    return hooksReady.load(std::memory_order_acquire) && s.initialized && eyePlayer == s.player &&
+    return hooksReady.load(std::memory_order_acquire) && s.initialized &&
+           rigPublication.usable(s.rigRevision) && eyePlayer == s.player &&
            validTrackingEpoch(s.generation) && channel.shared &&
            trackingEpoch(*channel.shared) == s.generation && eyeRequest.input.session;
 }
@@ -3024,6 +3044,7 @@ static int __fastcall weaponAbs(void *w, void *, const Matrix34 &view, Matrix34 
         return reject();
     AcquireSRWLockExclusive(&snapshotLock);
     const bool compatible = sameHandheldRig(s.rider, current.rider, s.generation, current.generation) &&
+        s.rigRevision==current.rigRevision && rigPublication.usable(s.rigRevision) &&
         current.playerHandle == s.playerHandle && current.handle[h] == s.handle[h] &&
         channel.shared && trackingEpoch(*channel.shared) == s.generation;
     const bool placed = compatible && (!physical || physicalWeapon->pass.placed(finiteMatrix(staged)));
@@ -3091,7 +3112,8 @@ static bool markerFrameCurrent(void *player, const Request &request, int index) 
         request.reference != eyeRequest.reference || request.input.sequence != eyeRequest.input.sequence)
         return false;
     const auto live = copySnapshot();
-    return live.rider == eyeSnapshot.rider && nativeRiderCurrent(player, eyeSnapshot.rider) &&
+    return live.rigRevision==eyeSnapshot.rigRevision &&
+           live.rider == eyeSnapshot.rider && nativeRiderCurrent(player, eyeSnapshot.rider) &&
            nativeFrameIdentity(request, live.input, live.generation, live.initialized, live.ui.gameplay,
                                live.player == player && livePlayer(live)) && vrSession(live) && fresh(live.input);
 }

@@ -114,6 +114,28 @@ def verify(game):
     child_math=list(md.disasm(engine.get_data(0x57b87,0x1fa),0x10057b87))
     require(not any(i.mnemonic.startswith(('call','j')) for i in child_math),
             'Child recomposition gained a callback or alternate formula')
+    # The canonical mechanism precheck is not a complete thick body sweep:
+    # it skips small displacements and otherwise traces a zero-radius centre ray.
+    engine_imports={i.address:i.name for d in engine.DIRECTORY_ENTRY_IMPORT for i in d.imports}
+    require(engine_imports[0x102063a8]==b'?GetInnerRadius@CPrimitiveDesc@SeriousEngine@@QAEMXZ',
+            'Primitive precheck size policy changed')
+    require(struct.unpack('<f',engine.get_data(0x20963c,4))[0]==struct.unpack('<f',struct.pack('<f',.9))[0],
+            'Primitive precheck threshold changed')
+    check(engine,[(0x52030,0x158)],{
+        0x52077:('call','dword ptr [0x102063a8]'),
+        0x5207d:('fmul','dword ptr [0x1020963c]'),
+        0x52089:('fcomp','dword ptr [ebp + 0xc]'),
+        0x52091:('je','0x10052180'),
+        0x520ab:('call','0x101b35e0'),0x520f2:('call','0x101b34b0'),
+        0x52100:('call','0x101b3530'),0x52123:('call','0x10029200'),
+        0x52185:('ret','0x10'),
+    })
+    precheck=list(md.disasm(engine.get_data(0x52030,0x158),0x10052030))
+    calls=[i.op_str for i in precheck if i.mnemonic=='call']
+    require(calls==['dword ptr [0x102063a8]','0x101b35e0','0x101b34b0','0x101b3530',
+                    '0x10028bc0','0x10028bd0','0x10029090','0x10029200','0x101b35c0',
+                    '0x10028c10','0x10028bc0','0x10028bd0'],
+            'Primitive precheck gained another ray/radius/callback operation')
     check(sam,[(0x83b90,0x2e0)],{
         0x83cf1:('mov','dword ptr [ebx + 0x114], eax'),
         0x83cf9:('mov','edx, dword ptr [ebx + 0x120]'),

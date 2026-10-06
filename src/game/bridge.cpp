@@ -667,6 +667,13 @@ template <class T> static bool deviceHook(void *address, void *detour, T &origin
 // Component admission only: the native main-thread/owner/resource-epoch checks
 // remain required. A Reset reuses creation ownership; deviceReady cannot invent
 // that ownership. MULTITHREADED offers per-call safety, not a whole transaction.
+bool nativePresentationIdleForBodyMove() noexcept {
+    // uiFrame spans both eyes, their gap, scope previews and deferred native UI.
+    // eyeIndex alone would incorrectly admit a body move between two eyes.
+    return creationThread && GetCurrentThreadId()==creationThread &&
+        device && device==creationDevice && eye[0] && eye[1] && !stopping.load() &&
+        uiFrame.slot<0 && deferredSlot<0 && activeEye<0 && !scopeScratch && !scopeTransaction;
+}
 bool nativeUiDeviceCurrent(IDirect3DDevice9 *d) {
     if (!d || d != device || d != creationDevice || !creationThread ||
         GetCurrentThreadId() != creationThread) return false;

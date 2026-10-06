@@ -74,3 +74,15 @@ This does not supply the swept geometry for the actual proposed root pose,
 worker/query ownership, local origin publication or multiplayer settlement.
 These remain required before activation. No native executable, game, headset,
 Wine or multiplayer session was run.
+
+## Further native precheck evidence
+
+CMechanismPart::CheckMove1315D0 normalizes the candidate quaternion before calling
+root virtual+20. The admitted primitive-hull implementation52030 uses the
+primitive's Core GetInnerRadius scaled by0.9 as a movement threshold. Smaller
+translations return without issuing a ray. For larger translations it resets
+ray state, uses a normalized centre ray with maximum length plus that radius
+allowance, and copies the hit fraction/aspect. It never sets a positive ray
+radius after rayInit resets it to zero. Thus this native mechanism precheck is
+not a complete capsule sweep and cannot replace the additional whole-body cover.
+The extra queries do not weaken or replace this native precheck.

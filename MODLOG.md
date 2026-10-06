@@ -1110,3 +1110,23 @@ post-simulation/worker-join/scalar-cleanup evidence. All47 Debug/Release groups,
 cleanup ASan/UBSan, x86 products and native/compiled boundary checks pass. A wrong
 radius-argument fixture is rejected. See ROOMSCALE_NATIVE_SWEEP_DRIVER.md; the
 simulation controller/settlement is still unconnected and no runtime was run.
+
+## 2026-10-06 — Actual-anchor origin correction
+
+Added an inactive translation-only origin-settlement helper using actual native
+anchor displacement, unchanged orientation and an explicit world-position error
+budget. It refuses clamped offsets and uncertain inputs instead of silently
+recentering. All48 Debug/Release groups pass; the helper passes ASan/UBSan and
+Windows x86/x64 compile-only checks, including eye/hand stability and a long-run
+closed-path regression. Controller publication and authoritative pairing remain
+unfinished. See ROOMSCALE_ORIGIN_SETTLEMENT.md; no runtime was executed.
+
+## 2026-10-06 — Rig publication identity in native presentation
+
+Connected an internal rig-revision check to native snapshot publication and VR,
+stereo, weapon, laser and marker admission. Added a full stereo/UI-extent idle
+query and finally-retired snapshot-read depth for the upcoming movement owner.
+The controller does not begin any transition yet; normal revisions stay stable
+and body movement remains disabled. All49 Debug/Release groups, revision-helper
+ASan/UBSan and x86 builds pass; query/swimming ABIs remain valid. No wire/input
+history generation changed. See RIG_PUBLICATION_REVISION.md.
