@@ -186,7 +186,9 @@ also needed containment inside the reentered mod callback.
 Both reliable and unreliable client dispatch now use the existing native-finally
 boundary to restore their prior TLS context. The reentered ExecuteRPC adapter
 contains its own GNU errors, and its peer metadata work uses the established
-withPeerLock helper. Aborted paths mark native input unhealthy; they do not send
+withPeerLock helper. Aborted paths mark an active simulation interval unhealthy
+when one exists; nativeInputFailed is not a persistent out-of-interval latch.
+The cleanup paths do not send
 packets, retry gameplay or fabricate ACKs. Normal native mapping and unknown-RPC
 forwarding remain unchanged. This fixes an existing integration boundary; it
 is not multiplayer roomscale implementation or native exception runtime proof.
@@ -198,3 +200,52 @@ optimization. A modified-object fixture removing one actual TLS-restoration
 store is rejected. The expanded native replication check also passes normally
 and with Python optimization. These checks do not execute native SEH or a
 network session.
+
+## Local player correction is not the ordinary actor-update tail
+
+Further pinned inspection rejects using the actor marker as the local body/origin
+settlement event even when its property copy succeeded:
+
+- CPlayerPuppet::PostReceiveUpdate104260 calls CPuppet::PostReceiveUpdateA46E0.
+  The base checks IsLocal atA4750 and skips its remote position-error calculation
+  for the locally operated puppet. For nonlocal puppets, that calculation uses
+  actual mechanism placement minus replicated position+4F0, storing error+3B0.
+- The local player's separate CPlayerBrain::PostReceiveUpdateEDE60 checks the
+  authoritative correction byte+1CC against consumed byte+152. With matching
+  live group mover/profile, it resolves the target position+1D0 (including native
+  support-relative handling), compares actual mechanism placement, stores the
+  puppet correction+3B0 and advances the consumed byte. This is a correction
+  request, not immediate body placement.
+- Puppet OnStep calls virtual+5BC atA6E0D. The actual inherited implementation is
+  ApplyClientPositionCorrection90490. It applies native threshold/time-dependent
+  correction and invokes the original mechanism setter at90706 with flags0,
+  then reduces the remaining error. The VR anchor's GetAbsPlacement path reads
+  the actual mechanism, not an already-settled interpretation of brain+1D0.
+
+The original ClientAction path already compares the client-reported body/support
+position and uses native correction identities and tolerances; see
+NATIVE_MOVEMENT_AUDIT.md. A roomscale patch must preserve that prediction and
+correction flow. Pairing an origin stamp solely with a successful actor update
+would still consume the origin before the native local correction has moved the
+body. No setter, correction field, prediction policy or network schema has been
+changed to bypass this issue. The new client-correction verifier fingerprints
+these exports, player slots, imports and exact branches/calls, and passes normally
+and with Python optimization. No network session was executed.
+
+## Provisional coordinate history, not a native integration
+
+The portable roomscale_replication.hpp helper keeps an explicitly bounded origin
+history with double cumulative stage offsets, exact epoch/revision lookup and
+no implicit eviction. A stale completion, unknown epoch, retired revision,
+capacity exhaustion or invalid movement refuses the operation without changing
+history. Its coordinate-only rebase preserves the pose orientation and cannot
+authorize a weapon intent or native body movement. A caller must reserve capacity
+before any native move and prove it can retire old history; the helper is not a
+native ownership lease.
+
+This remains unused by game/server/host code. It does not resolve which native
+prediction/correction event should consume a multiplayer origin, and no wire
+fields or capabilities were added. The existing snap-turn tracking-generation
+change still cancels retained taps; the helper does not permit cross-generation
+replay. All52 portable groups pass Debug/Release, its test passes ASan/UBSan, and
+it compiles for Windows x86/x64. These are coordinate/history checks only.

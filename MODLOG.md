@@ -1160,3 +1160,13 @@ from the containing packet and that native LastUpdateSequence can advance after
 a caught property-copy CException. Expanded static verification checks the real
 EH descriptor and continuation. MP body/origin pairing remains unfinished; no
 new packet or movement is enabled. See ROOMSCALE_NATIVE_PLACEMENT_REPLICATION_NOTES.md.
+
+## 2026-10-06 — Local client correction boundary
+
+Pinned the separate brain correction sequence and later native puppet correction
+application. The ordinary local actor-update tail is not a body-settlement event,
+so no multiplayer origin is rebased there. Added normal/-O binary checks and a
+provisional inactive coordinate-history helper with52 Debug/Release groups,
+ASan/UBSan and Windows x86/x64 compile-only coverage. No protocol, prediction,
+body-correction or multiplayer roomscale path is enabled. See
+ROOMSCALE_NATIVE_PLACEMENT_REPLICATION_NOTES.md.
