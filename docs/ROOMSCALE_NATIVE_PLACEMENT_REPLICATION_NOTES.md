@@ -106,3 +106,13 @@ checks exported reliability functions and virtual slot, receive-selection sites,
 and PostReceiveUpdate-before-SetLastUpdateSequence ordering. It passes normally
 and under Python optimization. This evidence rules out an unsafe ordering
 assumption; it does not implement roomscale replication or test a network session.
+
+The pinned layout verifier now also checks the real player binding sequence:
+Sam2Game83CF1 stores the mechanism handle,83CF9 resolves the player's model at+120
+for native CreateMechanism83D10, and83D32/83D3B obtains and stores the root-body
+handle separately. It verifies the exported hybrid/primitive tables, graph/pose
+getters, mechanism part-array root lookup, model pose source, and the original
+movement-query owner/mechanism/category loads. Run
+`tools/verify_roomscale_body_layout.py --game <private-game-root>`; normal and
+optimized Python runs pass. This confirms binary layout roles, not the actual
+loaded player model's shape or safe live body ownership.
