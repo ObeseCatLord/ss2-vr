@@ -1088,3 +1088,14 @@ must remain outside it. All44 Debug/Release groups, FP-helper ASan/UBSan, both
 x86 builds and normal/-O compiled boundary checks pass; a restore-as-save
 negative fixture is rejected. See ROOMSCALE_MATH_FRAME.md. No runtime testing
 or roomscale activation is claimed.
+
+## 2026-10-06 — Root candidate and child-hull sweep geometry
+
+Extended the bounded body capture with native root/relative hull placements and
+active propagation flags. Added conservative native child-recomposition bounds
+and a complete root-target sphere sweep cover, including float-world-grid and
+ray-endpoint uncertainty within the explicit radius allowance. All46 portable
+groups pass Debug/Release; changed geometry tests pass ASan/UBSan and compile for
+Windows x86/x64. Expanded pinned propagation layout checks pass normally/-O.
+The owner/query/commit/settlement path is still inactive and unfinished. See
+ROOMSCALE_BODY_SWEEP_GEOMETRY.md; no runtime behavior is claimed.

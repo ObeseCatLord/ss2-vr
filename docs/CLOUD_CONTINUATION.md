@@ -436,3 +436,21 @@ ClientAction rather than a movement rewrite or direct pose writes. See
 [SWIMMING_CONTROLS.md](SWIMMING_CONTROLS.md) for admission, native ABI evidence,
 configuration and explicit runtime limitations. Other unfinished roomscale,
 melee and multiplayer settlement work remains open.
+
+## Root target geometry continuation — 2026-10-06
+
+The checked-placement component now has bounded geometry preparation for its
+actual native root target. Captures retain separate root, model, absolute hull
+and relative hull placements; active root/hull propagation is required. Native
+child recomposition is enclosed across caller precision/rounding choices, then
+combined with the captured hull in the existing affine capsule cover. Ray
+endpoint and world-grid error consume the explicit radius allowance. This is
+still inactive: native query ownership, checked placement integration and
+local/authoritative origin settlement are not complete.
+
+46 portable groups pass Debug/Release, three changed geometry suites pass
+ASan/UBSan and compile for Windows x86/x64, and the pinned body/propagation layout
+check passes normally and with Python optimization. See
+ROOMSCALE_BODY_SWEEP_GEOMETRY.md. The separately added FP math frame preserves
+native caller state and is likewise inactive; see ROOMSCALE_MATH_FRAME.md. No
+runtime verification is claimed, and this does not complete the full mod.

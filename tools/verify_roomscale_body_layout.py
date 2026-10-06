@@ -26,7 +26,7 @@ def verify(game):
     for name,pin in PINS.items():
         data=(game/'Bin'/name).read_bytes()
         require(hashlib.sha256(data).hexdigest()==pin,'Fingerprint mismatch: '+name)
-        pe=pefile.PE(data=data)
+        pe=pefile.PE(data=data,max_symbol_exports=100000)
         require(pe.OPTIONAL_HEADER.ImageBase==0x10000000 and pe.FILE_HEADER.Machine==0x14c,
                 'Unsupported ABI: '+name)
         images[name]=pe
@@ -83,6 +83,37 @@ def verify(game):
     expansion=list(md.disasm(engine.get_data(0x525cb,0xaa),0x100525cb))
     require(not any(i.mnemonic in ('call','jmp','ret') for i in expansion),
             'Raw quaternion expansion gained a normalization/callback boundary')
+    # Root SetRelPlacement invokes OnMoved only when bit0 is active. The
+    # child's OnMoved callback is equally required for broadphase maintenance.
+    for table,target in ((0x217af0,0x10f460),(0x209268,0x509d0)):
+        require(struct.unpack('<I',engine.get_data(table+0x1c,4))[0]==0x10000000+target,
+                'Root/hull propagation vtable changed')
+    check(engine,[(0x571d0,0x3f5),(0x57b70,0x400),(0x10f460,0x6c),(0x509d0,0x65)],{
+        0x571db:('mov','eax, dword ptr [edx + 4]'),
+        0x571f1:('lea','esi, [eax + 0x2c]'),
+        0x57207:('lea','eax, [edx + 0x10]'),
+        0x5741d:('rep movsd','dword ptr es:[edi], dword ptr [esi]'),
+        0x574e7:('lea','edi, [edx + 0x2c]'),
+        0x5759e:('test','byte ptr [edx + 0x4c], 1'),
+        0x575bc:('call','dword ptr [eax + 0x1c]'),
+        0x10f4b9:('call','0x10057b70'),
+        0x50a29:('call','0x10057b70'),
+        0x57b7a:('mov','ebx, dword ptr [ecx + 8]'),
+        0x57b87:('mov','eax, dword ptr [ebp + 0xc]'),
+        0x57c43:('fmul','dword ptr [ebx + 0x28]'),
+        0x57c4c:('fmul','dword ptr [ebx + 0x20]'),
+        0x57c57:('fmul','dword ptr [ebx + 0x24]'),
+        0x57cac:('fld','dword ptr [ebx + 0x10]'),
+        0x57d40:('lea','edx, [ebx + 0x2c]'),
+        0x57d73:('test','byte ptr [ebx + 0x4c], 1'),
+        0x57d7f:('rep movsd','dword ptr es:[edi], dword ptr [esi]'),
+        0x57f59:('call','dword ptr [eax + 0x1c]'),
+        0x57f5c:('mov','ebx, dword ptr [ebx + 0xc]'),
+        0x57f6d:('ret','8'),
+    })
+    child_math=list(md.disasm(engine.get_data(0x57b87,0x1fa),0x10057b87))
+    require(not any(i.mnemonic.startswith(('call','j')) for i in child_math),
+            'Child recomposition gained a callback or alternate formula')
     check(sam,[(0x83b90,0x2e0)],{
         0x83cf1:('mov','dword ptr [ebx + 0x114], eax'),
         0x83cf9:('mov','edx, dword ptr [ebx + 0x120]'),

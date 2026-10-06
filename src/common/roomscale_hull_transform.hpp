@@ -11,18 +11,22 @@ struct HullTransformEnvelope { AffineEnvelope matrix{}; bool valid=false; };
 // The envelope includes both forward placement and inverse-transpose query
 // geometry: finite-precision matrices are not assumed perfectly orthogonal.
 // This is geometry only; the native owner still must freeze/revalidate the pose.
-inline HullTransformEnvelope nativeHullTransformEnvelope(const ss2vr::Pose& pose) {
+inline HullTransformEnvelope hullTransformFromPoseBounds(
+    const std::array<detail::Interval,4>& q,const detail::IntervalVector& position) {
     using namespace detail;
     HullTransformEnvelope result;
-    if (!arithmeticSupported()||!ss2vr::finite(pose)||!bodyUnitQuaternion(pose.q)) return result;
+    if (!arithmeticSupported()) return result;
+    for(auto value:q)if(!detail::valid(value))return result;
+    for(auto value:position)if(!detail::valid(value))return result;
     auto twice=[](Interval a) { return plus(a,a); };
     auto stored=[](Interval a) {
-        if(!valid(a))return Interval{NAN,NAN};
+        if(!valid(a)||a.lo < -std::numeric_limits<float>::max()||
+           a.hi > std::numeric_limits<float>::max())return Interval{NAN,NAN};
         // Force binary32 storage even on an x87 compiler with excess precision.
         volatile float lo=static_cast<float>(a.lo),hi=static_cast<float>(a.hi);
         return Interval{double(lo),double(hi)};
     };
-    const auto x=exact(pose.q.x),y=exact(pose.q.y),z=exact(pose.q.z),w=exact(pose.q.w);
+    const auto x=q[0],y=q[1],z=q[2],w=q[3];
     const auto a=twice(times(x,x)),b=twice(times(y,x)),c=twice(times(z,x));
     const auto d=stored(twice(times(y,y))),e=stored(twice(times(z,y))),f=twice(times(z,z));
     const auto g=stored(twice(times(w,x))),h=stored(twice(times(w,y))),i=twice(times(w,z));
@@ -47,9 +51,15 @@ inline HullTransformEnvelope nativeHullTransformEnvelope(const ss2vr::Pose& pose
         result.matrix[r*4+col]={std::min(m[r][col].lo,inverseTranspose.lo),
                                 std::max(m[r][col].hi,inverseTranspose.hi)};
     }
-    result.matrix[3]=exact(pose.p.x);result.matrix[7]=exact(pose.p.y);result.matrix[11]=exact(pose.p.z);
+    result.matrix[3]=position[0];result.matrix[7]=position[1];result.matrix[11]=position[2];
     result.valid=true;
     return result;
+}
+inline HullTransformEnvelope nativeHullTransformEnvelope(const ss2vr::Pose& pose) {
+    using detail::exact;
+    if(!ss2vr::finite(pose)||!bodyUnitQuaternion(pose.q))return {};
+    return hullTransformFromPoseBounds({exact(pose.q.x),exact(pose.q.y),exact(pose.q.z),exact(pose.q.w)},
+                                      {exact(pose.p.x),exact(pose.p.y),exact(pose.p.z)});
 }
 struct BodyCover {
     std::array<CapsuleCover,BodyGeometry::MaximumHulls> hulls{};

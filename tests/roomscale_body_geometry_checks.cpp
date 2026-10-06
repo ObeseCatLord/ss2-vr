@@ -17,7 +17,9 @@ struct Memory {
         word(0x2008,1);word(0x2004,0x5000);word(0x2038,4);word(0x5008,0x3000);
         word(0x3000,0x7000);word(0x3048,0x1000);word(0x3008,0x6000);
         word(0x6000,0x7100);word(0x6004,0x3000);word(0x6048,0x1000);word(0x6070,0x2000);
-        word(0x6054,0x12345678);
+        word(0x6054,0x12345678);word(0x304c,1);word(0x604c,1);
+        write(0x302c,Pose{Quat{0,0,0,1},{1,1,3}});
+        write(0x6010,Pose{Quat{0,0,0,1},{0,1,0}});
         write(0x602c,Pose{Quat{0,0,0,1},{1,2,3}});
         write(0x402c,Pose{Quat{0,0,0,1},{1,1,3}});
         write(0x6078,roomscale::Primitive{2,.6f,1.8f,0});
@@ -42,9 +44,9 @@ int main() {
     Memory valid;roomscale::BodyGeometry a,b;
     assert(valid.capture(a)&&a.root!=a.model&&a.hullCount==1&&a.hulls[0].category==0x12345678);
     assert(valid.capture(b)&&roomscale::sameBodyGeometry(a,b));
-    for(auto [address,value]:std::array<std::pair<uint32_t,uint32_t>,13>{{
+    for(auto [address,value]:std::array<std::pair<uint32_t,uint32_t>,16>{{
         {0x1010,2},{0x1564,7},{0x1544,7},{0x1114,0},{0x2008,2},{0x5008,0x4000},
-        {0x2038,3},{0x3000,0x7100},{0x3048,0x4000},{0x6004,0},
+        {0x304c,0},{0x604c,0},{0x3004,0x4000},{0x2038,3},{0x3000,0x7100},{0x3048,0x4000},{0x6004,0},
         {0x6008,0x6500},{0x600c,0x6500},{0x6070,0x3000}}}) {
         Memory bad;bad.word(address,value);b=a;
         assert(!bad.capture(b)&&b.player==0);
@@ -67,6 +69,16 @@ int main() {
     assert(sphere.capture(b));
     Memory badModel;badModel.write(0x402c,Pose{Quat{0,0,0,0},{1,2,3}});
     assert(!badModel.capture(b));
+    Memory changedRoot;changedRoot.write(0x302c,Pose{Quat{0,0,0,1},{2,1,3}});
+    assert(changedRoot.capture(b)&&!roomscale::sameBodyGeometry(a,b));
+    Memory changedRelative;changedRelative.write(0x6010,Pose{Quat{0,0,0,1},{0,2,0}});
+    assert(changedRelative.capture(b)&&!roomscale::sameBodyGeometry(a,b));
+    for(uint32_t poseAddress: {0x302cu,0x6010u}) {
+        Memory bad;bad.write(poseAddress,Pose{Quat{0,0,0,0},{1,2,3}});
+        assert(!bad.capture(b));
+        bad.write(poseAddress,Pose{Quat{0,0,0,1},{NAN,2,3}});
+        assert(!bad.capture(b));
+    }
     Memory overflow;overflow.word(0x3008,UINT32_MAX-4);assert(!overflow.capture(b));
     // A pose change invalidates a comparison even if every handle is unchanged.
     Memory moved;moved.write(0x402c,Pose{Quat{0,0,0,1},{2,1,3}});
