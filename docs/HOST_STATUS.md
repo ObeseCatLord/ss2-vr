@@ -1,5 +1,17 @@
 # OpenXR host and controls
 
+## Current source — 2026-10-07
+
+Current game/host IPC is9 and the offline suite has56 groups. A response-owned
+head-clearance receipt now limits current head/eye placement and cached-image
+age when the default-off head guard is enabled. Game, server and host also carry
+read-only exported build-input/version/layout contracts for package verification.
+See HEAD_VOLUME_INTEGRATION.md and PACKAGE_IDENTITY.md. All products cross-build;
+Windows and Linux/Proton runtime behavior remains untested. The original integration
+record below retains historical ABI6 wording and delegation provenance.
+
+## Original host integration record
+
 The final x64 Windows host is implemented in src/host/host.cpp and linked with the official pinned OpenXR loader. No host/runtime/headset execution occurred. Final integration supersedes the worker's initial frozen-header status; source construction and a strict x64 compile were delegated to GPT-6.1 Sol at xhigh, then integrated by the main agent.
 
 The host opens the per-launch IPC channel, checks ABI/size/PID ownership and monitors the game process. It loads the adjacent official loader by absolute filename, resolves APIs through xrGetInstanceProcAddr, enables XR_KHR_D3D11_enable, selects PRIMARY_STEREO/opaque blending, queries adapter LUID/minimum feature level, and creates D3D11 on the runtime-selected adapter. LOCAL and VIEW spaces, independent left/right aim and grip action spaces and a single action set supply actual HMD/controller poses.

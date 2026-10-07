@@ -33,3 +33,32 @@ The producer runs before current-record dispatch, so ownership must come from bo
 CSimulation::Step1B70E0 is called synchronously through Sam IAT294948 at258D8. CPuppet Render3D94380 is a synchronous virtual+600 call atSamA0D86/FEA84; their shared scheduler is not proven. Core thrIsThisMainThread63BA0 compares native thread identity with its recorded main thread. Production pins before original simulation, requires that predicate, and refuses mismatches before native adapter reads.
 
 EngineStep calls physics10D7C0 at1B7406. Dispatcher10EE90 schedules registered Core ExecuteThread calls at10EEB8 and waits each WaitOnThread at10EEDE before returningret4; Step returns1B7418 afterward. This proves completion of those registered physics tasks, not coverage of all model/skeleton/deletion workers or permission for concurrent rendering. Default-disabled head integration remains conditional until that lifetime coverage is established. No runtime thread IDs were observed and no game was executed.
+
+## CPU direction channels and loading-worker counter — 2026-10-07
+
+Root rechecked the pinned producer/consumer instructions. DDE30 copies all active
+48-byte palette slots from canonical evaluation (or the native sentinel fallback).
+CPU DF5B0 uses the same temporary palette2EAC94 for its position stream and two
+direction streams. The position transform adds matrix translation; the checked
+three-component direction transform uses the nine linear coefficients without
+translation. The four-component direction path preserves its fourth scalar.
+Outputs replace2EABC8/2EABCC/2EABD0 respectively. This narrows the previous CPU
+coverage uncertainty; it does not certify every material/shader normal convention,
+extra rendering pass, concurrent lifetime or actual appearance. The GPU setter
+still retains a pointer and its binder sends three constant registers per matrix;
+no consumer substitution or pointer swap was added.
+
+The native loading task pool is a separate lifetime concern from joined physics
+workers. Core CountPendingTasks63090 reads the queued count at pool implementation
++3C. PopTask62F00 decrements it before worker OnExecute63140 invokes the task's
+virtual callback. Zero pending tasks therefore does not establish worker
+quiescence. WaitUntilCompleted632F0 itself pops and executes tasks on the caller
+before joining workers; it is not a passive rendering-side observation and must
+not be inserted as one. No new task-pool lock, scheduler call or worker pause was
+introduced. Complete model/resource lifetime remains unproved.
+
+`tools/verify_head_palette_native.py` reproduces these bounded facts against the
+exact Engine/Core fingerprints, normally and with Python optimization. It does
+not execute native code or enable RemoteHeadTracking. The earlier GPU/CPU
+architecture remains; native-unwind cleanup was separately corrected in
+REMOTE_RENDER_UNWIND.md.

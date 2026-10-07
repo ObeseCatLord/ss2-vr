@@ -7,6 +7,7 @@ from pathlib import Path
 import shutil
 import struct
 import zipfile
+from build_contract import validate_products, development_version
 ROOT = Path(__file__).resolve().parents[1]
 
 def machine(path):
@@ -20,13 +21,22 @@ def machine(path):
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
-def package(output):
+def package(output=None):
     payload = {
         'Bin/d3d9.dll': ROOT/'build-game/d3d9.dll',
         'Bin/SS2VRServer.dll': ROOT/'build-game/SS2VRServer.dll',
         'Bin/SS2VR/ss2vr_host.exe': ROOT/'build-host/ss2vr_host.exe',
         'Bin/SS2VR/openxr_loader.dll': ROOT/'build-host/openxr/src/loader/libopenxr_loader.dll',
     }
+    contract = validate_products(ROOT, {
+        'game': payload['Bin/d3d9.dll'], 'server': payload['Bin/SS2VRServer.dll'],
+        'host': payload['Bin/SS2VR/ss2vr_host.exe'],
+    })
+    version = development_version(contract)
+    output = Path(output).resolve() if output is not None else ROOT/'dist'/('ss2vr-' + version)
+    if any(output.is_relative_to(ROOT/directory) for directory in
+           ['src','tests','cmake','tools','docs','licenses','config']):
+        raise ValueError('Package output must be outside copied source directories')
     for relative, path in payload.items():
         expected = 0x14c if relative in ('Bin/d3d9.dll', 'Bin/SS2VRServer.dll') else 0x8664
         if machine(path) != expected: raise ValueError('Architecture mismatch: ' + relative)
@@ -42,13 +52,6 @@ def package(output):
         target = output/relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
-    files = {relative: digest(output/relative) for relative in payload}
-    manifest = {'version': '0.2.11-dev', 'files': files,
-                'game_fingerprints': json.loads((ROOT/'docs/installed-build.json').read_text()),
-                'ipc_abi': 8, 'multiplayer_wire_version': 6,
-                'scope': 'immersive-extension-checkpoint',
-                'runtime_verified': False}
-    (output/'manifest.json').write_text(json.dumps(manifest, indent=2)+'\n')
     for name in ['README.md','AGENTS.md','CMakeLists.txt','LICENSE','THIRD_PARTY.md','MODDING_PLAN.md','MODLOG.md','.clang-format','.gitignore']:
         shutil.copy2(ROOT/name,output/name)
     for directory in ['src','tests','cmake','tools','docs','licenses','config']:
@@ -56,6 +59,18 @@ def package(output):
             if source.is_file() and '__pycache__' not in source.parts and source.suffix not in ('.pyc','.log','.dmp'):
                 target=output/source.relative_to(ROOT);target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(source,target)
     shutil.copy2(ROOT/'tools/install.py', output/'install.py')
+    # Validate the staged bytes too: a source edit during copying must not turn
+    # a matching build into an archive containing a different source snapshot.
+    validate_products(output, {'game':output/'Bin/d3d9.dll',
+        'server':output/'Bin/SS2VRServer.dll','host':output/'Bin/SS2VR/ss2vr_host.exe'})
+    files = {relative: digest(output/relative) for relative in payload}
+    manifest = {'version': version, 'files': files,
+                'game_fingerprints': json.loads((ROOT/'docs/installed-build.json').read_text()),
+                'ipc_abi': contract['ipc_abi'], 'multiplayer_wire_version': contract['multiplayer_wire_version'],
+                'build_contract': contract,
+                'scope': 'incomplete-development-checkpoint',
+                'runtime_verified': False}
+    (output/'manifest.json').write_text(json.dumps(manifest, indent=2)+'\n')
     with zipfile.ZipFile(Path(str(output)+'.zip'), 'x', compression=zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(output.rglob('*')):
             if path.is_file(): archive.write(path, path.relative_to(output))
@@ -64,5 +79,5 @@ def package(output):
 
 if __name__ == '__main__':
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--output', type=Path, default=ROOT/'dist/ss2vr-0.2.11-dev')
-    package(parser.parse_args().output.resolve())
+    parser.add_argument('--output', type=Path, help='Fresh directory; default includes the source fingerprint')
+    package(parser.parse_args().output)

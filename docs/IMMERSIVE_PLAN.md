@@ -21,21 +21,22 @@ Preserve native rendering, physics, player commands, network session/RPC transpo
 
 Wire real features through native producer/consumer paths. Record concrete implemented behavior and unknown ABI or feature gaps. Build both products, exercise portable state/math/protocol invariants, verify native exports/layouts/artifacts and package current source/products separately. Preserve old artifacts and existing installed files. Compilation or scaffolding alone does not establish runtime playability or multiplayer correctness.
 
-## Current source checkpoint
+## Current source checkpoint — 2026-10-07
 
-Current source uses IPC8/wire6 and passes20 portable groups; x86 proxy/server and
-x64 OpenXR host/official loader build. Native zoom controls are connected. Scope
-geometry, UV input, actual shader UV relation, actual c8/c9 rows and optical-frame
-math are integrated; magnified imagery remains absent pending material/alpha,
-source capture and substitution. See SCOPE_PROGRAM_ADMISSION_REVIEW.md and
-scope-program-source-checks.json for the exact source/product checkpoint.
+Current source uses IPC9/wire6 and passes56 portable groups; x86 proxy/server and
+x64 OpenXR host/official loader build. Native zoom and magnified per-hand scope
+captures/ordered cap imagery are connected for their admitted renderer subset.
+Default-off single-player roomscale uses native body queries, checked placement
+and actual-anchor origin settlement. Default-off handheld/seated head-volume
+queries and cached-frame receipts are connected, with native own-vehicle exclusions.
+Optional immersive swimming retains head-directed joystick control by default.
 
-OpenXR head/hands carry full XYZ and quaternion tracking, consumed by stereo,
-gun and muzzle transforms. Full collision-aware roomscale body movement is still
-unfinished; head bounds and optional fade do not implement it. The native API
-limitations are in ROOMSCALE_COLLISION_API_AUDIT.md. Physical melee, broader
-vehicles/overlays and full remote-head support remain part of the active goal.
-Nothing has been runtime tested. The immutable0.2.11 archive predates this source.
+Multiplayer body/origin settlement, physical melee consumption/observer delivery,
+remaining vehicle/head coverage and the final full-project review remain open.
+No game, Windows/Wine, OpenXR, headset or network session has been executed. New
+packaging verifies matching compiled source/version/layout contracts; the old
+0.2.11 archive is an unchanged historical checkpoint. See CLOUD_CONTINUATION.md
+and IMPLEMENTATION_STATUS.md for current boundaries rather than historical counts.
 
 ## Historical offline checkpoints
 

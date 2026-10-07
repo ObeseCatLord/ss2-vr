@@ -1,4 +1,4 @@
-# Implementation status — 2026-10-06
+# Implementation status — 2026-10-07
 
 ## Active cloud implementation
 
@@ -9,18 +9,25 @@ are historical evidence, not the current pause state or feature count.
 Windows and Linux via Proton are required. Native magnified scope source views
 and ordered cap imagery are connected in source, alongside native zoom, mounted
 controls/turret lasers, native flat/world overlays and multiplayer integration.
-The current offline suite has41 groups. Native products cross-build; no Windows,
+The current offline suite has56 groups. Native products cross-build; no Windows,
 Wine, game, headset or network runtime has been executed. The owner explicitly
 requires coding to finish first and will perform device testing afterward.
 GitHub Actions is disabled at the owner's request; checks remain local.
 
-Full implementation is NOT complete: roomscale body collision/authoritative
-settlement, physical melee consumption/observer delivery, broader vehicle
-coverage and complete remote-head lifetime/enablement remain open. Optional
-roomscale resource cancellation, primitive contact, bounded body reader and capsule-volume cover
-components are compiled but not activated; they supply
-no body movement or certified collision result. See roomscale notes linked from
-the continuation record. Do not substitute test counts for these integrations.
+Current source connects default-off single-player roomscale body movement through
+native whole-body queries, the checked native setter and actual-anchor origin
+settlement. Default-off head-volume checks cover handheld and seated world queries,
+with IPC9 head/eye clearance limits on cached frames; native exclusions can omit
+the ridden vehicle itself. Optional immersive swimming preserves head-directed
+joystick input as the default. Remote renderer native-unwind cleanup now explicitly
+retires TLS, locks and owned scratch. Packaging checks matching compiled build-input
+fingerprints and version/layout contracts instead of hardcoding an obsolete ABI.
+
+Full implementation is NOT complete: multiplayer roomscale body/origin settlement,
+physical melee consumption/observer delivery, broader vehicle coverage, complete
+remote-head lifetime/enablement and the final full-project review remain open.
+See the current roomscale, head-volume and swimming records linked from the
+continuation. Do not substitute test counts for these integrations.
 
 ## Historical checkpoint record
 

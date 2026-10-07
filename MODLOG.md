@@ -1219,3 +1219,26 @@ compiled/native gates pass. A missing-TLS-restore compiled fixture is rejected.
 Native worker/model lifetime and runtime acceptance remain unproved. See
 REMOTE_RENDER_UNWIND.md. Multiplayer body/origin movement, physical melee and
 full-project completion remain open; no runtime or deployment occurred.
+
+## Compiled package identity — 2026-10-07
+
+Corrected packaging's obsolete hardcoded IPC8 metadata. Each game/server/host
+now exports a read-only, constant-initialized128-byte build contract containing
+component, IPC/wire versions, structure sizes, project version and build-input
+fingerprint. CMake tracks source/compiler-input changes. Packaging and artifact
+verification reject missing, stale or mixed contracts; staged bytes are checked
+again before a manifest is written. New development names include the fingerprint,
+and all old archives remain unchanged. No package is represented as test-ready.
+
+All56 Debug/Release groups and all products build. Synthetic packaging tests cover
+stale/mixed/invalid identities and a source change during staging. Actual compiled
+products also pass a private archive/manifest/hash smoke without deployment.
+Existing native-finally, renderer-unwind, head and artifact gates pass. The host's
+strict build exposed one unused network local, which was removed without changing
+behavior. See PACKAGE_IDENTITY.md. Current status/host/plan docs now distinguish
+these source integrations from older archive claims.
+
+A separate pinned inspection confirms that CPU position and direction streams
+share the temporary head palette. It also proves zero loading-queue count is not
+worker quiescence, and native WaitUntilCompleted can execute jobs on its caller.
+No scheduler change or new head lifetime claim follows; see NATIVE_HEAD_ANIMATION_AUDIT.md.

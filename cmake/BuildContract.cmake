@@ -1,0 +1,27 @@
+# Source-only fingerprint, independent of checkout location, timestamps and Git
+# author metadata. Reconfigure when an input is changed, added or removed.
+file(GLOB_RECURSE SS2VR_CONTRACT_INPUTS CONFIGURE_DEPENDS RELATIVE "${CMAKE_SOURCE_DIR}"
+     "${CMAKE_SOURCE_DIR}/src/*" "${CMAKE_SOURCE_DIR}/cmake/*")
+list(APPEND SS2VR_CONTRACT_INPUTS "CMakeLists.txt")
+list(SORT SS2VR_CONTRACT_INPUTS)
+set(SS2VR_CONTRACT_TEXT "")
+foreach(relative IN LISTS SS2VR_CONTRACT_INPUTS)
+ if(NOT IS_DIRECTORY "${CMAKE_SOURCE_DIR}/${relative}")
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/${relative}")
+  file(SHA256 "${CMAKE_SOURCE_DIR}/${relative}" digest)
+  string(APPEND SS2VR_CONTRACT_TEXT "${relative}:${digest}\n")
+ endif()
+endforeach()
+string(SHA256 SS2VR_SOURCE_FINGERPRINT "${SS2VR_CONTRACT_TEXT}")
+configure_file("${CMAKE_SOURCE_DIR}/cmake/build_contract_generated.hpp.in"
+               "${CMAKE_BINARY_DIR}/generated/build_contract_generated.hpp" @ONLY)
+function(ss2vr_stamp_contract target component)
+ if(TARGET ${target})
+  target_sources(${target} PRIVATE "${CMAKE_SOURCE_DIR}/src/common/build_contract.cpp")
+  target_include_directories(${target} PRIVATE "${CMAKE_BINARY_DIR}/generated")
+  target_compile_definitions(${target} PRIVATE SS2VR_BUILD_COMPONENT=${component})
+ endif()
+endfunction()
+ss2vr_stamp_contract(ss2vr_game 1)
+ss2vr_stamp_contract(ss2vr_server 2)
+ss2vr_stamp_contract(ss2vr_host 3)

@@ -810,7 +810,6 @@ struct PeerState {
         lastPoseLocalTick = localTick;
         hasPose = true;
         for (unsigned hand = 0; hand != 2; ++hand) {
-            const uint8_t bit = uint8_t(1u << hand);
             if (!intentEpoch[hand] || pose.intentEpoch[hand] != intentEpoch[hand])
                 continue;
             updatePrimaryAdmission(pose, hand);

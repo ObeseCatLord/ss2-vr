@@ -8,6 +8,7 @@ import re
 import struct
 import subprocess
 import pefile
+from build_contract import validate_products
 ROOT=Path(__file__).resolve().parents[1]
 EXPECTED_EXPORTS={'Direct3DCreate9','Direct3DCreate9Ex','D3DPERF_BeginEvent','D3DPERF_EndEvent',
                   'D3DPERF_GetStatus','D3DPERF_QueryRepeatFrame','D3DPERF_SetMarker','D3DPERF_SetOptions','D3DPERF_SetRegion'}
@@ -25,6 +26,8 @@ def verify(game):
         if relative=='build-game/SS2VRServer.dll' and not {'SS2VRServer_Startup_t','SS2VRServer_Cleanup'}<=exports:raise ValueError('Missing native server module entrypoints')
         if relative.endswith('libopenxr_loader.dll') and 'xrGetInstanceProcAddr' not in exports:raise ValueError('Missing loader entrypoint')
         report['artifacts'][path.name]={'machine':hex(machine),'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'imports':imports}
+    report['build_contract']=validate_products(ROOT, {'game':ROOT/'build-game/d3d9.dll',
+        'server':ROOT/'build-game/SS2VRServer.dll','host':ROOT/'build-host/ss2vr_host.exe'})
     source=(ROOT/'src/game/engine.cpp').read_text()
     mapping={'g':'Sam2Game.dll','e':'Engine.dll','c':'Core.dll'}
     fingerprints=json.loads((ROOT/'docs/installed-build.json').read_text())

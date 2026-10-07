@@ -52,14 +52,14 @@ Set **USE COMBO WEAPONS → YES** in the stock single-player or cooperative sett
 
 Set a desktop resolution with **both dimensions at most 2048** and disable MSAA. Use a 32-bit color mode. A modest window resolution such as 1280×720 reduces CPU transfer cost; the native drawport size currently determines each eye's texture size. The allocator preserves the native depth format and uses separate non-MSAA eye targets. CPU readback can stall the game; performance has not been measured.
 
-The current extension package is `dist/ss2vr-0.2.11-dev.zip`; older archives remain immutable checkpoints. Extract it, then install with Python 3:
+The historical extension archive is `dist/ss2vr-0.2.11-dev.zip`; it predates current IPC9 source and remains unchanged. Current packaging derives a `-dev.<source-fingerprint>` name and refuses stale or mixed game/server/host builds. No current finished-device-test package is available yet. For a matching development package, extract it and use Python 3:
 
 ```sh
 python install.py install --game "/path/to/Serious Sam 2" --dry-run
 python install.py install --game "/path/to/Serious Sam 2"
 ```
 
-From this repository, use `python tools/install.py install --game ".." --package dist/ss2vr-0.2.11-dev`. The installer checks all five game fingerprints and every package hash, refuses collisions with `Bin/d3d9.dll`, `Bin/SS2VR`, `Bin/SS2VRServer.dll` or `Content/SS2VR.mod`, and writes a receipt. It never overwrites another mod. Removal checks that all payload files still match:
+From this repository, pass the fresh directory printed by `tools/package.py` as the installer’s `--package` argument. The installer checks all five game fingerprints and every package hash, refuses collisions with `Bin/d3d9.dll`, `Bin/SS2VR`, `Bin/SS2VRServer.dll` or `Content/SS2VR.mod`, and writes a receipt. It never overwrites another mod. Removal checks that all payload files still match:
 
 ```sh
 python install.py uninstall --game "/path/to/Serious Sam 2"
@@ -96,7 +96,7 @@ Weapons remain native: this is trigger-driven firing, not a new physical swing-m
 
 ## Build and repository
 
-Linux tools: CMake ≥3.24, Git, Python 3, native C++ compiler, Clang with the i686 Windows MSVC target, and i686/x86_64 GNU MinGW-w64 C/C++ cross-compilers/binutils. The game compiler must provide native Windows TLS (for example GCC 16 configured with `--enable-tls`, plus binutils ≥2.44); CMake checks an actual compiled TLS probe. Clang is used only for the small native-finally object, not as a replacement game compiler. The small native-finally C object isolates native SEH cleanup while the surrounding C++ remains on MinGW. CMake fetches pinned MinHook/OpenXR revisions onto the project drive. `python tools/build.py` builds both products and runs only native offline checks. Optional `--minhook-source` and `--openxr-source` accept matching local checkouts. `python tools/package.py` creates a fresh package, refusing an existing output; choose `--output` for later builds.
+Linux tools: CMake ≥3.24, Git, Python 3, native C++ compiler, Clang with the i686 Windows MSVC target, and i686/x86_64 GNU MinGW-w64 C/C++ cross-compilers/binutils. The game compiler must provide native Windows TLS (for example GCC 16 configured with `--enable-tls`, plus binutils ≥2.44); CMake checks an actual compiled TLS probe. Clang is used only for the small native-finally object, not as a replacement game compiler. The small native-finally C object isolates native SEH cleanup while the surrounding C++ remains on MinGW. CMake fetches pinned MinHook/OpenXR revisions onto the project drive. `python tools/build.py` builds both products and runs only native offline checks. Optional `--minhook-source` and `--openxr-source` accept matching local checkouts. `python tools/package.py` verifies exported compiled source/version/layout contracts before staging and derives the manifest ABI from them. Its default output includes the build-input fingerprint; existing outputs are refused. Choose `--output` for another fresh directory. Install the Python dependencies in `tools/requirements.txt` before verification/packaging. See [package identity checks](docs/PACKAGE_IDENTITY.md).
 
 `python tools/verify_zoom_entry_abi.py` inspects actual linked native zoom entries and callback return conventions; `verify_sniper_predicate_sites.py --game ..` checks pinned native boundaries and HDE decoder acceptance. Neither executes Windows or game code. `python tools/verify_weapon_abi.py` inspects the compiled MinGW x86 gun-hook calling conventions and unchanged camera forwarding. `python tools/verify_world_marker_abi.py` checks native marker caller shape, supplemented by the manual provenance audit for accepted artifact hashes. `python tools/verify_artifacts.py --game ..` checks final PE architectures, exports/imports, both IPC layouts and installed hook symbols. It needs pefile (`python -m pip install -r tools/requirements.txt`). No verification tool launches the game, host or headset runtime.
 
