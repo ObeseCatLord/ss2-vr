@@ -30,7 +30,7 @@ def verify(obj,root):
     query=one('queryHeadVolume(void*)');instructions=code(query)
     require('mov DWORD PTR [esp+0x1c],0x1' in instructions,'Head queries must reject initial contact')
     require('mov DWORD PTR [esp+0x8],0x0' in instructions,'Head query must not grant a penetration budget')
-    require(sum(i.startswith('call ') for i in instructions)==1 and 'runRoomscaleSweepQueries' in query,
+    require(sum(i.startswith('call ') for i in instructions)==1 and 'runOwnedSphereQueries' in query,
             'Head query must use the owned native sphere driver')
     cleanup=one('runPostSimulationHeadVisibility(', '::Context::finish(void*, int)')
     require('_tls_index' in cleanup and '.tls$' in cleanup,'Head owner cleanup lost explicit native TLS')
@@ -59,10 +59,14 @@ def verify(obj,root):
             'Recheck head clearance after potentially waiting HUD uploads')
     require('Abi = 9' in protocol and 'static_assert(sizeof(HeadClearance)==40)' in protocol,
             'Versioned fixed-width head receipt ABI missing')
+    require('!captureHeadQueryBinding(h,h.binding)' in engine and 'headQueryOwnerCurrent(&h)' in engine,
+            'Head filters must use their separate owned binding, not a fabricated foot body')
+    require('(!c.snapshot.rider.handheld()&&!c.snapshot.rider.seated())' in engine,
+            'Mounted head admission must retain explicit native rider state')
     return {'object_sha256':hashlib.sha256(obj.read_bytes()).hexdigest(),
             'post_simulation_head_query':True,'initial_contact_rejected':True,
             'host_late_pose_and_age_gate':True,'ipc_abi':9,'runtime_executed':False,
-            'mounted_head_volume_supported':False}
+            'mounted_world_head_query_enabled':True}
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--object',type=Path,required=True)
     p.add_argument('--root',type=Path,default=Path(__file__).resolve().parents[1])

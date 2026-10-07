@@ -9,9 +9,10 @@ An original native adapter for the fingerprinted Steam Serious Sam 2 installatio
 The current extension adds threshold-follow VR panels, native controller menu pointing, grip alignment, native-event haptics, collision lasers and multiplayer pose/weapon authority with remote weapon presentation and a dedicated server module. The **0.2.9** checkpoint connected native flat HUD/messages and full-field fades to both eye images through the original once-only native owner, with comfortable frozen panel geometry and conditional stats fallback. The current **0.2.11** source adds independent native sniper zoom controls and cleanup, including multiplayer shot context. It also retains the input/replication corrections from0.2.10. Astra approved these bounded source changes. Full immersive equivalence remains incomplete; teleport is excluded. See [UI source review](docs/NATIVE_FLAT_UI_CONNECTED_REVIEW.md), [input and multiplayer review](docs/NATIVE_INPUT_INTERVAL_REVIEW.md), [extension plan](docs/IMMERSIVE_PLAN.md) and [implementation status](docs/IMPLEMENTATION_STATUS.md).
 
 Current source also contains default-off single-player roomscale movement and
-handheld head-volume protection. The latter uses post-simulation native queries,
+handheld/seated world head-volume protection. The latter uses post-simulation native queries,
 rejects initial overlaps and constrains cached image reuse to the checked space
-and age. It is not mounted head protection or a runtime-verified safety system.
+and age. Native mechanism exclusions can omit the ridden vehicle itself; this
+is not cockpit-interior protection or a runtime-verified safety system.
 The IPC9 head-clearance receipt requires matching game/host builds; do not mix
 with older archives. See [head-volume integration](docs/HEAD_VOLUME_INTEGRATION.md).
 
@@ -39,7 +40,7 @@ The 0.2.11 development checkpoint includes admitted native flat UI and full-eye 
 - Native navigational beacons and world objective markers use each eye's actual view and full asymmetric projection, with the original native fade/content/draw helpers. Failed target or lifecycle checks reject the whole pair. See [Astra source acceptance](docs/NATIVE_WORLD_OVERLAY_SOURCE_REVIEW.md). Flat panels use the separately admitted once-only UI path above.
 - Touch, Index, Vive and Microsoft motion-controller action profiles; exact mappings are in [host details](docs/HOST_STATUS.md).
 
-Experimental head-lean dimming can be enabled with `[HeadComfort] Enabled=1` in `Bin/SS2VR/SS2VR.ini`. It dims both world views while preserving the HUD/wheels, and leaves unqueried frames clear. Astra required it to remain disabled by default: native query availability and moving-geometry freshness are unresolved, so it may alternate dim/clear frames. See [head comfort review](docs/HEAD_COMFORT_REVIEW_DISPOSITION.md).
+Experimental head-volume protection can be enabled with `[HeadComfort] Enabled=1` in `Bin/SS2VR/SS2VR.ini`. Current source waits for a matching query attempt and makes obstructed or unavailable owned attempts opaque in both world views while preserving UI. Clear cached images must remain inside their admitted volume and lifetime. It remains disabled by default and runtime-unverified. See [current head-volume integration](docs/HEAD_VOLUME_INTEGRATION.md); the [earlier head comfort review](docs/HEAD_COMFORT_REVIEW_DISPOSITION.md) describes the superseded opportunistic ray implementation.
 
 Native remote head bones can be requested with `[Multiplayer] RemoteHeadTracking=1` in that INI. The adapter retains native animation and applies full XYZ/quaternion tracking about the body eye. It remains disabled by default: complete native concurrent-worker/model lifetime and appearance are unverified. This does not affect the existing local 6DOF headset and hand tracking. See [head review disposition](docs/HEAD_ANIMATION_REVIEW_DISPOSITION.md).
 

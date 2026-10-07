@@ -23,7 +23,7 @@ struct NativeQueries {
     }
 } native;
 struct Query {
-    const roomscale::BodyGeometry &body;
+    const roomscale::SphereQuerySubject &subject;
     const roomscale::BodySweepCover &cover;
     RoomscaleQueryOwnerCurrent current;
     void *context;
@@ -41,10 +41,10 @@ struct Query {
         const roomscale::Ray ray{sphere.centre,q.cover.direction};
         native.setRay(ray);native.maximum(q.cover.maximumParameter);native.minimum(0);
         native.radius(sphere.radius);
-        native.category(q.body.hulls[q.hull].category);
-        native.thickCategory(q.body.hulls[q.hull].category);
-        native.avatar(reinterpret_cast<void*>(q.body.player));
-        native.mechanism(reinterpret_cast<void*>(q.body.mechanism));
+        native.category(q.subject.categories[q.hull]);
+        native.thickCategory(q.subject.categories[q.hull]);
+        native.avatar(reinterpret_cast<void*>(q.subject.avatar));
+        native.mechanism(reinterpret_cast<void*>(q.subject.mechanism));
         native.fluids(0);
         native.check();
         const bool clear=native.hit()==0;
@@ -78,22 +78,21 @@ bool configureRoomscaleSweepQueries(HMODULE engine) noexcept {
     native=next;return true;
 }
 void resetRoomscaleSweepQueriesAfterQuiescence() noexcept {native={};}
-bool runRoomscaleSweepQueries(const roomscale::BodyGeometry& body,const roomscale::BodySweepCover& cover,
+bool __attribute__((noinline)) runOwnedSphereQueries(const roomscale::SphereQuerySubject& subject,const roomscale::BodySweepCover& cover,
     float contactDepthBudget,DWORD thread,RoomscaleQueryOwnerCurrent current,void *context,bool& failed,bool rejectInitialContact) noexcept {
     if(!roomscale::arithmeticSupported()) {failed=true;return false;}
     const double directionNorm=double(cover.direction.x)*cover.direction.x+
         double(cover.direction.y)*cover.direction.y+double(cover.direction.z)*cover.direction.z;
     if(failed||!native.ready()||!roomscaleCollisionKernelsUsable()||!current||!thread||thread!=GetCurrentThreadId()||
        !roomscaleResourceScopeUsable()||
-       !cover.valid||!cover.body.valid||!body.player||!body.mechanism||
+       !cover.valid||!cover.body.valid||!subject.valid()||
        !roomscale::detail::finite(roomscale::detail::convert(cover.direction))||
        !std::isfinite(directionNorm)||
        std::abs(directionNorm-1)>32*std::numeric_limits<float>::epsilon()||
-       !body.hullCount||body.hullCount>roomscale::BodyGeometry::MaximumHulls||
-       cover.body.hullCount!=body.hullCount||!std::isfinite(cover.maximumParameter)||cover.maximumParameter<=0||
+       cover.body.hullCount!=subject.categoryCount||!std::isfinite(cover.maximumParameter)||cover.maximumParameter<=0||
        !std::isfinite(contactDepthBudget)||contactDepthBudget<0) {failed=true;return false;}
     unsigned count=0;
-    for(unsigned hull=0;hull<body.hullCount;++hull) {
+    for(unsigned hull=0;hull<subject.categoryCount;++hull) {
         const auto& spheres=cover.body.hulls[hull];
         if(!spheres.valid||!spheres.count||spheres.count>spheres.sphere.size()) {failed=true;return false;}
         for(unsigned index=0;index<spheres.count;++index) {
@@ -101,7 +100,7 @@ bool runRoomscaleSweepQueries(const roomscale::BodyGeometry& body,const roomscal
             if(!roomscale::detail::finite(roomscale::detail::convert(sphere.centre))||
                !std::isfinite(sphere.radius)||sphere.radius<=contactDepthBudget) {failed=true;return false;}
             roomscale::QueryScope scope{cover.maximumParameter,contactDepthBudget,false,true,rejectInitialContact};
-            Query query{body,cover,current,context,scope,hull,index};
+            Query query{subject,cover,current,context,scope,hull,index};
             if(!runRoomscaleModelQueryScope(scope,thread,Query::run,&query)||!query.clear) {
                 failed=true;return false;
             }
@@ -110,5 +109,10 @@ bool runRoomscaleSweepQueries(const roomscale::BodyGeometry& body,const roomscal
     }
     if(count!=cover.body.queryCount||!current(context)||!roomscaleResourceScopeUsable()) {failed=true;return false;}
     return true;
+}
+bool runRoomscaleSweepQueries(const roomscale::BodyGeometry& body,const roomscale::BodySweepCover& cover,
+    float budget,DWORD thread,RoomscaleQueryOwnerCurrent current,void* context,bool& failed,bool rejectInitialContact) noexcept {
+    const auto subject=roomscale::sphereSubjectForBody(body);
+    return runOwnedSphereQueries(subject,cover,budget,thread,current,context,failed,rejectInitialContact);
 }
 } // namespace ss2vr::game

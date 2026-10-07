@@ -7,12 +7,12 @@ namespace ss2vr {
 // Call with the last admitted head centre (or a separately validated body anchor)
 // to test travel as well as final occupancy. Do not advance that centre on a miss
 // caused by unavailable query data. It must be used with rejectInitialContact.
-inline roomscale::BodySweepCover coverHeadVolumeSweep(const roomscale::BodyGeometry& body,
+inline roomscale::BodySweepCover coverHeadVolumeSweep(unsigned categoryCount,
     Vec3 from,Vec3 to,float radius,float numericalBudget) {
     using namespace roomscale;
     using namespace roomscale::detail;
     BodySweepCover result;
-    if(!arithmeticSupported()||!body.hullCount||body.hullCount>BodyGeometry::MaximumHulls||
+    if(!arithmeticSupported()||!categoryCount||categoryCount>BodyGeometry::MaximumHulls||
        !detail::finite({from.x,from.y,from.z})||!detail::finite({to.x,to.y,to.z})||
        !std::isfinite(radius)||radius<=0||!std::isfinite(numericalBudget)||numericalBudget<=0||
        numericalBudget>=radius)return result;
@@ -43,12 +43,12 @@ inline roomscale::BodySweepCover coverHeadVolumeSweep(const roomscale::BodyGeome
     // Extra travel is conservative; it is never interpreted as player movement.
     const float inflated=outwardFloat(up(double(radius)+allowance));
     if(!inflated||double(inflated)-double(radius)>numericalBudget)return {};
-    for(unsigned h=0;h<body.hullCount;++h) {
+    for(unsigned h=0;h<categoryCount;++h) {
         auto& hull=result.body.hulls[h];
         hull.sphere[0]={{from.x,from.y,from.z},inflated};
         hull.count=1;hull.valid=true;
     }
-    result.body.hullCount=body.hullCount;result.body.queryCount=body.hullCount;
+    result.body.hullCount=categoryCount;result.body.queryCount=categoryCount;
     result.body.valid=true;result.direction=direction;result.maximumParameter=parameter;
     result.valid=true;return result;
 }

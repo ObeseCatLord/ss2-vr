@@ -11,6 +11,7 @@
 #include "common/native_primary_projection.hpp"
 #include "common/frame_policy.hpp"
 #include "common/head_volume.hpp"
+#include "common/head_query_binding.hpp"
 #include "common/hook_transaction.hpp"
 #include "common/lasers.hpp"
 #include "common/muzzle.hpp"
@@ -157,7 +158,7 @@ using ShootDirection = Vec3 *(__thiscall *)(void *, Vec3 *);
 static ModelInstanceGet laserModelInstance = nullptr;
 static AttachmentGet laserAttachment = nullptr;
 static uint32_t laserIdleAttachment = 0;
-static uint32_t bulletCategory = 0;
+static uint32_t bulletCategory = 0,headQueryCategory = 0;
 static VoidThis originalOperatorFiring = nullptr;
 static HandInt originalFireButtonPressed = nullptr;
 using WeaponButton = int32_t(__thiscall *)(void *, uint32_t);
@@ -365,9 +366,14 @@ bool nativeTrackingAnchor(void *player, Pose &out, const RiderIdentity *expected
     if (!baseViewOrigin || !nativeBodyPlacement || !readNativeRider(player, identity) ||
         (expected && identity != *expected))
         return false;
+    // The pinned base getter returns a global fallback pose when this resource link
+    // is null. That is not a usable world anchor, including while seated.
+    uint32_t viewResource=0;memcpy(&viewResource,static_cast<uint8_t*>(player)+0x47c,4);
+    if(!viewResource)return false;
     Pose view, body;
     baseViewOrigin(player, &view, 0);
-    if (!nativeRiderCurrent(player, identity))
+    memcpy(&viewResource,static_cast<uint8_t*>(player)+0x47c,4);
+    if (!viewResource || !nativeRiderCurrent(player, identity))
         return false;
     uint32_t heightBits;
     memcpy(&heightBits, static_cast<uint8_t *>(player) + 0x8c0, 4);
@@ -1991,7 +1997,7 @@ static void __fastcall viewPrepare(void *command, void *, const Matrix34 &view, 
 }
 bool headFramePrepared(void* player,const Request& request) noexcept {
     const auto snapshot=copySnapshot();
-    if(!settings.headFade||!snapshot.rider.handheld())return true;
+    if(!settings.headFade||(!snapshot.rider.handheld()&&!snapshot.rider.seated()))return true;
     if(player!=snapshot.player||simulationThread.load()!=GetCurrentThreadId())return false;
     AcquireSRWLockShared(&laserLock);
     const auto& h=headVolumeObservation;
@@ -2017,7 +2023,7 @@ bool beginStereo(void *p, const Request &request) {
                  nativeTrackingAnchor(p, eyeAnchor, &eyeSnapshot.rider) && finite(eyeNativeCamera);
     if (ready) {
         freezeLasers(request);
-        if (settings.headFade && eyeSnapshot.rider.handheld()) {
+        if (settings.headFade && (eyeSnapshot.rider.handheld()||eyeSnapshot.rider.seated())) {
             const Pose head = worldHeadTracking(eyeAnchor,eyeSnapshot.origin,eyeSnapshot.turn,request.input.head);
             AcquireSRWLockShared(&laserLock);
             const bool clear = !nativeRayFaulted.load(std::memory_order_acquire) &&
@@ -2172,7 +2178,7 @@ static Matrix44 *__fastcall project(void *p, void *, Matrix44 *out) {
             nz = .05f;
             fz = 10000;
         }
-        if(settings.headFade && eyeSnapshot.rider.handheld()) {
+        if(settings.headFade && (eyeSnapshot.rider.handheld()||eyeSnapshot.rider.seated())) {
             const uint32_t bits=std::bit_cast<uint32_t>(nz);
             if(caller==rootProjectionReturn) {
                 pairHeadNearBits=std::max(pairHeadNearBits,bits);
@@ -3892,17 +3898,36 @@ static __attribute__((noinline)) void runPostSimulationRoomscale(SimulationInter
 struct HeadVisibilityAttempt {
     LocalRoomscaleAttempt owner;
     Request request{};
+    roomscale::HeadQueryBinding binding;
     Pose head{};
     float radius=0,nearZ=.05f,numericalGuard=.002f;
     bool prepared=false,clear=false;
 };
+static bool captureHeadQueryBinding(HeadVisibilityAttempt& h,roomscale::HeadQueryBinding& result) {
+    auto& c=h.owner;
+    return roomscale::readHeadQueryBinding([&](uint32_t address,void* target,size_t size) {
+        if(!c.reads.contains(reinterpret_cast<void*>(address),size))return false;
+        std::memcpy(target,reinterpret_cast<void*>(address),size);return true;
+    },[](uint32_t handle){return uint32_t(reinterpret_cast<uintptr_t>(resolve(handle)));},
+       c.snapshot.playerHandle,uint32_t(swimmingPlayerVtable),headQueryCategory,result);
+}
+static bool __cdecl headQueryOwnerCurrent(void* opaque) noexcept {
+    auto& h=*static_cast<HeadVisibilityAttempt*>(opaque);auto& c=h.owner;
+    if(c.failed||!roomscalePhaseCurrent(c)||!roomscaleCleanupReady(c))return false;
+    const auto live=copySnapshot();
+    if(!roomscaleSnapshotMatches(c.snapshot,live)||!vrSession(live)||!fresh(live.input)||!live.ui.gameplay||
+       (!live.rider.handheld()&&!live.rider.seated())||recenterHeld(live.input)||!livePlayer(live)||
+       !nativeRiderCurrent(live.player,live.rider))return false;
+    roomscale::HeadQueryBinding current;
+    return captureHeadQueryBinding(h,current)&&roomscale::sameHeadQueryBinding(h.binding,current);
+}
 static void __cdecl queryHeadVolume(void* opaque) noexcept {
     auto& h=*static_cast<HeadVisibilityAttempt*>(opaque);auto& c=h.owner;
-    h.clear=runRoomscaleSweepQueries(c.body,c.cover,0,c.thread,roomscaleOwnerCurrent,&c,c.failed,true);
+    h.clear=runOwnedSphereQueries(h.binding.subject,c.cover,0,c.thread,headQueryOwnerCurrent,&h,c.failed,true);
 }
 static bool __cdecl prepareAndQueryHeadVolume(void* opaque) {
     auto& h=*static_cast<HeadVisibilityAttempt*>(opaque);auto& c=h.owner;
-    if(!roomscalePhaseCurrent(c)||!roomscaleCleanupReady(c)||!captureRoomscaleBody(c,c.body))return false;
+    if(!roomscalePhaseCurrent(c)||!roomscaleCleanupReady(c)||!captureHeadQueryBinding(h,h.binding))return false;
     const auto relative=relativeTracking(c.snapshot.origin,h.request.input.head);
     if(!finite(relative)||!finite(c.anchorBefore))return false;
     const auto bounded=boundHeadTranslation(relative.p);
@@ -3944,8 +3969,8 @@ static bool __cdecl prepareAndQueryHeadVolume(void* opaque) {
     radius+=settings.headClearanceMargin; // Explicit room for later tracked poses inside this clear volume.
     if(!std::isfinite(radius)||radius<=0||radius>.5)return false;
     h.radius=roomscale::outwardFloat(radius);
-    c.cover=coverHeadVolumeSweep(c.body,c.anchorBefore.p,h.head.p,h.radius,.001f);
-    if(!c.cover.valid||!roomscaleOwnerCurrent(&c))return false;
+    c.cover=coverHeadVolumeSweep(h.binding.subject.categoryCount,c.anchorBefore.p,h.head.p,h.radius,.001f);
+    if(!c.cover.valid||!headQueryOwnerCurrent(&h))return false;
     c.reads.seal();h.prepared=true;
     return runRoomscaleResourceScope(c.failed,c.thread,queryHeadVolume,&h)&&h.clear;
 }
@@ -3956,7 +3981,7 @@ static __attribute__((noinline)) void runPostSimulationHeadVisibility(Simulation
     c.interval=&interval;c.snapshot=copySnapshot();c.thread=GetCurrentThreadId();
     c.simulationSequence=simulationRevision;c.world=reinterpret_cast<uintptr_t>(interval.preparedWorld);
     if(!vrSession(c.snapshot)||!fresh(c.snapshot.input)||!c.snapshot.ui.gameplay||
-       !c.snapshot.rider.handheld()||recenterHeld(c.snapshot.input)||!livePlayer(c.snapshot)||
+       (!c.snapshot.rider.handheld()&&!c.snapshot.rider.seated())||recenterHeld(c.snapshot.input)||!livePlayer(c.snapshot)||
        !roomscaleWord(c.world,0x6c,c.physics)||!c.physics)return;
     auto* prepared=preparedPrimary(c.snapshot.player);
     if(!prepared||!prepared->prepared||prepared->revoked||!prepared->recognized||
@@ -4237,6 +4262,7 @@ bool attach(bool headless) {
         }
     if (!headless) {
         toId(&bulletCategory, "bullet");
+        toId(&headQueryCategory, "player");
         toId(&laserIdleAttachment, "Barrel01");
     }
 #define H(module, name, fn, orig)                                                                            \

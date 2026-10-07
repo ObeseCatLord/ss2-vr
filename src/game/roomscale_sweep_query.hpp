@@ -1,5 +1,6 @@
 #pragma once
 #include "common/roomscale_body_sweep.hpp"
+#include "common/sphere_query_subject.hpp"
 #include <windows.h>
 namespace ss2vr::game {
 using RoomscaleQueryOwnerCurrent=bool(__cdecl *)(void *) noexcept;
@@ -16,6 +17,10 @@ void resetRoomscaleSweepQueriesAfterQuiescence() noexcept;
 // initial penetration is unusable. Movement callers retain their contact policy.
 // Every sphere must finish unobstructed. Native results are copied before the
 // ordinary next rayInit; abnormal native unwind is never "repaired" here.
+bool runOwnedSphereQueries(const roomscale::SphereQuerySubject&,const roomscale::BodySweepCover&,
+    float contactDepthBudget,DWORD simulationThread,RoomscaleQueryOwnerCurrent ownerCurrent,
+    void *ownerContext,bool &failed,bool rejectInitialContact) noexcept;
+// Body-movement adapter retains each actually captured source-hull category.
 bool runRoomscaleSweepQueries(const roomscale::BodyGeometry&,const roomscale::BodySweepCover&,
     float contactDepthBudget,DWORD simulationThread,RoomscaleQueryOwnerCurrent ownerCurrent,
     void *ownerContext,bool &failed,bool rejectInitialContact=false) noexcept;

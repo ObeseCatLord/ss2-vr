@@ -485,3 +485,20 @@ query/owner, strict-contact, cleanup, swimming, multiplayer RPC and fixed-layout
 checks pass. Native gameplay and Windows/Proton headset behavior remain untested.
 See HEAD_VOLUME_INTEGRATION.md. This does not finish the multiplayer body/origin
 correction problem, physical melee, remaining vehicle/head work or final review.
+
+## Seated world head-query binding — 2026-10-07
+
+Head queries now bind the actual player, mechanism and pose source independently
+of foot-body collision geometry. Positively owned seated riders use the same
+strict world-volume query and IPC9 receipt. Native player-category and self/parent
+mechanism filters are preserved; the ridden vehicle can be excluded, so its own
+interior is not claimed protected. Missing native view resources reject the
+anchor instead of using the getter's global fallback. Body movement retains its
+previous hull categories and single-player gate.
+
+All55 Debug/Release groups, x86 game/server and x64 host builds pass. The binding
+fixture passes ASan/UBSan and x86/x64 compile-only checks. Pinned binary and
+compiled query checks pass normally and with Python optimization. No runtime or
+deployment occurred. HeadComfort remains default-off; multiplayer roomscale,
+physical melee, remaining head/vehicle work and final review remain unfinished.
+See HEAD_VOLUME_INTEGRATION.md for the exact scope and limits.
