@@ -121,7 +121,8 @@ static bool unlock() noexcept {
     return true;
 }
 static void cleanup(bool aborted) noexcept {
-    if (aborted) { retireScopeGeometry(); scopeGpuFault(); }
+    const bool retired = probe.generation != graphicsResourceGeneration();
+    if (aborted) { retireScopeGeometry(); if (!retired) scopeGpuFault(); }
     if (probe.imageChanged) restoreImageState(probe.device);
     if (probe.lock.phase == ScopeLockPhase::Acquired) unlock();
     if (probe.lock.outstanding()) {
@@ -141,7 +142,7 @@ static void cleanup(bool aborted) noexcept {
     release(probe.device);
     if (probe.transaction) {
         // Current performs identity comparisons only, never dereferences device.
-        if (probe.split && (!current || !scopeGpuTransactionCurrent(device))) scopeGpuFault();
+        if (!retired && probe.split && (!current || !scopeGpuTransactionCurrent(device))) scopeGpuFault();
         scopeGpuTransactionEnd();
     }
     probe.sourceView = {}; probe.imageConstants = {};
@@ -321,6 +322,10 @@ static constexpr D3DRENDERSTATETYPE imageStates[]{D3DRS_ZWRITEENABLE,D3DRS_ZFUNC
 static bool restoreImageState(IDirect3DDevice9 *d) noexcept {
     if (!probe.imageChanged) return !probe.imageRestoreFailed;
     probe.imageChanged = false; // One bounded restoration attempt, including foreign unwind.
+    if (probe.generation != graphicsResourceGeneration()) {
+        probe.imageRestoreFailed = false;
+        return true; // Retired invocation: release-only cleanup, no old shader/texture restoration.
+    }
     probe.imageRestoreFailed = true;
     bool ok = SUCCEEDED(d->SetPixelShader(probe.bindings[0].color.shader));
     ok = SUCCEEDED(d->SetTexture(0,probe.originalTexture)) && ok;

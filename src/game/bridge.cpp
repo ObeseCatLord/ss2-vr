@@ -18,6 +18,7 @@
 #include <bcrypt.h>
 #include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <vector>
 namespace ss2vr::game {
@@ -111,10 +112,204 @@ bool supported(bool headless) {
     }
     return true;
 }
+static bool labOnlineIsolated = false;
+template<class T> static T loadLabProc(HMODULE module,const char *name) {
+    return reinterpret_cast<T>(GetProcAddress(module,name));
+}
+static uintptr_t labEngineBase = 0;
+static DWORD labStartupThread = 0;
+static uintptr_t labInitializerCaller = 0;
+static void *(__cdecl *labCurrentNet)() = nullptr;
+static int(__cdecl *labNetIsLocal)() = nullptr;
+static void(__cdecl *labOriginalUninitialize)() = nullptr;
+static void(__thiscall *labOriginalOpen)(void *,const char *,const char *) = nullptr;
+static int32_t(__thiscall *labStreamSize)(void *) = nullptr;
+static int32_t(__thiscall *labStreamPosition)(void *) = nullptr;
+static int(__cdecl *labIsLoadingThread)() = nullptr;
+static void(__thiscall *labStreamSeek)(void *,int32_t) = nullptr;
+static void(__thiscall *labStreamRead)(void *,void *,int32_t) = nullptr;
+static char labSceneName[1024]{};
+static thread_local bool labSceneReading = false;
+static bool labSceneNameMatches(const char *name) noexcept {
+    if (!name) return false;
+    for (unsigned i=0;i<sizeof(labSceneName);++i) {
+        char a=name[i],b=labSceneName[i];
+        if (a=='\\') a='/';if (b=='\\') b='/';
+        if (a>='A'&&a<='Z') a+=32;if (b>='A'&&b<='Z') b+=32;
+        if (a!=b) return false;
+        if (!a) return true;
+    }
+    return false;
+}
+[[noreturn]] static void abortLab(const char *reason) {
+    log("Lab isolation abort: %s",reason);
+    // This opt-in fixture must never continue into real remote profile mutation
+    // when its early isolation boundary cannot be established.
+    TerminateProcess(GetCurrentProcess(),0x53533201);
+    std::abort();
+}
+static void hashLabScene(void *stream) {
+    const int32_t size=labStreamSize(stream),position=labStreamPosition(stream);
+    if (size<=0 || size>32*1024*1024 || position<0 || position>size)
+        abortLab("native scene stream size/position outside probe contract");
+    BCRYPT_ALG_HANDLE algorithm=nullptr;BCRYPT_HASH_HANDLE hash=nullptr;
+    void *object=nullptr;DWORD objectBytes=0,received=0;
+    bool restore=false,complete=false;unsigned char digest[32]{};
+    withNativeFinally([&] {
+        if (BCryptOpenAlgorithmProvider(&algorithm,BCRYPT_SHA256_ALGORITHM,nullptr,0)<0 ||
+            BCryptGetProperty(algorithm,BCRYPT_OBJECT_LENGTH,reinterpret_cast<PUCHAR>(&objectBytes),sizeof(objectBytes),&received,0)<0 ||
+            !objectBytes) return;
+        object=HeapAlloc(GetProcessHeap(),0,objectBytes);
+        if (!object || BCryptCreateHash(algorithm,&hash,static_cast<PUCHAR>(object),objectBytes,nullptr,0,0)<0) return;
+        restore=true; // Set before the first operation that can move native position.
+        labStreamSeek(stream,0);
+        unsigned char buffer[65536];
+        int32_t remaining=size;
+        while (remaining>0) {
+            const int32_t bytes=std::min<int32_t>(remaining,sizeof(buffer));
+            labStreamRead(stream,buffer,bytes);
+            if (BCryptHashData(hash,buffer,static_cast<ULONG>(bytes),0)<0) return;
+            remaining-=bytes;
+        }
+        complete=BCryptFinishHash(hash,digest,sizeof(digest),0)>=0;
+    },[&](bool) noexcept {
+        if (restore) {
+            bool restored=false;
+            withNativeFinally([&] {
+                labStreamSeek(stream,position);
+                restored=labStreamPosition(stream)==position;
+            },[&](bool aborted) noexcept {
+                if (aborted || !restored) abortLab("native scene stream restoration failed");
+            });
+        }
+        if (hash) BCryptDestroyHash(hash);
+        if (algorithm) BCryptCloseAlgorithmProvider(algorithm,0);
+        if (object) HeapFree(GetProcessHeap(),0,object);
+    });
+    if (!complete) abortLab("native scene stream hash did not complete");
+    char hex[65]{};for (unsigned i=0;i<32;++i) std::snprintf(hex+i*2,3,"%02x",digest[i]);
+    log("Lab native scene stream bytes=%ld positionRestored=%ld sha256=%s",static_cast<long>(size),static_cast<long>(position),hex);
+}
+static __attribute__((force_align_arg_pointer)) void __fastcall labOpenScene(void *stream,void *,const char *filename,const char *mode) {
+    const bool candidate=mode&&mode[0]=='r'&&mode[1]==0&&labSceneNameMatches(filename);
+    bool owns=false;
+    withNativeFinally([&] {
+        labOriginalOpen(stream,filename,mode); // Exactly once, including unrelated opens.
+        if (!candidate) return;
+        if (labSceneReading || (GetCurrentThreadId()!=labStartupThread && !labIsLoadingThread()))
+            abortLab("nested/foreign native scene open");
+        labSceneReading=true;owns=true;
+        hashLabScene(stream); // Borrowed synchronously; never close or retain it.
+    },[&](bool) noexcept { if (owns) labSceneReading=false; });
+}
+static __attribute__((noinline)) void __cdecl suppressLabOnlineInitialization() {
+    const auto caller=reinterpret_cast<uintptr_t>(__builtin_extract_return_addr(__builtin_return_address(0)));
+    uint32_t pointer = 0;
+    std::memcpy(&pointer,reinterpret_cast<const void *>(labEngineBase+0x2ec890),sizeof(pointer));
+    if (!labOnlineIsolated || GetCurrentThreadId()!=labStartupThread || pointer || caller!=labInitializerCaller)
+        abortLab("unexpected online initializer owner or existing interface");
+    static bool reported = false;
+    if (!reported) { reported=true; log("Lab native online initializer suppressed; interface=0; cloud/stats object not constructed"); }
+}
+static void __cdecl labOnlineUninitialize() {
+    uint32_t pointer=0;
+    std::memcpy(&pointer,reinterpret_cast<const void *>(labEngineBase+0x2ec890),sizeof(pointer));
+    if (pointer) abortLab("online interface appeared before native shutdown");
+    log("Lab native online shutdown wrapper entered; interface=0; Steam synchronization body excluded");
+    labOriginalUninitialize(); // Preserve the stock null-interface return.
+}
+void installLabOnlineIsolation() {
+    wchar_t value[2]{};
+    if (GetEnvironmentVariableW(L"SS2VR_LAB_ISOLATE_ONLINE",value,2)!=1 || value[0]!=L'1') return;
+    if (labOnlineIsolated) return;
+    std::wstring bin;
+    if (!moduleDirectory(nullptr,bin) ||
+        GetFileAttributesW((bin+L"..\\.ss2vr-runtime-lab.json").c_str())==INVALID_FILE_ATTRIBUTES)
+        abortLab("private lab marker missing");
+    const auto engine=GetModuleHandleW(L"Engine.dll");
+    if (!engine || !matches(nullptr,"727901f161133ff653fcdc196858335b991b743e67deb448c03c808e5b33e28b") ||
+        !matches(engine,"da6efc9f72637eb3b6f48eadca2107be89b09c00618b6e72d5d3632938a7d851") ||
+        !matches(GetModuleHandleW(L"Core.dll"),"7a1bd56b9bfa3edfbb23f4d3c96490e40a7c0b031b85e797e1af91b2ba3cf207") ||
+        !matches(GetModuleHandleW(L"GfxD3D.dll"),"88749b79be36f0c0dccb623c4f1712685b5af603b451e25ed3c5029bedcdf3ed"))
+        abortLab("startup binary fingerprint mismatch");
+    labEngineBase=reinterpret_cast<uintptr_t>(engine);
+    uint32_t pointer=0;
+    std::memcpy(&pointer,reinterpret_cast<const void *>(labEngineBase+0x2ec890),sizeof(pointer));
+    auto *entry=reinterpret_cast<void *>(GetProcAddress(engine,"?onlInitialize@SeriousEngine@@YAXXZ"));
+    auto *uninitialize=reinterpret_cast<void *>(GetProcAddress(engine,"?onlUninitialize@SeriousEngine@@YAXXZ"));
+    const uint8_t prefix[]{0x55,0x8b,0xec,0x6a,0xff};
+    if (pointer || entry!=reinterpret_cast<void *>(labEngineBase+0x10abe0))
+        abortLab("online initializer already entered or export mismatch");
+    if (std::memcmp(entry,prefix,sizeof(prefix)) || uninitialize!=reinterpret_cast<void *>(labEngineBase+0x109010))
+        abortLab("live online wrapper instruction/address mismatch");
+    labCurrentNet=loadLabProc<void *(__cdecl *)()>(engine,"?netGetCurrent@SeriousEngine@@YAPAVCNetworkInterface@1@XZ");
+    labNetIsLocal=loadLabProc<int(__cdecl *)()>(engine,"?netIsLocal@SeriousEngine@@YAHXZ");
+    if (!labCurrentNet || reinterpret_cast<uintptr_t>(labNetIsLocal)!=labEngineBase+0xf81d0)
+        abortLab("native local transport query missing");
+    HMODULE pinned=nullptr;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,
+        reinterpret_cast<LPCWSTR>(engine),&pinned)) abortLab("native online module pin failed");
+    void *unusedOriginal=nullptr;
+    if (MH_CreateHook(entry,reinterpret_cast<void *>(suppressLabOnlineInitialization),&unusedOriginal)!=MH_OK)
+        abortLab("online isolation hook creation failed");
+    if (MH_CreateHook(uninitialize,reinterpret_cast<void *>(labOnlineUninitialize),
+        reinterpret_cast<void **>(&labOriginalUninitialize))!=MH_OK || !labOriginalUninitialize)
+        abortLab("online shutdown observation hook creation failed");
+    labStartupThread=GetCurrentThreadId();
+    labInitializerCaller=reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr))+0x1b1b;
+    labOnlineIsolated=true; // Publish owner before the enabled detour can execute.
+    if (MH_EnableHook(entry)!=MH_OK) abortLab("online isolation hook enable failed");
+    if (MH_EnableHook(uninitialize)!=MH_OK) abortLab("online shutdown observation hook enable failed");
+    const DWORD sceneBytes=GetEnvironmentVariableA("SS2VR_LAB_SCENE",labSceneName,sizeof(labSceneName));
+    if (!sceneBytes || sceneBytes>=sizeof(labSceneName)) abortLab("native scene probe path missing/too long");
+    const auto core=GetModuleHandleW(L"Core.dll");
+    auto *open=reinterpret_cast<void *>(GetProcAddress(core,"?OpenFile_t@CStream@SeriousEngine@@QAEXPBD0@Z"));
+    labStreamSize=loadLabProc<decltype(labStreamSize)>(core,"?GetSize@CStream@SeriousEngine@@QAEJXZ");
+    labStreamPosition=loadLabProc<decltype(labStreamPosition)>(core,"?GetPosition@CStream@SeriousEngine@@QAEJXZ");
+    labStreamSeek=loadLabProc<decltype(labStreamSeek)>(core,"?SeekBeg_t@CStream@SeriousEngine@@QAEXJ@Z");
+    labStreamRead=loadLabProc<decltype(labStreamRead)>(core,"?Read_t@CStream@SeriousEngine@@QAEXPAXJ@Z");
+    const auto cb=reinterpret_cast<uintptr_t>(core);
+    labIsLoadingThread=loadLabProc<decltype(labIsLoadingThread)>(core,"?mlIsThisLoadingThreadID@SeriousEngine@@YAHXZ");
+    if (reinterpret_cast<uintptr_t>(labIsLoadingThread)!=cb+0x44860 ||
+        !GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,
+            reinterpret_cast<LPCWSTR>(core),&pinned)) abortLab("native loading thread query/pin mismatch");
+    if (reinterpret_cast<uintptr_t>(open)!=cb+0x4bd00 ||
+        reinterpret_cast<uintptr_t>(labStreamSize)!=cb+0x4a0e0 ||
+        reinterpret_cast<uintptr_t>(labStreamPosition)!=cb+0x4a0f0 ||
+        reinterpret_cast<uintptr_t>(labStreamSeek)!=cb+0x4a160 ||
+        reinterpret_cast<uintptr_t>(labStreamRead)!=cb+0x4a130)
+        abortLab("native scene stream ABI exports mismatch");
+    if (MH_CreateHook(open,reinterpret_cast<void *>(labOpenScene),reinterpret_cast<void **>(&labOriginalOpen))!=MH_OK ||
+        !labOriginalOpen || MH_EnableHook(open)!=MH_OK) abortLab("native scene observation hook unavailable");
+    log("Lab online isolation installed synchronously at D3D9 factory entry; interface=0");
+}
+void validateLabOnlineIsolation(bool gameplay) {
+    if (!labOnlineIsolated) return;
+    uint32_t pointer=0;
+    std::memcpy(&pointer,reinterpret_cast<const void *>(labEngineBase+0x2ec890),sizeof(pointer));
+    if (pointer) abortLab("online interface appeared during private fixture");
+    const auto *net=labCurrentNet();
+    if (!net) { if (gameplay) abortLab("gameplay has no native local transport"); return; }
+    uintptr_t table=0;std::memcpy(&table,net,sizeof(table));
+    const auto game=reinterpret_cast<uintptr_t>(GetModuleHandleW(L"Sam2Game.dll"));
+    if (!labNetIsLocal() || !game || table!=game+0x29d270)
+        abortLab("private fixture escaped expected native local transport");
+    static bool localReported=false;
+    if (!localReported) { localReported=true; log("Lab native local transport established; interface=0"); }
+    if (gameplay) {
+        static bool reported=false;
+        if (!reported) { reported=true; log("Lab local gameplay observed with online interface=0"); }
+    }
+}
 static IDirect3DDevice9 *device = nullptr, *creationDevice = nullptr;
 static DWORD creationThread = 0;
 static IDirect3DSurface9 *eye[2]{}, *depth[2]{}, *readback[2]{};
 static uint32_t width = 0, height = 0;
+// One admitted native output, beside the existing device/resource lifetime.
+// Surfaces are reacquired per transaction; only the chain identity is retained.
+static IDirect3DSwapChain9 *presentationChain = nullptr;
+static HWND presentationWindow = nullptr;
+static bool resetQuarantined = false;
 static D3DFORMAT depthFormat = D3DFMT_UNKNOWN, colorFormat = D3DFMT_UNKNOWN;
 static bool hasStencil = false;
 static std::atomic<bool> stopping = false;
@@ -150,13 +345,15 @@ static bool sameSurface(IDirect3DSurface9 *a, IDirect3DSurface9 *b) {
     if (!a || !b)
         return false;
     IUnknown *x = nullptr, *y = nullptr;
-    bool same = SUCCEEDED(a->QueryInterface(IID_IUnknown, reinterpret_cast<void **>(&x))) &&
-                SUCCEEDED(b->QueryInterface(IID_IUnknown, reinterpret_cast<void **>(&y))) && x == y;
-    if (x)
-        x->Release();
-    if (y)
-        y->Release();
-    return same;
+    bool same = false;
+    const bool contained = withNativeFinally([&] {
+        same = SUCCEEDED(a->QueryInterface(IID_IUnknown, reinterpret_cast<void **>(&x))) &&
+               SUCCEEDED(b->QueryInterface(IID_IUnknown, reinterpret_cast<void **>(&y))) && x == y;
+    }, [&](bool) noexcept {
+        if (x) { x->Release(); x = nullptr; }
+        if (y) { y->Release(); y = nullptr; }
+    });
+    return contained && same;
 }
 using SetRT = HRESULT(WINAPI *)(IDirect3DDevice9 *, DWORD, IDirect3DSurface9 *);
 static SetRT originalSetRT = nullptr;
@@ -203,6 +400,7 @@ struct NativeUiFrame {
 static thread_local NativeUiFrame uiFrame;
 static thread_local bool scopeTransaction = false, scopeInterference = false;
 static thread_local uint64_t scopeTransactionGeneration = 0;
+static void retireNativeFrameForReset() noexcept;
 // Written once by the first deviceCreated diagnostic, then immutable. This
 // snapshot correlates startup events; it never establishes current ownership.
 static struct {
@@ -232,12 +430,20 @@ bool startupDeviceOwner(IDirect3DDevice9 *d) noexcept {
     return startupCreationPublished.load(std::memory_order_acquire) &&
         d == startupCreation.device && GetCurrentThreadId() == startupCreation.thread;
 }
+bool presentationDeviceOwner(IDirect3DDevice9 *d) noexcept {
+    // Only the immutable first creation thread may read/change current graphics
+    // ownership. Foreign concurrent factories remain desktop-only.
+    return startupCreationPublished.load(std::memory_order_acquire) &&
+        GetCurrentThreadId() == startupCreation.thread && d == device && d == creationDevice &&
+        GetCurrentThreadId() == creationThread;
+}
 uint32_t traceChainPresent(IDirect3DSwapChain9 *chain, uintptr_t caller, HWND overrideWindow) noexcept {
     // Diagnostic only: immutable startup metadata is not current admission.
     // Foreign threads forward without COM introspection. References never span
     // the original Present, so reset/replacement cannot inherit probe ownership.
     if (!chain || !startupCreationPublished.load(std::memory_order_acquire) ||
         GetCurrentThreadId() != startupCreation.thread) return 0;
+    if (resetQuarantined) return 0;
     const bool ready = hooksReady.load(std::memory_order_acquire);
     // Only the published creation thread writes these saturating counters.
     static unsigned observed[2]{}, tickets = 0;
@@ -327,7 +533,7 @@ bool scopeGpuEyeOwner(IDirect3DDevice9 *d,IUnknown *&color,IUnknown *&z,UINT &w,
 static thread_local bool uiBypass = false;
 static void releaseUiFrame() noexcept;
 static bool restoreUiFrame() noexcept;
-void nativeUiFault() noexcept { if (uiFrame.slot >= 0 && uiFrame.ui) uiFrame.fault = true; }
+void nativeUiFault() noexcept { if (uiFrame.slot >= 0) uiFrame.fault = true; }
 void scopeGpuFault() noexcept {
     eyeInvalid=true;
     uiFrame.fault=true; // Includes world-only pairs; nativeUiFault is UI-conditional.
@@ -454,6 +660,7 @@ static DrawIndexed originalDrawIndexed = nullptr;
 static_assert(D3DPT_TRIANGLELIST==4 && D3DPT_TRIANGLESTRIP==5 && D3DPT_TRIANGLEFAN==6);
 static_assert(D3DFILL_POINT==1 && D3DFILL_WIREFRAME==2 && D3DFILL_SOLID==3);
 template<class Call> static HRESULT uiDrawCall(IDirect3DDevice9 *d,D3DPRIMITIVETYPE topology,Call call) noexcept {
+    const auto generation = graphicsResourceGeneration();
     if (!scopeGpuForwardingAllowed()) return D3DERR_INVALIDCALL;
     if (!observingUi(d)) return call();
     if (uiDraw.busy) { nativeUiFault(); return call(); }
@@ -461,6 +668,7 @@ template<class Call> static HRESULT uiDrawCall(IDirect3DDevice9 *d,D3DPRIMITIVET
     HRESULT result = D3DERR_INVALIDCALL;
     const bool contained = withNativeFinally([&] {
         result = call(); // Desktop first, exactly once; preserve its HRESULT/state effects.
+        if (generation != graphicsResourceGeneration()) return;
         if (FAILED(result)) { nativeUiFault(); return; }
         if (!captureUiDraw(d)) {
             // Offscreen drawing stays native; only eventual desktop composition is adapted.
@@ -501,10 +709,14 @@ template<class Call> static HRESULT uiDrawCall(IDirect3DDevice9 *d,D3DPRIMITIVET
             if (!uiFrame.fade)
                 for (unsigned j=0;j<6;++j) ok = SUCCEEDED(d->SetClipPlane(j,projected[i].planes[j].data())) && ok;
             ok = SUCCEEDED(d->SetRenderState(D3DRS_CLIPPLANEENABLE,uiFrame.fade ? 0 : 0x3f)) && ok;
-            if (!ok || FAILED(call())) { nativeUiFault(); break; }
+            if (!ok || FAILED(call()) || generation != graphicsResourceGeneration()) { nativeUiFault(); break; }
         }
         uiBypass = false;
-    }, [&](bool aborted) noexcept { cleanupUiDraw(aborted); });
+    }, [&](bool aborted) noexcept {
+        const bool retired = generation != graphicsResourceGeneration();
+        if (retired) uiDraw.changed = false;
+        cleanupUiDraw(aborted && !retired);
+    });
     if (!contained) nativeUiFault();
     return result;
 }
@@ -533,6 +745,7 @@ static thread_local IDirect3DSwapChain9 *uiObservedChain = nullptr;
 static thread_local bool uiObserverBusy = false;
 template<class Call> static HRESULT observeUiOutput(IDirect3DDevice9 *d, Call call,
                                                     IDirect3DSurface9 *target, bool current) noexcept {
+    const auto generation = graphicsResourceGeneration();
     if (!scopeGpuForwardingAllowed()) return D3DERR_INVALIDCALL;
     if (!observingUi(d)) return call();
     if (uiObserverBusy) { nativeUiFault(); return call(); }
@@ -540,6 +753,7 @@ template<class Call> static HRESULT observeUiOutput(IDirect3DDevice9 *d, Call ca
     HRESULT result = D3DERR_INVALIDCALL;
     withNativeFinally([&] {
         result = call();
+        if (generation != graphicsResourceGeneration()) return;
         if (current) {
             if (!singleUiTarget(d,uiObservedExtra)) { nativeUiFault(); return; }
             if (FAILED(d->GetRenderTarget(0,&uiObservedTarget))) { nativeUiFault(); return; }
@@ -548,7 +762,7 @@ template<class Call> static HRESULT observeUiOutput(IDirect3DDevice9 *d, Call ca
         if (!uiCurrent() || !target || sameSurface(target,uiFrame.color) ||
             !uiOffscreen(target,uiObservedChain)) nativeUiFault();
     },[&](bool aborted) noexcept {
-        if (aborted) { nativeUiFault(); uiHalted = true; }
+        if (aborted && generation == graphicsResourceGeneration()) { nativeUiFault(); uiHalted = true; }
         if (uiObservedChain) uiObservedChain->Release();
         uiObservedChain=nullptr;
         if (uiObservedExtra) uiObservedExtra->Release();
@@ -659,7 +873,7 @@ static HRESULT WINAPI setRT(IDirect3DDevice9 *d, DWORD index, IDirect3DSurface9 
     }
     return result;
 }
-void deviceLost() {
+static void releaseTargets() {
     ++resourceGeneration;
     nativeUiFault();
     if (uiQuarantinedReadback) uiQuarantinedReadback->Release();
@@ -676,6 +890,8 @@ void deviceLost() {
         Lock l(channel);
         if (l) {
             channel.shared->rendererReady = 0;
+            channel.shared->menu.visible = 0;
+            channel.shared->menu.tickMs = 0;
             for (auto &s : channel.shared->slot) {
                 if (s.state == SlotState::Requested || s.state == SlotState::Ready)
                     s.state = SlotState::Empty;
@@ -685,25 +901,56 @@ void deviceLost() {
         }
     }
 }
-static bool allocate() {
-    if (!device)
+static void retirePresentationOwner() noexcept {
+    auto *old = presentationChain;
+    presentationChain = nullptr;
+    presentationWindow = nullptr;
+    if (old) old->Release();
+}
+void deviceLost() {
+    resetQuarantined = true;
+    ++resourceGeneration; // Retire immutable entry epochs before clearing TLS.
+    retireNativeFrameForReset();
+    releaseTargets();
+    retirePresentationOwner();
+}
+static HRESULT sourceBackbuffer(IDirect3DSurface9 **out) {
+    if (!out) return D3DERR_INVALIDCALL;
+    *out = nullptr;
+    if (!presentationChain || resetQuarantined || !nativeUiDeviceCurrent(device) ||
+        !nativePresentationThreadCurrent() || device->TestCooperativeLevel() != D3D_OK) return D3DERR_INVALIDCALL;
+    return presentationChain->GetBackBuffer(0, D3DBACKBUFFER_TYPE_MONO, out);
+}
+static bool allocateBody(bool stereo, IDirect3DSurface9 *&bb, IDirect3DSurface9 *&nativeDepth) {
+    if (!device || !presentationChain || resetQuarantined)
         return false;
-    IDirect3DSurface9 *bb = nullptr;
-    if (FAILED(device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &bb)))
+    if (FAILED(sourceBackbuffer(&bb)))
         return false;
     D3DSURFACE_DESC desc{};
-    bb->GetDesc(&desc);
+    const HRESULT descriptionResult = bb->GetDesc(&desc);
     bb->Release();
-    if (desc.Width > MaxDimension || desc.Height > MaxDimension || !desc.Width || !desc.Height ||
+    bb = nullptr;
+    if (FAILED(descriptionResult) || desc.Width > MaxDimension || desc.Height > MaxDimension || !desc.Width || !desc.Height ||
+        desc.MultiSampleType != D3DMULTISAMPLE_NONE ||
         (desc.Format != D3DFMT_A8R8G8B8 && desc.Format != D3DFMT_X8R8G8B8))
         return false;
-    IDirect3DSurface9 *nativeDepth = nullptr;
+    if (desc.Width != width || desc.Height != height || desc.Format != colorFormat) {
+        releaseTargets(); // Preserve the admitted chain while replacing targets.
+        width = desc.Width; height = desc.Height; colorFormat = desc.Format;
+    }
+    if (!readback[0] && FAILED(device->CreateOffscreenPlainSurface(width, height, colorFormat,
+        D3DPOOL_SYSTEMMEM, &readback[0], nullptr))) return false;
+    if (!stereo) return readback[0] != nullptr;
     D3DSURFACE_DESC depthDesc{};
     if (FAILED(device->GetDepthStencilSurface(&nativeDepth)) || !nativeDepth)
         return false;
-    nativeDepth->GetDesc(&depthDesc);
+    const auto depthResult = nativeDepth->GetDesc(&depthDesc);
     nativeDepth->Release();
-    if (depthDesc.MultiSampleType != D3DMULTISAMPLE_NONE || desc.MultiSampleType != D3DMULTISAMPLE_NONE)
+    nativeDepth = nullptr;
+    D3DVIEWPORT9 viewport{};
+    if (FAILED(depthResult) || depthDesc.MultiSampleType != D3DMULTISAMPLE_NONE ||
+        depthDesc.Width < width || depthDesc.Height < height || FAILED(device->GetViewport(&viewport)) ||
+        viewport.X || viewport.Y || viewport.Width != width || viewport.Height != height)
         return false;
     if (eye[0] && desc.Width == width && desc.Height == height && depthDesc.Format == depthFormat &&
         desc.Format == colorFormat) {
@@ -712,9 +959,12 @@ static bool allocate() {
             channel.shared->rendererReady = 1;
         return true;
     }
-    deviceLost();
-    width = desc.Width;
-    height = desc.Height;
+    // Stereo resources can change while menu color readback remains usable.
+    for (unsigned i = 0; i != 2; ++i) {
+        if (eye[i]) eye[i]->Release();
+        if (depth[i]) depth[i]->Release();
+        eye[i] = depth[i] = nullptr;
+    }
     depthFormat = depthDesc.Format;
     colorFormat = desc.Format;
     hasStencil = depthFormat == D3DFMT_D24S8 || depthFormat == D3DFMT_D15S1 || depthFormat == D3DFMT_D24X4S4;
@@ -723,9 +973,9 @@ static bool allocate() {
                                               &eye[i], nullptr)) ||
             FAILED(device->CreateDepthStencilSurface(width, height, depthFormat, D3DMULTISAMPLE_NONE, 0, TRUE,
                                                      &depth[i], nullptr)) ||
-            FAILED(device->CreateOffscreenPlainSurface(width, height, colorFormat, D3DPOOL_SYSTEMMEM,
-                                                       &readback[i], nullptr))) {
-            deviceLost();
+            (!readback[i] && FAILED(device->CreateOffscreenPlainSurface(width, height, colorFormat, D3DPOOL_SYSTEMMEM,
+                                                       &readback[i], nullptr)))) {
+            releaseTargets();
             return false;
         }
     }
@@ -737,6 +987,17 @@ static bool allocate() {
     }
     log("CPU stereo targets %ux%u; performance unverified", width, height);
     return true;
+}
+static bool allocate(bool stereo = true) noexcept {
+    IDirect3DSurface9 *bb = nullptr, *nativeDepth = nullptr;
+    bool result = false;
+    const bool contained = withNativeFinally([&] { result = allocateBody(stereo, bb, nativeDepth); },
+        [&](bool aborted) noexcept {
+            if (bb) { bb->Release(); bb = nullptr; }
+            if (nativeDepth) { nativeDepth->Release(); nativeDepth = nullptr; }
+            if (aborted) { uiHalted = true; result = false; }
+        });
+    return contained && result;
 }
 template <class T> static bool deviceHook(void *address, void *detour, T &original, const char *name) {
     static void *boundAddress = nullptr;
@@ -783,17 +1044,22 @@ bool nativeUiDeviceCurrent(IDirect3DDevice9 *d) {
     return SUCCEEDED(d->GetDeviceCaps(&caps)) && caps.MaxUserClipPlanes >= 6;
 }
 void deviceCreated(IDirect3DDevice9 *d) {
-    creationDevice = d;
-    creationThread = GetCurrentThreadId();
-    uiHalted = false; // A newly created device is a new admitted resource lifetime.
-    static std::atomic<bool> first{false};
-    if (!first.exchange(true, std::memory_order_relaxed)) {
+    static std::atomic<bool> claimed{false};
+    const bool first = !claimed.exchange(true, std::memory_order_acq_rel);
+    if (first) {
         startupCreation.device = d;
         startupCreation.thread = GetCurrentThreadId();
         startupCreationPublished.store(true, std::memory_order_release);
+    } else if (!startupCreationPublished.load(std::memory_order_acquire) ||
+               GetCurrentThreadId() != startupCreation.thread) return;
+    creationDevice = d;
+    creationThread = GetCurrentThreadId();
+    uiHalted = false; // A newly created device is a new admitted resource lifetime.
+    if (first) {
         logStartup("deviceCreated", d, hooksReady.load(std::memory_order_acquire));
     }
     deviceReady(d);
+    resetQuarantined = false;
 }
 void deviceReady(IDirect3DDevice9 *d) {
     if (device && device != d) {
@@ -824,8 +1090,12 @@ void deviceReady(IDirect3DDevice9 *d) {
     auto &reported = ready ? firstReady : firstWaiting;
     if (!reported.exchange(true, std::memory_order_relaxed))
         logStartup("deviceReady", d, ready, uiRoutingReady);
-    if (!ready)
-        return;
+}
+static void startChannel() {
+    auto *d = device;
+    const bool ready = hooksReady.load(std::memory_order_acquire);
+    if (!ready || !presentationChain || resetQuarantined || !nativeUiDeviceCurrent(d) ||
+        !nativePresentationThreadCurrent()) return;
     if (!channel.shared) {
         wchar_t token[64];
         swprintf(token, 64, L"%lu-%llu", GetCurrentProcessId(), GetTickCount64());
@@ -862,7 +1132,6 @@ void deviceReady(IDirect3DDevice9 *d) {
             log("Startup OpenXR host created=0 error=%lu thread=%lu", error, GetCurrentThreadId());
         }
     }
-    allocate();
 }
 static uint64_t lastMenuCopy = 0, menuSequence = 0;
 static MenuNavigation menuNavigation;
@@ -893,7 +1162,95 @@ bool foregroundGame() {
     HWND foreground = GetForegroundWindow();
     return foreground && GetAncestor(foreground, GA_ROOT) == GetAncestor(params.hFocusWindow, GA_ROOT);
 }
+bool nativePresentationCaller(uintptr_t caller, bool chain) noexcept {
+    if (!hooksReady.load(std::memory_order_acquire)) return false;
+    const auto module = reinterpret_cast<uintptr_t>(GetModuleHandleW(L"GfxD3D.dll"));
+    return module && caller == module + (chain ? 0x1c68u : 0x1c75u);
+}
+void nestedNativePresentation() noexcept {
+    if (!startupCreationPublished.load(std::memory_order_acquire) ||
+        GetCurrentThreadId() != startupCreation.thread) return;
+    ++resourceGeneration;
+    nativeUiFault();
+    if (channel.shared && channel.lock()) {
+        channel.shared->rendererReady = 0;
+        channel.shared->menu.tickMs = 0;
+        channel.shared->menu.visible = 0;
+        channel.unlock();
+    }
+}
+void nativePresentationFailed(IDirect3DDevice9 *d, IDirect3DSwapChain9 *chain) noexcept {
+    if (!startupCreationPublished.load(std::memory_order_acquire) ||
+        GetCurrentThreadId() != startupCreation.thread ||
+        (d && d != device) || (chain && chain != presentationChain) || (!d && !chain)) return;
+    resetQuarantined = true;
+    nestedNativePresentation(); // Scalar invalidation only; no post-Present COM queries.
+}
+static void admitPresentation(IDirect3DSwapChain9 *chain, uintptr_t caller, bool chainRoute,
+    const RECT *src, const RECT *dst, HWND overrideWindow, const RGNDATA *region, DWORD flags) noexcept {
+    if (!chain || src || dst || region || flags || !nativePresentationCaller(caller, chainRoute) ||
+        !startupCreationPublished.load(std::memory_order_acquire) ||
+        GetCurrentThreadId() != startupCreation.thread || resetQuarantined || stopping || uiHalted ||
+        activeEye >= 0 || uiFrame.slot >= 0 || scopeScratch || scopeTransaction) return;
+    IDirect3DDevice9 *d = nullptr;
+    IDirect3DSurface9 *bb = nullptr, *rt = nullptr;
+    withNativeFinally([&] {
+        if (FAILED(chain->GetDevice(&d)) || !nativeUiDeviceCurrent(d) || !uiRoutingReady ||
+            !nativePresentationThreadCurrent()) return;
+        D3DPRESENT_PARAMETERS params{};
+        D3DDEVICE_CREATION_PARAMETERS creation{};
+        D3DSURFACE_DESC desc{};
+        D3DVIEWPORT9 viewport{};
+        if (FAILED(chain->GetPresentParameters(&params)) || FAILED(d->GetCreationParameters(&creation))) return;
+        const HWND window = overrideWindow ? overrideWindow : params.hDeviceWindow;
+        if (!window || window != creation.hFocusWindow ||
+            (!presentationChain && GetForegroundWindow() != window)) return;
+        DWORD process = 0;
+        if (!GetWindowThreadProcessId(window, &process) || process != GetCurrentProcessId()) return;
+        if (FAILED(chain->GetBackBuffer(0, D3DBACKBUFFER_TYPE_MONO, &bb)) || !bb ||
+            FAILED(bb->GetDesc(&desc)) || FAILED(d->GetRenderTarget(0, &rt)) || !rt ||
+            !sameSurface(bb, rt) || FAILED(d->GetViewport(&viewport)) ||
+            !desc.Width || !desc.Height || desc.Width > MaxDimension || desc.Height > MaxDimension ||
+            desc.MultiSampleType != D3DMULTISAMPLE_NONE ||
+            (desc.Format != D3DFMT_X8R8G8B8 && desc.Format != D3DFMT_A8R8G8B8) ||
+            viewport.X || viewport.Y || viewport.Width != desc.Width || viewport.Height != desc.Height) return;
+        if (chain != presentationChain || window != presentationWindow) {
+            releaseTargets();
+            retirePresentationOwner();
+            presentationChain = chain;
+            chain->AddRef();
+            presentationWindow = window;
+            log("Native presentation owner admitted %ux%u; capture/lifecycle acceptance pending", desc.Width, desc.Height);
+        }
+        // Do not retain admission surfaces through input, allocation or readback.
+        bb->Release(); bb = nullptr;
+        rt->Release(); rt = nullptr;
+        present(d);
+    }, [&](bool aborted) noexcept {
+        if (bb) { bb->Release(); bb = nullptr; }
+        if (rt) { rt->Release(); rt = nullptr; }
+        if (d) { d->Release(); d = nullptr; }
+        if (aborted) { uiHalted = true; nestedNativePresentation(); }
+    });
+}
+void presentChain(IDirect3DSwapChain9 *chain, uintptr_t caller, const RECT *src, const RECT *dst,
+                  HWND window, const RGNDATA *region, DWORD flags) noexcept {
+    admitPresentation(chain, caller, true, src, dst, window, region, flags);
+}
+void presentDevice(IDirect3DDevice9 *d, uintptr_t caller, const RECT *src, const RECT *dst,
+                   HWND window, const RGNDATA *region) noexcept {
+    if (!nativePresentationCaller(caller, false) || !presentationDeviceOwner(d) || resetQuarantined) return;
+    IDirect3DSwapChain9 *chain = nullptr;
+    withNativeFinally([&] {
+        if (SUCCEEDED(d->GetSwapChain(0, &chain))) admitPresentation(chain, caller, false, src, dst, window, region, 0);
+    }, [&](bool aborted) noexcept {
+        if (chain) { chain->Release(); chain = nullptr; }
+        if (aborted) { uiHalted = true; nestedNativePresentation(); }
+    });
+}
 void present(IDirect3DDevice9 *d) {
+    if (!presentationChain || resetQuarantined || !nativeUiDeviceCurrent(d) ||
+        !nativePresentationThreadCurrent() || uiHalted || stopping) return;
     static std::atomic<bool> first{false};
     if (!first.load(std::memory_order_relaxed) && !first.exchange(true, std::memory_order_relaxed))
         logStartup("first device Present", d, hooksReady.load(std::memory_order_acquire));
@@ -906,9 +1263,12 @@ void present(IDirect3DDevice9 *d) {
     if (!device || !hooksReady || uiHalted)
         return;
     if (!channel.shared)
-        deviceReady(device);
-    if (!channel.shared || !allocate())
+        startChannel();
+    if (!channel.shared || !allocate(false))
         return;
+    // Readiness precedes tracking admission in engine::update. Attempt stereo
+    // capability independently; menu readback remains usable without depth.
+    const bool stereoReady = allocate();
     Input input{};
     Ui ui{};
     {
@@ -920,7 +1280,16 @@ void present(IDirect3DDevice9 *d) {
     }
     uint64_t now = GetTickCount64();
     bool gameplay = ui.gameplay && now >= ui.tickMs && now - ui.tickMs < 250;
-    bool menuVisible = menus::active() || !gameplay;
+    const bool nativeMenu = menus::active();
+    const bool menuVisible = nativeMenu;
+    static unsigned diagnostics = 0, previousClassification = ~0u;
+    const unsigned classification = unsigned(nativeMenu) | (unsigned(gameplay) << 1) | (unsigned(stereoReady) << 2);
+    if (diagnostics < 16 && classification != previousClassification) {
+        ++diagnostics;
+        previousClassification = classification;
+        log("Native frame classification menu=%d gameplayEnabled=%d stereoReady=%d uiAge=%llu",
+            nativeMenu, gameplay, stereoReady, static_cast<unsigned long long>(now >= ui.tickMs ? now-ui.tickMs : 0));
+    }
     bool valid = input.focused && input.headValid && now >= input.tickMs && now - input.tickMs < 200;
     bool foreground = foregroundGame();
     const MenuAction action =
@@ -963,36 +1332,44 @@ void present(IDirect3DDevice9 *d) {
         return;
     uint32_t menuGeneration = menus::captureGeneration();
     lastMenuCopy = now;
-    IDirect3DSurface9 *backbuffer = nullptr;
-    D3DLOCKED_RECT locked{};
-    if (FAILED(device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backbuffer)))
-        return;
-    bool ok = SUCCEEDED(device->StretchRect(backbuffer, nullptr, eye[0], nullptr, D3DTEXF_NONE));
-    backbuffer->Release();
-    if (ok)
-        ok = SUCCEEDED(device->GetRenderTargetData(eye[0], readback[0]));
-    if (ok)
-        ok = SUCCEEDED(readback[0]->LockRect(&locked, nullptr, D3DLOCK_READONLY));
-    if (!ok)
-        return;
-    if (locked.Pitch >= int(width * 4)) {
-        Lock l(channel);
-        if (l) {
-            auto &m = channel.shared->menu;
-            for (uint32_t y = 0; y < height; y++)
-                memcpy(m.pixels + size_t(y) * width * 4,
-                       static_cast<uint8_t *>(locked.pBits) + size_t(y) * locked.Pitch, width * 4);
-            for (size_t pixel = 3; pixel < size_t(width) * height * 4; pixel += 4)
-                m.pixels[pixel] = 255;
-            m.width = width;
-            m.height = height;
-            m.tickMs = now;
-            m.sequence = ++menuSequence;
-            m.interactionGeneration = menuGeneration;
-            m.visible = 1;
+    const auto generation = resourceGeneration.load(std::memory_order_acquire);
+    const uint32_t copyWidth = width, copyHeight = height;
+    IDirect3DSurface9 *backbuffer = nullptr, *cpu = nullptr;
+    bool locked = false, lockAttempted = false, lockReturned = false, held = false;
+    withNativeFinally([&] {
+        if (FAILED(sourceBackbuffer(&backbuffer)) || !readback[0]) return;
+        cpu = readback[0]; cpu->AddRef();
+        if (FAILED(device->GetRenderTargetData(backbuffer, cpu)) ||
+            generation != resourceGeneration.load(std::memory_order_acquire)) return;
+        backbuffer->Release(); backbuffer = nullptr;
+        D3DLOCKED_RECT pixels{};
+        lockAttempted = true;
+        const auto result = cpu->LockRect(&pixels, nullptr, D3DLOCK_READONLY);
+        lockReturned = true; locked = SUCCEEDED(result);
+        if (!locked || !pixels.pBits || pixels.Pitch < int(copyWidth * 4) ||
+            generation != resourceGeneration.load(std::memory_order_acquire)) return;
+        held = channel.lock();
+        if (!held) return;
+        auto &m = channel.shared->menu;
+        for (uint32_t y = 0; y < copyHeight; ++y)
+            memcpy(m.pixels + size_t(y) * copyWidth * 4,
+                static_cast<uint8_t *>(pixels.pBits) + size_t(y) * pixels.Pitch, copyWidth * 4);
+        for (size_t pixel = 3; pixel < size_t(copyWidth) * copyHeight * 4; pixel += 4) m.pixels[pixel] = 255;
+        m.width = copyWidth; m.height = copyHeight; m.tickMs = now;
+        m.sequence = ++menuSequence; m.interactionGeneration = menuGeneration; m.visible = 1;
+    }, [&](bool aborted) noexcept {
+        if (held) { channel.unlock(); held = false; }
+        const bool uncertain = aborted && lockAttempted && !lockReturned;
+        const bool unlockFailed = locked && cpu && FAILED(cpu->UnlockRect());
+        locked = false;
+        if (cpu && (uncertain || unlockFailed)) {
+            uiHalted = true;
+            uiQuarantinedReadback = cpu; cpu = nullptr;
         }
-    }
-    readback[0]->UnlockRect();
+        if (cpu) { cpu->Release(); cpu = nullptr; }
+        if (backbuffer) { backbuffer->Release(); backbuffer = nullptr; }
+        if (aborted) { uiHalted = true; nestedNativePresentation(); }
+    });
 }
 static bool eyeTargetCurrent(int index) {
     D3DVIEWPORT9 viewport{};
@@ -1009,6 +1386,7 @@ static bool eyeTargetCurrent(int index) {
 }
 static bool restoreUiFrame() noexcept {
     if (!uiFrame.restore) return true;
+    if (uiFrame.generation != graphicsResourceGeneration()) { uiFrame.restore = false; return false; }
     bool ok = true;
     uiBypass = true;
     auto *d=uiFrame.device;
@@ -1151,6 +1529,23 @@ static bool publishUiFrame(uint32_t presentation) {
             slot.presentation=presentation;
             slot.presentationReserved=0;
             accepted=commitStereo(uiFrame.player,uiFrame.request,slot);
+            if (accepted) {
+                static unsigned pairDiagnostics = 0;
+                if (pairDiagnostics < 4) {
+                    ++pairDiagnostics;
+                    uint64_t hash[2]{14695981039346656037ull,14695981039346656037ull};
+                    size_t different = 0;
+                    const auto bytes = size_t(uiFrame.request.width) * uiFrame.request.height * 4;
+                    for (size_t i=0;i<bytes;++i) {
+                        for (unsigned eye=0;eye<2;++eye) hash[eye]=(hash[eye]^uiFrame.pixels[eye][i])*1099511628211ull;
+                        if (uiFrame.pixels[0][i]!=uiFrame.pixels[1][i]) ++different;
+                    }
+                    log("Native eye pair accepted sequence=%llu pixels=%ux%u left=%016llx right=%016llx differingBytes=%llu presentation=%u",
+                        static_cast<unsigned long long>(uiFrame.request.sequence),uiFrame.request.width,uiFrame.request.height,
+                        static_cast<unsigned long long>(hash[0]),static_cast<unsigned long long>(hash[1]),
+                        static_cast<unsigned long long>(different),presentation);
+                }
+            }
             if (accepted) SetEvent(channel.ready);
             else slot.state=SlotState::Empty;
         }
@@ -1182,6 +1577,34 @@ struct ScopeCaptureFrame {
 // Never recycled after an abnormal source invocation. A stale native callback
 // first checks the process-lifetime halt and cannot reach released resources.
 static thread_local ScopeCaptureFrame scopeCaptureFrame;
+static void retireNativeFrameForReset() noexcept {
+    // Release-only retirement; suspended callbacks must not restore old state.
+    uiHalted = true;
+    uiFrame.restore = false;
+    uiDraw.changed = false;
+    cleanupUiDraw(false);
+    for (auto **owned : {&uiObservedTarget, &uiObservedExtra}) {
+        auto *old = *owned; *owned = nullptr;
+        if (old) old->Release();
+    }
+    auto *observed = uiObservedChain; uiObservedChain = nullptr;
+    if (observed) observed->Release();
+    uiObserverBusy = false;
+    if (scopeScratch || scopeTransaction || scopeCaptureFrame.active) scopeSourcesHalted = true;
+    scopeCaptureFrame.active = false;
+    scopeCaptureFrame.copied = false;
+    scopeCaptureFrame.once.rejected = true;
+    scopeScratch = false;
+    scopeGpuTransactionEnd();
+    activeEye = -1; eyeInvalid = true;
+    endEye(); desktopTarget = desktopDepth = nullptr;
+    if (uiFrame.slot >= 0) {
+        deferredSlot = uiFrame.slot;
+        deferredSequence = uiFrame.request.sequence;
+        releaseUiFrame();
+    }
+    retireDeferred(); // On contention the existing tuple remains for later retirement.
+}
 static bool scopeCaptureCurrent(void *opaque) noexcept {
     const auto *capture = static_cast<ScopeCaptureFrame *>(opaque);
     return !scopeSourcesHalted && capture == &scopeCaptureFrame && capture->active && !capture->once.rejected &&
@@ -1233,6 +1656,7 @@ static bool prepareScopeScratch() {
             (hasStencil ? D3DCLEAR_STENCIL : 0),0xff000000,1,0));
 }
 static bool renderScopeSources(void *puppet,void(__thiscall *original)(void *),const Request &request) {
+    const auto generation = graphicsResourceGeneration();
     if (scopeSourcesHalted || !scopePreviewNeeded(puppet,request)) return true;
     auto *d = uiFrame.device;
     D3DCAPS9 caps{};
@@ -1250,6 +1674,7 @@ static bool renderScopeSources(void *puppet,void(__thiscall *original)(void *),c
     beginScopePreview(puppet,request);
     bool ok = prepareScopeScratch();
     if (ok) original(puppet);
+    if (generation != graphicsResourceGeneration()) return false;
     ok = ok && !eyeInvalid && eyeTargetCurrent(0);
     bool candidate[2]{};
     if (ok) for (unsigned hand=0;hand<2;++hand) candidate[hand] = copyScopeSourceView(hand,uiFrame.scopeView[hand]);
@@ -1265,6 +1690,7 @@ static bool renderScopeSources(void *puppet,void(__thiscall *original)(void *),c
         if (begun) {
             ok = prepareScopeScratch();
             if (ok) original(puppet);
+            if (generation != graphicsResourceGeneration()) return false;
             const bool finished = endScopeSource(ok && !eyeInvalid);
             uiFrame.scopeReady[hand] = scopeCaptureFrame.once.complete(finished,scopeCaptureFrame.copied) &&
                 scopeCaptureCurrent(&scopeCaptureFrame) && nativeUiFrameCurrent(puppet,request);
@@ -1276,14 +1702,16 @@ static bool renderScopeSources(void *puppet,void(__thiscall *original)(void *),c
     return ok;
 }
 void stereo(void *puppet,void(__thiscall *original)(void *),EyePostRender postRender) {
+    const auto generation = graphicsResourceGeneration();
     if (uiFrame.slot>=0) {
         nativeUiFault();
         withNativeFinally([&]{ original(puppet); },[&](bool aborted) noexcept { if(aborted) uiHalted=true; });
         return;
     }
     retireDeferred();
-    if (deferredSlot>=0 || activeEye>=0 || stopping || uiHalted || !device || !channel.shared || !originalSetRT ||
-        !originalSetDepth || !originalStretch || !originalReadTarget || !originalFill || !allocate()) {
+    if (!nativeRenderExtentCurrent() || deferredSlot>=0 || activeEye>=0 || stopping || uiHalted || !device || !channel.shared || !originalSetRT ||
+        !originalSetDepth || !originalStretch || !originalReadTarget || !originalFill || !allocate() ||
+        generation != graphicsResourceGeneration()) {
         withNativeFinally([&]{ original(puppet); },[&](bool aborted) noexcept { if(aborted) uiHalted=true; });
         return;
     }
@@ -1301,6 +1729,12 @@ void stereo(void *puppet,void(__thiscall *original)(void *),EyePostRender postRe
                 chosen=i; request=slot.request; slot.state=SlotState::Rendering; break;
             }
         }
+    }
+    static unsigned requestDiagnostics = 0;
+    if (chosen >= 0 && requestDiagnostics < 4) {
+        ++requestDiagnostics;
+        log("Native world request acquired sequence=%llu size=%ux%u",
+            static_cast<unsigned long long>(request.sequence),request.width,request.height);
     }
     if(chosen<0) {
         withNativeFinally([&]{ original(puppet); },[&](bool aborted) noexcept { if(aborted) uiHalted=true; });
@@ -1325,7 +1759,7 @@ void stereo(void *puppet,void(__thiscall *original)(void *),EyePostRender postRe
             SUCCEEDED(d->GetViewport(&uiFrame.viewport)) && SUCCEEDED(d->GetScissorRect(&uiFrame.scissor));
         // Backbuffer proof uses the retained known original desktop target rather
         // than retaining any native intermediate target after its invocation.
-        ok=SUCCEEDED(d->GetBackBuffer(0,0,D3DBACKBUFFER_TYPE_MONO,&uiFrame.backbuffer)) && ok;
+        ok=SUCCEEDED(sourceBackbuffer(&uiFrame.backbuffer)) && ok;
         ok=ok && sameSurface(uiFrame.color,uiFrame.backbuffer) && uiFrame.ds;
         if(uiFrame.backbuffer) uiFrame.backbuffer->Release();
         uiFrame.backbuffer=nullptr;
@@ -1351,9 +1785,21 @@ void stereo(void *puppet,void(__thiscall *original)(void *),EyePostRender postRe
             uiFrame.panel[i]=compose(inverse(request.eye[i]),request.uiPanel);
         desktopTarget=uiFrame.color;
         desktopDepth=uiFrame.ds;
+        static unsigned admissionDiagnostics = 0;
+        if (admissionDiagnostics < 4) {
+            ++admissionDiagnostics;
+            log("Native world target admission ok=%u ui=%u source=%ux%u viewport=%ux%u",
+                ok,uiFrame.ui,cd.Width,cd.Height,vp.Width,vp.Height);
+        }
         if(ok) ok=beginStereo(puppet,request);
+        if (!ok) {
+            static unsigned beginDiagnostics = 0;
+            if (beginDiagnostics < 4) { ++beginDiagnostics; log("Native world pair admission rejected"); }
+        }
+        if (generation != graphicsResourceGeneration()) { original(puppet); return; }
         const float visibility=ok ? frozenWorldVisibility() : 1;
         if (ok) ok = renderScopeSources(puppet,original,request);
+        if (generation != graphicsResourceGeneration()) { original(puppet); return; }
         for(int i=0;i<2 && ok;++i) {
             activeEye=i; eyeInvalid=false; renderRequest=request;
             beginEye(puppet,request,i);
@@ -1364,6 +1810,13 @@ void stereo(void *puppet,void(__thiscall *original)(void *),EyePostRender postRe
             ok=ok && SUCCEEDED(d->Clear(0,nullptr,D3DCLEAR_TARGET|D3DCLEAR_ZBUFFER|
                 (hasStencil ? D3DCLEAR_STENCIL : 0),0xff000000,1,0));
             if(ok) original(puppet);
+            if (generation != graphicsResourceGeneration()) { ok = false; break; }
+            static unsigned eyeDiagnostics=0;
+            const bool traceEye=eyeDiagnostics<4;
+            if(traceEye) {
+                ++eyeDiagnostics;
+                log("Native eye render returned eye=%d setup=%u invalid=%u",i,ok,eyeInvalid);
+            }
             if(uiFrame.ui && ok) {
                 ok=copyExecutedUiProjection(puppet,request,i,uiFrame.projection[i]);
                 Matrix44 identity{};
@@ -1372,18 +1825,34 @@ void stereo(void *puppet,void(__thiscall *original)(void *),EyePostRender postRe
                 ok=ok && nativeUiProjection(identity,uiFrame.projection[i],uiFrame.panel[i],
                     request.uiWidth,request.uiHeight,request.width,request.height,
                     {0,0,request.width,request.height,0,1},false,{},admission) && !admission.empty;
+                if(traceEye) log("Native eye UI projection eye=%d admitted=%u empty=%u",i,ok,admission.empty);
             }
             ok=finishEyeRender(ok && !eyeInvalid,
-                [&]{ return !eyeInvalid && eyeTargetCurrent(i); },
-                [&]{ return !postRender || postRender(puppet,request,i); });
+                [&]{
+                    const bool current=generation==graphicsResourceGeneration() && !eyeInvalid && eyeTargetCurrent(i);
+                    if(traceEye) log("Native eye target eye=%d current=%u",i,current);
+                    return current;
+                },
+                [&]{
+                    const bool complete=generation==graphicsResourceGeneration() && (!postRender || postRender(puppet,request,i)) &&
+                        generation==graphicsResourceGeneration();
+                    if(traceEye) log("Native eye postlude eye=%d completed=%u",i,complete);
+                    return complete;
+                });
             endEye(); activeEye=-1;
-            if(ok && (!uiFrame.ui || visibility!=1)) ok=readUiEye(i,uiFrame.ui,visibility);
+            if(ok && generation == graphicsResourceGeneration() && (!uiFrame.ui || visibility!=1)) ok=readUiEye(i,uiFrame.ui,visibility);
         }
         activeEye=-1; endEye(); desktopTarget=desktopDepth=nullptr;
         ok=restoreUiFrame() && ok;
         // Native desktop rebuild remains exactly once; never replay brain/overlay.
         original(puppet);
+        if (generation != graphicsResourceGeneration()) return;
         uiFrame.world=ok && !uiFrame.fault && uiFrame.generation==resourceGeneration.load();
+        static unsigned completionDiagnostics = 0;
+        if (completionDiagnostics < 4) {
+            ++completionDiagnostics;
+            log("Native world render completion ok=%u fault=%u world=%u ui=%u",ok,uiFrame.fault,uiFrame.world,uiFrame.ui);
+        }
         if(uiFrame.ui) {
             if(!uiCurrent()) nativeUiFault();
             retained=true; // Even a partial UI pair remains owned until enclosing cleanup.
@@ -1393,12 +1862,16 @@ void stereo(void *puppet,void(__thiscall *original)(void *),EyePostRender postRe
             publishUiFrame(0);
         }
     },[&](bool aborted) noexcept {
-        if(aborted || !retained) nativeUiEndOwner(aborted);
+        if(aborted || !retained) nativeUiEndOwner(aborted && generation == graphicsResourceGeneration());
     });
 }
 void deviceResetSucceeded(IDirect3DDevice9 *d) {
-    if (d==creationDevice && GetCurrentThreadId()==creationThread) uiHalted=false;
-    deviceReady(d);
+    if (d==creationDevice && GetCurrentThreadId()==creationThread) {
+        uiHalted=false;
+        resetQuarantined=false;
+    }
+    // Native additional chains are recreated after Reset returns. No eager
+    // allocation/channel startup against the implicit buffer or retired owner.
 }
 void shutdown() {
     stopping = true;

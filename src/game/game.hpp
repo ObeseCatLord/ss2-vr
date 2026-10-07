@@ -13,6 +13,10 @@ bool attach(bool headless = false);
 void nativeInputFailed() noexcept;
 bool nativeInputHealthy() noexcept;
 bool supported(bool headless = false);
+// Explicit private-lab opt-in only. Install before the native online initializer;
+// normal game/Steam behavior is untouched when the opt-in is absent.
+void installLabOnlineIsolation();
+void validateLabOnlineIsolation(bool gameplay);
 bool foregroundGame();
 void deviceReady(IDirect3DDevice9 *device);
 void deviceCreated(IDirect3DDevice9 *device);
@@ -23,8 +27,18 @@ bool nativePresentationIdleForBodyMove() noexcept;
 void deviceLost();
 void invalidateRenderer();
 void present(IDirect3DDevice9 *device);
+bool nativePresentationThreadCurrent() noexcept;
+bool nativeRenderExtentCurrent() noexcept;
+void presentChain(IDirect3DSwapChain9 *, uintptr_t caller, const RECT *, const RECT *, HWND,
+                  const RGNDATA *, DWORD flags) noexcept;
+void presentDevice(IDirect3DDevice9 *, uintptr_t caller, const RECT *, const RECT *, HWND,
+                   const RGNDATA *) noexcept;
+bool nativePresentationCaller(uintptr_t caller, bool chain) noexcept;
+void nestedNativePresentation() noexcept;
+void nativePresentationFailed(IDirect3DDevice9 *, IDirect3DSwapChain9 *) noexcept;
 // Bounded read-only startup probe. Does not admit a canvas or start capture.
 bool startupDeviceOwner(IDirect3DDevice9 *) noexcept;
+bool presentationDeviceOwner(IDirect3DDevice9 *) noexcept;
 uint32_t traceChainPresent(IDirect3DSwapChain9 *, uintptr_t caller, HWND overrideWindow) noexcept;
 bool nativeUiProgramsCurrent(IDirect3DVertexShader9 *, IDirect3DPixelShader9 *);
 bool copyExecutedUiProjection(void *player, const Request &, int index, Matrix44 &out);

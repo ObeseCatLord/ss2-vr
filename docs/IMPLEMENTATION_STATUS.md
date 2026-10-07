@@ -2,6 +2,14 @@
 
 ## Active PC implementation
 
+The latest direct-scene run observed the expected native Jungle stream hash, local
+gameplay with a null online interface, thirty neutral-head input observations and
+normal native shutdown. It failed first-eye completion before publishing any world
+pair; no native stereo/6DOF acceptance is claimed. The desktop terrain-occlusion
+report and deterministic loading-screen continuation are active gates.
+
+Latest rendering investigation: [PC_GAMEPLAY_READINESS.md](PC_GAMEPLAY_READINESS.md). Actual native menu CPU transport and host submission work in the private Proton/Monado lab. Actual outdoor first-person gameplay enables tracking and eye swapchains, but no native world pair was delivered in the observed segment. Distinct eye imagery/parallax and head translation/rotation remain unaccepted. The earlier startup summaries below precede this draft integration.
+
 Development is active. Start with [CLOUD_CONTINUATION.md](CLOUD_CONTINUATION.md)
 and [PLATFORM_SUPPORT.md](PLATFORM_SUPPORT.md); HANDOFF.md and the records below
 are historical evidence, not the current pause state or feature count.
@@ -13,8 +21,8 @@ The current offline suite has60 groups. Native products cross-build. The user no
 permits PC runtime testing and additional sessions before feature completion.
 Initial Xvfb launches hit a stock-reproduced zero-refresh DXVK failure. A focused
 real-display IPC10 proxy run now renders the native desktop menu. See
-[PC_VALIDATION.md](PC_VALIDATION.md) for identities and observations. Host startup
-and actual stereo are not yet established; startup-route diagnostics are connected.
+[PC_VALIDATION.md](PC_VALIDATION.md) for identities and observations. The actual x64 host reaches FOCUSED under Proton and native menu transport works.
+Actual gameplay stereo remains unaccepted; see the newer direct-scene record above.
 No headset or network runtime acceptance exists. Older coding-first/no-runtime
 instructions are historical; actual observations remain separate from offline checks.
 GitHub Actions is disabled at the owner's request; checks remain local.
@@ -28,8 +36,9 @@ xrEndFrame calls; it does not prove native game transport or actual hardware.
 The game tracing checkpoint confirms recurring native additional-swapchain
 presentation and actual1280x720 RT0 ownership. See
 [PRESENTATION_OWNER.md](PRESENTATION_OWNER.md) for review disposition/native limits
-and [PC_VALIDATION.md](PC_VALIDATION.md) for exact test identities. The production
-capture adapter still needs all buffer consumers and lifecycle gates corrected.
+and [PC_VALIDATION.md](PC_VALIDATION.md) for exact test identities. The draft capture adapter now routes all buffer consumers through the admitted native
+chain; ordinary-path and reset retirement changes are implemented with limited reviews.
+Full scope/nested/reset runtime acceptance remains open.
 
 Current source connects default-off single-player roomscale body movement through
 native whole-body queries, the checked native setter and actual-anchor origin

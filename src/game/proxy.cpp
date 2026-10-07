@@ -20,6 +20,7 @@ static CreateDevice originalCreate = nullptr;
 static Reset originalReset = nullptr;
 using Present = HRESULT(WINAPI *)(IDirect3DDevice9 *, const RECT *, const RECT *, HWND, const RGNDATA *);
 static Present originalPresent = nullptr;
+static thread_local unsigned presentationDepth = 0;
 using AdditionalChain = HRESULT(WINAPI *)(IDirect3DDevice9 *, D3DPRESENT_PARAMETERS *, IDirect3DSwapChain9 **);
 using ChainPresent = HRESULT(WINAPI *)(IDirect3DSwapChain9 *, const RECT *, const RECT *, HWND,
                                      const RGNDATA *, DWORD);
@@ -32,8 +33,16 @@ template<unsigned Index>
 static __attribute__((noinline)) HRESULT WINAPI chainPresent(IDirect3DSwapChain9 *chain,
     const RECT *src, const RECT *dst, HWND window, const RGNDATA *region, DWORD flags) {
     const auto caller = reinterpret_cast<uintptr_t>(__builtin_extract_return_addr(__builtin_return_address(0)));
-    const auto ticket = ss2vr::game::traceChainPresent(chain, caller, window);
-    const HRESULT hr = chainHooks[Index].original(chain, src, dst, window, region, flags);
+    const auto ticket = presentationDepth == 0 ? ss2vr::game::traceChainPresent(chain, caller, window) : 0;
+    HRESULT hr = D3DERR_INVALIDCALL;
+    const bool outer = presentationDepth == 0;
+    ++presentationDepth;
+    ss2vr::game::withNativeFinally([&] {
+        if (outer) ss2vr::game::presentChain(chain, caller, src, dst, window, region, flags);
+        else if (ss2vr::game::nativePresentationCaller(caller, true)) ss2vr::game::nestedNativePresentation();
+        hr = chainHooks[Index].original(chain, src, dst, window, region, flags);
+    }, [&](bool) noexcept { --presentationDepth; });
+    if (FAILED(hr)) ss2vr::game::nativePresentationFailed(nullptr, chain);
     // Completion is scalar-only, including failed Present: no COM introspection
     // or retained resource crosses the original callback.
     if (ticket) ss2vr::game::log("Presentation probe ticket=%u completed=1 chain=%p caller=%p hr=%08lx",
@@ -43,7 +52,7 @@ static __attribute__((noinline)) HRESULT WINAPI chainPresent(IDirect3DSwapChain9
 static void discoverChain(IDirect3DDevice9 *device, IDirect3DSwapChain9 *chain) {
     // This startup probe covers only the first creation owner. Hook records are
     // written on that thread and immutable once enabled; no cross-thread list.
-    if (!chain || !ss2vr::game::startupDeviceOwner(device)) return;
+    if (!chain || !ss2vr::game::presentationDeviceOwner(device)) return;
     void *address = (*reinterpret_cast<void ***>(chain))[3];
     for (auto &hook : chainHooks)
         if (hook.address == address) return;
@@ -80,7 +89,7 @@ static void discoverChain(IDirect3DDevice9 *device, IDirect3DSwapChain9 *chain) 
         address, static_cast<int>(created), static_cast<int>(enabled), hook.enabled);
 }
 static void seedChain(IDirect3DDevice9 *device) noexcept {
-    if (!ss2vr::game::startupDeviceOwner(device)) return;
+    if (!ss2vr::game::presentationDeviceOwner(device)) return;
     IDirect3DSwapChain9 *chain = nullptr;
     ss2vr::game::withNativeFinally([&] {
         const HRESULT hr = device->GetSwapChain(0, &chain);
@@ -121,10 +130,19 @@ template <class T> static void proxyHook(void *address, void *detour, T &origina
         logHook(name, "enable", enabled, enableOk, enableFailed);
     }
 }
-static HRESULT WINAPI present(IDirect3DDevice9 *d, const RECT *src, const RECT *dst, HWND window,
+static __attribute__((noinline)) HRESULT WINAPI present(IDirect3DDevice9 *d, const RECT *src, const RECT *dst, HWND window,
                               const RGNDATA *region) {
-    ss2vr::game::present(d);
-    return originalPresent(d, src, dst, window, region);
+    const auto caller = reinterpret_cast<uintptr_t>(__builtin_extract_return_addr(__builtin_return_address(0)));
+    HRESULT hr = D3DERR_INVALIDCALL;
+    const bool outer = presentationDepth == 0;
+    ++presentationDepth;
+    ss2vr::game::withNativeFinally([&] {
+        if (outer) ss2vr::game::presentDevice(d, caller, src, dst, window, region);
+        else if (ss2vr::game::nativePresentationCaller(caller, false)) ss2vr::game::nestedNativePresentation();
+        hr = originalPresent(d, src, dst, window, region);
+    }, [&](bool) noexcept { --presentationDepth; });
+    if (FAILED(hr)) ss2vr::game::nativePresentationFailed(d, nullptr);
+    return hr;
 }
 static INIT_ONCE initialize = INIT_ONCE_STATIC_INIT;
 static bool vrEnabled = false;
@@ -176,11 +194,12 @@ static BOOL CALLBACK init(PINIT_ONCE, PVOID, PVOID *) {
     return TRUE;
 }
 static HRESULT WINAPI reset(IDirect3DDevice9 *d, D3DPRESENT_PARAMETERS *p) {
-    ss2vr::game::deviceLost();
+    const bool owner = ss2vr::game::presentationDeviceOwner(d);
+    if (owner) ss2vr::game::deviceLost();
     HRESULT hr = originalReset(d, p);
-    if (SUCCEEDED(hr))
+    if (owner && SUCCEEDED(hr))
         ss2vr::game::deviceResetSucceeded(d);
-    if (SUCCEEDED(hr)) seedChain(d);
+    if (owner && SUCCEEDED(hr)) seedChain(d);
     return hr;
 }
 static HRESULT WINAPI createDevice(IDirect3D9 *api, UINT adapter, D3DDEVTYPE type, HWND window, DWORD flags,
@@ -208,6 +227,9 @@ static HRESULT WINAPI createDevice(IDirect3D9 *api, UINT adapter, D3DDEVTYPE typ
 }
 extern "C" __declspec(dllexport) IDirect3D9 *WINAPI Direct3DCreate9(UINT version) {
     const BOOL initialized = InitOnceExecuteOnce(&initialize, init, nullptr, nullptr);
+    // On the fingerprinted native startup route this synchronous boundary
+    // precedes onlInitialize. The lab adapter fails closed if unavailable.
+    ss2vr::game::installLabOnlineIsolation();
     IDirect3D9 *api = create9 ? create9(version) : nullptr;
     static std::atomic<bool> apiOk{false}, apiFailed{false};
     auto &reported = api ? apiOk : apiFailed;

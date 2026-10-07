@@ -22,6 +22,7 @@
 #include "common/world_markers.hpp"
 #include "game.hpp"
 #include "menu.hpp"
+#include "scope_gpu.hpp"
 #include "multiplayer.hpp"
 #include "native_tracking.hpp"
 #include "native_memory.hpp"
@@ -169,6 +170,9 @@ static GameInfoGet nativeGameInfo = nullptr;
 static uintptr_t primaryOperatorReturn = 0, primaryHeldReturn = 0;
 static IntThis originalSniperAlternativePress = nullptr;
 static int(__cdecl *nativeMainThread)() = nullptr;
+bool nativePresentationThreadCurrent() noexcept {
+    return hooksReady.load(std::memory_order_acquire) && nativeMainThread && nativeMainThread();
+}
 static uintptr_t playerAlternativePressReturn = 0;
 static WeaponAbs originalWeaponAbs = nullptr;
 static RenderWeapon originalWeaponRender = nullptr, originalSniperRender = nullptr;
@@ -676,6 +680,7 @@ static void publishSnapshot(const Snapshot &s) {
     }
 }
 static void update(void *p) {
+    validateLabOnlineIsolation(false);
     if (rigMutationActive || !hooksReady.load(std::memory_order_acquire) || !channel.shared || !local(p))
         return;
     simulationThread.store(GetCurrentThreadId(), std::memory_order_relaxed);
@@ -722,6 +727,7 @@ static void update(void *p) {
         advanceGeneration(s);
     }
     enabled = enabled && validTrackingEpoch(s.generation);
+    validateLabOnlineIsolation(enabled);
     s.input = input;
     const int previousHealth = s.ui.health;
     const bool hadHealth = s.ui.tickMs != 0;
@@ -1935,21 +1941,28 @@ float frozenWorldVisibility() {
 static void freezeLasers(const Request &request);
 static void drawLasers();
 static void __fastcall viewExecute(void *command, void *) {
+    const auto generation = graphicsResourceGeneration();
+    auto *previousExecution = executingView;
     const bool root = command == rootView && eyePlayer && eyeIndex >= 0;
-    ScopedWeaponContext<void> execution(executingView, command);
+    executingView = command;
     if (root && !rootCaptureAttempted) {
         rootCaptureAttempted = true;
         rootCaptureArmed = true;
     }
     const bool sourceRoot = command == rootView && scopeSource.active && eyePlayer && eyeIndex == -1;
-    originalViewExecute(command);
-    if (sourceRoot) scopeSource.executed = true;
-    if (root) {
-        rootCaptureArmed = false;
-        if (!executedWeaponWorld.valid)
-            weaponPairFault = true;
-        drawLasers();
-    }
+    withNativeFinally([&] {
+        originalViewExecute(command);
+        if (generation != graphicsResourceGeneration()) return;
+        if (sourceRoot) scopeSource.executed = true;
+        if (root) {
+            rootCaptureArmed = false;
+            if (!executedWeaponWorld.valid) weaponPairFault = true;
+            drawLasers();
+        }
+    }, [&](bool aborted) noexcept {
+        executingView = !aborted && generation == graphicsResourceGeneration() ? previousExecution : nullptr;
+        if (aborted) { weaponPairFault = true; rootCaptureArmed = false; }
+    });
 }
 static void __fastcall viewPrepare(void *command, void *, const Matrix34 &view, const Matrix44 &projection,
                                    const Box1 &depthRange, uint32_t identifier) {
@@ -1974,6 +1987,8 @@ static void __fastcall viewPrepare(void *command, void *, const Matrix34 &view, 
     }
     if (eyeIndex >= 0 && eyePlayer && caller == rootPrepareReturn) {
         if (rootView) {
+            static unsigned duplicateDiagnostics=0;
+            if(duplicateDiagnostics<4) { ++duplicateDiagnostics; log("Native root duplicate rejected eye=%d",eyeIndex); }
             weaponPairFault = true; // Another root cannot inherit this eye's execution capture.
             preparedWeaponWorld = {};
             executedWeaponWorld = {};
@@ -1990,6 +2005,14 @@ static void __fastcall viewPrepare(void *command, void *, const Matrix34 &view, 
             finiteMatrix(view) && finiteProjection(projection) &&
             validDepthRange(depthRange.min, depthRange.max) && sameWeaponView(view, expectedView) &&
             sameProjectionXY(projection, ss2vr::projection(eyeRequest.fov[eyeIndex]))};
+        static unsigned prepareDiagnostics=0;
+        if(prepareDiagnostics<4) {
+            ++prepareDiagnostics;
+            log("Native root prepared eye=%d valid=%u matrix=%u projection=%u depth=%u viewMatch=%u xyMatch=%u depthRange=%.9g,%.9g",
+                eyeIndex,preparedWeaponWorld.valid,finiteMatrix(view),finiteProjection(projection),
+                validDepthRange(depthRange.min,depthRange.max),sameWeaponView(view,expectedView),
+                sameProjectionXY(projection,ss2vr::projection(eyeRequest.fov[eyeIndex])),depthRange.min,depthRange.max);
+        }
         identifier ^= scopePreview ? 0x40000000u : (eyeIndex == 0 ? 0x80000000u : 0xc0000000u);
     }
     originalViewPrepare(command, view, projection, depthRange, identifier);
@@ -2097,6 +2120,22 @@ static Pose *__fastcall camera(void *p, void *, Pose *out) {
     else if (p == eyePlayer && eyeIndex >= 0 && eyeSnapshot.initialized) {
         *out = worldEyeTracking(eyeAnchor, eyeSnapshot.origin, eyeSnapshot.turn, eyeRequest.input.head,
                                 eyeRequest.eye[eyeIndex]);
+        // Opt-in lab observation only: record the actual hooked native camera,
+        // without overriding runtime poses or adding test input to gameplay.
+        static const bool labTrace = [] { wchar_t value[2]{}; return GetEnvironmentVariableW(L"SS2VR_LAB_TRACE",value,2)==1 && value[0]==L'1'; }();
+        static Pose observedHead[2]{};
+        static bool observed[2]{};
+        static unsigned cameraDiagnostics = 0;
+        const auto &head = eyeRequest.input.head;
+        const auto &prior = observedHead[eyeIndex];
+        const double delta = std::hypot(double(head.p.x)-prior.p.x,double(head.p.y)-prior.p.y,double(head.p.z)-prior.p.z);
+        const double angle = std::abs(double(head.q.x)*prior.q.x+double(head.q.y)*prior.q.y+double(head.q.z)*prior.q.z+double(head.q.w)*prior.q.w);
+        if (labTrace && cameraDiagnostics < 48 && (!observed[eyeIndex] || delta > .0005 || angle < .99999)) {
+            ++cameraDiagnostics; observed[eyeIndex]=true; observedHead[eyeIndex]=head;
+            log("Lab native camera eye=%d request=%llu head=%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f camera=%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f",
+                eyeIndex,static_cast<unsigned long long>(eyeRequest.sequence),head.p.x,head.p.y,head.p.z,head.q.x,head.q.y,head.q.z,head.q.w,
+                out->p.x,out->p.y,out->p.z,out->q.x,out->q.y,out->q.z,out->q.w);
+        }
         if(eyeHeadClearance.mode==HeadClearanceMode::Clear) {
             const auto f=eyeRequest.fov[eyeIndex];
             const double x=std::max(std::abs(std::tan(double(f.left))),std::abs(std::tan(double(f.right))));
@@ -2139,6 +2178,7 @@ static int __fastcall renderThirdPerson(void *p, void *) {
     return originalThirdPerson(p);
 }
 static Matrix44 *__fastcall project(void *p, void *, Matrix44 *out) {
+    const auto generation = graphicsResourceGeneration();
 #ifdef _MSC_VER
     const auto caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
 #else
@@ -2157,14 +2197,16 @@ static Matrix44 *__fastcall project(void *p, void *, Matrix44 *out) {
     withNativeFinally([&] {
         const auto result = originalProjection(p, out);
         completed = true;
+        if (generation != graphicsResourceGeneration()) return;
         if (observe && result == out && observation.seen && !observation.rejected &&
             p == eyePlayer && eyeIndex >= 0 && !weaponPairFault)
             eyeNativeBaseFov = observation.baseFov;
     },[&](bool aborted) noexcept {
-        nativeProjectionObservation = previous;
+        nativeProjectionObservation = !aborted && generation == graphicsResourceGeneration() ? previous : nullptr;
         if (aborted && observe) eyeNativeBaseFov = 0;
     });
     if (!completed) { weaponPairFault = true; return out; }
+    if (generation != graphicsResourceGeneration()) return out;
     if (p == eyePlayer && scopeSource.active) {
         const float nz = out->m[11]/(out->m[10]-1), fz = out->m[11]/(out->m[10]+1);
         if (!(std::isfinite(nz) && nz > 0 && std::isfinite(fz) && fz > nz)) scopeSource.fault = true;
@@ -2240,6 +2282,7 @@ static bool physicalCallbacksAvailable() {
            nativeProjectionSet && *nativeProjectionSet == expectedProjectionSet;
 }
 static void __cdecl weaponDepthRange(float nearDepth, float farDepth) {
+    const auto generation = graphicsResourceGeneration();
 #ifdef _MSC_VER
     const auto caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
 #else
@@ -2254,7 +2297,16 @@ static void __cdecl weaponDepthRange(float nearDepth, float farDepth) {
             weaponPairFault = true;
         }
     }
+    static unsigned depthDiagnostics=0;
+    const bool traceDepth=eyePlayer && eyeIndex>=0 && depthDiagnostics<8;
+    if(traceDepth) {
+        ++depthDiagnostics;
+        log("Native root depth call eye=%d caller=%p expected=%p armed=%u root=%u capture=%u callback=%u supplied=%.9g,%.9g",
+            eyeIndex,reinterpret_cast<void *>(caller),reinterpret_cast<void *>(rootDepthReturn),rootCaptureArmed,
+            executingView==rootView,capture,physicalCallbacksAvailable(),nearDepth,farDepth);
+    }
     originalDepthRange(nearDepth, farDepth);
+    if (generation != graphicsResourceGeneration()) return;
     if (physicalWeapon && caller == weaponRestoreReturn) {
         if (!physicalWeapon->pass.restored() || !physicalCallbacksAvailable() ||
             std::memcmp(nativeCurrentProjection, &physicalWeapon->entryProjection, sizeof(Matrix44)) ||
@@ -2269,6 +2321,14 @@ static void __cdecl weaponDepthRange(float nearDepth, float farDepth) {
             executedWeaponWorld = executedWeaponView(preparedWeaponWorld, *nativeCurrentView,
                                                       *nativeCurrentProjection, *nativeDepthNear,
                                                       *nativeDepthFar);
+        if(traceDepth && physicalCallbacksAvailable()) {
+            log("Native root executed eye=%d prepared=%u matrix=%u projection=%u depth=%u viewMatch=%u xyMatch=%u nearMatch=%u farMatch=%u actualDepth=%.9g,%.9g",
+                eyeIndex,preparedWeaponWorld.valid,finiteMatrix(*nativeCurrentView),finiteProjection(*nativeCurrentProjection),
+                validDepthRange(*nativeDepthNear,*nativeDepthFar),sameWeaponView(preparedWeaponWorld.view,*nativeCurrentView),
+                sameProjectionXY(preparedWeaponWorld.projection,*nativeCurrentProjection),
+                *nativeDepthNear==preparedWeaponWorld.nearDepth,*nativeDepthFar==preparedWeaponWorld.farDepth,
+                *nativeDepthNear,*nativeDepthFar);
+        }
         executedUiProjectionValid = executedWeaponWorld.valid && nativeAdjustedProjection &&
                                     finiteProjection(*nativeAdjustedProjection);
         if (executedUiProjectionValid)
@@ -2280,34 +2340,36 @@ static void __cdecl weaponDepthRange(float nearDepth, float farDepth) {
 // Copy while this eye still owns its completed root, before marker ortho setup
 // and endEye retire native context. Never read a later UI projection as world P.
 bool copyExecutedUiProjection(void *player, const Request &request, int index, Matrix44 &out) {
-    if (!nativeMainThread || !nativeMainThread() || player != eyePlayer || index != eyeIndex ||
-        index < 0 || index > 1 || !sameRequest(request, eyeRequest) || !rootCaptureAttempted ||
-        !executedWeaponWorld.valid || !executedUiProjectionValid || weaponPairFault)
-        return false;
+    const bool mainThread=nativeMainThread && nativeMainThread();
+    const bool current=mainThread && player==eyePlayer && index==eyeIndex && index>=0 && index<=1 &&
+        sameRequest(request,eyeRequest);
+    const bool admitted=current && rootCaptureAttempted && executedWeaponWorld.valid &&
+        executedUiProjectionValid && !weaponPairFault;
+    static unsigned diagnostics=0;
+    if (!admitted && diagnostics<4) {
+        ++diagnostics;
+        log("Native eye projection rejected eye=%d current=%u rootAttempted=%u worldValid=%u uiProjection=%u weaponFault=%u",
+            index,current,rootCaptureAttempted,executedWeaponWorld.valid,executedUiProjectionValid,weaponPairFault);
+    }
+    if (!admitted) return false;
     out = executedUiProjection;
     return true;
 }
-static void finishPhysicalWeapon(PhysicalWeaponInvocation &invocation) noexcept {
-    if (invocation.pass.complete())
-        return;
+static void finishPhysicalWeapon(PhysicalWeaponInvocation &invocation, uint64_t generation) noexcept {
+    if (generation != graphicsResourceGeneration() || invocation.pass.complete()) return;
     weaponPairFault = true;
-    if (!invocation.pass.cleanupRequired() || !physicalCallbacksAvailable())
-        return;
-    // Original Render exceptions propagate. Only best-effort adapter cleanup
-    // exceptions are contained; the pair is already permanently ineligible.
-    ScopedWeaponContext<PhysicalWeaponInvocation> suppress(physicalWeapon, nullptr);
-    try {
+    if (!invocation.pass.cleanupRequired() || !physicalCallbacksAvailable()) return;
+    auto *previous = physicalWeapon;
+    physicalWeapon = nullptr;
+    withNativeFinally([&] {
         (*nativeProjectionSet)(invocation.entryProjection);
-        *nativeCachedMatrices &= ~6u; // Native4CA80 invalidates projection products.
+        if (generation != graphicsResourceGeneration()) return;
+        *nativeCachedMatrices &= ~6u;
         originalDepthRange(invocation.entryNear, invocation.entryFar);
-    } catch (...) {
-        // Failed cleanup is not permission to publish either eye.
-    }
+    }, [&](bool aborted) noexcept {
+        physicalWeapon = !aborted && generation == graphicsResourceGeneration() ? previous : nullptr;
+    });
 }
-struct FinishPhysicalWeapon {
-    PhysicalWeaponInvocation *invocation;
-    ~FinishPhysicalWeapon() { if (invocation) finishPhysicalWeapon(*invocation); }
-};
 static thread_local unsigned nativeShotDepth = 0;
 struct MuzzleContext {
     bool accepted = false, authoritative = false;
@@ -3109,13 +3171,13 @@ static int __fastcall weaponAbs(void *w, void *, const Matrix34 &view, Matrix34 
     return result;
 }
 static void renderTrackedWeapon(void *w, Matrix34 m, bool sniper, uintptr_t caller) {
-    if (physicalWeapon) {
-        // Native nested rendering may leave its view changed. Do not resume
-        // an outer physical draw after an unproven nested state transaction.
-        physicalWeapon->pass.failed = true;
-        weaponPairFault = true;
-    }
-    ScopedWeaponContext<PhysicalWeaponInvocation> entryBarrier(physicalWeapon, nullptr);
+    const auto generation = graphicsResourceGeneration();
+    auto *previous = physicalWeapon;
+    if (previous) { previous->pass.failed = true; weaponPairFault = true; }
+    physicalWeapon = nullptr;
+    PhysicalWeaponInvocation invocation;
+    bool physical = false;
+    withNativeFinally([&] {
     const auto s = eyeIndex >= 0 ? eyeSnapshot : copySnapshot();
     const int hand = handOf(w, s);
     if (eyeIndex >= 0 && hand >= 0)
@@ -3123,9 +3185,8 @@ static void renderTrackedWeapon(void *w, Matrix34 m, bool sniper, uintptr_t call
     if (eyeIndex >= 0 && hand >= 0 &&
         (!eyeRequest.input.handValid[hand] || !finite(weaponTracking(eyeRequest.input, unsigned(hand)))))
         return;
-    const bool physical = eyeIndex >= 0 && eyePlayer == s.player && hand >= 0 &&
+    physical = eyeIndex >= 0 && eyePlayer == s.player && hand >= 0 &&
                           executingView == rootView && rootView;
-    PhysicalWeaponInvocation invocation;
     if (physical) {
         if (!trackedWeaponSession(s) || !executedWeaponWorld.valid || !physicalCallbacksAvailable() ||
             !finiteProjection(*nativeCurrentProjection) ||
@@ -3138,15 +3199,20 @@ static void renderTrackedWeapon(void *w, Matrix34 m, bool sniper, uintptr_t call
         invocation.ordinaryCommand=ordinaryWeaponRenderReturn && caller==ordinaryWeaponRenderReturn;
     }
     // Establish a suppression barrier even for unowned/nested/desktop calls.
-    ScopedWeaponContext<PhysicalWeaponInvocation> context(physicalWeapon, physical ? &invocation : nullptr);
-    FinishPhysicalWeapon finish{physical ? &invocation : nullptr};
+    physicalWeapon = physical ? &invocation : nullptr;
     if (sniper && !(eyeIndex >= 0 && hand >= 0))
         originalSniperRender(w, m);
     else
         originalWeaponRender(w, m);
-    if (physical)
+    if (physical && generation == graphicsResourceGeneration())
         eyeScopePoses.finishDraw(unsigned(hand), invocation.scopePose,
                                  invocation.pass.complete() && !invocation.scopePoseAmbiguous);
+    }, [&](bool aborted) noexcept {
+        if (!aborted && physical && generation == graphicsResourceGeneration())
+            finishPhysicalWeapon(invocation, generation);
+        physicalWeapon = !aborted && generation == graphicsResourceGeneration() ? previous : nullptr;
+        if (aborted) weaponPairFault = true;
+    });
 }
 static void __fastcall weaponRender(void *w, void *, Matrix34 m) {
     renderTrackedWeapon(w, m, false,reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
@@ -3248,8 +3314,12 @@ struct NativeUiOwner {
 };
 static thread_local NativeUiOwner uiOwner;
 static thread_local unsigned uiOwnerDepth = 0, uiOverlayDepth = 0;
+static thread_local uint64_t uiOwnerGeneration = 0;
+bool nativeRenderExtentCurrent() noexcept {
+    return !uiOwnerDepth || uiOwnerGeneration == graphicsResourceGeneration();
+}
 bool nativeUiOwnerCurrent(void *player) {
-    if(uiOwnerDepth!=1 || !player || player!=uiOwner.player || !uiOwner.brain ||
+    if(uiOwnerDepth!=1 || !nativeRenderExtentCurrent() || !player || player!=uiOwner.player || !uiOwner.brain ||
         !nativeMainThread || !nativeMainThread() || !uiOwner.brainHandle || !uiOwner.playerHandle ||
         resolve(uiOwner.brainHandle)!=uiOwner.brain || resolve(uiOwner.playerHandle)!=player ||
         !readableMemory(static_cast<uint8_t *>(uiOwner.brain)+0x28,4)) return false;
@@ -3276,6 +3346,7 @@ static void __fastcall brainRender(void *brain,void *) {
         return;
     }
     uiOwnerDepth=1;
+    uiOwnerGeneration=graphicsResourceGeneration();
     withNativeFinally([&] {
         if(nativeMainThread && nativeMainThread() && readableMemory(static_cast<uint8_t *>(brain)+0x28,4)) {
             uint32_t handle=0;
@@ -3287,10 +3358,11 @@ static void __fastcall brainRender(void *brain,void *) {
                 uiOwner={brain,player,pointerHandle(brain),handle};
         }
         originalBrainRender(brain); // Native player index/listener/HUD timing owner once.
-        nativeUiFinishOwner();
+        if (nativeRenderExtentCurrent()) nativeUiFinishOwner();
     },[&](bool aborted) noexcept {
         nativeUiEndOwner(aborted);
         uiOwner={}; uiOwnerDepth=0; uiOverlayDepth=0;
+        uiOwnerGeneration=0;
     });
 }
 static void __fastcall overlayRender(void *player,void *,int flag) {
@@ -3323,7 +3395,18 @@ static void __fastcall render(void *p,void *) {
     const auto caller=reinterpret_cast<uintptr_t>(__builtin_return_address(0));
     withNativeFinally([&] {
         auto s=copySnapshot();
-        if(p==s.player && trackingEligible(p) && vrSession(s) && fresh(s.input) && s.ui.gameplay)
+        // Preserve the original short-circuit order: retired render extents must
+        // never acquire a native player/rider getter merely for diagnostics.
+        const bool extent = nativeRenderExtentCurrent(), samePlayer = extent && p == s.player;
+        const bool eligible = samePlayer && trackingEligible(p);
+        const bool session = eligible && vrSession(s), currentInput = session && fresh(s.input);
+        static unsigned renderDiagnostics = 0;
+        if (s.ui.gameplay && renderDiagnostics < 4) {
+            ++renderDiagnostics;
+            log("Native world render gate extent=%u player=%u eligible=%u session=%u fresh=%u gameplay=%u marker=%u",
+                extent,samePlayer,eligible,session,currentInput,s.ui.gameplay,caller==markerParentReturn);
+        }
+        if(extent && samePlayer && eligible && session && currentInput && s.ui.gameplay)
             stereo(p,originalRender,caller==markerParentReturn ? nativeMarkerPostlude : nullptr);
         else originalRender(p);
     },[&](bool aborted) noexcept { if(aborted) nativeUiEndOwner(true); });

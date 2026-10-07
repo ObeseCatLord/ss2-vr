@@ -1,5 +1,16 @@
 # Cloud continuation — 2026-10-05
 
+Latest PC direct-scene work is in PC_GAMEPLAY_READINESS.md and DIRECT_GAMEPLAY_LAB.md.
+Native +level now reaches Jungle without menu navigation, using one verified
+loading-screen Enter pair. Scene stream bytes/hash, null online interface, native
+shutdown and thirty neutral OpenXR input observations were recorded privately.
+First-eye completion rejects executed depth0..0.9 against prepared0..1; no world
+eye pair/projection or translated/rotated-camera acceptance exists. Astra is
+reviewing native partition evidence before a narrow fix. The user reports desktop
+trees/waterfall through terrain; matched renderer/eye comparisons remain required.
+Public source/RE-note approval is renewed below; online MP with mod users remains
+explicitly required. Do not activate the lab-only online barrier in MP tests.
+
 ## PC continuation authority — 2026-10-07
 
 The user now permits PC development, additional sessions and runtime testing where feasible. This supersedes historical root-only, transfer-only, pause and no-runtime restrictions. Native safety, privacy, anonymous publication, Actions-off and no destructive cleanup remain. The isolated public checkout starts at commit `8d172189aa0fbddadc1c1786eedbc38db8368487`, tree `07b2508387d1a367107673020e6162eba9e17fd4`, including both queued checkpoints. All28 reachable commits passed the full-history empty-email gate; Actions is disabled and workflow files absent. The old installed-game checkout and its unaccepted melee changes remain separate; no old ancestry was imported. Cloud edits have stopped; the PC main session is integration owner.
@@ -665,3 +676,15 @@ depth, and explicit references/TLS/lock cleanup around native unwinds/reset.
 No unconditional worker-thread host-start workaround or transport rewrite.
 Melee/MP plans already read remain separate later owner probes; steering still
 needs positively verified actual controls/geometry and broader model coverage.
+
+## Urgent native gameplay acceptance gate
+
+Read PC_GAMEPLAY_READINESS.md before interpreting startup progress. Actual menu CPU transport has been observed; an actual first-person outdoor pistol segment enabled gameplay/stereo capacity but delivered no native eye pair. Source fixes the new readiness cycle and keeps menu classification independent from tracking loss. Bounded render/request/target/completion diagnostics are being run. Distinct native eye images, parallax, head translation/rotation and final projection presentation are still required; no flat gameplay fallback is acceptable. Scope/reset/nested recovery is outside the bounded Astra/xhigh pistol-observation GO. Full remaining features are unchanged.
+
+## Historical authority: PUBLICATION HOLD (superseded below)
+
+Public publication is blocked pending explicit renewed confirmation delivered by the parent supervising thread. All earlier push/source-publication authority is superseded. Continue LOCAL source development and authorized private runtime tests immediately; no pushes, public PRs/releases or external artifacts. Local anonymous empty-email commits are allowed. Actions remains disabled, workflows absent. The direct +level harness has passed byte/preflight checks and its observer compiles; actual no-menu stereo gameplay has not yet run. Private Monado exact-pose snapshot/teardown follow-up corrections and Steam-cloud profile/save isolation are the immediate gates. Do not substitute preflight/menu/source checks for gameplay acceptance.
+
+## Delivered renewed user source-publication approval
+
+The user explicitly approved publishing SS2 VR source and sanitized reverse-engineering notes to public ObeseCatLord/ss2-vr with empty commit emails and no game assets, binaries or credentials. This supersedes the earlier hold recorded above; preserve that history. Source-only bounded checkpoints may publish after full-history metadata/privacy checks. Runtime data/settings/captures and proprietary assets/binaries stay private; Actions disabled and workflows absent. Actual gameplay/native stereo acceptance remains open.

@@ -968,7 +968,7 @@ struct Host {
     std::vector<XrTime> referenceChanges;
     uint32_t sessionGeneration = 0, referenceGeneration = 1;
     uint64_t inputSequence = 0, requestSequence = 0;
-    uint64_t xrEndSuccess = 0, xrLayerSuccess = 0, xrMenuSuccess = 0;
+    uint64_t xrEndSuccess = 0, xrLayerSuccess = 0, xrMenuSuccess = 0, xrWorldSuccess = 0;
     uint64_t completed = 0, timeouts = 0, fullSlots = 0, discarded = 0, imageTimeouts = 0, invalidViews = 0;
     uint64_t retired = 0, submissions = 0, reused = 0, lastSubmittedSequence = 0;
     ULONGLONG lastDiagnostics = 0, lastMutexDiagnostic = 0;
@@ -1921,14 +1921,14 @@ struct Host {
         std::snprintf(line, sizeof(line),
                       "Frame totals: ipc_complete=%llu deadline=%llu slots_full=%llu discarded=%llu "
                       "image_wait=%llu invalid_views=%llu retired=%llu submitted=%llu reused=%llu "
-                      "xr_end_success=%llu xr_layers=%llu xr_menu=%llu",
+                      "xr_end_success=%llu xr_layers=%llu xr_menu=%llu xr_world=%llu",
                       static_cast<unsigned long long>(completed), static_cast<unsigned long long>(timeouts),
                       static_cast<unsigned long long>(fullSlots), static_cast<unsigned long long>(discarded),
                       static_cast<unsigned long long>(imageTimeouts),
                       static_cast<unsigned long long>(invalidViews), static_cast<unsigned long long>(retired),
                       static_cast<unsigned long long>(submissions), static_cast<unsigned long long>(reused),
                       static_cast<unsigned long long>(xrEndSuccess), static_cast<unsigned long long>(xrLayerSuccess),
-                      static_cast<unsigned long long>(xrMenuSuccess));
+                      static_cast<unsigned long long>(xrMenuSuccess), static_cast<unsigned long long>(xrWorldSuccess));
         log.write(line);
     }
     void run() {
@@ -2074,6 +2074,7 @@ struct Host {
             const auto endResult = frame.submit(layers);
             if (endResult == XR_SUCCESS) {
                 ++xrEndSuccess;
+                if (worldPresented && std::find(layers.begin(),layers.end(),world)!=layers.end()) ++xrWorldSuccess;
                 if (!layers.empty()) ++xrLayerSuccess;
                 if (std::find(layers.begin(), layers.end(),
                     reinterpret_cast<const XrCompositionLayerBaseHeader *>(&menuQuad)) != layers.end()) ++xrMenuSuccess;
