@@ -63,3 +63,14 @@ while the joystick/jump vector is idle. Both modes retain the native three-axis
 ClientAction RPC and movement consumer, with no direct body writes or new wire
 fields. This has source/offline/static verification only; water transitions,
 comfort and Windows/Proton runtime behavior still need the owner's later tests.
+
+## Immersive steering-wheel control — owner requirement, 2026-10-07
+
+For vehicles that have steering wheels, add tracked grab-and-turn steering with
+either hand alone or both hands together. Support releasing one hand and passing
+the wheel to the other without a steering discontinuity. Resolve the actual
+vehicle wheel placement and steering axis rather than guessing a generic wheel
+in front of every seat. Feed the existing native steering input and preserve
+native vehicle physics, speed, constraints, networking and mount ownership.
+This requirement is not implemented yet. Controller grab routing, wheel geometry,
+vehicle-family admission and interruption/release behavior remain to be connected.
