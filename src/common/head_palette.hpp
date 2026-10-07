@@ -16,6 +16,14 @@ struct PaletteMap {
 };
 enum class HeadPaletteResult { Invalid, Unchanged, Changed };
 
+// Foreign native unwind may skip the GNU helper's RAII restore. The native
+// finally frame calls this using scalar context retained above that frame.
+inline void retireNativePaletteInvocation(bool previousActive,bool aborted,
+                                           bool& active,bool& invalidated) noexcept {
+    active=previousActive;
+    if(aborted)invalidated=true;
+}
+
 // One native producer invocation, including non-render and nested passthrough.
 // Nested native work can rebuild globals: decline the entire outer adaptation.
 template<class Original, class Adapt, class Fault>

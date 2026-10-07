@@ -1204,3 +1204,18 @@ compiled query checks pass normally and with Python optimization. No runtime or
 deployment occurred. HeadComfort remains default-off; multiplayer roomscale,
 physical melee, remaining head/vehicle work and final review remain unfinished.
 See HEAD_VOLUME_INTEGRATION.md for the exact scope and limits.
+
+## Remote renderer unwind retirement — 2026-10-07
+
+Fixed source-level foreign-unwind holes in producer TLS, presentation locks and
+model/head/scope scratch ownership. Native-finally cleanup explicitly restores
+prior reentry flags, frees owned storage, releases MP then binding locks, and
+retires interrupted pairs including native-only banks. Nested adapter reads are
+refused before lock reacquisition; native producer behavior and default-off head
+tracking remain unchanged. No alternative palette ownership was introduced.
+
+All55 Debug/Release groups, game/server/host builds, head-helper sanitizers and
+compiled/native gates pass. A missing-TLS-restore compiled fixture is rejected.
+Native worker/model lifetime and runtime acceptance remain unproved. See
+REMOTE_RENDER_UNWIND.md. Multiplayer body/origin movement, physical melee and
+full-project completion remain open; no runtime or deployment occurred.

@@ -16,6 +16,7 @@
 #include <atomic>
 #include <cstring>
 #include <span>
+#include <optional>
 #include <vector>
 
 namespace ss2vr::game::remote_render {
@@ -107,16 +108,49 @@ static std::atomic<bool> pairInvalid = false;
 static std::atomic<bool> pairActive = false; // bindingLock protects the transaction bank.
 static std::atomic<DWORD> simulationThread = 0; // observations establish native object ownership.
 static DWORD pairThread = 0;
-struct ExclusiveBindings {
-    ExclusiveBindings() { AcquireSRWLockExclusive(&bindingLock); }
-    ~ExclusiveBindings() { ReleaseSRWLockExclusive(&bindingLock); }
-};
-struct SharedBindings {
-    SharedBindings() { AcquireSRWLockShared(&bindingLock); }
-    ~SharedBindings() { ReleaseSRWLockShared(&bindingLock); }
-};
 static thread_local bool frozenPair = false;
-static thread_local bool reentrant = false;
+static thread_local bool reentrant = false, modelInvalidated = false, presentationBusy = false;
+
+static void producerAbort() noexcept {
+    modelInvalidated=paletteInvalidated=true;
+    // A native-only bank is normally a valid fallback. An interrupted producer
+    // is different: retire the whole pair, including a bank with no remotes.
+    pairActive.store(false,std::memory_order_release);
+    pairInvalid.store(true,std::memory_order_release);
+    nativeUiFault();
+}
+
+// The role query happens before binding ownership. Native callbacks below may
+// unwind through MSVC frames; GNU destructors alone cannot retire these locks.
+template<bool Exclusive=false,class Body,class Cleanup>
+static bool withPresentationBindings(Body&& body,Cleanup&& cleanup) noexcept {
+    static_assert(std::is_nothrow_invocable_v<Cleanup&,bool>);
+    static_assert(std::is_trivially_destructible_v<std::remove_reference_t<Body>>);
+    static_assert(std::is_trivially_destructible_v<std::remove_reference_t<Cleanup>>);
+    if(presentationBusy) {
+        // Decline nested adapter reads before reacquiring nonrecursive locks.
+        producerAbort();
+        return false;
+    }
+    multiplayer::PresentationReadGuard guard(false);
+    bool held=false;presentationBusy=true;
+    return withNativeFinally([&] {
+        if constexpr(Exclusive) AcquireSRWLockExclusive(&bindingLock);
+        else AcquireSRWLockShared(&bindingLock);
+        held=true;guard.acquire();
+        body(guard);
+    },[&](bool aborted) noexcept {
+        cleanup(aborted);
+        if(aborted)producerAbort();
+        guard.release();
+        if(held) {
+            held=false;
+            if constexpr(Exclusive) ReleaseSRWLockExclusive(&bindingLock);
+            else ReleaseSRWLockShared(&bindingLock);
+        }
+        presentationBusy=false;
+    });
+}
 
 static uint32_t read32(const void *object, size_t offset) {
     uint32_t value = 0;
@@ -209,7 +243,8 @@ static bool validatePair(const multiplayer::PresentationReadGuard &guard) {
             return false;
         }
     }
-    return true;
+    return pairActive.load(std::memory_order_acquire)&&
+        (!admitted||!pairInvalid.load(std::memory_order_acquire));
 }
 
 static bool eligibleHand(const Binding &binding, const multiplayer::Sample &sample, void *player, unsigned hand) {
@@ -247,8 +282,13 @@ static bool selectRoot(std::span<const NativeModelRecord> native, std::span<cons
         if (!descriptor)
             continue;
         getChildName(&name, descriptor);
+        if(modelInvalidated)return false;
         getChildOffset(&candidateOffset, descriptor);
-        if (name != binding.toolId[hand] || native[index].instance != getChildInstance(descriptor) ||
+        if(modelInvalidated)return false;
+        if(name!=binding.toolId[hand])continue;
+        const auto child=getChildInstance(descriptor);
+        if(modelInvalidated)return false;
+        if (native[index].instance != child ||
             !lineageContainsBody(records, index, binding.bodyModelInstance))
             continue;
         if (found != records.size())
@@ -262,14 +302,16 @@ static bool selectRoot(std::span<const NativeModelRecord> native, std::span<cons
     return true;
 }
 
-static void postModelPass() {
+struct ModelPassStorage {
+    std::vector<ModelRecord> records,changed;
+};
+static void postModelPassBody(const multiplayer::PresentationReadGuard& presentationGuard,
+                              ModelPassStorage& storage) {
     if (!hooksReady.load(std::memory_order_acquire) || !ready.load(std::memory_order_acquire))
         return;
-    SharedBindings bindingGuard;
-    multiplayer::PresentationReadGuard presentationGuard;
     if (frozenPair && !validatePair(presentationGuard))
         return;
-    if (!checkNativeThread())
+    if (!checkNativeThread() || modelInvalidated)
         return;
 
     NativeModelRecord *native = nullptr;
@@ -288,11 +330,11 @@ static void postModelPass() {
             bank[i].binding = bindings[i];
     }
 
-    std::vector<ModelRecord> records;
+    auto& records=storage.records;
     records.reserve(size_t(count));
     for (int32_t i = 0; i < count; ++i)
         records.push_back({native[i].parent, reinterpret_cast<uintptr_t>(native[i].instance), native[i].world});
-    std::vector<ModelRecord> changed = records;
+    auto& changed=storage.changed;changed=records;
     std::array<size_t, MaxBindings * 2> selected{};
     size_t selectedCount = 0;
 
@@ -304,28 +346,33 @@ static void postModelPass() {
         multiplayer::Sample sample = binding.sample;
         if (!frozenPair) {
             player = resolve(binding.playerHandle);
+            if(modelInvalidated)return;
             if (!player)
                 continue;
             sample = presentationGuard.sample(binding.playerHandle);
         }
-        if (!currentBinding(binding, sample, player, frozenPair ? &presentationGuard : nullptr))
-            continue;
+        const bool current=currentBinding(binding, sample, player, frozenPair ? &presentationGuard : nullptr);
+        if(modelInvalidated)return;
+        if (!current)continue;
         Pose body;
         if (frozenPair) {
             if (!entry.bodyValid)
                 continue;
             body = entry.body;
-        } else if (!bodyAnchor(player, binding.rider, body)) {
-            continue;
+        } else {
+            const bool anchored=bodyAnchor(player,binding.rider,body);
+            if(modelInvalidated)return;
+            if(!anchored)continue;
         }
         for (unsigned hand = 0; hand < 2; ++hand) {
             if (!eligibleHand(binding, sample, player, hand))
                 continue;
             size_t root = 0;
             Pose offset;
-            if (!selectRoot(std::span<const NativeModelRecord>(native, size_t(count)), records, binding, hand,
-                            root, offset))
-                continue;
+            const bool selectedRoot=selectRoot(std::span<const NativeModelRecord>(native,size_t(count)),
+                                                records,binding,hand,root,offset);
+            if(modelInvalidated)return;
+            if(!selectedRoot)continue;
             bool collision = false;
             for (size_t i = 0; i < selectedCount; ++i)
                 collision |= root == selected[i] || descendantOf(records, root, selected[i]) ||
@@ -341,9 +388,17 @@ static void postModelPass() {
         }
     }
 
+    if(modelInvalidated)return; // A nested native producer can replace every captured span.
     for (size_t i = 0; i < records.size(); ++i)
         if (std::memcmp(&records[i].world, &changed[i].world, sizeof(Matrix34)))
             native[i].world = changed[i].world;
+}
+
+static void postModelPass() {
+    // Storage lives above the foreign unwind frame and is explicitly retired.
+    std::optional<ModelPassStorage> storage(std::in_place);
+    withPresentationBindings([&](const auto& guard) {postModelPassBody(guard,*storage);},
+                             [&](bool) noexcept {storage.reset();});
 }
 
 // Engine renderer arrays, read only after DDE30 has finished reallocating/copying.
@@ -373,11 +428,20 @@ static void paletteFault() {
     if (frozenPair)
         pairInvalid.store(true, std::memory_order_release);
 }
-static void postPalette() {
+struct HeadPassStorage {
+    std::vector<uintptr_t> instances;
+    std::vector<PaletteModelRange> models;
+    std::vector<PaletteMeshRange> meshRanges;
+    std::vector<PaletteDrawRange> drawRanges;
+    std::vector<Matrix34> worlds,changed,next;
+    std::vector<int32_t> drawOwners;
+    std::vector<PaletteBone> boneViews;
+    std::vector<uint8_t> ownersUsed;
+};
+static void postPaletteBody(const multiplayer::PresentationReadGuard& presentationGuard,
+                            HeadPassStorage& storage) {
     if (!hooksReady.load(std::memory_order_acquire) || !ready.load(std::memory_order_acquire))
         return;
-    SharedBindings bindingsGuard;
-    multiplayer::PresentationReadGuard presentationGuard;
     if (!checkNativeThread() || (frozenPair && !validatePair(presentationGuard))) {
         paletteFault();
         return;
@@ -411,7 +475,7 @@ static void postPalette() {
         paletteFault();
         return;
     }
-    std::vector<uintptr_t> instances;
+    auto& instances=storage.instances;
     for (const auto &record : records)
         instances.push_back(reinterpret_cast<uintptr_t>(record.instance));
     std::array<int32_t, MaxBindings> bodyOwners;
@@ -438,10 +502,10 @@ static void postPalette() {
         paletteFault();
         return;
     }
-    std::vector<PaletteModelRange> models;
-    std::vector<PaletteMeshRange> meshRanges;
-    std::vector<PaletteDrawRange> drawRanges;
-    std::vector<Matrix34> worlds;
+    auto& models=storage.models;
+    auto& meshRanges=storage.meshRanges;
+    auto& drawRanges=storage.drawRanges;
+    auto& worlds=storage.worlds;
     for (const auto &record : records) {
         int32_t first = 0, count = 0;
         std::memcpy(&first, reinterpret_cast<const uint8_t *>(&record) + 8, 4);
@@ -451,12 +515,12 @@ static void postPalette() {
     }
     for (const auto &mesh : meshes) meshRanges.push_back({mesh.owner, mesh.first, mesh.count});
     for (const auto &draw : draws) drawRanges.push_back({draw.mesh, draw.first, draw.count});
-    std::vector<int32_t> drawOwners;
+    auto& drawOwners=storage.drawOwners;
     if (!paletteDrawOwners(models, meshRanges, drawRanges, mappings, drawOwners)) {
         paletteFault();
         return;
     }
-    std::vector<PaletteBone> boneViews;
+    auto& boneViews=storage.boneViews;
     for (const auto &bone : bones) {
         uint32_t name = 0;
         if (bone.definition) {
@@ -465,8 +529,9 @@ static void postPalette() {
         }
         boneViews.push_back({bone.owner, bone.parent, name, bone.definition != nullptr});
     }
-    std::vector<Matrix34> changed(palette.begin(), palette.begin() + mappings.size()), next;
-    std::vector<uint8_t> ownersUsed(records.size(), 0);
+    auto& changed=storage.changed;auto& next=storage.next;
+    changed.assign(palette.begin(),palette.begin()+mappings.size());
+    auto& ownersUsed=storage.ownersUsed;ownersUsed.assign(records.size(),0);
     bool changedHead = false;
     for (size_t i = 0; i < bank.size(); ++i) {
         const auto &entry = bank[i];
@@ -506,6 +571,11 @@ static void postPalette() {
     for (size_t i = 0; i < mappings.size(); ++i)
         if (std::memcmp(&palette[i], &changed[i], sizeof(Matrix34)))
             palette[i] = changed[i];
+}
+static void postPalette() {
+    std::optional<HeadPassStorage> storage(std::in_place);
+    withPresentationBindings([&](const auto& guard) {postPaletteBody(guard,*storage);},
+                             [&](bool) noexcept {storage.reset();});
 }
 static ScopeSurfaceLayout scopeSurfaceLayout(const uint8_t *bytes) {
     ScopeSurfaceLayout layout;
@@ -550,7 +620,16 @@ static ScopeRasterStatus readScopeRaster(void *instance, Matrix34 &affine, Scope
     layout = scopeSurfaceLayout(surface);
     return ScopeRasterStatus::Observed; // No native pointer or index escapes this synchronous read.
 }
-static void observeLocalScope() {
+struct ScopePassStorage {
+    std::vector<uintptr_t> instances;
+    std::vector<PaletteModelRange> modelRanges;
+    std::vector<Matrix34> worlds;
+    std::vector<PaletteMeshRange> meshRanges;
+    std::vector<PaletteDrawRange> drawRanges;
+    std::vector<uint32_t> surfaceNames;
+    std::vector<PaletteBone> boneViews;
+};
+static void observeLocalScopeBody(ScopePassStorage& storage) {
     ScopeDrawBinding binding;
     if (!hooksReady.load(std::memory_order_acquire) || !ready.load(std::memory_order_acquire) ||
         !ownsNativeThread() || !currentScopeDraw(binding) || paletteInvalidated)
@@ -568,9 +647,9 @@ static void observeLocalScope() {
         !rendererArray(0x2eac70, MaxPaletteMatrices, mappings) ||
         !rendererArray(0x2eac90, MaxPaletteMatrices, palette))
         return;
-    std::vector<uintptr_t> instances;
-    std::vector<PaletteModelRange> modelRanges;
-    std::vector<Matrix34> worlds;
+    auto& instances=storage.instances;
+    auto& modelRanges=storage.modelRanges;
+    auto& worlds=storage.worlds;
     for (const auto &record : records) {
         int32_t first = 0, count = 0;
         std::memcpy(&first, reinterpret_cast<const uint8_t *>(&record) + 8, 4);
@@ -579,9 +658,9 @@ static void observeLocalScope() {
         instances.push_back(reinterpret_cast<uintptr_t>(record.instance));
         worlds.push_back(record.world);
     }
-    std::vector<PaletteMeshRange> meshRanges;
-    std::vector<PaletteDrawRange> drawRanges;
-    std::vector<uint32_t> surfaceNames;
+    auto& meshRanges=storage.meshRanges;
+    auto& drawRanges=storage.drawRanges;
+    auto& surfaceNames=storage.surfaceNames;
     for (const auto &mesh : meshes)
         meshRanges.push_back({mesh.owner, mesh.first, mesh.count});
     for (const auto &draw : draws) {
@@ -594,7 +673,7 @@ static void observeLocalScope() {
         drawRanges.push_back({draw.mesh, draw.first, draw.count});
         surfaceNames.push_back(name);
     }
-    std::vector<PaletteBone> boneViews;
+    auto& boneViews=storage.boneViews;
     for (const auto &bone : bones) {
         uint32_t name = 0;
         if (bone.definition) {
@@ -621,32 +700,44 @@ static void observeLocalScope() {
     const auto layout = scopeSurfaceLayout(bytes);
     if (!paletteInvalidated) recordScopeObservation(binding, selected.affine, layout);
 }
+static void observeLocalScope() {
+    std::optional<ScopePassStorage> storage(std::in_place);
+    withNativeFinally([&] {observeLocalScopeBody(*storage);},[&](bool aborted) noexcept {
+        storage.reset();
+        if(aborted)producerAbort();
+    });
+}
 static void __cdecl palettePass() {
 #ifdef _MSC_VER
     const auto caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
 #else
     const auto caller = reinterpret_cast<uintptr_t>(__builtin_return_address(0));
 #endif
-    withFreshNativePalette(caller == engineBase + 0xe2e06, paletteReentrant, paletteInvalidated,
-                           [] { originalPalettePass(); }, [] {
-                               if (headTrackingEnabled) {
-                                   try { postPalette(); } catch (...) { paletteFault(); }
-                               }
-                               // Independent of remote-player presence and head option.
-                               // Invalid observations never alter native palettes/world eligibility.
-                               try { observeLocalScope(); } catch (...) {}
-                           }, [] { if (headTrackingEnabled) paletteFault(); });
+    const bool wasActive=paletteReentrant;
+    withNativeFinally([&] {
+        withFreshNativePalette(caller == engineBase + 0xe2e06, paletteReentrant, paletteInvalidated,
+                               [] { originalPalettePass(); }, [] {
+                                   if (headTrackingEnabled) postPalette();
+                                   // Independent of remote-player presence and head option.
+                                   // Unsupported observations stay native; an aborted extent
+                                   // retires the pair through its native-finally cleanup.
+                                   observeLocalScope();
+                               }, [] { if (headTrackingEnabled) paletteFault(); });
+    },[&](bool aborted) noexcept {
+        retireNativePaletteInvocation(wasActive,aborted,paletteReentrant,paletteInvalidated);
+        if(aborted)producerAbort();
+    });
 }
 
 static void __cdecl modelPass() {
-    if (reentrant) {
-        originalModelPass();
-        return;
-    }
-    reentrant = true;
-    originalModelPass(); // Engine+DBC90 populates the render records before the adapter changes them.
-    try { postModelPass(); } catch (...) { paletteFault(); }
-    reentrant = false;
+    const bool wasActive=reentrant;
+    withNativeFinally([&] {
+        withFreshNativePalette(true,reentrant,modelInvalidated,
+            [] {originalModelPass();},[] {postModelPass();},[] {paletteFault();});
+    },[&](bool aborted) noexcept {
+        retireNativePaletteInvocation(wasActive,aborted,reentrant,modelInvalidated);
+        if(aborted)producerAbort();
+    });
 }
 
 static void clearBinding(uint32_t handle) {
@@ -840,52 +931,45 @@ void invalidatePlayer(void *player) {
 }
 
 void freezePair() {
-    ExclusiveBindings bindingGuard;
-    multiplayer::PresentationReadGuard guard;
-    frozen = {};
-    pairThread = GetCurrentThreadId();
-    pairActive = true;
-    pairInvalid.store(false, std::memory_order_release);
-    // Native model/handle access stays on the established simulation thread.
-    // A bank with no admissible remote players is a valid native-only pair.
-    if (ready.load(std::memory_order_acquire) && checkNativeThread()) {
-        const uint64_t now = GetTickCount64();
-        for (size_t i = 0; i < bindings.size(); ++i) {
-            auto &entry = frozen[i];
-            entry.binding = bindings[i];
-            auto sample = guard.sample(entry.binding.playerHandle);
-            if (!sample.negotiated || !sample.valid || !sample.avatar || !sample.incarnation ||
-                sample.avatar != entry.binding.playerHandle ||
-                sample.incarnation != entry.binding.sample.incarnation || now < sample.receivedMs ||
-                now - sample.receivedMs > network::MaxPoseAgeMs) {
-                entry = {};
-                continue;
+    withPresentationBindings<true>([&](const auto& guard) {
+        frozen = {};
+        pairThread = GetCurrentThreadId();
+        pairActive = true;
+        pairInvalid.store(false, std::memory_order_release);
+        // Native model/handle access stays on the established simulation thread.
+        // A bank with no admissible remote players is a valid native-only pair.
+        if (ready.load(std::memory_order_acquire) && checkNativeThread()) {
+            const uint64_t now = GetTickCount64();
+            for (size_t i = 0; i < bindings.size(); ++i) {
+                auto &entry = frozen[i];
+                entry.binding = bindings[i];
+                auto sample = guard.sample(entry.binding.playerHandle);
+                if (!sample.negotiated || !sample.valid || !sample.avatar || !sample.incarnation ||
+                    sample.avatar != entry.binding.playerHandle ||
+                    sample.incarnation != entry.binding.sample.incarnation || now < sample.receivedMs ||
+                    now - sample.receivedMs > network::MaxPoseAgeMs) {
+                    entry = {};
+                    continue;
+                }
+                entry.binding.sample = sample;
+                void *player = nullptr;
+                entry.bodyValid = currentBinding(entry.binding, sample, player, &guard) &&
+                                  bodyAnchor(player, entry.binding.rider, entry.body);
+                if (!entry.bodyValid)
+                    entry = {};
             }
-            entry.binding.sample = sample;
-            void *player = nullptr;
-            entry.bodyValid = currentBinding(entry.binding, sample, player, &guard) &&
-                              bodyAnchor(player, entry.binding.rider, entry.body);
-            if (!entry.bodyValid)
-                entry = {};
         }
-    }
+    },[&](bool aborted) noexcept {
+        if(aborted) pairActive.store(false,std::memory_order_release);
+    });
 }
 
 bool commitPair(Slot &slot, const Request &request, bool localEligible) {
-    // Compute native role before any lock; acquire in the original binding->MP order.
-    multiplayer::PresentationReadGuard presentationGuard(false);
-    AcquireSRWLockShared(&bindingLock);
-    presentationGuard.acquire();
     // Both remote locks remain held through Ready; local caller holds snapshotLock.
-    bool committed = false;
-    withNativeFinally([&] {
-        committed = commitNativeFrame(slot, request, localEligible && validatePair(presentationGuard));
-    },[&](bool aborted) noexcept {
-        if (aborted) nativeUiFault();
-        pairActive.store(false, std::memory_order_release);
-        presentationGuard.release();
-        ReleaseSRWLockShared(&bindingLock);
-    });
+    bool committed=false;
+    withPresentationBindings([&](const auto& guard) {
+        committed=commitNativeFrame(slot,request,localEligible&&validatePair(guard));
+    },[&](bool) noexcept {pairActive.store(false,std::memory_order_release);});
     return committed;
 }
 

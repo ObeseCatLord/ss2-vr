@@ -84,6 +84,18 @@ int main() {
         withFreshNativePalette(true,active,invalidated,[] { throw 7; },adapt,fault);
     } catch (int value) { escaped=value==7; }
     assert(escaped && !active && adaptations==beforeAdapt);
+    // Explicit native cleanup must also work when the GNU destructor never ran.
+    for(bool previous : {false,true}) {
+        active=true;invalidated=false;
+        retireNativePaletteInvocation(previous,true,active,invalidated);
+        assert(active==previous&&invalidated);
+        retireNativePaletteInvocation(previous,true,active,invalidated);
+        assert(active==previous&&invalidated); // Idempotent scalar retirement.
+        active=true;invalidated=false;
+        retireNativePaletteInvocation(previous,false,active,invalidated);
+        assert(active==previous&&!invalidated);
+    }
+    active=false;invalidated=false;
     unsigned objectReads=0;
     auto unsupportedOwner=[&] { ++objectReads; return false; };
     auto slot=std::make_unique<Slot>(); Request request; request.sequence=1;
