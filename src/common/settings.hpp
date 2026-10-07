@@ -13,7 +13,7 @@ struct VrSettings {
     bool roomscale = false; // Development gate until controller/replication completion.
     bool headFade = false;
     bool remoteHeadTracking = false;
-    float headRadius = .12f, headFadeDepth = .05f;
+    float headRadius = .12f, headClearanceMargin = .05f;
     Pose gripOffset[WeaponCount];
 };
 inline Pose calibratedGrip(const Input &input, unsigned hand, int weapon, const VrSettings &settings) {

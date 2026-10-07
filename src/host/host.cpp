@@ -6,6 +6,7 @@
 #include "common/color.hpp"
 #include "common/controls.hpp"
 #include "common/frame_policy.hpp"
+#include "common/head_clearance.hpp"
 #include "common/native_ui_finish.hpp"
 #include "common/ipc.hpp"
 #include "common/math.hpp"
@@ -916,6 +917,7 @@ struct Host {
     bool hudUploaded = false;
     PendingRequest outstanding[2];
     Request cachedRequest;
+    HeadClearance cachedClearance;
     uint64_t cachedDeadline = 0;
     uint32_t cachedPresentation = 0;
     bool cachedValid = false, viewsTracked = false;
@@ -1203,6 +1205,7 @@ struct Host {
     void invalidateCachedPair() {
         cachedValid = false;
         cachedPresentation = 0;
+        cachedClearance = {};
     }
     void invalidate() {
         actions.invalidateStreams();
@@ -1505,6 +1508,7 @@ struct Host {
         if (!bothImagesReady(eye[0].ownership, eye[1].ownership))
             throw std::runtime_error("Stereo wait barrier failed");
         Request reply;
+        HeadClearance clearance;
         uint64_t deadline = 0;
         uint32_t presentation = 0;
         bool accepted = false;
@@ -1520,6 +1524,9 @@ struct Host {
                     if (slot.presentationReserved || (slot.presentation & ~NativeUiComplete) ||
                         (slot.presentation == NativeUiComplete && reply.uiRequested != 1))
                         throw std::runtime_error("IPC response presentation metadata invalid");
+                    if(!validHeadClearance(slot.headClearance))
+                        throw std::runtime_error("IPC head clearance metadata invalid");
+                    clearance=slot.headClearance;
                     deadline = tracked.deadline;
                     presentation = slot.presentation;
                     const size_t bytes = size_t(reply.width) * reply.height * 4;
@@ -1529,6 +1536,7 @@ struct Host {
                     slot.cancelled = 0;
                     slot.presentation = 0;
                     slot.presentationReserved = 0;
+                    slot.headClearance = {};
                     tracked = {};
                     ++completed;
                     accepted = true;
@@ -1545,6 +1553,7 @@ struct Host {
         hresult(device->GetDeviceRemovedReason(), "D3D11 device removed", log);
         if (!api.lossPending) {
             cachedRequest = reply;
+            cachedClearance = clearance;
             cachedDeadline = deadline;
             cachedPresentation = presentation;
             cachedValid = true;
@@ -1579,6 +1588,7 @@ struct Host {
         slot.cancelled = 0;
         slot.presentation = 0;
         slot.presentationReserved = 0;
+        slot.headClearance = {};
         slot.state = SlotState::Requested;
         SetEvent(channel.ready);
     }
@@ -1605,8 +1615,13 @@ struct Host {
         layer.views = views.data();
         return true;
     }
-    bool finalProjectionEligible(const Input &input, bool validViews) {
+    bool finalProjectionEligible(const Input &input, bool validViews,const std::array<XrView,2>& views) {
         if (!cachedValid || !validViews || !input.focused || !input.headValid) {
+            invalidateCachedPair();
+            return false;
+        }
+        const Pose currentEyes[2]{pose(views[0].pose),pose(views[1].pose)};
+        if(!headClearanceAllows(cachedClearance,cachedRequest,input,currentEyes,GetTickCount64())) {
             invalidateCachedPair();
             return false;
         }
@@ -1620,10 +1635,11 @@ struct Host {
         return true;
     }
     bool admitFinalWorld(std::vector<const XrCompositionLayerBaseHeader *> &layers,
-                         const XrCompositionLayerBaseHeader *world, const Input &input, bool validViews) {
+                         const XrCompositionLayerBaseHeader *world, const Input &input, bool validViews,
+                         const std::array<XrView,2>& views) {
         if (std::find(layers.begin(), layers.end(), world) == layers.end())
             return false;
-        if (finalProjectionEligible(input, validViews))
+        if (finalProjectionEligible(input, validViews,views))
             return true;
         layers.erase(std::remove(layers.begin(), layers.end(), world), layers.end());
         return false;
@@ -1967,7 +1983,7 @@ struct Host {
             if (quit || api.lossPending)
                 layers.clear();
             const auto *world = reinterpret_cast<const XrCompositionLayerBaseHeader *>(&projectionLayer);
-            bool worldPresented = admitFinalWorld(layers, world, input, validViews);
+            bool worldPresented = admitFinalWorld(layers, world, input, validViews,views);
             const bool canDrawHud = published && !quit && !api.lossPending && frameState.shouldRender &&
                                     !snapshot.menuVisible;
             bool fallbackDrawn = false;
@@ -1977,11 +1993,11 @@ struct Host {
             }
             // A fallback upload may wait for an image. Recheck the world after it
             // completes so an expired pair is never resubmitted.
-            worldPresented = admitFinalWorld(layers, world, input, validViews);
+            worldPresented = admitFinalWorld(layers, world, input, validViews,views);
             if (canDrawHud && !worldPresented && !fallbackDrawn) {
                 hudLayer(snapshot.ui, input, hudQuad, layers);
                 fallbackDrawn = true;
-                worldPresented = admitFinalWorld(layers, world, input, validViews);
+                worldPresented = admitFinalWorld(layers, world, input, validViews,views);
             }
             worldPresented=finalNativeUiLayers(quit,api.lossPending,layers,worldPresented);
             if (worldPresented) {

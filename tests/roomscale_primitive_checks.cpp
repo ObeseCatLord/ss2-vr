@@ -122,4 +122,14 @@ int main() {
     dispatchPrimitive(&strictCrossing,falseMiss,&out,{{5,0,0},{-1,0,0}},sphere,1);
     assert(strictCrossing.failed&&strictCalls==1&&out.entry>out.exit);
 
+    QueryScope allowedContact{.01,1e-6,false,true,false};
+    const Ray touching{{1.49f,0,0},{1,0,0}};
+    assert(classifyPrimitive(allowedContact,touching,sphere,.5f).decision==Decision::ignoreNondeepening);
+    QueryScope rejectedContact{.01,1e-6,false,true,true};
+    dispatchPrimitive(&rejectedContact,falseMiss,&out,touching,sphere,.5f);
+    assert(rejectedContact.failed&&strictCalls==1&&out.entry>out.exit);
+    QueryScope clearVolume{.01,1e-6,false,true,true};
+    dispatchPrimitive(&clearVolume,falseMiss,&out,{{5,0,0},{1,0,0}},sphere,.5f);
+    assert(!clearVolume.failed&&strictCalls==2);
+
 }

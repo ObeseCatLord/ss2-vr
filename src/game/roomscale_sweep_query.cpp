@@ -79,7 +79,7 @@ bool configureRoomscaleSweepQueries(HMODULE engine) noexcept {
 }
 void resetRoomscaleSweepQueriesAfterQuiescence() noexcept {native={};}
 bool runRoomscaleSweepQueries(const roomscale::BodyGeometry& body,const roomscale::BodySweepCover& cover,
-    float contactDepthBudget,DWORD thread,RoomscaleQueryOwnerCurrent current,void *context,bool& failed) noexcept {
+    float contactDepthBudget,DWORD thread,RoomscaleQueryOwnerCurrent current,void *context,bool& failed,bool rejectInitialContact) noexcept {
     if(!roomscale::arithmeticSupported()) {failed=true;return false;}
     const double directionNorm=double(cover.direction.x)*cover.direction.x+
         double(cover.direction.y)*cover.direction.y+double(cover.direction.z)*cover.direction.z;
@@ -100,7 +100,7 @@ bool runRoomscaleSweepQueries(const roomscale::BodyGeometry& body,const roomscal
             const auto& sphere=spheres.sphere[index];
             if(!roomscale::detail::finite(roomscale::detail::convert(sphere.centre))||
                !std::isfinite(sphere.radius)||sphere.radius<=contactDepthBudget) {failed=true;return false;}
-            roomscale::QueryScope scope{cover.maximumParameter,contactDepthBudget,false,true};
+            roomscale::QueryScope scope{cover.maximumParameter,contactDepthBudget,false,true,rejectInitialContact};
             Query query{body,cover,current,context,scope,hull,index};
             if(!runRoomscaleModelQueryScope(scope,thread,Query::run,&query)||!query.clear) {
                 failed=true;return false;

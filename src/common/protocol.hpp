@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <type_traits>
 namespace ss2vr {
-constexpr uint32_t Magic = 0x32565253, Abi = 8, MaxDimension = 2048, WeaponCount = 17;
+constexpr uint32_t Magic = 0x32565253, Abi = 9, MaxDimension = 2048, WeaponCount = 17;
 constexpr size_t EyeBytes = size_t(MaxDimension) * MaxDimension * 4;
 enum Button : uint32_t { Wheel = 1, Use = 2, Jump = 4, Menu = 8, Recenter = 16, Sprint = 32 };
 enum FramePresentation : uint32_t { NativeUiComplete = 1 };
@@ -63,12 +63,24 @@ struct Ui {
     uint32_t fireSequence[2]{}, damageSequence = 0;
     WheelUi wheel[2];
 };
+enum class HeadClearanceMode : uint32_t { Disabled=0, Opaque=1, Clear=2 };
+// Response-only receipt for the actual image pair. Units are OpenXR metres in
+// this request's reference space; no native pointer or world handle crosses IPC.
+struct HeadClearance {
+    uint64_t tickMs=0;
+    Vec3 centre{};
+    float clearRadius=0,headRadius=0,nearZ=0;
+    HeadClearanceMode mode=HeadClearanceMode::Disabled;
+    uint32_t reserved=0;
+};
+static_assert(sizeof(HeadClearance)==40);
 struct Slot {
     SlotState state = SlotState::Empty;
     uint32_t cancelled = 0;
     // Response capability belongs to the actual image pair, not its request.
     uint32_t presentation = 0, presentationReserved = 0;
     Request request;
+    HeadClearance headClearance;
     uint8_t pixels[2][EyeBytes];
 };
 // Explicitly mono menu/loading frame; never eligible for a projection layer.

@@ -38,7 +38,8 @@ inline VrSettings loadSettings(const std::wstring &filename) {
     settings.remoteHeadTracking = number(L"Multiplayer", L"RemoteHeadTracking", 0, 0, 1) >= .5f;
     settings.headFade = number(L"HeadComfort", L"Enabled", 0, 0, 1) >= .5f;
     settings.headRadius = number(L"HeadComfort", L"RadiusMeters", .12f, .05f, .2f);
-    settings.headFadeDepth = number(L"HeadComfort", L"FadeDepthMeters", .05f, .02f, .15f);
+    settings.headClearanceMargin = number(L"HeadComfort", L"ClearanceMarginMeters",
+        number(L"HeadComfort", L"FadeDepthMeters", .05f, .02f, .15f), .02f, .15f);
     for (unsigned weapon = 0; weapon < WeaponCount; ++weapon) {
         wchar_t section[32];
         std::swprintf(section, 32, L"Weapon%d", int(weapon));

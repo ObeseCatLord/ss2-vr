@@ -247,6 +247,18 @@ int main() {
     dispatch(&strictCrossing,miss,{{1,1,3},{0,0,-1}},A,B,C,N,.5f);
     CHECK(strictCrossing.failed&&strictCalls==1); // A hypothetical native miss cannot clear a crossing.
 
+    // Head-volume visibility must reject an initial overlap even when the
+    // body-contact policy would allow a nondeepening/tangential sweep.
+    QueryScope allowedContact{.01,1e-6,false,true,false};
+    const Ray touching{{1,1,.49f},{1,0,0}};
+    CHECK(classify(allowedContact,touching,A,B,C,N,.5f).decision==Decision::ignoreNondeepening);
+    QueryScope rejectedContact{.01,1e-6,false,true,true};
+    dispatch(&rejectedContact,miss,touching,A,B,C,N,.5f);
+    CHECK(rejectedContact.failed&&strictCalls==1);
+    QueryScope clearVolume{.01,1e-6,false,true,true};
+    dispatch(&clearVolume,miss,{{1,1,1},{1,0,0}},A,B,C,N,.5f);
+    CHECK(!clearVolume.failed&&strictCalls==2);
+
     for(unsigned k=1;k<=200;++k) {
         const double travel=double(k)/50;
         QueryScope whole{travel,1e-6,false,true};

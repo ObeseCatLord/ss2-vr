@@ -139,6 +139,7 @@ thread_local IDirect3DSurface9 *desktopTarget = nullptr;
 thread_local IDirect3DSurface9 *desktopDepth = nullptr;
 thread_local Request renderRequest;
 extern bool beginStereo(void *, const Request &);
+extern bool headFramePrepared(void *,const Request &) noexcept;
 extern float frozenWorldVisibility();
 extern bool commitStereo(void *, const Request &, Slot &);
 extern void beginEye(void *, const Request &, int);
@@ -1174,7 +1175,8 @@ void stereo(void *puppet,void(__thiscall *original)(void *),EyePostRender postRe
             const auto now=GetTickCount64();
             if(slot.state==SlotState::Requested && !slot.cancelled && slot.request.width==width &&
                 slot.request.height==height && slot.request.input.focused && slot.request.input.headValid &&
-                now>=slot.request.input.tickMs && now-slot.request.input.tickMs<200) {
+                now>=slot.request.input.tickMs && now-slot.request.input.tickMs<200 &&
+                headFramePrepared(puppet,slot.request)) {
                 chosen=i; request=slot.request; slot.state=SlotState::Rendering; break;
             }
         }

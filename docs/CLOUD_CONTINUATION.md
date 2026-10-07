@@ -470,3 +470,18 @@ controller, query/swimming, placement/resource/math, native-finally and artifact
 checks pass. Metadata/readability helpers pass sanitizers and Windows compile
 checks. A corrupted FP cleanup is rejected. No game or headset process was run.
 See ROOMSCALE_LOCAL_CONTROLLER.md for the exact connected scope and limits.
+
+## Handheld head-volume and frame clearance — 2026-10-06
+
+Current source adds the default-off post-simulation handheld head-volume path
+and response-owned IPC9 clearance receipts. The host restricts cached clear
+images to the checked head/eye space and query lifetime; rejected/unknown native
+attempts produce opaque world output. Requested frames are not consumed before
+a matching native query opportunity. Mounted head protection remains excluded.
+
+All54 portable groups pass Debug/Release, both game DLLs and the host build, and
+changed helper sanitizers plus Windows compile-only checks pass. Compiled/native
+query/owner, strict-contact, cleanup, swimming, multiplayer RPC and fixed-layout
+checks pass. Native gameplay and Windows/Proton headset behavior remain untested.
+See HEAD_VOLUME_INTEGRATION.md. This does not finish the multiplayer body/origin
+correction problem, physical melee, remaining vehicle/head work or final review.

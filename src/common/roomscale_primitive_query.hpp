@@ -106,6 +106,7 @@ inline PrimitivePlan classifyPrimitive(QueryScope& scope,const Ray& ray,
         if (scope.requireWholePathClear && !(travel.lo>radius)) return invalid();
         return plan;
     }
+    if (scope.rejectInitialContact) return invalid();
     if (up(distance.hi-separation.lo)>scope.contactDepthBudget) return invalid();
     if (travel.lo>=up(distance.hi-scope.contactDepthBudget)) {
         plan.decision=Decision::ignoreNondeepening;

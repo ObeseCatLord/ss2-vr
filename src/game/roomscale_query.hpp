@@ -40,7 +40,7 @@ bool roomscaleCollisionKernelsUsable() noexcept;
 // scope/context must live above this call and survive native unwinding.
 bool runRoomscaleModelQueryScope(roomscale::QueryScope& scope,DWORD recognizedSimulationThread,
                                 RoomscaleQueryBody body,void* context) noexcept;
-// Combined entry for the eventual native owner. Resource cancellation and both
+// Combined entry for an independently admitted native owner. Resource cancellation and both
 // mathematical kernels share scope.failed, so earlier hits cannot survive a
 // pending-resource cancellation. Requires all three hook components enabled by
 // the caller and requireWholePathClear=true: native TOI misses alone are not

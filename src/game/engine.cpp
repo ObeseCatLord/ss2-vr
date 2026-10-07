@@ -10,7 +10,7 @@
 #include "common/native_zoom.hpp"
 #include "common/native_primary_projection.hpp"
 #include "common/frame_policy.hpp"
-#include "common/head_comfort.hpp"
+#include "common/head_volume.hpp"
 #include "common/hook_transaction.hpp"
 #include "common/lasers.hpp"
 #include "common/muzzle.hpp"
@@ -238,7 +238,13 @@ struct Snapshot {
 static Snapshot current;
 static std::atomic<DWORD> simulationThread{0};
 static LaserAim laserAim[2];
-static HeadObstruction headObstruction;
+static HeadVolumeObservation headVolumeObservation;
+static HeadClearance eyeHeadClearance;
+static Pose protectedWorldHead;
+static float protectedWorldRadius=0;
+static bool headVolumeDrawSafe=true;
+static std::atomic<uint32_t> headNearBits{std::bit_cast<uint32_t>(.05f)};
+static uint32_t pairHeadNearBits=0;
 static SRWLOCK laserLock = SRWLOCK_INIT;
 static TrackingEpochs generations, networkGenerations;
 // Called while holding snapshotLock; publish invalidation before native state changes.
@@ -924,6 +930,7 @@ struct SimulationInterval {
     uintptr_t nativeCaller=0;
 };
 static void runPostSimulationRoomscale(SimulationInterval &);
+static void runPostSimulationHeadVisibility(SimulationInterval &);
 static thread_local SimulationInterval *simulationInterval = nullptr;
 static thread_local const NativePrimaryInvocation *primaryInvocation = nullptr;
 static PreparedPlayer *preparedPrimary(void *subject) noexcept {
@@ -1240,6 +1247,7 @@ static void __fastcall simulationStep(void *simulation, void *) {
         remote_render::noteSimulationThread();
         originalSimulationStep(simulation);
         runPostSimulationRoomscale(interval);
+        runPostSimulationHeadVisibility(interval);
         // Retire input only after all original entity/script/physics work.
         if (interval.networkPrepared && nativeInputHealthy())
             multiplayer::completeTick();
@@ -1981,9 +1989,24 @@ static void __fastcall viewPrepare(void *command, void *, const Matrix34 &view, 
     }
     originalViewPrepare(command, view, projection, depthRange, identifier);
 }
+bool headFramePrepared(void* player,const Request& request) noexcept {
+    const auto snapshot=copySnapshot();
+    if(!settings.headFade||!snapshot.rider.handheld())return true;
+    if(player!=snapshot.player||simulationThread.load()!=GetCurrentThreadId())return false;
+    AcquireSRWLockShared(&laserLock);
+    const auto& h=headVolumeObservation;
+    const auto now=GetTickCount64();
+    const bool attempted=h.owner==snapshot.playerHandle&&h.generation==request.trackingGeneration&&
+        h.session==request.session&&h.reference==request.reference&&h.requestSequence==request.sequence&&
+        h.inputSequence==request.input.sequence&&h.simulationRevision==simulationRevision&&
+        h.rigRevision==snapshot.rigRevision&&now>=h.tickMs&&now-h.tickMs<=100;
+    ReleaseSRWLockShared(&laserLock);
+    return attempted;
+}
 bool beginStereo(void *p, const Request &request) {
     weaponPairFault = false;
     eyeWorldVisibility = 1;
+    eyeHeadClearance={};headVolumeDrawSafe=true;pairHeadNearBits=0;
     eyeSnapshot = copySnapshot();
     if (!nativeFrameIdentity(request, eyeSnapshot.input, eyeSnapshot.generation, eyeSnapshot.initialized,
                              eyeSnapshot.ui.gameplay, p == eyeSnapshot.player && livePlayer(eyeSnapshot)) ||
@@ -1994,15 +2017,20 @@ bool beginStereo(void *p, const Request &request) {
                  nativeTrackingAnchor(p, eyeAnchor, &eyeSnapshot.rider) && finite(eyeNativeCamera);
     if (ready) {
         freezeLasers(request);
-        if (settings.headFade && !nativeRayFaulted.load(std::memory_order_acquire)) {
-            const Pose head =
-                worldHeadTracking(eyeAnchor, eyeSnapshot.origin, eyeSnapshot.turn, request.input.head);
+        if (settings.headFade && eyeSnapshot.rider.handheld()) {
+            const Pose head = worldHeadTracking(eyeAnchor,eyeSnapshot.origin,eyeSnapshot.turn,request.input.head);
             AcquireSRWLockShared(&laserLock);
-            const auto presentation =
-                freezeHeadVisibility(headObstruction, eyeAnchor, head, eyeSnapshot.playerHandle, request,
-                                     GetTickCount64(), settings.headFadeDepth);
+            const bool clear = !nativeRayFaulted.load(std::memory_order_acquire) &&
+                simulationThread.load()==GetCurrentThreadId() &&
+                headVolumeVisible(headVolumeObservation,eyeAnchor,head,eyeSnapshot.playerHandle,request,
+                                  simulationRevision,eyeSnapshot.rigRevision,GetTickCount64());
+            eyeHeadClearance.mode=HeadClearanceMode::Opaque;
+            if(clear) eyeHeadClearance={headVolumeObservation.tickMs,request.input.head.p,
+                headVolumeObservation.radius-headVolumeObservation.numericalGuard,settings.headRadius,headVolumeObservation.nearZ,
+                HeadClearanceMode::Clear,0};
+            protectedWorldHead=headVolumeObservation.head;protectedWorldRadius=headVolumeObservation.radius;
             ReleaseSRWLockShared(&laserLock);
-            eyeWorldVisibility = presentation.value;
+            eyeWorldVisibility = clear ? 1.f : 0.f;
         }
         remote_render::freezePair();
     }
@@ -2017,7 +2045,8 @@ bool commitStereo(void *p,const Request &request,Slot &slot) {
         const bool eligible=nativeFrameIdentity(request,current.input,current.generation,current.initialized,
             current.ui.gameplay,p==current.player && livePlayer(current)) && vrSession(current) &&
             eyeSnapshot.rigRevision==current.rigRevision &&
-            fresh(current.input) && trackingEligible(p) && nativeRiderCurrent(p,current.rider) && !weaponPairFault;
+            fresh(current.input) && trackingEligible(p) && nativeRiderCurrent(p,current.rider) && !weaponPairFault && headVolumeDrawSafe;
+        if(eligible)slot.headClearance=eyeHeadClearance;
         committed=remote_render::commitPair(slot,request,eligible);
     },[&](bool aborted) noexcept {
         if(aborted) nativeUiFault();
@@ -2060,9 +2089,19 @@ static Pose *__fastcall camera(void *p, void *, Pose *out) {
     auto s = copySnapshot();
     if (p == eyePlayer && scopeSource.active && eyeSnapshot.initialized)
         *out = scopeSource.view.camera;
-    else if (p == eyePlayer && eyeIndex >= 0 && eyeSnapshot.initialized)
+    else if (p == eyePlayer && eyeIndex >= 0 && eyeSnapshot.initialized) {
         *out = worldEyeTracking(eyeAnchor, eyeSnapshot.origin, eyeSnapshot.turn, eyeRequest.input.head,
                                 eyeRequest.eye[eyeIndex]);
+        if(eyeHeadClearance.mode==HeadClearanceMode::Clear) {
+            const auto f=eyeRequest.fov[eyeIndex];
+            const double x=std::max(std::abs(std::tan(double(f.left))),std::abs(std::tan(double(f.right))));
+            const double y=std::max(std::abs(std::tan(double(f.down))),std::abs(std::tan(double(f.up))));
+            const double distance=std::hypot(double(out->p.x)-protectedWorldHead.p.x,
+                double(out->p.y)-protectedWorldHead.p.y,double(out->p.z)-protectedWorldHead.p.z);
+            const double extent=distance+double(eyeHeadClearance.nearZ)*std::sqrt(1+x*x+y*y)+.0005;
+            if(!finite(*out)||!std::isfinite(extent)||extent>protectedWorldRadius)headVolumeDrawSafe=false;
+        }
+    }
     else if (p == s.player && s.rider.handheld() && nativeRiderCurrent(p, s.rider) &&
              vrSession(s) && fresh(s.input)) {
         Pose body;
@@ -2132,6 +2171,15 @@ static Matrix44 *__fastcall project(void *p, void *, Matrix44 *out) {
         if (!(nz > 0 && fz > nz && std::isfinite(fz))) {
             nz = .05f;
             fz = 10000;
+        }
+        if(settings.headFade && eyeSnapshot.rider.handheld()) {
+            const uint32_t bits=std::bit_cast<uint32_t>(nz);
+            if(caller==rootProjectionReturn) {
+                pairHeadNearBits=std::max(pairHeadNearBits,bits);
+                headNearBits.store(pairHeadNearBits,std::memory_order_relaxed);
+            }
+            if(eyeHeadClearance.mode==HeadClearanceMode::Clear&&nz>eyeHeadClearance.nearZ)
+                headVolumeDrawSafe=false; // Query a matching volume on a later frame.
         }
         *out = projection(eyeRequest.fov[eyeIndex], nz, fz);
     }
@@ -2522,7 +2570,7 @@ static void trackedRayInitBody(uintptr_t caller, bool outermost) {
         simulationThread.load(std::memory_order_relaxed) != GetCurrentThreadId() || !nativeMainThread())
         return;
     auto s = copySnapshot();
-    if ((!settings.lasers && !settings.headFade && !s.zoom[0] && !s.zoom[1]) ||
+    if ((!settings.lasers && !s.zoom[0] && !s.zoom[1]) ||
         !vrSession(s) || !fresh(s.input) || !s.ui.gameplay || !livePlayer(s)) return;
     bool requested = false;
     Request queryRequest;
@@ -2550,30 +2598,6 @@ static void trackedRayInitBody(uintptr_t caller, bool outermost) {
     memcpy(existing, laserAim, sizeof(existing));
     ReleaseSRWLockShared(&laserLock);
     laserQuerying = true;
-    HeadObstruction sampledHead;
-    if (settings.headFade) {
-        const Pose head = worldHeadTracking(body, s.origin, s.turn, s.input.head);
-        const auto probe = makeHeadProbe(body, head);
-        if (probe.valid) {
-            originalRayInit();
-            const NativeRay ray{probe.origin, probe.direction};
-            setRay(ray);
-            rayMaximum(probe.length);
-            rayMinimum(0);
-            rayRadius(settings.headRadius);
-            rayCategory(bulletCategory);
-            thickCategory(bulletCategory);
-            rayAvatar(s.player);
-            rayMechanism(getMechanism(s.player));
-            rayFluids(0);
-            checkRay();
-            const bool hit = rayHit() != 0;
-            const float rawDistance = hitDistance();
-            originalRayInit(); // Retire this query even when its result is invalid.
-            sampledHead = recordHeadObstruction(body, head, s.playerHandle, queryRequest, GetTickCount64(),
-                                                probe, hit, rawDistance);
-        }
-    }
     LaserAim sampled[2];
     for (unsigned h = 0; h != 2; ++h) {
         if ((!settings.lasers && !(s.rider.handheld() && s.zoom[h])) || !s.input.handValid[h])
@@ -2646,7 +2670,6 @@ static void trackedRayInitBody(uintptr_t caller, bool outermost) {
     laserQuerying = false;
     const auto live = copySnapshot();
     if (!laserSampleCurrent(s, queryRequest)) {
-        sampledHead = {};
         sampled[0] = sampled[1] = {};
     }
     for (unsigned h = 0; h != 2; ++h)
@@ -2655,7 +2678,6 @@ static void trackedRayInitBody(uintptr_t caller, bool outermost) {
              !vehicleLaserCurrent(s, queryRequest, sampled[h].vehicle))))
             sampled[h] = {};
     AcquireSRWLockExclusive(&laserLock);
-    headObstruction = sampledHead;
     for (unsigned h = 0; h != 2; ++h)
         laserAim[h] = sampled[h];
     ReleaseSRWLockExclusive(&laserLock);
@@ -3867,6 +3889,112 @@ static __attribute__((noinline)) void runPostSimulationRoomscale(SimulationInter
     });
 }
 
+struct HeadVisibilityAttempt {
+    LocalRoomscaleAttempt owner;
+    Request request{};
+    Pose head{};
+    float radius=0,nearZ=.05f,numericalGuard=.002f;
+    bool prepared=false,clear=false;
+};
+static void __cdecl queryHeadVolume(void* opaque) noexcept {
+    auto& h=*static_cast<HeadVisibilityAttempt*>(opaque);auto& c=h.owner;
+    h.clear=runRoomscaleSweepQueries(c.body,c.cover,0,c.thread,roomscaleOwnerCurrent,&c,c.failed,true);
+}
+static bool __cdecl prepareAndQueryHeadVolume(void* opaque) {
+    auto& h=*static_cast<HeadVisibilityAttempt*>(opaque);auto& c=h.owner;
+    if(!roomscalePhaseCurrent(c)||!roomscaleCleanupReady(c)||!captureRoomscaleBody(c,c.body))return false;
+    const auto relative=relativeTracking(c.snapshot.origin,h.request.input.head);
+    if(!finite(relative)||!finite(c.anchorBefore))return false;
+    const auto bounded=boundHeadTranslation(relative.p);
+    if(bounded.x!=relative.p.x||bounded.y!=relative.p.y||bounded.z!=relative.p.z)return false;
+    h.head=worldHeadTracking(c.anchorBefore,c.snapshot.origin,c.snapshot.turn,h.request.input.head);
+    h.nearZ=std::bit_cast<float>(headNearBits.load(std::memory_order_relaxed));
+    if(!std::isfinite(h.nearZ)||h.nearZ<=0||!roomscale::bodyUnitQuaternion(c.anchorBefore.q)||
+       !roomscale::bodyUnitQuaternion(c.snapshot.origin.q))return false;
+    double radius=settings.headRadius;
+    double worldGrid=0,stageMagnitude=1;
+    for(float value:{h.head.p.x,h.head.p.y,h.head.p.z}) {
+        const double upper=double(std::nextafter(value,INFINITY))-value;
+        const double lower=double(value)-std::nextafter(value,-INFINITY);
+        worldGrid=std::max(worldGrid,std::max(upper,lower));
+    }
+    for(float value:{c.snapshot.origin.p.x,c.snapshot.origin.p.y,c.snapshot.origin.p.z,
+                    h.request.input.head.p.x,h.request.input.head.p.y,h.request.input.head.p.z})
+        stageMagnitude=std::max(stageMagnitude,std::abs(double(value)));
+    // The last observed native near plane is checked again while both eyes
+    // render. Larger/new clipping planes reject the pair and prime a new query.
+    for(unsigned eye=0;eye<2;++eye) {
+        const auto pose=worldEyeTracking(c.anchorBefore,c.snapshot.origin,c.snapshot.turn,
+                                         h.request.input.head,h.request.eye[eye]);
+        const auto f=h.request.fov[eye];
+        if(!finite(pose)||!roomscale::bodyUnitQuaternion(pose.q)||
+           !std::isfinite(f.left)||!std::isfinite(f.right)||!std::isfinite(f.up)||!std::isfinite(f.down)||
+           f.left>=f.right||f.down>=f.up||std::abs(f.left)>=1.5f||std::abs(f.right)>=1.5f||
+           std::abs(f.up)>=1.5f||std::abs(f.down)>=1.5f)return false;
+        const double x=std::max(std::abs(std::tan(double(f.left))),std::abs(std::tan(double(f.right))));
+        const double y=std::max(std::abs(std::tan(double(f.down))),std::abs(std::tan(double(f.up))));
+        const double eyeDistance=std::hypot(double(pose.p.x)-h.head.p.x,double(pose.p.y)-h.head.p.y,
+                                           double(pose.p.z)-h.head.p.z);
+        radius=std::max(radius,eyeDistance+double(h.nearZ)*std::sqrt(1+x*x+y*y)+.001);
+    }
+    const double guard=std::max(.002,32*worldGrid+128*std::numeric_limits<float>::epsilon()*stageMagnitude);
+    if(!std::isfinite(guard)||guard>.25)return false;
+    h.numericalGuard=roomscale::outwardFloat(guard);
+    radius+=h.numericalGuard;
+    radius+=settings.headClearanceMargin; // Explicit room for later tracked poses inside this clear volume.
+    if(!std::isfinite(radius)||radius<=0||radius>.5)return false;
+    h.radius=roomscale::outwardFloat(radius);
+    c.cover=coverHeadVolumeSweep(c.body,c.anchorBefore.p,h.head.p,h.radius,.001f);
+    if(!c.cover.valid||!roomscaleOwnerCurrent(&c))return false;
+    c.reads.seal();h.prepared=true;
+    return runRoomscaleResourceScope(c.failed,c.thread,queryHeadVolume,&h)&&h.clear;
+}
+static __attribute__((noinline)) void runPostSimulationHeadVisibility(SimulationInterval& interval) {
+    if(!settings.headFade||!roomscaleConfigured||roomscaleBusy||roomscaleFaulted.load()||
+       interval.previous||!interval.managerPrepared||!nativeInputHealthy())return;
+    HeadVisibilityAttempt h;auto& c=h.owner;
+    c.interval=&interval;c.snapshot=copySnapshot();c.thread=GetCurrentThreadId();
+    c.simulationSequence=simulationRevision;c.world=reinterpret_cast<uintptr_t>(interval.preparedWorld);
+    if(!vrSession(c.snapshot)||!fresh(c.snapshot.input)||!c.snapshot.ui.gameplay||
+       !c.snapshot.rider.handheld()||recenterHeld(c.snapshot.input)||!livePlayer(c.snapshot)||
+       !roomscaleWord(c.world,0x6c,c.physics)||!c.physics)return;
+    auto* prepared=preparedPrimary(c.snapshot.player);
+    if(!prepared||!prepared->prepared||prepared->revoked||!prepared->recognized||
+       prepared->handle!=c.snapshot.playerHandle||prepared->rider!=c.snapshot.rider)return;
+    uint32_t table=0;
+    if(!roomscaleWord(reinterpret_cast<uintptr_t>(c.snapshot.player),0,table)||table!=swimmingPlayerVtable)return;
+    {
+        Lock lock(channel,1);
+        if(!lock)return;
+        bool found=false;
+        for(const auto& slot:channel.shared->slot)
+            if(slot.state==SlotState::Requested&&!slot.cancelled&&
+               nativeFrameIdentity(slot.request,c.snapshot.input,c.snapshot.generation,c.snapshot.initialized,
+                                   c.snapshot.ui.gameplay,true)&&fresh(slot.request.input)) {
+                h.request=slot.request;found=true;break;
+            }
+        if(!found)return;
+    }
+    withNativeFinally([&] {
+        roomscaleBusy=true;
+        if(!roomscalePhaseCurrent(c,false)||!roomscaleWord(c.world,0x64,c.worldInfoHandle)||
+           !roomscaleWord(reinterpret_cast<uintptr_t>(c.snapshot.player),0x38c,c.brainHandle))return;
+        c.worldInfo=reinterpret_cast<uintptr_t>(resolve(c.worldInfoHandle));
+        c.brain=reinterpret_cast<uintptr_t>(resolve(c.brainHandle));
+        if(!roomscalePhaseCurrent(c)||!trackingEligible(c.snapshot.player)||!isAlive(c.snapshot.player)||
+           !nativeTrackingAnchor(c.snapshot.player,c.anchorBefore,&c.snapshot.rider))return;
+        const bool clear=runRoomscaleMathFrame(c.failed,c.thread,prepareAndQueryHeadVolume,&h)&&h.clear;
+        const HeadVolumeObservation sample{c.anchorBefore,h.head,c.snapshot.playerHandle,
+            h.request.trackingGeneration,h.request.session,h.request.reference,h.request.sequence,
+            h.request.input.sequence,c.simulationSequence,c.snapshot.rigRevision,GetTickCount64(),
+            h.radius,h.nearZ,h.numericalGuard,h.prepared,clear};
+        AcquireSRWLockExclusive(&laserLock);headVolumeObservation=sample;ReleaseSRWLockExclusive(&laserLock);
+    },[&](bool aborted) noexcept {
+        if(aborted) {nativeRayFaulted.store(true,std::memory_order_release);nativeInputFailed();}
+        roomscaleBusy=false;
+    });
+}
+
 static std::vector<void *> ownedHooks;
 static bool attachPoisoned = false;
 static bool rollbackNativeHooks() {
@@ -4196,10 +4324,10 @@ bool attach(bool headless) {
     ok = internalHook(g,0x172854,reinterpret_cast<void *>(zoomInterpolatePredicate),&zoomInterpolatePredicate_original) && ok;
     ok = internalHook(g,0x17297f,reinterpret_cast<void *>(zoomSoundStartPredicate),&zoomSoundStartPredicate_original) && ok;
     ok = internalHook(g,0x172a3c,reinterpret_cast<void *>(zoomSoundStopPredicate),&zoomSoundStopPredicate_original) && ok;
-    if(ok&&settings.roomscale&&!headless) {
+    if(ok&&(settings.roomscale||settings.headFade)&&!headless) {
         ok=configureRoomscaleSweepQueries(e)&&queueRoomscaleTriangleHook(c,hook)&&
-            queueRoomscalePrimitiveHook(c,hook)&&queueRoomscaleResourceGates(e,internalHook)&&
-            queueRoomscalePlacementHooks(e,hook,internalHook);
+            queueRoomscalePrimitiveHook(c,hook)&&queueRoomscaleResourceGates(e,internalHook);
+        if(ok&&settings.roomscale)ok=queueRoomscalePlacementHooks(e,hook,internalHook);
     }
     ok = multiplayer::initialize(e, c, g, hook) && ok;
     ok = internalHook(e, 0x1b3b60, reinterpret_cast<void *>(entityStep),
@@ -4214,8 +4342,8 @@ bool attach(bool headless) {
         return false;
     }
     ok = MH_ApplyQueued() == MH_OK;
-    if(ok&&settings.roomscale&&!headless) {
-        roomscaleConfigured=armRoomscalePlacementAfterEnable()&&roomscaleCollisionKernelsUsable()&&
+    if(ok&&(settings.roomscale||settings.headFade)&&!headless) {
+        roomscaleConfigured=(!settings.roomscale||armRoomscalePlacementAfterEnable())&&roomscaleCollisionKernelsUsable()&&
             roomscaleResourceGatesUsable();
         ok=roomscaleConfigured;
     }

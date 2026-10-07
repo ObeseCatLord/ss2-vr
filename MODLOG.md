@@ -1170,3 +1170,20 @@ provisional inactive coordinate-history helper with52 Debug/Release groups,
 ASan/UBSan and Windows x86/x64 compile-only coverage. No protocol, prediction,
 body-correction or multiplayer roomscale path is enabled. See
 ROOMSCALE_NATIVE_PLACEMENT_REPLICATION_NOTES.md.
+
+## 2026-10-06 — Handheld head-volume queries and cached-frame guards
+
+Replaced the optional opportunistic lean-fade consumer with a default-off
+post-simulation handheld volume query. Initial contact is rejected, stationary
+occupancy is checked, unavailable/obstructed attempts produce opaque world
+pixels, and requests wait for a matching query attempt before native capture.
+Actual eye/near-plane admission and numerical margin protect the captured pair.
+
+IPC9 adds a40-byte response-owned clearance receipt. The host checks current head
+and eye containment and a100ms query lifetime again before submission, including
+after UI waits. Mounted head protection remains unsupported/disabled; this is
+not body movement or a runtime-verified safety system. All54 Debug/Release groups,
+x86 game/server and x64 host builds, changed helper sanitizers/compile-only tests,
+native/compiled boundaries and equal IPC layouts pass. A missing strict-contact
+argument fixture is rejected. See HEAD_VOLUME_INTEGRATION.md. No game, headset,
+Windows/Wine execution or deployment occurred; the full mod remains unfinished.

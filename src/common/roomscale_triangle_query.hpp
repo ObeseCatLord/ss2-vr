@@ -33,6 +33,9 @@ struct QueryScope {
     // Body-movement requests cannot treat an unproved binary32 native miss as
     // clearance. Legacy contact-only experiments leave this false explicitly.
     bool requireWholePathClear;
+    // Visibility probes must never accept a sphere already touching geometry,
+    // even when moving tangentially/away would be valid for a body sweep.
+    bool rejectInitialContact;
 };
 static_assert(std::is_trivial_v<QueryScope> && std::is_standard_layout_v<QueryScope>);
 enum class Decision { nativeToi, ignoreNondeepening, block, invalid };
@@ -212,6 +215,7 @@ inline Plan classify(QueryScope& scope,const Ray& ray,const Vector& a,const Vect
         if (!nativeFacing(d,supplied,plan.reverseWinding)) return invalid();
         return plan;
     }
+    if (scope.rejectInitialContact) return invalid();
     // Bounds must locate the initial contact to within the explicit budget.
     // Otherwise an approximate projection cannot authorize a skip or disguise
     // an unknown start as a normal native miss.

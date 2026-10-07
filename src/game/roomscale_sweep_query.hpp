@@ -7,13 +7,16 @@ using RoomscaleQueryOwnerCurrent=bool(__cdecl *)(void *) noexcept;
 // and does not install hooks, start a query, or move anything.
 bool configureRoomscaleSweepQueries(HMODULE engine) noexcept;
 void resetRoomscaleSweepQueriesAfterQuiescence() noexcept;
-// Requires the enclosing checked-placement resource scope and math frame, plus
+// Requires an enclosing owned resource scope and math frame, plus
 // enabled triangle/primitive/resource hooks. ownerCurrent must establish phase,
 // worker/lifetime/scratch ownership and an inspected normal ray-cleanup list.
-// All copied body/candidate data must remain current through final commit.
+// All copied query data must remain current through the complete scope;
+// movement callers also retain it through their separately guarded commit.
+// rejectInitialContact is for visibility/occupancy probes: even tangential
+// initial penetration is unusable. Movement callers retain their contact policy.
 // Every sphere must finish unobstructed. Native results are copied before the
 // ordinary next rayInit; abnormal native unwind is never "repaired" here.
 bool runRoomscaleSweepQueries(const roomscale::BodyGeometry&,const roomscale::BodySweepCover&,
     float contactDepthBudget,DWORD simulationThread,RoomscaleQueryOwnerCurrent ownerCurrent,
-    void *ownerContext,bool &failed) noexcept;
+    void *ownerContext,bool &failed,bool rejectInitialContact=false) noexcept;
 } // namespace ss2vr::game
