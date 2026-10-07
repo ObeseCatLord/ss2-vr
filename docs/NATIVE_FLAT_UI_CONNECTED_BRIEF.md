@@ -112,3 +112,23 @@ source/disassembly is retained in this repository.
 and [swapchain presentation parameters](https://learn.microsoft.com/en-us/windows/win32/api/d3d9/nf-d3d9-idirect3dswapchain9-getpresentparameters)
 support that narrow output-domain gate. This is queried device admission, not
 an instruction to force or rewrite the native swapchain.
+
+## Runtime correction: backend input declarations
+
+The historical POSITION0 admission above was contradicted by actual device
+observation. The native builtin draw uses stream0/offset0/FLOAT3/default/TEXCOORD0;
+UV/color are TEXCOORD2/3 in their original streams. Two-phase GetFunction reports
+a124-byte VS1.1 program with a DCL of TEXCOORD0 into INPUTv0. Engine source strings
+remaining VS1.1 does not establish the final backend declaration contract.
+Previous bounded native findings identify API2 parsing (GfxD3D725E), injected
+dcl_texcoordN vN (Engine93425..93461), assembly (GfxD3D6DAA), device shader creation
+(77CC) and TEXCOORD/stream-index declaration construction (98D4/98DC,9D84/9D8C).
+These are fingerprint-bound notes, not published proprietary code.
+
+The current narrow gate uses that position element after original builtin program
+identity validation. Other semantic indices, POSITION/POSITIONT, changed stream,
+offset, type or method remain unsupported. Original draw arguments, buffers,
+shader objects, constants, state restoration and once-only owner remain native.
+No production shader parser or rewritten program is added. See
+RENDERING_SENIOR_REVIEW.md and PC_GAMEPLAY_READINESS.md for current acceptance;
+historical source GO did not certify runtime UI or the old POSITION0 assumption.

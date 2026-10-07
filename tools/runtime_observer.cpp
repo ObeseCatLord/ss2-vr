@@ -22,18 +22,21 @@ static BOOL CALLBACK closeWindow(HWND window,LPARAM pid) {
     return TRUE;
 }
 struct OwnedLoading {
-    HWND window=nullptr; DWORD pid=0,thread=0; uint32_t module=0,menu=0;
+    HWND window=nullptr; DWORD pid=0,thread=0; uint32_t module=0,menu=0,table=0,ready=0,stage=0,error=0;
 };
 static bool loadingOwner(DWORD pid,const wchar_t *path,OwnedLoading &out) {
     HANDLE process=OpenProcess(PROCESS_VM_READ|PROCESS_QUERY_LIMITED_INFORMATION,FALSE,pid);
-    if(!process)return false;
+    out.pid=pid;out.stage=1;
+    if(!process){out.error=GetLastError();return false;}
     wchar_t actual[2048]{};DWORD bytes=2048;
     const bool queried=QueryFullProcessImageNameW(process,0,actual,&bytes);
     std::wstring expected(path);
     for(auto &c:expected)if(c==L'/')c=L'\\';
     for(auto &c:actual)if(c==L'/')c=L'\\';
     bool ok=queried&&!_wcsicmp(actual,expected.c_str());
+    out.stage=ok?2:1;
     HANDLE modules=ok?CreateToolhelp32Snapshot(TH32CS_SNAPMODULE|TH32CS_SNAPMODULE32,pid):INVALID_HANDLE_VALUE;
+    if(modules==INVALID_HANDLE_VALUE)out.error=GetLastError();
     uint32_t base=0;MODULEENTRY32W module{sizeof(module)};
     if(modules!=INVALID_HANDLE_VALUE) {
         if(Module32FirstW(modules,&module))do {
@@ -47,6 +50,8 @@ static bool loadingOwner(DWORD pid,const wchar_t *path,OwnedLoading &out) {
     uint32_t menu=0,table=0,ready=0,again=0,tableAgain=0,readyAgain=0;
     ok=ok&&base&&read(base+0x40a270,menu)&&menu&&menu<=UINT32_MAX-0x6c&&
         read(menu,table)&&table==base+0x29f148&&read(menu+0x6c,ready)&&ready==1;
+    out.module=base;out.menu=menu;out.table=table;out.ready=ready;
+    if(ok)out.stage=3;
     const HWND window=GetForegroundWindow();DWORD owner=0;
     const DWORD thread=window?GetWindowThreadProcessId(window,&owner):0;
     wchar_t title[64]{};if(window)GetWindowTextW(window,title,64);
@@ -54,7 +59,7 @@ static bool loadingOwner(DWORD pid,const wchar_t *path,OwnedLoading &out) {
         read(base+0x40a270,again)&&again==menu&&read(menu,tableAgain)&&tableAgain==table&&
         read(menu+0x6c,readyAgain)&&readyAgain==1;
     CloseHandle(process);
-    if(ok)out={window,pid,thread,base,menu};
+    if(ok){out.window=window;out.thread=thread;out.stage=4;}
     return ok;
 }
 int wmain(int argc,wchar_t **argv) {
@@ -74,7 +79,7 @@ int wmain(int argc,wchar_t **argv) {
         pose(output,i.head);std::fprintf(output,",\"hands\":[");pose(output,i.hand[0]);std::fprintf(output,",");pose(output,i.hand[1]);
         OwnedLoading loading{};
         const bool ready=argc==5&&loadingOwner(s.gamePid,argv[4],loading);
-        std::fprintf(output,"],\"slots\":[%u,%u],\"loading_ready\":%u}\n",static_cast<unsigned>(s.slot[0].state),static_cast<unsigned>(s.slot[1].state),ready);
+        std::fprintf(output,"],\"slots\":[%u,%u],\"loading_ready\":%u,\"loading_stage\":%u,\"loading_error\":%u,\"loading_table_rva\":%u,\"loading_native_ready\":%u}\n",static_cast<unsigned>(s.slot[0].state),static_cast<unsigned>(s.slot[1].state),ready,loading.stage,loading.error,loading.module&&loading.table?loading.table-loading.module:0,loading.ready);
 
         return output==stdout ? (std::fflush(output)==0?0:7) : (std::fclose(output)==0?0:7);
     }
@@ -116,7 +121,7 @@ int wmain(int argc,wchar_t **argv) {
                     std::abs(head.p.x-expected[0])<.001&&std::abs(head.p.y-expected[1])<.001&&std::abs(head.p.z-expected[2])<.001;
                 if(s.state==SlotState::Ready&&!s.cancelled&&s.request.input.sequence>=minimumInput&&
                     shared.rendererReady&&shared.ui.gameplay&&!shared.menu.visible&&s.request.input.focused&&s.request.input.headValid&&
-                    poseMatches&&!s.request.reserved&&!s.presentationReserved&&s.presentation<=NativeUiComplete&&
+                    poseMatches&&!s.request.reserved&&!s.presentationReserved&&s.presentation==NativeUiComplete&&s.request.uiRequested==1&&
                     s.request.trackingGeneration==trackingEpoch(shared)&&
                     s.request.session==shared.latest.session&&s.request.reference==shared.latest.reference&&
                     GetTickCount64()>=s.request.input.tickMs&&GetTickCount64()-s.request.input.tickMs<=FrameAgeMs&&s.request.width&&s.request.height&&
@@ -148,9 +153,9 @@ int wmain(int argc,wchar_t **argv) {
     }
     auto name=std::wstring(argv[3])+L"-metadata.json";
     auto *f=_wfopen(name.c_str(),L"wbx");if(!f)return 6;
-    std::fprintf(f,"{\"sequence\":%llu,\"input_sequence\":%llu,\"input_tick_ms\":%llu,\"width\":%u,\"height\":%u,\"presentation\":%u,\"head\":",
+    std::fprintf(f,"{\"sequence\":%llu,\"input_sequence\":%llu,\"input_tick_ms\":%llu,\"width\":%u,\"height\":%u,\"presentation\":%u,\"session\":%u,\"reference\":%u,\"tracking_generation\":%u,\"ui_requested\":%u,\"head\":",
         static_cast<unsigned long long>(request.sequence),static_cast<unsigned long long>(request.input.sequence),
-        static_cast<unsigned long long>(request.input.tickMs),request.width,request.height,presentation);
+        static_cast<unsigned long long>(request.input.tickMs),request.width,request.height,presentation,request.session,request.reference,request.trackingGeneration,request.uiRequested);
     pose(f,request.input.head);std::fprintf(f,",\"eyes\":[");pose(f,request.eye[0]);std::fprintf(f,",");pose(f,request.eye[1]);
     std::fprintf(f,"],\"fov\":[");for(unsigned h=0;h<2;++h) {
         if(h)std::fprintf(f,",");const auto &v=request.fov[h];

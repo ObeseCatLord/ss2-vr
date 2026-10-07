@@ -1,8 +1,8 @@
 # Cloud continuation — 2026-10-05
 
 Latest PC direct-scene work is in PC_GAMEPLAY_READINESS.md and DIRECT_GAMEPLAY_LAB.md.
-Native +level now reaches Jungle without menu navigation, using one verified
-loading-screen Enter pair. Scene stream bytes/hash, null online interface, native
+Native +level now reaches Jungle without menu navigation, with a guarded loading-screen Enter adapter prepared. Actual records do not
+show it sent; the observed dismissal source remains unknown. Scene stream bytes/hash, null online interface, native
 shutdown and thirty neutral OpenXR input observations were recorded privately.
 First-eye completion rejects executed depth0..0.9 against prepared0..1; no world
 eye pair/projection or translated/rotated-camera acceptance exists. Astra is
@@ -688,3 +688,20 @@ Public publication is blocked pending explicit renewed confirmation delivered by
 ## Delivered renewed user source-publication approval
 
 The user explicitly approved publishing SS2 VR source and sanitized reverse-engineering notes to public ObeseCatLord/ss2-vr with empty commit emails and no game assets, binaries or credentials. This supersedes the earlier hold recorded above; preserve that history. Source-only bounded checkpoints may publish after full-history metadata/privacy checks. Runtime data/settings/captures and proprietary assets/binaries stay private; Actions disabled and workflows absent. Actual gameplay/native stereo acceptance remains open.
+
+## Sustained simulated native gameplay milestone
+
+Read PC_GAMEPLAY_READINESS.md and RENDERING_SENIOR_REVIEW.md. An exact native
+root-depth partition correction and actual TEXCOORD0 builtin position contract
+fix now produce complete native world/UI stereo. Run154502 captured all seven
+controlled head poses with exact request-correlated native cameras and successful
+projection submissions;300 distinct neutral complete pairs preceded capture.
+Source fingerprint765bd1bc0379da095f814cc790f46e9935c0ff38486391ce5a635c541ed7b7c4;
+all61 current Debug groups passed. Normal isolated shutdown/no cleanup errors were
+observed. Images/settings/runtime remain private. Full-mod acceptance remains open.
+
+Next: the reviewed opt-in stock-renderer comparator retaining private fixture
+startup isolation/scene receipts but skipping VR workers and graphics hooks; then
+identical scene/camera desktop depth/occlusion comparison and both VR eyes. Keep
+all effects enabled. Native dual wield and remaining immersive/MP/lifecycle and
+Windows/device targets follow; do not replace their acceptance with this milestone.

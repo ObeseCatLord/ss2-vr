@@ -1,6 +1,7 @@
 #pragma once
 #include "model_tree.hpp"
 #include <algorithm>
+#include <bit>
 #include <cmath>
 namespace ss2vr {
 struct WeaponWorldView {
@@ -43,6 +44,20 @@ inline WeaponWorldView executedWeaponView(const WeaponWorldView &prepared,
                        sameProjectionXY(prepared.projection, projection) &&
                        nearDepth == prepared.nearDepth && farDepth == prepared.farDepth;
     return {view, projection, nearDepth, farDepth, valid};
+}
+// Only the fingerprinted, first-root execution capture may use this adapter.
+// Native background collection partitions full-depth root [0,1] into world
+// [0,float32(0.9)] plus sky [float32(0.9),1]. Validate a value copy; never change
+// native prepared commands, accept arbitrary subranges, or alter restoration.
+inline WeaponWorldView executedRootWeaponView(const WeaponWorldView &prepared,
+                                              const Matrix34 &view,const Matrix44 &projection,
+                                              float nearDepth,float farDepth) {
+    auto expected=prepared;
+    if(std::bit_cast<uint32_t>(prepared.nearDepth)==0 &&
+       std::bit_cast<uint32_t>(prepared.farDepth)==0x3f800000u &&
+       std::bit_cast<uint32_t>(nearDepth)==0 && std::bit_cast<uint32_t>(farDepth)==0x3f666666u)
+        expected.farDepth=farDepth;
+    return executedWeaponView(expected,view,projection,nearDepth,farDepth);
 }
 // Ephemeral native Render invocation ordering, not simulation/gameplay state.
 struct WeaponViewPass {

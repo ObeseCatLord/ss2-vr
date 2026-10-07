@@ -2123,17 +2123,17 @@ static Pose *__fastcall camera(void *p, void *, Pose *out) {
         // Opt-in lab observation only: record the actual hooked native camera,
         // without overriding runtime poses or adding test input to gameplay.
         static const bool labTrace = [] { wchar_t value[2]{}; return GetEnvironmentVariableW(L"SS2VR_LAB_TRACE",value,2)==1 && value[0]==L'1'; }();
-        static Pose observedHead[2]{};
-        static bool observed[2]{};
+        static uint64_t observedRequest[2]{};
+        static uint32_t observedSession[2]{},observedReference[2]{},observedTracking[2]{};
         static unsigned cameraDiagnostics = 0;
         const auto &head = eyeRequest.input.head;
-        const auto &prior = observedHead[eyeIndex];
-        const double delta = std::hypot(double(head.p.x)-prior.p.x,double(head.p.y)-prior.p.y,double(head.p.z)-prior.p.z);
-        const double angle = std::abs(double(head.q.x)*prior.q.x+double(head.q.y)*prior.q.y+double(head.q.z)*prior.q.z+double(head.q.w)*prior.q.w);
-        if (labTrace && cameraDiagnostics < 48 && (!observed[eyeIndex] || delta > .0005 || angle < .99999)) {
-            ++cameraDiagnostics; observed[eyeIndex]=true; observedHead[eyeIndex]=head;
-            log("Lab native camera eye=%d request=%llu head=%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f camera=%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f",
-                eyeIndex,static_cast<unsigned long long>(eyeRequest.sequence),head.p.x,head.p.y,head.p.z,head.q.x,head.q.y,head.q.z,head.q.w,
+        if (labTrace && cameraDiagnostics < 4096 && (observedRequest[eyeIndex]!=eyeRequest.sequence || observedSession[eyeIndex]!=eyeRequest.session ||
+            observedReference[eyeIndex]!=eyeRequest.reference || observedTracking[eyeIndex]!=eyeRequest.trackingGeneration)) {
+            ++cameraDiagnostics; observedRequest[eyeIndex]=eyeRequest.sequence;
+            observedSession[eyeIndex]=eyeRequest.session;observedReference[eyeIndex]=eyeRequest.reference;observedTracking[eyeIndex]=eyeRequest.trackingGeneration;
+            log("Lab native camera eye=%d request=%llu session=%u reference=%u tracking=%u head=%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f camera=%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f",
+                eyeIndex,static_cast<unsigned long long>(eyeRequest.sequence),eyeRequest.session,eyeRequest.reference,eyeRequest.trackingGeneration,
+                head.p.x,head.p.y,head.p.z,head.q.x,head.q.y,head.q.z,head.q.w,
                 out->p.x,out->p.y,out->p.z,out->q.x,out->q.y,out->q.z,out->q.w);
         }
         if(eyeHeadClearance.mode==HeadClearanceMode::Clear) {
@@ -2318,7 +2318,7 @@ static void __cdecl weaponDepthRange(float nearDepth, float farDepth) {
     if (capture) {
         rootCaptureArmed = false; // Parent reactivation cannot overwrite this eye snapshot.
         if (physicalCallbacksAvailable())
-            executedWeaponWorld = executedWeaponView(preparedWeaponWorld, *nativeCurrentView,
+            executedWeaponWorld = executedRootWeaponView(preparedWeaponWorld, *nativeCurrentView,
                                                       *nativeCurrentProjection, *nativeDepthNear,
                                                       *nativeDepthFar);
         if(traceDepth && physicalCallbacksAvailable()) {
@@ -3372,6 +3372,12 @@ static void __fastcall overlayRender(void *player,void *,int flag) {
     bool active=false;
     withNativeFinally([&] {
         const bool admitted=caller==overlayParentReturn && flag==0 && outer && nativeUiOwnerCurrent(player);
+        static unsigned overlayDiagnostics=0;
+        if(uiOwnerDepth==1 && player==uiOwner.player && overlayDiagnostics<4) {
+            ++overlayDiagnostics;
+            log("Native UI overlay callback caller=%p expected=%p flag=%d outer=%u admitted=%u",
+                reinterpret_cast<void *>(caller),reinterpret_cast<void *>(overlayParentReturn),flag,outer,admitted);
+        }
         active=nativeUiBeginOverlay(player,admitted);
         originalOverlayRender(player,flag);
     },[&](bool aborted) noexcept {

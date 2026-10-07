@@ -2074,7 +2074,22 @@ struct Host {
             const auto endResult = frame.submit(layers);
             if (endResult == XR_SUCCESS) {
                 ++xrEndSuccess;
-                if (worldPresented && std::find(layers.begin(),layers.end(),world)!=layers.end()) ++xrWorldSuccess;
+                if (worldPresented && std::find(layers.begin(),layers.end(),world)!=layers.end()) {
+                    ++xrWorldSuccess;
+                    static const bool labTrace=[] { wchar_t value[2]{}; return GetEnvironmentVariableW(L"SS2VR_LAB_TRACE",value,2)==1 && value[0]==L'1'; }();
+                    static uint64_t lastSequence=0;
+                    static uint32_t lastSession=0,lastReference=0;
+                    static unsigned receipts=0;
+                    if(labTrace && receipts<2048 && (lastSequence!=cachedRequest.sequence ||
+                        lastSession!=cachedRequest.session || lastReference!=cachedRequest.reference)) {
+                        ++receipts;lastSequence=cachedRequest.sequence;lastSession=cachedRequest.session;lastReference=cachedRequest.reference;
+                        char receipt[256]{};
+                        std::snprintf(receipt,sizeof(receipt),"Lab projection submitted request=%llu session=%u reference=%u tracking=%u presentation=%u",
+                            static_cast<unsigned long long>(cachedRequest.sequence),cachedRequest.session,cachedRequest.reference,
+                            cachedRequest.trackingGeneration,cachedPresentation);
+                        log.write(receipt);
+                    }
+                }
                 if (!layers.empty()) ++xrLayerSuccess;
                 if (std::find(layers.begin(), layers.end(),
                     reinterpret_cast<const XrCompositionLayerBaseHeader *>(&menuQuad)) != layers.end()) ++xrMenuSuccess;

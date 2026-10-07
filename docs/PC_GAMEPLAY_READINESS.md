@@ -120,3 +120,85 @@ compiled source fingerprint
 All60 current offline Debug groups passed. Source review was bounded normal-path
 Astra/xhigh; serving-backend/effective-setting introspection remains unavailable.
 No full exception, reset, scope, hardware or network GO is claimed.
+
+Loading-gate clarification: later record inspection found no
+loading_continue_messages_posted flag and no positive loading_ready observation
+in runs143525/144056. Gameplay was reached without main-agent menu navigation,
+but automatic native Enter consumption was not verified. The dismissal source
+remains unknown; the native reader's predicate is being diagnosed. Do not repeat
+the earlier claim that a harness-posted Enter was observed.
+
+## Exact native partition and repeatable loading results
+
+Run145306 verified guarded loading continuation using the same-source x86 GUI
+observer: exact CMSLoading table29F148, ready1, Enter down/up posted, then actual
+Jungle simulation. The earlier x64 module snapshot failed with
+ERROR_PARTIAL_COPY299; a zero reader result was not evidence of a nonready menu.
+Runs143525/144056 still have unknown dismissal provenance.
+
+Native background collection writes the parent root depth range0..float32
+0x3F666666 (Engine15EF50/15EF60); its child uses that boundary..1. The local
+correction admits only this bit-exact executed root partition after the existing
+root/caller/eye ownership checks. Generic executed-view equality remains strict.
+Adjacent floats, other ranges, wrong eyes and NaN are rejected by checks.
+All60 current Debug groups passed; no equivalent current Release or fault-lifecycle
+acceptance is claimed. The bounded Astra/xhigh review admitted an ordinary probe.
+
+Run145753 completed both native world eyes and accepted one fresh pair: left
+FNV2adac751f9aa9098, rightb37a135fb1fc7c57, with1,596,793 differing RGBA bytes.
+The host recorded six successful world submissions, comprising one fresh pair and
+five reuses. This is distinct-image transport evidence, not visible parallax or
+six independent native renders. No eye images were captured by the strict
+same-pose readiness gate, and no translated/rotated camera acceptance follows.
+
+Run150535 reproduced the remaining UI rejection after successful world rendering.
+The native overlay owner matched Sam2Game+EB85D. The first fault mapped to a shared
+indexed-draw callsite, which cannot distinguish desktop draw failure, captured
+state rejection or unsupported topology/fill. Bounded scalar reason labels now
+preserve the first rejection and log only at normal owner finish. Original draw
+count, query order, offscreen behavior and failure gates remain unchanged. The
+repeatable run observed native scene identity and null-interface shutdown, with
+no cleanup errors. Sustained stereo, all six pose axes and the terrain-occlusion
+comparison remain open.
+
+## Actual sustained native world/UI and seven-pose result
+
+Run154502 completed verified native Jungle loading and guarded continuation.
+The narrow TEXCOORD0 contract correction admits the actual native builtin position
+stream; original desktop draw and two eye replays complete without the previous
+UI fault. The independent Astra/xhigh native check confirmed the common backend
+mapping for all six builtin variants against exact Engine/GfxD3D fingerprints.
+
+The harness observed300 distinct neutral complete world/UI pairs before capture.
+The final exact-request assessment found341 neutral pairs with both native
+cameras and matching successful projection submission; the host total2214
+world submissions includes reuse and is not a fresh-pair count. All seven pose
+image pairs were captured with exact request/session/reference/tracking identity,
+complete UI, successful matching projection and approximately64mm eye separation.
+Private contact-sheet inspection shows native game-world imagery for both eyes
+and changes corresponding to translation and yaw/pitch/roll. No flat gameplay
+quad was accepted.
+
+Measured native camera-center translation for commanded0.1m local axes:
+X=(-0.025039,0,-0.096810)m, Y=(0,0.100000,0)m,
+Z=(0.096817,0,-0.025040)m. Rotation for each commanded0.15rad yaw/pitch/roll
+was approximately8.594degrees. Centers stay fixed during these rotation probes.
+The original world orientation explains the rotated X/Z axes. This is actual
+simulated native game-camera response, not a fixture-only submission.
+
+Exact source fingerprint:
+765bd1bc0379da095f814cc790f46e9935c0ff38486391ce5a635c541ed7b7c4.
+Private package archive SHA256:
+ee53e34e5081d525277fa27b2556aecc532e2bf6453ee84114bf66abbe29f068.
+Public source base was b654b74a with recorded local diff. All61 Debug groups
+passed. Native scene SHA remains106f9e287110988720cc717aaaa22190cafcf90fb184fd5a83e9d467d93165df.
+Normal null-interface shutdown was observed and cleanup errors were empty.
+
+This establishes the bounded ordinary single-player simulated rendering path.
+Image quality and terrain/vegetation occlusion need the stock-renderer reference.
+Physical hands/weapons and independently fired native dual wield, scopes,
+roomscale/body collision, lifecycle failures, multiplayer, Windows-native and
+actual Frame/Beyond hardware are not accepted by this result. Full-mod acceptance
+remains false. The preceding attempt154001 stopped before scene/host readiness
+after an owned-focus-helper failure; its missing scene/shutdown evidence is not
+a post-fix UI or stereo failure. Future helper failures preserve private stderr.

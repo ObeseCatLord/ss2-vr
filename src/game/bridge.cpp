@@ -392,6 +392,14 @@ struct NativeUiFrame {
     int slot = -1;
     bool restore = false, ui = false, fault = false, world = false;
     bool overlay = false, overlaySeen = false, complete = false, fade = false;
+    uintptr_t faultOrigin = 0;
+    const char *faultReason = "none";
+    D3DVERTEXELEMENT9 diagnosticElements[8]{};
+    UINT diagnosticElementCount = 0;
+    DWORD diagnosticShaderVersion = 0, diagnosticShaderBytes = 0;
+    DWORD diagnosticFirstOpcode = 0, diagnosticFirstLength = 0, diagnosticDclUsage = 0, diagnosticDclIndex = 0;
+    DWORD diagnosticDclRegisterType = 0, diagnosticDclRegister = 0;
+    bool diagnosticDcl = false;
     ScopeSourceView scopeView[2];
     IDirect3DTexture9 *scopeImage[2]{};
     IDirect3DPixelShader9 *scopeShader = nullptr;
@@ -533,7 +541,15 @@ bool scopeGpuEyeOwner(IDirect3DDevice9 *d,IUnknown *&color,IUnknown *&z,UINT &w,
 static thread_local bool uiBypass = false;
 static void releaseUiFrame() noexcept;
 static bool restoreUiFrame() noexcept;
-void nativeUiFault() noexcept { if (uiFrame.slot >= 0) uiFrame.fault = true; }
+__attribute__((noinline)) void nativeUiFault(const char *reason) noexcept {
+    if(uiFrame.slot>=0) {
+        if(!uiFrame.fault) {
+            uiFrame.faultOrigin=reinterpret_cast<uintptr_t>(__builtin_extract_return_addr(__builtin_return_address(0)));
+            uiFrame.faultReason=reason;
+        }
+        uiFrame.fault=true;
+    }
+}
 void scopeGpuFault() noexcept {
     eyeInvalid=true;
     uiFrame.fault=true; // Includes world-only pairs; nativeUiFault is UI-conditional.
@@ -562,6 +578,7 @@ struct NativeUiDrawState {
     float planes[6][4]{};
     DWORD state[4]{};
     DWORD fill = 0;
+    const char *captureStage = "not-started";
     bool busy = false, captured = false, changed = false;
 };
 static thread_local NativeUiDrawState uiDraw;
@@ -614,42 +631,105 @@ static bool uiOffscreen(IDirect3DSurface9 *target,IDirect3DSwapChain9 *&chain) {
     return result==E_NOINTERFACE;
 }
 static bool captureUiDraw(IDirect3DDevice9 *d) {
+    // Scalar stage labels retain the first rejection without logging or querying
+    // additional native state on callback/unwind paths. Query order is unchanged.
+    uiDraw.captureStage="current-or-target";
     if (!uiCurrent() || FAILED(d->GetRenderTarget(0,&uiDraw.color))) return false;
-    if (!singleUiTarget(d,uiDraw.extra)) { nativeUiFault(); return false; }
+    uiDraw.captureStage="single-target";
+    if (!singleUiTarget(d,uiDraw.extra)) { nativeUiFault(uiDraw.captureStage); return false; }
     if (!sameSurface(uiDraw.color,uiFrame.color)) {
-        if (!uiOffscreen(uiDraw.color,uiDraw.chain)) nativeUiFault();
+        uiDraw.captureStage="other-output";
+        if (!uiOffscreen(uiDraw.color,uiDraw.chain)) nativeUiFault(uiDraw.captureStage);
         return false;
     }
     DWORD fog=0, stencil=0, clipping=0;
-    if (FAILED(d->GetRenderState(D3DRS_FOGENABLE,&fog)) || fog ||
-        FAILED(d->GetRenderState(D3DRS_STENCILENABLE,&stencil)) || stencil ||
-        FAILED(d->GetRenderState(D3DRS_CLIPPING,&clipping)) || !clipping ||
-        FAILED(d->GetRenderState(D3DRS_FILLMODE,&uiDraw.fill)) ||
-        FAILED(d->GetVertexShader(&uiDraw.vertex)) || FAILED(d->GetPixelShader(&uiDraw.pixel)) ||
-        !nativeUiProgramsCurrent(uiDraw.vertex,uiDraw.pixel) ||
-        FAILED(d->GetVertexDeclaration(&uiDraw.declaration)) || !uiDraw.declaration) return false;
+    uiDraw.captureStage="fog";
+    if (FAILED(d->GetRenderState(D3DRS_FOGENABLE,&fog)) || fog) return false;
+    uiDraw.captureStage="stencil";
+    if (FAILED(d->GetRenderState(D3DRS_STENCILENABLE,&stencil)) || stencil) return false;
+    uiDraw.captureStage="clipping";
+    if (FAILED(d->GetRenderState(D3DRS_CLIPPING,&clipping)) || !clipping) return false;
+    uiDraw.captureStage="fill-mode";
+    if (FAILED(d->GetRenderState(D3DRS_FILLMODE,&uiDraw.fill))) return false;
+    uiDraw.captureStage="vertex-shader";
+    if (FAILED(d->GetVertexShader(&uiDraw.vertex))) return false;
+    uiDraw.captureStage="pixel-shader";
+    if (FAILED(d->GetPixelShader(&uiDraw.pixel))) return false;
+    uiDraw.captureStage="native-programs";
+    if (!nativeUiProgramsCurrent(uiDraw.vertex,uiDraw.pixel)) return false;
+    uiDraw.captureStage="declaration";
+    if (FAILED(d->GetVertexDeclaration(&uiDraw.declaration)) || !uiDraw.declaration) return false;
     D3DVERTEXELEMENT9 elements[MAXD3DDECLLENGTH+1]{};
     UINT count=MAXD3DDECLLENGTH+1, positionBytes=0, positionOffset=0;
+    uiDraw.captureStage="declaration-elements";
     if (FAILED(uiDraw.declaration->GetDeclaration(elements,&count)) || count>MAXD3DDECLLENGTH+1) return false;
+    uiFrame.diagnosticElementCount=std::min<UINT>(count,8);
+    for(UINT i=0;i<uiFrame.diagnosticElementCount;++i) uiFrame.diagnosticElements[i]=elements[i];
     for (unsigned i=0;i<count && elements[i].Stream!=0xff;++i) {
         const auto &e=elements[i];
+        uiDraw.captureStage="transformed-position";
         if (e.Usage == D3DDECLUSAGE_POSITIONT) return false;
-        if (e.Usage != D3DDECLUSAGE_POSITION || e.UsageIndex != 0) continue;
-        if (positionBytes || e.Stream || e.Method != D3DDECLMETHOD_DEFAULT ||
-            (e.Type != D3DDECLTYPE_FLOAT3 && e.Type != D3DDECLTYPE_FLOAT4)) return false;
-        positionBytes = e.Type == D3DDECLTYPE_FLOAT3 ? 12 : 16;
+        if (e.Usage != D3DDECLUSAGE_TEXCOORD || e.UsageIndex != 0) continue;
+        uiDraw.captureStage="position-layout";
+        if (positionBytes || !nativeUiPositionInput(e.Stream,e.Offset,e.Type,e.Method,e.Usage,e.UsageIndex)) return false;
+        positionBytes = 12;
         positionOffset = e.Offset;
     }
-    // Exact builtin VS1.1 position v0; legacy POSITION0 maps to register0.
+    // Fingerprinted backend injects dcl_texcoord0 v0 into the native builtin
+    // VS1.1 program. POSITION0 legacy mapping is not this backend's contract.
     UINT offset=0,stride=0,frequency=0;
-    if (!positionBytes || FAILED(d->GetStreamSource(0,&uiDraw.positions,&offset,&stride)) ||
-        !uiDraw.positions || stride < positionOffset+positionBytes ||
-        FAILED(d->GetStreamSourceFreq(0,&frequency)) || frequency!=1 ||
-        FAILED(d->GetVertexShaderConstantF(1,uiDraw.constants.m,4)) ||
-        FAILED(d->GetViewport(&uiDraw.viewport)) || FAILED(d->GetScissorRect(&uiDraw.scissor))) return false;
+    uiDraw.captureStage="position-missing";
+    if (!positionBytes) {
+        // Opt-in lab observation only, never an admission predicate or shader
+        // rewrite. Inspect the first instruction of the actual bound program;
+        // retain scalar semantics, not shader code, for normal-owner logging.
+        static const bool trace=[] { wchar_t value[2]{}; return GetEnvironmentVariableW(L"SS2VR_LAB_TRACE",value,2)==1 && value[0]==L'1'; }();
+        static bool observed=false;
+        if(trace && !observed) {
+            observed=true;
+            DWORD words[256]{}; UINT bytes=0;
+            if(SUCCEEDED(uiDraw.vertex->GetFunction(nullptr,&bytes)) && bytes>=4 && bytes<=sizeof(words) && !(bytes%4) &&
+                SUCCEEDED(uiDraw.vertex->GetFunction(words,&bytes)) && bytes>=4 && bytes<=sizeof(words) && !(bytes%4)) {
+                uiFrame.diagnosticShaderVersion=words[0];uiFrame.diagnosticShaderBytes=bytes;
+                if(bytes>=8) {
+                    uiFrame.diagnosticFirstOpcode=words[1]&D3DSI_OPCODE_MASK;
+                    uiFrame.diagnosticFirstLength=(words[1]&D3DSI_INSTLENGTH_MASK)>>D3DSI_INSTLENGTH_SHIFT;
+                }
+                if(bytes>=16 && (words[0]==0xfffe0101 || words[0]==0xfffe0200 || words[0]==0xfffe0300) &&
+                    uiFrame.diagnosticFirstOpcode==D3DSIO_DCL &&
+                    (uiFrame.diagnosticFirstLength==2 || (words[0]==0xfffe0101 && uiFrame.diagnosticFirstLength==0))) {
+                    uiFrame.diagnosticDcl=true;
+                    uiFrame.diagnosticDclUsage=(words[2]&D3DSP_DCL_USAGE_MASK)>>D3DSP_DCL_USAGE_SHIFT;
+                    uiFrame.diagnosticDclIndex=(words[2]&D3DSP_DCL_USAGEINDEX_MASK)>>D3DSP_DCL_USAGEINDEX_SHIFT;
+                    uiFrame.diagnosticDclRegisterType=((words[3]&D3DSP_REGTYPE_MASK)>>D3DSP_REGTYPE_SHIFT)|
+                        ((words[3]&D3DSP_REGTYPE_MASK2)>>D3DSP_REGTYPE_SHIFT2);
+                    uiFrame.diagnosticDclRegister=words[3]&D3DSP_REGNUM_MASK;
+                }
+            }
+        }
+        return false;
+    }
+    uiDraw.captureStage="stream-query";
+    if (FAILED(d->GetStreamSource(0,&uiDraw.positions,&offset,&stride))) return false;
+    uiDraw.captureStage="stream-buffer";
+    if (!uiDraw.positions) return false;
+    uiDraw.captureStage="stream-stride";
+    if (stride < positionOffset+positionBytes) return false;
+    uiDraw.captureStage="stream-frequency";
+    if (FAILED(d->GetStreamSourceFreq(0,&frequency)) || frequency!=1) return false;
+    uiDraw.captureStage="projection-constants";
+    if (FAILED(d->GetVertexShaderConstantF(1,uiDraw.constants.m,4))) return false;
+    uiDraw.captureStage="viewport";
+    if (FAILED(d->GetViewport(&uiDraw.viewport))) return false;
+    uiDraw.captureStage="scissor";
+    if (FAILED(d->GetScissorRect(&uiDraw.scissor))) return false;
+    uiDraw.captureStage="render-state";
     for (unsigned i=0;i<4;++i) if (FAILED(d->GetRenderState(uiStates[i],&uiDraw.state[i]))) return false;
+    uiDraw.captureStage="original-clip-planes";
     if (uiDraw.state[3]) return false; // Do not overwrite an original user-plane policy.
+    uiDraw.captureStage="clip-plane-values";
     for (unsigned i=0;i<6;++i) if (FAILED(d->GetClipPlane(i,uiDraw.planes[i]))) return false;
+    uiDraw.captureStage="complete";
     uiDraw.captured = true;
     return true;
 }
@@ -659,6 +739,7 @@ static Draw originalDraw = nullptr;
 static DrawIndexed originalDrawIndexed = nullptr;
 static_assert(D3DPT_TRIANGLELIST==4 && D3DPT_TRIANGLESTRIP==5 && D3DPT_TRIANGLEFAN==6);
 static_assert(D3DFILL_POINT==1 && D3DFILL_WIREFRAME==2 && D3DFILL_SOLID==3);
+static_assert(D3DDECLTYPE_FLOAT3==2 && D3DDECLMETHOD_DEFAULT==0 && D3DDECLUSAGE_TEXCOORD==5);
 template<class Call> static HRESULT uiDrawCall(IDirect3DDevice9 *d,D3DPRIMITIVETYPE topology,Call call) noexcept {
     const auto generation = graphicsResourceGeneration();
     if (!scopeGpuForwardingAllowed()) return D3DERR_INVALIDCALL;
@@ -669,13 +750,13 @@ template<class Call> static HRESULT uiDrawCall(IDirect3DDevice9 *d,D3DPRIMITIVET
     const bool contained = withNativeFinally([&] {
         result = call(); // Desktop first, exactly once; preserve its HRESULT/state effects.
         if (generation != graphicsResourceGeneration()) return;
-        if (FAILED(result)) { nativeUiFault(); return; }
+        if (FAILED(result)) { nativeUiFault("desktop-draw-hresult"); return; }
         if (!captureUiDraw(d)) {
             // Offscreen drawing stays native; only eventual desktop composition is adapted.
-            if (!uiDraw.color || sameSurface(uiDraw.color,uiFrame.color)) nativeUiFault();
+            if (!uiDraw.color || sameSurface(uiDraw.color,uiFrame.color)) nativeUiFault(uiDraw.captureStage);
             return;
         }
-        if (!nativeUiTriangleTopology(topology,uiDraw.fill)) { nativeUiFault(); return; }
+        if (!nativeUiTriangleTopology(topology,uiDraw.fill)) { nativeUiFault("topology-or-fill"); return; }
         NativeUiProjection projected[2];
         for (unsigned i=0;i<2;++i) {
             if (uiFrame.fade) {
@@ -1443,6 +1524,11 @@ static void releaseUiFrame() noexcept {
     uiFrame.slot=-1;
     uiFrame.ui=uiFrame.fault=uiFrame.world=uiFrame.restore=false;
     uiFrame.overlay=uiFrame.overlaySeen=uiFrame.complete=uiFrame.fade=false;
+    uiFrame.faultOrigin=0;
+    uiFrame.faultReason="none";
+    uiFrame.diagnosticElementCount=0;
+    uiFrame.diagnosticShaderVersion=uiFrame.diagnosticShaderBytes=0;
+    uiFrame.diagnosticDcl=false;
 }
 void nativeUiEndOwner(bool aborted) noexcept {
     if (uiFrame.slot<0) return;
@@ -1463,7 +1549,15 @@ void nativeUiEndOwner(bool aborted) noexcept {
 }
 bool nativeUiBeginOverlay(void *player,bool admitted) {
     if (uiFrame.slot<0 || !uiFrame.ui) return false;
-    if (!admitted || player!=uiFrame.player || !uiFrame.world || uiFrame.overlaySeen || !uiCurrent()) {
+    const bool structure=admitted && player==uiFrame.player && uiFrame.world && !uiFrame.overlaySeen;
+    const bool current=structure && uiCurrent();
+    if (!current) {
+        static unsigned diagnostics=0;
+        if(diagnostics<4) {
+            ++diagnostics;
+            log("Native UI overlay rejected admitted=%u player=%u world=%u seen=%u fault=%u current=%u",
+                admitted,player==uiFrame.player,uiFrame.world,uiFrame.overlaySeen,uiFrame.fault,current);
+        }
         nativeUiFault(); return false;
     }
     uiFrame.overlaySeen=true;
@@ -1529,23 +1623,6 @@ static bool publishUiFrame(uint32_t presentation) {
             slot.presentation=presentation;
             slot.presentationReserved=0;
             accepted=commitStereo(uiFrame.player,uiFrame.request,slot);
-            if (accepted) {
-                static unsigned pairDiagnostics = 0;
-                if (pairDiagnostics < 4) {
-                    ++pairDiagnostics;
-                    uint64_t hash[2]{14695981039346656037ull,14695981039346656037ull};
-                    size_t different = 0;
-                    const auto bytes = size_t(uiFrame.request.width) * uiFrame.request.height * 4;
-                    for (size_t i=0;i<bytes;++i) {
-                        for (unsigned eye=0;eye<2;++eye) hash[eye]=(hash[eye]^uiFrame.pixels[eye][i])*1099511628211ull;
-                        if (uiFrame.pixels[0][i]!=uiFrame.pixels[1][i]) ++different;
-                    }
-                    log("Native eye pair accepted sequence=%llu pixels=%ux%u left=%016llx right=%016llx differingBytes=%llu presentation=%u",
-                        static_cast<unsigned long long>(uiFrame.request.sequence),uiFrame.request.width,uiFrame.request.height,
-                        static_cast<unsigned long long>(hash[0]),static_cast<unsigned long long>(hash[1]),
-                        static_cast<unsigned long long>(different),presentation);
-                }
-            }
             if (accepted) SetEvent(channel.ready);
             else slot.state=SlotState::Empty;
         }
@@ -1553,20 +1630,69 @@ static bool publishUiFrame(uint32_t presentation) {
         if (aborted) { uiFrame.fault=true; uiHalted=true; }
         channel.unlock();
     });
+    if (accepted) {
+        static unsigned pairDiagnostics = 0;
+        if (pairDiagnostics < 4) {
+            ++pairDiagnostics;
+            uint64_t hash[2]{14695981039346656037ull,14695981039346656037ull};
+            size_t different = 0;
+            const auto bytes = size_t(uiFrame.request.width) * uiFrame.request.height * 4;
+            for (size_t i=0;i<bytes;++i) {
+                for (unsigned eye=0;eye<2;++eye) hash[eye]=(hash[eye]^uiFrame.pixels[eye][i])*1099511628211ull;
+                if (uiFrame.pixels[0][i]!=uiFrame.pixels[1][i]) ++different;
+            }
+            log("Native eye pair accepted sequence=%llu pixels=%ux%u left=%016llx right=%016llx differingBytes=%llu presentation=%u",
+                static_cast<unsigned long long>(uiFrame.request.sequence),uiFrame.request.width,uiFrame.request.height,
+                static_cast<unsigned long long>(hash[0]),static_cast<unsigned long long>(hash[1]),
+                static_cast<unsigned long long>(different),presentation);
+        }
+    }
+    if(accepted) {
+        static const bool labTrace=[] { wchar_t value[2]{}; return GetEnvironmentVariableW(L"SS2VR_LAB_TRACE",value,2)==1 && value[0]==L'1'; }();
+        static unsigned receipts=0;
+        if(labTrace && receipts<2048) {
+            ++receipts;
+            log("Lab native pair request=%llu session=%u reference=%u tracking=%u presentation=%u",
+                static_cast<unsigned long long>(uiFrame.request.sequence),uiFrame.request.session,
+                uiFrame.request.reference,uiFrame.request.trackingGeneration,presentation);
+        }
+    }
     return accepted;
 }
 void nativeUiFinishOwner() {
     if (uiFrame.slot<0 || !uiFrame.ui) return;
-    if (!uiFrame.complete || uiFrame.overlay || uiFrame.fade || !uiCurrent()) {
-        nativeUiFault(); return;
+    const bool structure=uiFrame.complete && !uiFrame.overlay && !uiFrame.fade;
+    const bool current=structure && uiCurrent();
+    static unsigned diagnostics=0;
+    const bool trace=diagnostics<4;
+    if(trace) {
+        ++diagnostics;
+        log("Native UI finish sequence=%llu complete=%u overlay=%u fade=%u seen=%u fault=%u world=%u current=%u origin=%p reason=%s",
+            static_cast<unsigned long long>(uiFrame.request.sequence),uiFrame.complete,uiFrame.overlay,uiFrame.fade,
+            uiFrame.overlaySeen,uiFrame.fault,uiFrame.world,current,reinterpret_cast<void *>(uiFrame.faultOrigin),uiFrame.faultReason);
+        if(uiFrame.diagnosticShaderVersion) log("Native UI device program version=%08lx bytes=%lu firstOpcode=%lu firstLength=%lu dcl=%u usage=%lu index=%lu registerType=%lu register=%lu",
+            uiFrame.diagnosticShaderVersion,uiFrame.diagnosticShaderBytes,uiFrame.diagnosticFirstOpcode,uiFrame.diagnosticFirstLength,
+            uiFrame.diagnosticDcl,uiFrame.diagnosticDclUsage,uiFrame.diagnosticDclIndex,
+            uiFrame.diagnosticDclRegisterType,uiFrame.diagnosticDclRegister);
+        for(UINT i=0;i<uiFrame.diagnosticElementCount;++i) {
+            const auto &e=uiFrame.diagnosticElements[i];
+            log("Native UI declaration element=%u stream=%u offset=%u type=%u method=%u usage=%u index=%u",
+                i,e.Stream,e.Offset,e.Type,e.Method,e.Usage,e.UsageIndex);
+        }
     }
+    if (!current) { nativeUiFault(); return; }
     // UI and original full-field fades have now finished in BOTH owned eye RTs.
-    bool ok=readUiEye(0,false,1) && readUiEye(1,false,1);
+    const bool left=readUiEye(0,false,1),right=left && readUiEye(1,false,1);
+    bool ok=left && right;
+    if(trace)log("Native UI readback left=%u right=%u",left,right);
     if (ok) {
         const auto opaque=makeOpaqueDimming(1);
         for (auto &image:uiFrame.pixels) dimOpaquePixels(image.data(),image.size()/4,opaque);
     }
-    if (!ok || !uiCurrent() || !publishUiFrame(NativeUiComplete)) nativeUiFault();
+    const bool valid=ok && uiCurrent();
+    const bool published=valid && publishUiFrame(NativeUiComplete);
+    if(trace) log("Native UI publish readback=%u current=%u published=%u",ok,valid,published);
+    if(!published) nativeUiFault();
 }
 struct ScopeCaptureFrame {
     unsigned hand = 2;

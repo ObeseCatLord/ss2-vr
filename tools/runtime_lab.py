@@ -4,6 +4,8 @@
 Configuration, owned game assets, prefixes, logs and images stay outside source.
 This launcher never installs, changes global runtimes, joins multiplayer or clicks menus.
 """
+from assess_runtime import complete_pairs_for_pose
+
 import argparse
 import ctypes
 import hashlib
@@ -328,7 +330,12 @@ def run(cfg):
                     focus=subprocess.run([sys.executable,str(Path(__file__)),
                         '--focus-owned',str(owned_game['pid']),'--start',owned_game['start'],'--lab',str(lab)],
                         capture_output=True,text=True,timeout=remaining(deadline,2))
-                    if focus.returncode:raise RuntimeError('Owned-game focus helper failed')
+                    if focus.returncode:
+                        # Preserve the concrete child failure in private evidence;
+                        # a generic focus error cannot diagnose native startup.
+                        manifest['focus_failure']={'returncode':focus.returncode,
+                            'stdout':focus.stdout[-4096:],'stderr':focus.stderr[-4096:]}
+                        raise RuntimeError('Owned-game focus helper failed')
                     owned_window=json.loads(focus.stdout);last_focus=time.monotonic()
             hosts=running('ss2vr_host.exe')
             for h in hosts:
@@ -405,6 +412,19 @@ def run(cfg):
                     matches=matches+1 if valid else 0;previous=state['input_sequence']
                 time.sleep(.01)
             if matches<30:raise TimeoutError('Held pose did not produce 30 matching OpenXR observations: '+step['name'])
+            if step['name']=='baseline':
+                sustained_deadline=min(deadline,time.monotonic()+60)
+                count=0
+                while time.monotonic()<sustained_deadline:
+                    native_path=lab/'Bin/SS2VR.log';host_path=lab/'Bin/SS2VR/ss2vr_host.log'
+                    native=native_path.read_text(errors='replace') if native_path.exists() else ''
+                    host=host_path.read_text(errors='replace') if host_path.exists() else ''
+                    count=len(complete_pairs_for_pose(native,host,{'p':expected,'q':q}))
+                    if count>=30:break
+                    if not still_owned(owned_game):raise RuntimeError('Owned game exited during sustained neutral rendering')
+                    time.sleep(.1)
+                manifest['distinct_neutral_complete_pairs']=count
+                if count<30:raise TimeoutError('Neutral pose lacks 30 distinct complete native/UI/projection requests')
             (run_dir/(step['name']+'-input.json')).write_text(json.dumps(state,indent=2))
             desktop=run_dir/(step['name']+'-desktop.png')
             subprocess.run([sys.executable,str(Path(__file__)),

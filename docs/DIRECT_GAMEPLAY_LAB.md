@@ -72,7 +72,7 @@ dual-wield probes follow, preserving actual supported combinations/mechanics.
 
 ## Current local gates after follow-up review
 
-The user renewed source-only public publication authority; the prior hold is historical. Observer compiles; no direct no-menu gameplay run is accepted yet. A strict scan found four different Jungle world providers, including Sam2Renovation.gro, so the harness records providers and requires a hash of the successfully opened native scene stream. It never changes archive precedence to obtain a desired result. The existing files remain preserved. Native Steam initialization/shutdown can write and delete remote profiles; no supported cloud-disable cvar was proved. A narrow opt-in process-local online-init barrier is implemented and reviewed, preserving Proton VR bootstrap and default production behavior. The scene observer admits the native loading worker, borrows synchronously, restores native position, and emits the digest only after restoration. Native-exception restoration remains outside normal-path runtime acceptance.
+The user renewed source-only public publication authority; the prior hold is historical. Observer compiles; run154502 reached verified direct gameplay and captured sustained complete native world/UI stereo with all seven head poses. Broader quality, lifecycle, hardware and network gates remain open. A strict scan found four different Jungle world providers, including Sam2Renovation.gro, so the harness records providers and requires a hash of the successfully opened native scene stream. It never changes archive precedence to obtain a desired result. The existing files remain preserved. Native Steam initialization/shutdown can write and delete remote profiles; no supported cloud-disable cvar was proved. A narrow opt-in process-local online-init barrier is implemented and reviewed, preserving Proton VR bootstrap and default production behavior. The scene observer admits the native loading worker, borrows synchronously, restores native position, and emits the digest only after restoration. Native-exception restoration remains outside normal-path runtime acceptance.
 
 The private pose adapter follow-up passed its bounded source review after correcting default-view/head and hand-curl/pose snapshot consistency plus initialized thread-helper destruction. A real private remote-service preflight selected the remote builder, bound127.0.0.1, completed the376-byte native-header handshake/pose send, and exited0. No actual game/OpenXR pose or native world acceptance follows from that transport observation.
 
@@ -89,7 +89,7 @@ one down/up pair; release is always attempted and continuation is never retried.
 It never writes game memory or remotely calls a native method. Asynchronous input
 delivery can race other input; successful posting alone is not acceptance.
 
-An actual run now recorded continuation followed by completed native Jungle
+An actual run recorded completed native Jungle
 loading in6.96 seconds, local simulation and thirty matching neutral OpenXR head
 observations. The first-eye executed-view gate rejected the pair; no native world
 images/projection stereo or translated/rotated camera acceptance followed.
@@ -99,3 +99,11 @@ the game's focus. Compile with MinGW C++20, static runtime, -municode -mwindows,
 -Isrc and -lshell32. It reports status through exclusive private JSON files.
 The actual absolute deadline is configurable up to180 seconds; cleanup has a
 separate common20-second budget. All process retirement remains ownership checked.
+
+A later same-source x86 GUI observer run verified the complete guarded continuation
+route: CMSLoading table29F148/ready1, one posted Enter down/up pair, then actual
+Jungle simulation and normal null-interface shutdown. Cross-architecture x64
+Toolhelp module enumeration had failed with error299 and could not certify menu
+readiness. Distinct eye-image transport has since been observed for one fresh
+pair; sustained UI-complete capture and translated/rotated/parallax acceptance
+remain unverified. See PC_GAMEPLAY_READINESS.md for the precise limits.

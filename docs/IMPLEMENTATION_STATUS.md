@@ -2,13 +2,22 @@
 
 ## Active PC implementation
 
-The latest direct-scene run observed the expected native Jungle stream hash, local
-gameplay with a null online interface, thirty neutral-head input observations and
-normal native shutdown. It failed first-eye completion before publishing any world
-pair; no native stereo/6DOF acceptance is claimed. The desktop terrain-occlusion
-report and deterministic loading-screen continuation are active gates.
+The current direct-scene run154502 verified the expected native Jungle stream hash,
+guarded loading continuation, complete native world/UI stereo and all seven head
+pose image pairs under private simulated Monado/Proton. The harness required300
+distinct neutral complete pairs before capture. Exact request-correlated native
+cameras and successful projection receipts accompany every capture. Native camera
+centers respond by0.1m along each local axis; yaw/pitch/roll respond by0.15rad.
+Normal isolated shutdown and no cleanup errors were observed.
 
-Latest rendering investigation: [PC_GAMEPLAY_READINESS.md](PC_GAMEPLAY_READINESS.md). Actual native menu CPU transport and host submission work in the private Proton/Monado lab. Actual outdoor first-person gameplay enables tracking and eye swapchains, but no native world pair was delivered in the observed segment. Distinct eye imagery/parallax and head translation/rotation remain unaccepted. The earlier startup summaries below precede this draft integration.
+Current rendering evidence: [PC_GAMEPLAY_READINESS.md](PC_GAMEPLAY_READINESS.md).
+The exact native depth partition and TEXCOORD0 builtin input contract defects
+were corrected with bounded Astra reviews. [Senior disposition](RENDERING_SENIOR_REVIEW.md)
+records the changed correlation/acceptance contract. All61 current Debug groups
+pass; IPC10/wire6 compiled fingerprints agree across architectures. Native menu
+transport remains accepted separately. Full-mod/hardware/network acceptance is
+open; terrain/vegetation image quality still needs the stock-renderer comparison.
+The earlier startup summaries below precede this milestone.
 
 Development is active. Start with [CLOUD_CONTINUATION.md](CLOUD_CONTINUATION.md)
 and [PLATFORM_SUPPORT.md](PLATFORM_SUPPORT.md); HANDOFF.md and the records below
@@ -17,12 +26,12 @@ are historical evidence, not the current pause state or feature count.
 Windows and Linux via Proton are required. Native magnified scope source views
 and ordered cap imagery are connected in source, alongside native zoom, mounted
 controls/turret lasers, native flat/world overlays and multiplayer integration.
-The current offline suite has60 groups. Native products cross-build. The user now
+The current offline suite has61 groups. Native products cross-build. The user now
 permits PC runtime testing and additional sessions before feature completion.
 Initial Xvfb launches hit a stock-reproduced zero-refresh DXVK failure. A focused
 real-display IPC10 proxy run now renders the native desktop menu. See
 [PC_VALIDATION.md](PC_VALIDATION.md) for identities and observations. The actual x64 host reaches FOCUSED under Proton and native menu transport works.
-Actual gameplay stereo remains unaccepted; see the newer direct-scene record above.
+The bounded simulated gameplay path is recorded above; broader lifecycle and device acceptance remains open.
 No headset or network runtime acceptance exists. Older coding-first/no-runtime
 instructions are historical; actual observations remain separate from offline checks.
 GitHub Actions is disabled at the owner's request; checks remain local.

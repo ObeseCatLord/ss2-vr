@@ -35,6 +35,16 @@ static bool clipped(const NativeUiProjection &p, V4 v) {
     return false;
 }
 int main() {
+    // Recorded native position, UV and color elements from an actual admitted
+    // builtin draw. Only the first supplies the shader's declared v0 input.
+    check(nativeUiPositionInput(0,0,2,0,5,0),"Native TEXCOORD0 position input must admit");
+    check(!nativeUiPositionInput(2,0,2,0,5,2) && !nativeUiPositionInput(3,0,4,0,5,3),
+          "Other native vertex streams are not position aliases");
+    for(const auto &e:std::vector<std::array<uint32_t,6>>{
+        {0,0,2,0,0,0}, {0,0,2,0,9,0}, {0,0,2,0,5,1},
+        {1,0,2,0,5,0}, {0,4,2,0,5,0}, {0,0,3,0,5,0}, {0,0,2,1,5,0}})
+        check(!nativeUiPositionInput(e[0],e[1],e[2],e[3],e[4],e[5]),
+              "Unproved semantic/register, transformed/type, stream, offset or method rejects");
     for (uint32_t topology : {0u,1u,2u,3u,7u,0xffffffffu})
         check(!nativeUiTriangleTopology(topology,3),
               "Unsupported point/line/unknown raster footprints cannot complete panel UI");

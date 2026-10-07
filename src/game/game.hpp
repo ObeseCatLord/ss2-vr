@@ -44,7 +44,7 @@ bool nativeUiProgramsCurrent(IDirect3DVertexShader9 *, IDirect3DPixelShader9 *);
 bool copyExecutedUiProjection(void *player, const Request &, int index, Matrix44 &out);
 bool nativeUiFrameCurrent(void *player, const Request &);
 bool nativeUiOwnerCurrent(void *player);
-void nativeUiFault() noexcept;
+void nativeUiFault(const char *reason = "unspecified") noexcept;
 bool nativeUiBeginOverlay(void *player, bool admitted);
 void nativeUiEndOverlay(bool completed) noexcept;
 bool nativeUiBeginFade();

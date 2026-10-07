@@ -26,6 +26,36 @@ int main() {
         const Matrix44 executionP=projection(fov,.19f,71);
         const auto executed=executedWeaponView(prepared,prepared.view,executionP,.1f,.9f);
         check(executed.valid, "Native execution clip-distance changes retain eye provenance");
+        auto fullRoot=prepared;fullRoot.nearDepth=0;fullRoot.farDepth=1;
+        const float worldFar=std::bit_cast<float>(0x3f666666u);
+        const auto partitioned=executedRootWeaponView(fullRoot,fullRoot.view,executionP,0,worldFar);
+        check(partitioned.valid && partitioned.farDepth==worldFar && fullRoot.farDepth==1,
+              "Native sky partition validates only a copy and retains actual world depth");
+        check(executedRootWeaponView(fullRoot,fullRoot.view,executionP,0,1).valid &&
+              !executedWeaponView(fullRoot,fullRoot.view,executionP,0,worldFar).valid,
+              "Unpartitioned root remains valid and generic endpoint equality remains strict");
+        for(float far:{std::nextafter(worldFar,0.f),std::nextafter(worldFar,1.f),.8f,.1f})
+            check(!executedRootWeaponView(fullRoot,fullRoot.view,executionP,0,far).valid,
+                  "Adjacent floats and unrelated contained depth intervals are rejected");
+        check(!executedRootWeaponView(prepared,prepared.view,executionP,0,worldFar).valid,
+              "Only full prepared depth admits the native world partition");
+        auto partitionWrongEye=fullRoot;
+        partitionWrongEye.projection=projection(eye ? Fov{-.91f,.72f,.87f,-.81f} : Fov{-.72f,.91f,.87f,-.81f});
+        auto invalidRootView=fullRoot.view;invalidRootView.m[0]=std::numeric_limits<float>::quiet_NaN();
+        check(!executedRootWeaponView(partitionWrongEye,fullRoot.view,executionP,0,worldFar).valid &&
+              !executedRootWeaponView(fullRoot,invalidRootView,executionP,0,worldFar).valid,
+              "The partition cannot authorize a different eye or an invalid world matrix");
+        const Vec3 wall=camera.p+rotate(camera.q,{0,0,-.8f});
+        const Vec3 behindWall=camera.p+rotate(camera.q,{0,0,-1.1f});
+        WeaponViewPass partitionedGun{partitioned};
+        Matrix44 partitionGunProjection{};Matrix34 partitionGunView{};float partitionNear=0,partitionFar=0;
+        check(partitionedGun.projection(partitionGunProjection)&&partitionedGun.view(partitionGunView)&&
+              partitionedGun.depth(partitionNear,partitionFar)&&partitionedGun.placed(true),
+              "Physical weapon acquires the same native partitioned world interval");
+        WeaponWorldView partitionGun{partitionGunView,partitionGunProjection,partitionNear,partitionFar,true};
+        check(projected(partitionGun,behindWall)[2]>projected(partitioned,wall)[2] &&
+              projected(partitionGun,behindWall)==projected(partitioned,behindWall),
+              "Terrain occludes a weapon behind it under the actual world interval");
         WeaponViewPass pass{executed};
         Matrix44 gunP{}; Matrix34 gunView{}; float nz=0, fz=.1f;
         check(pass.projection(gunP) && pass.view(gunView) && pass.depth(nz,fz) && pass.placed(true),
