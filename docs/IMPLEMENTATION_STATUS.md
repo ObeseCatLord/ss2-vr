@@ -1,6 +1,6 @@
 # Implementation status — 2026-10-07
 
-## Active cloud implementation
+## Active PC implementation
 
 Development is active. Start with [CLOUD_CONTINUATION.md](CLOUD_CONTINUATION.md)
 and [PLATFORM_SUPPORT.md](PLATFORM_SUPPORT.md); HANDOFF.md and the records below
@@ -9,9 +9,12 @@ are historical evidence, not the current pause state or feature count.
 Windows and Linux via Proton are required. Native magnified scope source views
 and ordered cap imagery are connected in source, alongside native zoom, mounted
 controls/turret lasers, native flat/world overlays and multiplayer integration.
-The current offline suite has59 groups. Native products cross-build; no Windows,
-Wine, game, headset or network runtime has been executed. The owner explicitly
-requires coding to finish first and will perform device testing afterward.
+The current offline suite has59 groups. Native products cross-build. The user now
+permits PC runtime testing and additional sessions before feature completion.
+The first isolated Proton game launch crashed after Direct3D context creation;
+see [PC_VALIDATION.md](PC_VALIDATION.md) for exact build identities and observations.
+No headset or network runtime acceptance exists. Older coding-first/no-runtime
+instructions are historical; actual observations remain separate from offline checks.
 GitHub Actions is disabled at the owner's request; checks remain local.
 
 Current source connects default-off single-player roomscale body movement through

@@ -1,5 +1,13 @@
 # Cloud continuation — 2026-10-05
 
+## PC continuation authority — 2026-10-07
+
+The user now permits PC development, additional sessions and runtime testing where feasible. This supersedes historical root-only, transfer-only, pause and no-runtime restrictions. Native safety, privacy, anonymous publication, Actions-off and no destructive cleanup remain. The isolated public checkout starts at commit `8d172189aa0fbddadc1c1786eedbc38db8368487`, tree `07b2508387d1a367107673020e6162eba9e17fd4`, including both queued checkpoints. All28 reachable commits passed the full-history empty-email gate; Actions is disabled and workflow files absent. The old installed-game checkout and its unaccepted melee changes remain separate; no old ancestry was imported. Cloud edits have stopped; the PC main session is integration owner.
+
+Previous verification is offline evidence only. No headset/network runtime pass follows from changed authorization. Native160/348 remain manual-only; rejected WIP is not activated. New source changes and actual runtime observations will be recorded separately.
+
+## Historical cloud record
+
 The user requested that dot perform development itself in its cloud workspace.
 The local task was used only to inspect and transfer files and publish the
 reviewed source snapshot. It performed no development or runtime testing.

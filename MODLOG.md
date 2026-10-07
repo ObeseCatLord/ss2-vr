@@ -1302,3 +1302,20 @@ missing unlock calls and an altered reliable/unreliable flag. An initial sweep
 had compiler lookup failures from an incomplete PATH; the corrected toolchain
 sweep passes all40, without changing any product or gate to accommodate them.
 No native runtime, game, headset, network session or deployment was executed.
+
+## 2026-10-07 — PC authority, isolated source and first native startup
+
+Continued from sanitized public8d172189 (tree07b2508387d1a367107673020e6162eba9e17fd4)
+including both queued source checkpoints, in a separate clone with no old ancestry.
+Updated active instructions for the user's PC/runtime/additional-session authority;
+retained native safety, privacy, anonymous publication and Actions-off policy.
+Original checkout/WIP/user data preserved. All28 raw ancestors pass privacy gate.
+
+Local x86 game/server and x64 host/loader rebuild and artifact/layout verification
+pass; all59 Debug/Release groups pass after pinned dependency environment setup.
+Created config backup, complete private game copy, separate prefix and matching
+private package. First Proton Hotfix/Xvfb launch with proxy crashes after native
+Direct3D context creation; inspected screenshot, no host log. Not a VR pass.
+Hash-checked removal touched only lab payload for stock comparison. Astra handles
+bounded steering-asset inspection and initial crash triage; main owns integration
+and runtime. See docs/PC_VALIDATION.md for identities, limits and remaining goal.

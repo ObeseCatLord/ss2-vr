@@ -1,8 +1,10 @@
 # Windows and Linux/Proton targets
 
-Both are required targets. The mod is still a development build: native game,
-Windows executable, headset and network runtime testing has not been performed.
-Offline checks cannot establish playability, headset coverage or performance.
+Both are required targets. The mod is still a development build. PC runtime
+testing is now authorized; the first isolated Proton launch crashed during
+startup. See [PC_VALIDATION.md](PC_VALIDATION.md). No headset/network acceptance
+or native Windows test exists. Offline checks cannot establish playability,
+headset coverage or performance.
 
 ## Shared architecture
 
@@ -71,7 +73,7 @@ execute a loader, graphics API, native hook or headset frame.
 Eventual runtime acceptance still needs the complete installation/startup path,
 real stereo/controller input, scope/UI output, loss/reset/restart behavior and
 performance on both Windows and the selected Proton/native-runtime combination.
-Those tests require a separate change to the current no-runtime-testing scope.
+The user authorized these local/private runtime tests on 2026-10-07; actual results must still be recorded separately.
 
 Installer preflight also applies Windows filename rules when run on Linux:
 reserved device names, trailing-dot/space aliases, case-colliding payloads,
