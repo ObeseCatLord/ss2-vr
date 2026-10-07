@@ -1242,3 +1242,24 @@ A separate pinned inspection confirms that CPU position and direction streams
 share the temporary head palette. It also proves zero loading-queue count is not
 worker quiescence, and native WaitUntilCompleted can execute jobs on its caller.
 No scheduler change or new head lifetime claim follows; see NATIVE_HEAD_ANIMATION_AUDIT.md.
+
+## Offline verifier maintenance — 2026-10-07
+
+A broader40-check native/compiled sweep exposed three verifier failures rather
+than product ABI changes: the sniper checker assumed an obsolete MinHook path,
+and both vehicle-artifact checks selected an old wrapper name now also present
+in native-finally callbacks. MinHook discovery now uses the configured dependency
+or an explicit --minhook-source while retaining all six pinned source hashes.
+Vehicle checks target the actual observed query body with the same argument and
+callee-cleanup requirements. A purpose=0 mutated PE is rejected normally and
+with Python optimization.
+
+All remaining removable Python assertions in verify_*.py were replaced with
+explicit failure guards without changing their predicates. A portable test bans
+new removable assertions and exercises27 production guards under Python -O; a
+second fixture checks explicit/configured/relative/missing dependency paths.
+All58 Debug/Release groups and game/server/host builds pass. The full40-check
+sweep passes normally and with optimization. This includes the exact supplied
+mesh/skeleton bytes through private archive adapters, not a claim about complete
+installed-archive provenance. No Windows/game/headset execution or deployment
+occurred. Native integration work and final full-project review remain open.

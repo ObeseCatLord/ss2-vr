@@ -7,6 +7,10 @@ import subprocess
 from pathlib import Path
 import capstone
 import pefile
+def require(ok, message):
+    if not ok:
+        raise ValueError(message)
+
 ROOT=Path(__file__).resolve().parents[1]
 ENTRIES=[('zoomActivatePredicate',28,0),('zoomOwnerPredicate',28,1),('zoomFovPredicate',28,2),
          ('zoomInterpolatePredicate',28,3),('zoomSoundStartPredicate',24,4),('zoomSoundStopPredicate',28,5)]
@@ -15,7 +19,7 @@ CALLBACKS={'sniperStep':0,'baseWeaponStep':0,'sniperFire':4,'zoomActivated':0,'z
 
 def inspect(path):
     native=pefile.PE(str(path),max_symbol_exports=65536)
-    assert native.FILE_HEADER.Machine==0x14c
+    require(native.FILE_HEADER.Machine==0x14c, 'Required boundary check failed: native.FILE_HEADER.Machine == 332')
     base=native.OPTIONAL_HEADER.ImageBase
     rows=subprocess.check_output(['i686-w64-mingw32-nm',str(path)],text=True).splitlines()
     symbols={r.split()[2]:int(r.split()[0],16) for r in rows
@@ -39,19 +43,19 @@ def inspect(path):
                   ('add','esp, 0x10'),('mov',f'dword ptr [ebp + 0x{slot:x}], eax'),
                   ('fxrstor','[esp]'),('mov','esp, ebp'),('popal',''),('popfd',''),
                   ('jmp',f'dword ptr [0x{symbols["_"+name+"_original"]:x}]')]
-        assert actual==expected,name+' entry ABI changed'
+        require(actual==expected, name+' entry ABI changed')
         jump=instructions[-1]
-        assert jump.address-base+2 in relocations,name+' trampoline cell lacks HIGHLOW relocation'
+        require(jump.address-base+2 in relocations, name+' trampoline cell lacks HIGHLOW relocation')
         entries.append({'name':name,'saved_result_offset':slot,'saved_subject_offset':4,'kind':kind,
                         'instructions':len(instructions),'trampoline_cell_relocated':True})
     callbacks=[]
     for name,pop in CALLBACKS.items():
         matches=[n for n in symbols if re.fullmatch(r'@_ZN5ss2vr4gameL\d+'+name+r'EPvS\d_.*@\d+',n)]
-        assert len(matches)==1,(name,'callback definition missing/ambiguous')
+        require(len(matches)==1, (name,'callback definition missing/ambiguous'))
         address=symbols[matches[0]]
         end=next(a for a in text_addresses if a>address)
         returns=[i for i in decoder.disasm(native.get_data(address-base,end-address),address) if i.mnemonic=='ret']
-        assert returns and all(i.op_str==str(pop) if pop else not i.op_str for i in returns),name+' return ABI changed'
+        require(returns and all(i.op_str==str(pop) if pop else not i.op_str for i in returns), name+' return ABI changed')
         callbacks.append({'name':name,'return_stack_bytes':pop,'return_sites':len(returns)})
     return {'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'entries':entries,'callbacks':callbacks}
 

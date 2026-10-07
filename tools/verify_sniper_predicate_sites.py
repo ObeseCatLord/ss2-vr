@@ -28,15 +28,34 @@ except ModuleNotFoundError as error:
 ROOT = Path(__file__).resolve().parents[1]
 BOUNDARIES_PATH = ROOT / "docs/sniper-predicate-boundaries.json"
 CHECKS_PATH = ROOT / "docs/sniper-predicate-site-checks.json"
-MINHOOK_PATHS = {
-    "trampoline_c_sha256": ROOT / "deps/vendor/minhook/src/trampoline.c",
-    "trampoline_h_sha256": ROOT / "deps/vendor/minhook/src/trampoline.h",
-    "hde32_c_sha256": ROOT / "deps/vendor/minhook/src/hde/hde32.c",
-    "hde32_h_sha256": ROOT / "deps/vendor/minhook/src/hde/hde32.h",
-    "hde32_pstdint_sha256": ROOT / "deps/vendor/minhook/src/hde/pstdint.h",
-    "hde32_table_sha256": ROOT / "deps/vendor/minhook/src/hde/table32.h",
+MINHOOK_FILES = {
+    "trampoline_c_sha256": "src/trampoline.c",
+    "trampoline_h_sha256": "src/trampoline.h",
+    "hde32_c_sha256": "src/hde/hde32.c",
+    "hde32_h_sha256": "src/hde/hde32.h",
+    "hde32_pstdint_sha256": "src/hde/pstdint.h",
+    "hde32_table_sha256": "src/hde/table32.h",
 }
-HDE32_DIR = MINHOOK_PATHS["hde32_c_sha256"].parent
+
+
+def minhook_paths(source=None, root=ROOT):
+    root = Path(root)
+    if source is None:
+        cache = root / "build-game/CMakeCache.txt"
+        values = {}
+        if cache.is_file():
+            for line in cache.read_text().splitlines():
+                if ":" in line and "=" in line and not line.startswith(("#", "//")):
+                    key, value = line.split("=", 1)
+                    values[key.split(":", 1)[0]] = value
+        configured = values.get("minhook_SOURCE_DIR") or values.get("MINHOOK_SOURCE")
+        source = Path(configured) if configured else root / "deps/vendor/minhook"
+        if configured and not source.is_absolute():
+            source = root / source
+    source = Path(source).resolve(strict=True)
+    return {name: source / relative for name, relative in MINHOOK_FILES.items()}
+
+
 HDE32_HOST_SCRATCH = Path("/tmp/ss2-vr-equivalence")
 IMAGE_SCN_MEM_EXECUTE = 0x20000000
 IMAGE_REL_BASED_HIGHLOW = 3
@@ -98,7 +117,7 @@ def create_private_hde32_scratch():
 
 
 @contextmanager
-def built_hde32_host_decoder():
+def built_hde32_host_decoder(paths):
     """Build unchanged pinned hde32.c for the POSIX host, never game code."""
     compiler = shutil.which("cc")
     if compiler is None:
@@ -147,8 +166,8 @@ def built_hde32_host_decoder():
             encoding="ascii")
         library = directory / "libss2_hde32_host.so"
         command = [compiler, "-shared", "-fPIC", "-std=c99", "-D_M_IX86=1",
-                   "-I", str(shim_dir), "-I", str(HDE32_DIR),
-                   str(MINHOOK_PATHS["hde32_c_sha256"]), str(bridge),
+                   "-I", str(shim_dir), "-I", str(paths["hde32_c_sha256"].parent),
+                   str(paths["hde32_c_sha256"]), str(bridge),
                    "-o", str(library)]
         completed = subprocess.run(command, capture_output=True, text=True, check=False)
         if completed.returncode:
@@ -386,7 +405,7 @@ def scan_direct_interior_references(pe, decoder, sites, sections):
                       "executable_highlow_relocation_count": relocation_count}
 
 
-def verify(game, checks_path=CHECKS_PATH, boundaries_path=BOUNDARIES_PATH):
+def verify(game, checks_path=CHECKS_PATH, boundaries_path=BOUNDARIES_PATH, minhook_source=None):
     checks = json.loads(checks_path.read_text())
     boundaries = json.loads(boundaries_path.read_text())
     native = game / "Bin/Sam2Game.dll"
@@ -400,7 +419,8 @@ def verify(game, checks_path=CHECKS_PATH, boundaries_path=BOUNDARIES_PATH):
     if len(checks["sites"]) != 8 or len(boundaries["candidates"]) != 8:
         fail("expected exactly eight sniper predicate sites")
 
-    minhook_hashes = {name: sha256_file(path) for name, path in MINHOOK_PATHS.items()}
+    paths = minhook_paths(minhook_source)
+    minhook_hashes = {name: sha256_file(path) for name, path in paths.items()}
     if minhook_hashes != checks["pinned_minhook"]["source_sha256"]:
         fail("pinned MinHook/HDE source fingerprint changed")
     hde32_host = checks["pinned_hde32_host"]
@@ -423,7 +443,7 @@ def verify(game, checks_path=CHECKS_PATH, boundaries_path=BOUNDARIES_PATH):
     resolved_sites = []
     aggregate_stolen_instruction_count = 0
     aggregate_continuation_instruction_count = 0
-    with built_hde32_host_decoder() as decode_hde32:
+    with built_hde32_host_decoder(paths) as decode_hde32:
         for expected in checks["sites"]:
             role = expected["role"]
             boundary = boundary_by_role.get(role)
@@ -520,8 +540,10 @@ if __name__ == "__main__":
                         help="Serious Sam 2 install root (read-only)")
     parser.add_argument("--checks", type=Path, default=CHECKS_PATH,
                         help="pinned non-proprietary static facts JSON")
+    parser.add_argument("--minhook-source", type=Path,
+                        help="Pinned checkout; default uses the configured build dependency")
     arguments = parser.parse_args()
     try:
-        print(json.dumps(verify(arguments.game.resolve(), arguments.checks.resolve()), indent=2))
+        print(json.dumps(verify(arguments.game.resolve(), arguments.checks.resolve(), minhook_source=arguments.minhook_source), indent=2))
     except (OSError, ValueError, json.JSONDecodeError) as error:
         raise SystemExit(f"FAIL CLOSED: {error}") from error

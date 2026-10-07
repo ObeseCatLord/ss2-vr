@@ -9,6 +9,10 @@ import subprocess
 import capstone
 import pefile
 
+def require(ok, message):
+    if not ok:
+        raise ValueError(message)
+
 ROOT = Path(__file__).resolve().parents[1]
 ENTRIES = [("primaryDownPredicate", 0, 0), ("primaryPressPredicate", 24, 1),
            ("primaryReleasePredicate", 24, 2), ("primaryHistoryPredicate", 24, 3),
@@ -18,7 +22,7 @@ CALLBACKS = {"operatorFiring": 0, "fireButtonPressed": 4}
 
 def inspect(path):
     native = pefile.PE(str(path), max_symbol_exports=65536)
-    assert native.FILE_HEADER.Machine == 0x14c
+    require(native.FILE_HEADER.Machine == 0x14c, 'Required boundary check failed: native.FILE_HEADER.Machine == 332')
     base = native.OPTIONAL_HEADER.ImageBase
     rows = subprocess.check_output(["i686-w64-mingw32-nm", str(path)], text=True).splitlines()
     symbols = {r.split()[2]: int(r.split()[0], 16) for r in rows
@@ -45,28 +49,28 @@ def inspect(path):
                     ("add", "esp, 0x10"), ("mov", "dword ptr " + operand + ", eax"),
                     ("fxrstor", "[esp]"), ("mov", "esp, ebp"), ("popal", ""), ("popfd", ""),
                     ("jmp", f'dword ptr [0x{symbols["_" + name + "_original"]:x}]')]
-        assert [(i.mnemonic, i.op_str) for i in instructions] == expected, name + " entry differs"
-        assert instructions[-1].address - base + 2 in relocations, name + " cell not relocated"
+        require([(i.mnemonic, i.op_str) for i in instructions] == expected, name + " entry differs")
+        require(instructions[-1].address - base + 2 in relocations, name + " cell not relocated")
         entries.append({"name": name, "result_saved_offset": slot, "subject_saved_offset": 4,
                         "kind": kind, "trampoline_cell_relocated": True})
     callbacks = []
     for name, pop in CALLBACKS.items():
         matches = [n for n in symbols if re.fullmatch(r"@_ZN5ss2vr4gameL\d+" + name + r"EPvS\d_.*@\d+", n)]
-        assert len(matches) == 1, (name, "definition missing or ambiguous")
+        require(len(matches) == 1, (name, "definition missing or ambiguous"))
         address = symbols[matches[0]]
         end = next(a for a in text_addresses if a > address)
         returns = [i for i in decoder.disasm(native.get_data(address - base, end - address), address)
                    if i.mnemonic == "ret"]
-        assert returns and all(i.op_str == str(pop) if pop else not i.op_str for i in returns), name + " return differs"
+        require(returns and all(i.op_str == str(pop) if pop else not i.op_str for i in returns), name + " return differs")
         body = list(decoder.disasm(native.get_data(address - base, end - address), address))
-        assert any(i.mnemonic == "call" and i.op_str == f'0x{symbols["_ss2vrNativeFinally"]:x}'
-                   for i in body), name + " missing native-finally boundary"
+        require(any(i.mnemonic == "call" and i.op_str == f'0x{symbols["_ss2vrNativeFinally"]:x}'
+                   for i in body), name + " missing native-finally boundary")
         callbacks.append({"name": name, "return_stack_bytes": pop, "return_sites": len(returns)})
     helper = symbols["_ss2vrPrimaryPredicate"]
     end = next(a for a in text_addresses if a > helper)
     code = list(decoder.disasm(native.get_data(helper - base, end - helper), helper))
-    assert not any(i.mnemonic == "call" for i in code), "Scalar primary helper contains a call"
-    assert any(i.mnemonic == "ret" for i in code), "Scalar primary helper has no return"
+    require(not any(i.mnemonic == "call" for i in code), "Scalar primary helper contains a call")
+    require(any(i.mnemonic == "ret" for i in code), "Scalar primary helper has no return")
     return {"sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
             "entries": entries, "callbacks": callbacks, "scalar_helper_call_count": 0}
 

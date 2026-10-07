@@ -16,6 +16,10 @@ import tempfile
 
 import pefile
 
+def require(ok, message):
+    if not ok:
+        raise ValueError(message)
+
 ROOT = Path(__file__).resolve().parents[1]
 EXPORT = b"?mthIntersectThickRayTriangle@SeriousEngine@@YAMABVRay3f@1@ABVVector3f@1@111M@Z"
 CORE_SHA256 = "7a1bd56b9bfa3edfbb23f4d3c96490e40a7c0b031b85e797e1af91b2ba3cf207"
@@ -57,15 +61,15 @@ def fixture_check(body, indirect):
         destination = "[esp]" if index == 0 else f"[esp+0x{index*4:x}]"
         expected += [f"mov {pointer_register},DWORD PTR [ebp+0x{first_argument+index*4:x}]",
                      f"mov DWORD PTR {destination},{pointer_register}"]
-    assert code[:len(expected)] == expected, code
+    require(code[:len(expected)] == expected, code)
     call = code[len(expected)]
     if indirect:
-        assert call == "call eax", call
+        require(call == "call eax", call)
     else:
-        assert re.fullmatch(r"call [0-9a-f]+ <_roomscaleAbiEntry\+0x[0-9a-f]+>", call), call
-        assert "DISP32\t_ss2vrRoomscaleTriangleQuery" in body
-    assert code[len(expected)+1:] == ["fstp DWORD PTR [ebp-0x4]",
-                                     "fld DWORD PTR [ebp-0x4]", "leave", "ret"], code
+        require(re.fullmatch(r"call [0-9a-f]+ <_roomscaleAbiEntry\+0x[0-9a-f]+>", call), call)
+        require("DISP32\t_ss2vrRoomscaleTriangleQuery" in body, "Required boundary check failed: 'DISP32\\t_ss2vrRoomscaleTriangleQuery' in body")
+    require(code[len(expected)+1:] == ["fstp DWORD PTR [ebp-0x4]",
+                                     "fld DWORD PTR [ebp-0x4]", "leave", "ret"], code)
     # The caller owns its 28-byte local frame (24 outgoing args + result).
     # There is no ret 24/callee cleanup. Input pointers retain native order.
 
@@ -73,13 +77,13 @@ def fixture_check(body, indirect):
 def native_export_check(game):
     core = game / "Bin/Core.dll"
     raw = core.read_bytes()
-    assert hashlib.sha256(raw).hexdigest() == CORE_SHA256, "Core fingerprint differs"
+    require(hashlib.sha256(raw).hexdigest() == CORE_SHA256, "Core fingerprint differs")
     pe = pefile.PE(data=raw)
-    assert pe.FILE_HEADER.Machine == 0x14C and pe.OPTIONAL_HEADER.ImageBase == 0x10000000
+    require(pe.FILE_HEADER.Machine == 0x14C and pe.OPTIONAL_HEADER.ImageBase == 0x10000000, 'Required boundary check failed: pe.FILE_HEADER.Machine == 332 and pe.OPTIONAL_HEADER.ImageBase == 268435456')
     matches = [s for s in pe.DIRECTORY_ENTRY_EXPORT.symbols if s.name == EXPORT]
-    assert len(matches) == 1 and matches[0].address == 0x1D3C0 and not matches[0].forwarder
+    require(len(matches) == 1 and matches[0].address == 0x1D3C0 and not matches[0].forwarder, 'Required boundary check failed: len(matches) == 1 and matches[0].address == 119744 and (not matches[0].forwarder)')
     # Exact pinned ABI evidence only; no native implementation is copied out.
-    assert pe.get_data(0x1D3C0, 6) == bytes.fromhex("55 8b ec 83 ec 60")
+    require(pe.get_data(0x1D3C0, 6) == bytes.fromhex("55 8b ec 83 ec 60"), "Required boundary check failed: pe.get_data(119744, 6) == bytes.fromhex('55 8b ec 83 ec 60')")
     for offset, expected in {
         0x1D3C6: "8b 4d 18",  # fifth arg: normal reference
         0x1D3CA: "8b 75 08",  # first arg: ray reference
@@ -89,8 +93,8 @@ def native_export_check(game):
         0x1D66B: "d9 45 18 5f 5b 5e 8b e5 5d c3",  # ST0 return; plain ret
     }.items():
         expected_bytes = bytes.fromhex(expected)
-        assert pe.get_data(offset, len(expected_bytes)) == expected_bytes, hex(offset)
-    assert pe.get_data(0x81974, 4) == bytes.fromhex("e6 b1 61 7f")
+        require(pe.get_data(offset, len(expected_bytes)) == expected_bytes, hex(offset))
+    require(pe.get_data(0x81974, 4) == bytes.fromhex("e6 b1 61 7f"), "Required boundary check failed: pe.get_data(530804, 4) == bytes.fromhex('e6 b1 61 7f')")
     pe.close()
 
 
@@ -105,7 +109,7 @@ def verify(scratch, game):
         subprocess.run(["i686-w64-mingw32-g++", "-std=c++20", optimization,
                         "-fno-omit-frame-pointer", "-Wall", "-Wextra", "-Werror",
                         "-I" + str(ROOT / "src"), "-c", str(ROOT / source), "-o", str(target)], check=True)
-        assert target.read_bytes()[:2] == b"\x4c\x01", "Expected i386 COFF"
+        require(target.read_bytes()[:2] == b"\x4c\x01", "Expected i386 COFF")
         objects[name] = target
     fixture = functions(run("i686-w64-mingw32-objdump", "-dr", "-Mintel", str(objects["fixture"])))
     fixture_check(fixture["_roomscaleAbiCall"], True)
@@ -115,43 +119,43 @@ def verify(scratch, game):
     bodies = functions(assembly)
     entry = bodies["_ss2vrRoomscaleTriangleQuery"]
     code = instructions(entry)
-    assert "and esp,0xfffffff0" in code  # native caller can supply 4-byte alignment
-    assert "__tls_index" in entry and "secrel32\t.tls$" in entry
-    assert "dir32\t.bss" in entry and code.count("call esi") == 2  # original trampoline
-    assert "roomscale8classify" in entry
-    assert code.count("fchs") == 3  # negated native normal
-    assert code.count("ret") == 2 and not any(c.startswith("ret ") for c in code)
+    require("and esp,0xfffffff0" in code, "Required boundary check failed: 'and esp,0xfffffff0' in code")  # native caller can supply 4-byte alignment
+    require("__tls_index" in entry and "secrel32\t.tls$" in entry, "Required boundary check failed: '__tls_index' in entry and 'secrel32\\t.tls$' in entry")
+    require("dir32\t.bss" in entry and code.count("call esi") == 2, "Required boundary check failed: 'dir32\\t.bss' in entry and code.count('call esi') == 2")  # original trampoline
+    require("roomscale8classify" in entry, "Required boundary check failed: 'roomscale8classify' in entry")
+    require(code.count("fchs") == 3, "Required boundary check failed: code.count('fchs') == 3")  # negated native normal
+    require(code.count("ret") == 2 and not any(c.startswith("ret ") for c in code), "Required boundary check failed: code.count('ret') == 2 and (not any((c.startswith('ret ') for c in code)))")
     # Both native-call sites receive six slots. The outside-scope path returns
     # ST0 untouched; the scoped path examines ST0 for invalid native output.
     calls = [i for i, value in enumerate(code) if value == "call esi"]
     for i in calls:
         window = code[i-12:i]
-        assert "fstp DWORD PTR [esp+0x14]" in window
+        require("fstp DWORD PTR [esp+0x14]" in window, "Required boundary check failed: 'fstp DWORD PTR [esp+0x14]' in window")
         for slot in (0, 4, 8, 12, 16):
             operand = "[esp]" if slot == 0 else f"[esp+0x{slot:x}]"
-            assert any(c.startswith(f"mov DWORD PTR {operand},") for c in window), window
-    assert code[calls[0]+1] == "fld st(0)"
-    assert code[calls[1]+1:calls[1]+6] == ["lea esp,[ebp-0x8]", "pop ebx", "pop esi", "pop ebp", "ret"]
+            require(any(c.startswith(f"mov DWORD PTR {operand},") for c in window), window)
+    require(code[calls[0]+1] == "fld st(0)", "Required boundary check failed: code[calls[0] + 1] == 'fld st(0)'")
+    require(code[calls[1]+1:calls[1]+6] == ["lea esp,[ebp-0x8]", "pop ebx", "pop esi", "pop ebp", "ret"], "Required boundary check failed: code[calls[1] + 1:calls[1] + 6] == ['lea esp,[ebp-0x8]', 'pop ebx', 'pop esi', 'pop ebp', 'ret']")
     # The reversed branch gives original B to native C's slot, then loads
     # original C and joins the common store to native B's slot.
     reverse = code[calls[1]+6:]
     swapped = ["mov eax,DWORD PTR [ebp+0x10]", "mov DWORD PTR [esp+0xc],eax",
                "mov eax,DWORD PTR [ebp+0x14]"]
     index = reverse.index(swapped[0])
-    assert reverse[index:index+3] == swapped
-    assert reverse[index+3].startswith("jmp ")
-    assert "lea eax,[esp+0x2c]" in reverse[:index]  # address of negated normal
+    require(reverse[index:index+3] == swapped, 'Required boundary check failed: reverse[index:index + 3] == swapped')
+    require(reverse[index+3].startswith("jmp "), "Required boundary check failed: reverse[index + 3].startswith('jmp ')")
+    require("lea eax,[esp+0x2c]" in reverse[:index], "Required boundary check failed: 'lea eax,[esp+0x2c]' in reverse[:index]")  # address of negated normal
     scope = next(body for name, body in bodies.items() if "27runRoomscaleModelQueryScope" in name and "withNativeFinally" not in name)
-    assert "DISP32\t_ss2vrNativeFinally" in scope and "GetCurrentThreadId" in scope
-    assert "fnstcw" in scope and "_fegetround" in scope
+    require("DISP32\t_ss2vrNativeFinally" in scope and "GetCurrentThreadId" in scope, "Required boundary check failed: 'DISP32\\t_ss2vrNativeFinally' in scope and 'GetCurrentThreadId' in scope")
+    require("fnstcw" in scope and "_fegetround" in scope, "Required boundary check failed: 'fnstcw' in scope and '_fegetround' in scope")
     finish = next(body for name, body in bodies.items() if "Context6finish" in name)
-    assert "secrel32\t.tls$" in finish and "mov BYTE PTR [edx+0x10],0x1" in instructions(finish)
+    require("secrel32\t.tls$" in finish and "mov BYTE PTR [edx+0x10],0x1" in instructions(finish), "Required boundary check failed: 'secrel32\\t.tls$' in finish and 'mov BYTE PTR [edx+0x10],0x1' in instructions(finish)")
     queue = next(body for name, body in bodies.items() if "queueRoomscaleTriangleHook" in name)
-    assert "RoomscaleTriangleExport" in queue and "dir32\t.bss" in queue
-    assert EXPORT + b"\0" in objects["production"].read_bytes()
+    require("RoomscaleTriangleExport" in queue and "dir32\t.bss" in queue, "Required boundary check failed: 'RoomscaleTriangleExport' in queue and 'dir32\\t.bss' in queue")
+    require(EXPORT + b"\0" in objects["production"].read_bytes(), "Required boundary check failed: EXPORT + b'\\x00' in objects['production'].read_bytes()")
     nm = run("i686-w64-mingw32-nm", str(objects["production"]))
-    assert re.search(r" T _ss2vrRoomscaleTriangleQuery$", nm, re.MULTILINE)
-    assert "MH_EnableHook" not in nm and "MH_ApplyQueued" not in nm
+    require(re.search(r" T _ss2vrRoomscaleTriangleQuery$", nm, re.MULTILINE), "Required boundary check failed: re.search(' T _ss2vrRoomscaleTriangleQuery$', nm, re.MULTILINE)")
+    require("MH_EnableHook" not in nm and "MH_ApplyQueued" not in nm, "Required boundary check failed: 'MH_EnableHook' not in nm and 'MH_ApplyQueued' not in nm")
     print(json.dumps({
         "scope_done": "compiled model triangle boundary only",
         "runtime_executed": False, "native_hooks_installed": False,

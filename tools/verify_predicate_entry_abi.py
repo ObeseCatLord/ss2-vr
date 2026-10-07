@@ -6,6 +6,10 @@ import re
 import subprocess
 from pathlib import Path
 
+def require(ok, message):
+    if not ok:
+        raise ValueError(message)
+
 ROOT = Path(__file__).resolve().parents[1]
 obj = ROOT / "build-game/native-predicate-abi.o"
 subprocess.run(["i686-w64-mingw32-g++", "-std=c++20", "-O2", "-Wall", "-Wextra", "-Werror",
@@ -42,22 +46,22 @@ for name, slot, subject, kind in [("predicateEax", 0x1c, 4, 1),
                 "sub $0x4,%esp", f"push $0x{kind:x}",
                 f"push 0x{subject:x}(%ebp)",
                 f"push 0x{slot:x}(%ebp)"]
-    assert instructions[:13] == expected, (name, instructions[:13])
-    assert len(instructions) == 21, (name, instructions)
-    assert re.fullmatch(r"call [0-9a-f]+ <_predicateAbiHelper>", instructions[13]), instructions[13]
-    assert instructions[14:20] == ["add $0x10,%esp", f"mov %eax,0x{slot:x}(%ebp)",
-                                   "fxrstor (%esp)", "mov %ebp,%esp", "popa", "popf"]
+    require(instructions[:13] == expected, (name, instructions[:13]))
+    require(len(instructions) == 21, (name, instructions))
+    require(re.fullmatch(r"call [0-9a-f]+ <_predicateAbiHelper>", instructions[13]), instructions[13])
+    require(instructions[14:20] == ["add $0x10,%esp", f"mov %eax,0x{slot:x}(%ebp)",
+                                   "fxrstor (%esp)", "mov %ebp,%esp", "popa", "popf"], "Required boundary check failed: instructions[14:20] == ['add $0x10,%esp', f'mov %eax,0x{slot:x}(%ebp)', 'fxrstor (%esp)', 'mov %ebp,%esp', 'popa', 'popf']")
     cell = symbols["_" + name + "_original"]
-    assert instructions[20] == f"jmp *0x{cell:x}", instructions[20]
-    assert len(re.findall(r"\bdir32\s+\.bss\b", assembly)) == 1
+    require(instructions[20] == f"jmp *0x{cell:x}", instructions[20])
+    require(len(re.findall(r"\bdir32\s+\.bss\b", assembly)) == 1, "Required boundary check failed: len(re.findall('\\\\bdir32\\\\s+\\\\.bss\\\\b', assembly)) == 1")
     # Independent stack arithmetic: native ESP is restored through saved EBP,
     # not by guessing the number of bytes discarded during alignment.
     for initial in (0, 4, 8, 12):
         saved_frame = 0x1000 + initial - 4 - 32
         fx_base = (saved_frame & ~15) - 512
         call_stack = fx_base - 4 - 12
-        assert call_stack % 16 == 0 and call_stack + 16 == fx_base
-        assert saved_frame + 32 + 4 == 0x1000 + initial
+        require(call_stack % 16 == 0 and call_stack + 16 == fx_base, 'Required boundary check failed: call_stack % 16 == 0 and call_stack + 16 == fx_base')
+        require(saved_frame + 32 + 4 == 0x1000 + initial, 'Required boundary check failed: saved_frame + 32 + 4 == 4096 + initial')
     report[name] = {"selected_saved_register_offset": slot,
                     "subject_saved_register_offset": subject,
                     "general_registers_and_flags_restored": True,

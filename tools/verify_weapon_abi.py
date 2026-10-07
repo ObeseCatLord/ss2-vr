@@ -3,6 +3,10 @@
 import subprocess,re,json,hashlib,argparse
 from pathlib import Path
 from abi_camera_forwarding import verify_camera_forwarding
+def require(ok, message):
+    if not ok:
+        raise ValueError(message)
+
 ROOT=Path(__file__).resolve().parents[1]
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--artifact',choices=['d3d9.dll','SS2VRServer.dll'],default='d3d9.dll')
@@ -14,7 +18,7 @@ for function,needle,size in [('weaponRender','L12weaponRender',48),('sniperRende
  rows=[line.split() for line in nm.splitlines() if needle in line and ' t ' in line and '.cold' not in line]
  if not rows:
   rows=[line.split() for line in nm.splitlines() if function in line and ' t ' in line and '.cold' not in line]
- assert len(rows)==1,(function,rows)
+ require(len(rows)==1, (function,rows))
  address=int(rows[0][0],16)
  # Next defined text symbol bounds compiler-generated function, then inspect
  # only own plugin machine code. Native code dumps are not exported.
@@ -27,13 +31,13 @@ for function,needle,size in [('weaponRender','L12weaponRender',48),('sniperRende
   # Prove the actual original argument slot, ECX and ESP are restored, rather
   # than accepting any indirect jump as equivalent to callee cleanup.
   trampoline=[line.split() for line in nm.splitlines() if 'L17originalLookClampE' in line]
-  assert len(trampoline)==1,trampoline
+  require(len(trampoline)==1, trampoline)
   target=int(trampoline[0][0],16)
   instructions=[line.split('\t')[-1].strip() for line in assembly.splitlines()
                 if re.match(r'^[0-9a-f]+:',line.strip()) and
                    re.match(r'^[a-z]+(?:\s|$)',line.split('\t')[-1].strip())]
-  assert instructions[:6]==['push   %edi','lea    0x8(%esp),%edi','and    $0xfffffff8,%esp',
-                            'push   -0x4(%edi)','push   %ebp','mov    %esp,%ebp'],instructions[:6]
+  require(instructions[:6]==['push   %edi','lea    0x8(%esp),%edi','and    $0xfffffff8,%esp',
+                            'push   -0x4(%edi)','push   %ebp','mov    %esp,%ebp'], instructions[:6])
   saved_entry=re.search(r'mov    %edi,(-0x[0-9a-f]+\(%ebp\))',assembly).group(1)
   saved_brain=re.search(r'mov    %ecx,(-0x[0-9a-f]+\(%ebp\))',assembly).group(1)
   load=instructions.index('mov    (%edi),%eax')
@@ -43,15 +47,15 @@ for function,needle,size in [('weaponRender','L12weaponRender',48),('sniperRende
   tail=[f'mov    {saved_entry},%eax',f'mov    {saved_argument},%edx','mov    %edx,(%eax)',
         f'mov    {saved_brain},%ecx','lea    -0xc(%ebp),%esp','pop    %ebx','pop    %esi',
         'pop    %edi','pop    %ebp','lea    -0x8(%edi),%esp','pop    %edi',f'jmp    *0x{target:x}']
-  assert any(instructions[i:i+len(tail)]==tail for i in range(len(instructions))),tail
+  require(any(instructions[i:i+len(tail)]==tail for i in range(len(instructions))), tail)
   exits=re.findall(r'\bjmp\s+\*([^\n]+)',assembly)
-  assert exits==[f'0x{target:x}'],exits
+  require(exits==[f'0x{target:x}'], exits)
   source=(ROOT/'src/game/engine.cpp').read_text()
-  assert 'using LookClamp = void(__thiscall *)(void *, Vec3 &);' in source
+  require('using LookClamp = void(__thiscall *)(void *, Vec3 &);' in source, "Required boundary check failed: 'using LookClamp = void(__thiscall *)(void *, Vec3 &);' in source")
   entries[function]={'return_cleanup_bytes':size,'cleanup_owner':'audited native __thiscall trampoline',
                      'tail_transfer_preserves_ecx_esp_and_original_reference':True}
   continue
- assert rets and all((int(x,16) if x else 0)==size for x in rets),(function,rets)
+ require(rets and all((int(x,16) if x else 0)==size for x in rets), (function,rets))
  if size==48:
   instructions=[line.split('\t')[-1].strip() for line in assembly.splitlines()
                 if re.match(r'^[0-9a-f]+:',line.strip()) and
