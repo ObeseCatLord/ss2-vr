@@ -121,6 +121,114 @@ was added. Astra/Max is reviewing the smallest actual presentation-owner adapter
 including the implicit16x16 device buffer versus native window canvas.
 
 No real HMD/controllers, stereo submission, scope/UI-in-headset, gameplay or
-multiplayer runtime acceptance exists. Headset/runtime preference is pending;
+multiplayer runtime acceptance exists. Headset/runtime preference was pending at this test;
 WinBoat is stopped and Windows GPU/OpenXR capability is unverified. Do not change
 passthrough/security/credentials to make that platform appear tested.
+
+## Confirmed target matrix and simulated baseline
+
+The user subsequently confirmed SteamVR + Steam Frame and Envision/Monado +
+Bigscreen Beyond as the required targets and explicitly approved simulated
+Monado testing. Brief game focus is already authorized. Windows and Linux/Proton
+remain separate platform requirements; actual hardware acceptance is separate
+from simulation. No target device was detected during initial inventory.
+
+The existing Envision simulated profile was started as a private per-process
+service with a private runtime/socket directory. The first ordinary-pipe launch
+failed at stdin epoll registration before compositor startup. A PTY launch
+resolved that failure without global runtime/security changes. The service
+created a Qwerty HMD and both synthetic controllers, selecting the RTX4090.
+Runtime identifies itself as Monado25.1.0, build
+`v25.1.0-710-g735e29e4e`.
+
+The native Linux Vulkan2 `hello_xr` baseline created two896x1007 color/depth
+swapchains (chosen color format43), enumerated View/Local/Stage spaces and
+transitioned IDLE → READY → SYNCHRONIZED → VISIBLE → FOCUSED. Grab bindings
+identify left/right Microsoft Mixed Reality Motion Controller Squeeze. The
+runtime reports synthetic orientation/position tracking capabilities false;
+this is not physical sensor tracking. No per-frame submission result or
+compositor image has yet been accepted. This is neither the actual Windows
+D3D11 host nor the x86 proxy/CPU-transport test.
+
+The actual Proton host must use the Windows wineopenxr manifest resolving
+`C:\\windows\\system32\\wineopenxr.dll`; the native Monado shared-library
+manifest belongs to the Unix loader. WineD3D is not an equivalent D3D11 host
+test: Proton's bridge requires DXVK Vulkan interop. Keep these runtime contexts
+distinct and record runtime/Proton versions, enabled extensions, selected GPU,
+swapchain formats, session transitions, frame results and both hand profiles.
+
+Steam Frame's optional native extension/profile must be enabled/suggested only
+when supported. Its documented fallback is Frame → Generic Controller → Oculus
+Touch. Index equivalence must not be inferred. Native Frame left inputs are
+dpad/view; right inputs include a/b/x/y/menu, so left X/Y paths are invalid for
+that profile. Existing Touch bindings have a documented fallback route. Beyond
+is an HMD; actual controller model determines its interaction profile.
+
+Primary references: [Frame inputs](https://partner.steamgames.com/doc/steamhardware/steamframe/input),
+[custom-engine fallback](https://partner.steamgames.com/doc/steamhardware/steamframe/engines/custom),
+[Proton D3D11 bridge](https://github.com/ValveSoftware/Proton/blob/proton_11.0/wineopenxr/openxr.c),
+[Proton loader](https://github.com/ValveSoftware/Proton/blob/proton_11.0/wineopenxr/openxr_loader.c),
+[Monado development](https://monado.freedesktop.org/developing-with-monado.html).
+
+## Actual D3D11 host and native chain probe
+
+The tracing-only source received Astra/xhigh follow-up GO after correcting
+completion COM queries, failure-log bounds and duplicate creation identity.
+The earlier Astra/Max design review remains conditional for the production
+adapter. Current-turn settings were verified for both PC reviews. See
+PRESENTATION_OWNER.md for dispositions and unresolved lifecycle gates.
+
+All products rebuilt together; all60 portable groups, artifact/layout and
+native-finally gates pass. Compiled chain callbacks have24-byte stdcall cleanup.
+Source/build fingerprint:
+`13dda1cfc9e9a8249d8aa6f816b92b59b5eea2764892b04d2a24ecef37838748`.
+
+| Product | SHA256 |
+|---|---|
+| x86 d3d9.dll | `9d7c749e4900bb6b2d1311a005fec3e954fb9adc55c61325c3471f24d7517839` |
+| x86 SS2VRServer.dll | `4d1f501f2bd3a2967b504f59b114c691f33002320459a0b569fd12ef3a35f840` |
+| x64 ss2vr_host.exe | `31d40ce94d74670067a1d05af129da6270af269ef4affb3fdbc99f13dd1199b2` |
+| x64 official loader | `bb011caa82528c541a73967ce6408f82198ff4fd0358b38b54884719d863bd1d` |
+
+The tested private development archive is
+`e4b375a50ce2a4562be7ea119f9a8766b66806a4cab5a324a4505d29c53e64b1`.
+It predates this results documentation and is not a playable/public release.
+Installer refused a residual generated host log; the log was preserved outside
+the lab mod directory before hash/collision preflight and installation succeeded.
+No unrelated collisions were overwritten.
+
+The focused game probe observes eight recurring additional-swapchain calls
+after hooksReady, at the pinned native presentation return site. Backbuffer is
+1280x720 X8R8G8B8, non-MSAA and identical to RT0; destination is the foreground
+game window, device/thread agree with creation, original HRESULTs are success.
+Native depth is3440x1440 D24S8. The inspected compositor capture shows the
+rendered startup scene. This probe did not establish a new menu capture or launch
+a host from the game. The exact lab process was stopped after the bounded test.
+
+A separate private synthetic IPC fixture launched the **actual matching x64
+mod host** under the same Proton Hotfix/prefix and private simulated Monado
+service. Native `XR_RUNTIME_JSON` selected Monado; `WINEXR_RUNTIME_JSON` selected
+the Windows wineopenxr manifest. Proton's existing Steam helper initialized
+vrclient. No global runtime registration/security change occurred. A read-only
+Astra investigation supplied the environment plan; its effective-settings
+introspection was unavailable, so that investigation is not formal source GO.
+
+Observed host runtime: Monado25.1.0, build `v25.1.0-710-g735e29e4e`, required
+`XR_KHR_D3D11_enable`, NVIDIA GeForce RTX4090 (10de:2684), feature level12.1.
+Session transitions IDLE → READY → SYNCHRONIZED → VISIBLE → FOCUSED. Both hand
+profiles are `/interaction_profiles/microsoft/motion_controller`. Two1024x1024
+wheel swapchains, a1024x256 HUD chain and a640x360 synthetic menu chain use
+DXGI_FORMAT_B8G8R8A8_UNORM (87), three images each.
+
+At the final periodic snapshot:1201 successful xrEndFrame returns, including
+300 submissions containing the synthetic menu quad. These new counters count
+successful API returns after submission and distinguish menu layers from the
+existing world-pair counter. Fixture snapshots show focused/head/both-hand
+validity and advancing input sequence; no physical movement/button/haptic test
+was performed. The fixture requested shutdown, host exited0 and tracking was
+invalidated. Native game world/CPU transport counters remained0 by design.
+
+This proves actual-host D3D11 runtime/session/swapchain/API submission and
+synthetic input bring-up. It does not prove visible compositor image fidelity,
+native proxy-to-host CPU readback, gameplay stereo, Frame/Beyond controls or
+hardware acceptance. Those gates remain open.

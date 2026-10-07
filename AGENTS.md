@@ -21,6 +21,8 @@ Additional sessions/delegation are authorized. Before spawning define objective,
 ## Local validation and runtime safety
 Local/private runtime testing may precede full feature completion. Preserve original user data and reversible backups. Inspect hardware/runtime and input/foreground availability before driving; do not interfere with active user input. Do not blindly change runtime registration, permissions or security settings. Actions remains disabled; checks run locally.
 
+The user explicitly approved brief SS2 game focus and simulated Monado testing on 2026-10-07; those questions are resolved. Required device targets are SteamVR + Steam Frame and Envision/Monado + Bigscreen Beyond, on Windows and Linux/Proton. Simulation acceptance is separate from each actual device/platform. Beyond controller profile depends on the user's controllers. Use isolated/per-process runtime setup; never pass a native Linux runtime manifest to the Windows loader. Preserve CPU D3D9 readback into the separate D3D11 host. Do not change global runtime defaults to perform these tests.
+
 ## Build conventions
 C++20, explicit x86 calling conventions at the engine boundary, fixed-width pointer-free IPC structures and bounded waits. Use pinned upstream dependencies with license notices. Use rg for searches. Test behavior and protocol invariants, not copies of implementation. No TODO, stub or guessed ABI may be represented as a complete feature.
 

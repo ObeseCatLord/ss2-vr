@@ -228,6 +228,60 @@ static void logStartup(const char *event, IDirect3DDevice9 *d, bool ready,
         ownerMatch, idleLocal, ready, routingReady, channelPresent, stopping.load(), uiHalted.load(),
         activeEye, uiFrame.slot, scopeScratch, scopeTransaction);
 }
+bool startupDeviceOwner(IDirect3DDevice9 *d) noexcept {
+    return startupCreationPublished.load(std::memory_order_acquire) &&
+        d == startupCreation.device && GetCurrentThreadId() == startupCreation.thread;
+}
+uint32_t traceChainPresent(IDirect3DSwapChain9 *chain, uintptr_t caller, HWND overrideWindow) noexcept {
+    // Diagnostic only: immutable startup metadata is not current admission.
+    // Foreign threads forward without COM introspection. References never span
+    // the original Present, so reset/replacement cannot inherit probe ownership.
+    if (!chain || !startupCreationPublished.load(std::memory_order_acquire) ||
+        GetCurrentThreadId() != startupCreation.thread) return 0;
+    const bool ready = hooksReady.load(std::memory_order_acquire);
+    // Only the published creation thread writes these saturating counters.
+    static unsigned observed[2]{}, tickets = 0;
+    if (observed[ready] >= (ready ? 8u : 2u)) return 0;
+    const unsigned ordinal = observed[ready]++;
+    uint32_t ticket = 0;
+    IDirect3DDevice9 *d = nullptr;
+    IDirect3DSurface9 *bb = nullptr, *rt = nullptr, *z = nullptr;
+    withNativeFinally([&] {
+        const HRESULT deviceResult = chain->GetDevice(&d);
+        if (FAILED(deviceResult) || d != startupCreation.device) return;
+        ticket = ++tickets;
+        D3DPRESENT_PARAMETERS params{};
+        D3DSURFACE_DESC color{}, target{}, depthDesc{};
+        const HRESULT paramsResult = chain->GetPresentParameters(&params);
+        const HRESULT bbResult = chain->GetBackBuffer(0, D3DBACKBUFFER_TYPE_MONO, &bb);
+        const HRESULT colorResult = bb ? bb->GetDesc(&color) : D3DERR_NOTFOUND;
+        const HRESULT rtResult = d->GetRenderTarget(0, &rt);
+        if (rt) rt->GetDesc(&target);
+        const HRESULT zResult = d->GetDepthStencilSurface(&z);
+        if (z) z->GetDesc(&depthDesc);
+        const auto gfx = reinterpret_cast<uintptr_t>(GetModuleHandleW(L"GfxD3D.dll"));
+        const uintptr_t rva = gfx && caller >= gfx ? caller - gfx : 0;
+        const HWND destination = overrideWindow ? overrideWindow : params.hDeviceWindow;
+        log("Presentation probe ticket=%u ordinal=%u completed=0 hooksReady=%d thread=%lu "
+            "chain=%p device=%p caller=%p gfxRva=%08lx window=%p foreground=%p "
+            "paramsHr=%08lx bbHr=%08lx descHr=%08lx bb=%p size=%ux%u format=%u msaa=%u "
+            "rtHr=%08lx rt=%p rtSize=%ux%u depthHr=%08lx depth=%p depthSize=%ux%u depthFormat=%u",
+            ticket, ordinal, ready, GetCurrentThreadId(),
+            static_cast<void *>(chain), static_cast<void *>(d), reinterpret_cast<void *>(caller),
+            static_cast<unsigned long>(rva), static_cast<void *>(destination),
+            static_cast<void *>(GetForegroundWindow()), static_cast<unsigned long>(paramsResult),
+            static_cast<unsigned long>(bbResult), static_cast<unsigned long>(colorResult),
+            static_cast<void *>(bb), color.Width, color.Height, static_cast<unsigned>(color.Format),
+            static_cast<unsigned>(color.MultiSampleType), static_cast<unsigned long>(rtResult),
+            static_cast<void *>(rt), target.Width, target.Height, static_cast<unsigned long>(zResult),
+            static_cast<void *>(z), depthDesc.Width, depthDesc.Height, static_cast<unsigned>(depthDesc.Format));
+    }, [&](bool) noexcept {
+        for (auto *surface : {bb, rt, z}) if (surface) surface->Release();
+        bb = rt = z = nullptr;
+        if (d) { d->Release(); d = nullptr; }
+    });
+    return ticket;
+}
 void scopeGpuOutput(IDirect3DDevice9 *d) noexcept {
     if (scopeTransaction && d == uiFrame.device) scopeInterference = true;
 }

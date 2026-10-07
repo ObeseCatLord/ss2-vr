@@ -2,6 +2,7 @@
 #include "common/winproc.hpp"
 #include "common/winpath.hpp"
 #include "game.hpp"
+#include "native_finally.hpp"
 #include <MinHook.h>
 #include <atomic>
 #include <d3d9.h>
@@ -19,6 +20,89 @@ static CreateDevice originalCreate = nullptr;
 static Reset originalReset = nullptr;
 using Present = HRESULT(WINAPI *)(IDirect3DDevice9 *, const RECT *, const RECT *, HWND, const RGNDATA *);
 static Present originalPresent = nullptr;
+using AdditionalChain = HRESULT(WINAPI *)(IDirect3DDevice9 *, D3DPRESENT_PARAMETERS *, IDirect3DSwapChain9 **);
+using ChainPresent = HRESULT(WINAPI *)(IDirect3DSwapChain9 *, const RECT *, const RECT *, HWND,
+                                     const RGNDATA *, DWORD);
+static AdditionalChain originalAdditional = nullptr;
+// Two method implementations suffice for this bounded discovery probe. Unknown
+// implementations are logged and left untouched, never mapped to a wrong ABI.
+static struct ChainHook { void *address = nullptr; ChainPresent original = nullptr; bool enabled = false; }
+    chainHooks[2];
+template<unsigned Index>
+static __attribute__((noinline)) HRESULT WINAPI chainPresent(IDirect3DSwapChain9 *chain,
+    const RECT *src, const RECT *dst, HWND window, const RGNDATA *region, DWORD flags) {
+    const auto caller = reinterpret_cast<uintptr_t>(__builtin_extract_return_addr(__builtin_return_address(0)));
+    const auto ticket = ss2vr::game::traceChainPresent(chain, caller, window);
+    const HRESULT hr = chainHooks[Index].original(chain, src, dst, window, region, flags);
+    // Completion is scalar-only, including failed Present: no COM introspection
+    // or retained resource crosses the original callback.
+    if (ticket) ss2vr::game::log("Presentation probe ticket=%u completed=1 chain=%p caller=%p hr=%08lx",
+        ticket, static_cast<void *>(chain), reinterpret_cast<void *>(caller), static_cast<unsigned long>(hr));
+    return hr;
+}
+static void discoverChain(IDirect3DDevice9 *device, IDirect3DSwapChain9 *chain) {
+    // This startup probe covers only the first creation owner. Hook records are
+    // written on that thread and immutable once enabled; no cross-thread list.
+    if (!chain || !ss2vr::game::startupDeviceOwner(device)) return;
+    void *address = (*reinterpret_cast<void ***>(chain))[3];
+    for (auto &hook : chainHooks)
+        if (hook.address == address) return;
+    unsigned index = 0;
+    while (index < 2 && chainHooks[index].address) ++index;
+    if (index == 2) {
+        static bool reported = false;
+        if (!reported) {
+            reported = true;
+            ss2vr::game::log("Presentation probe unknown chain method=%p; untouched", address);
+        }
+        return;
+    }
+    auto &hook = chainHooks[index];
+    const auto detour = index == 0 ? chainPresent<0> : chainPresent<1>;
+    const auto created = MH_CreateHook(address, reinterpret_cast<void *>(detour),
+                                       reinterpret_cast<void **>(&hook.original));
+    MH_STATUS enabled = MH_UNKNOWN;
+    if (created == MH_OK) {
+        // Publish the trampoline/address before enabling its typed callback.
+        hook.address = address;
+        enabled = MH_EnableHook(address);
+        hook.enabled = enabled == MH_OK;
+        if (!hook.enabled) {
+            MH_RemoveHook(address);
+            hook = {};
+        }
+    }
+    static bool failedCreate = false, failedEnable = false;
+    bool report = hook.enabled;
+    if (created != MH_OK && !failedCreate) { failedCreate = true; report = true; }
+    if (created == MH_OK && enabled != MH_OK && !failedEnable) { failedEnable = true; report = true; }
+    if (report) ss2vr::game::log("Presentation probe chain method=%p create=%d enable=%d covered=%d",
+        address, static_cast<int>(created), static_cast<int>(enabled), hook.enabled);
+}
+static void seedChain(IDirect3DDevice9 *device) noexcept {
+    if (!ss2vr::game::startupDeviceOwner(device)) return;
+    IDirect3DSwapChain9 *chain = nullptr;
+    ss2vr::game::withNativeFinally([&] {
+        const HRESULT hr = device->GetSwapChain(0, &chain);
+        if (SUCCEEDED(hr) && chain) discoverChain(device, chain);
+        else {
+            static bool reported = false;
+            if (!reported) {
+                reported = true;
+                ss2vr::game::log("Presentation probe implicit seed failed hr=%08lx",static_cast<unsigned long>(hr));
+            }
+        }
+    }, [&](bool) noexcept { if (chain) { chain->Release(); chain = nullptr; } });
+}
+static HRESULT WINAPI additionalChain(IDirect3DDevice9 *device, D3DPRESENT_PARAMETERS *params,
+                                      IDirect3DSwapChain9 **out) {
+    const HRESULT hr = originalAdditional(device, params, out);
+    if (SUCCEEDED(hr) && out && *out) {
+        // Probe installation owns no chain references and changes no parameters.
+        try { discoverChain(device, *out); } catch (...) {}
+    }
+    return hr;
+}
 // Diagnostic latches never gate hook installation or forwarding. Keep both
 // first success and first failure visible if an existing caller retries.
 static void logHook(const char *name, const char *operation, MH_STATUS status,
@@ -96,6 +180,7 @@ static HRESULT WINAPI reset(IDirect3DDevice9 *d, D3DPRESENT_PARAMETERS *p) {
     HRESULT hr = originalReset(d, p);
     if (SUCCEEDED(hr))
         ss2vr::game::deviceResetSucceeded(d);
+    if (SUCCEEDED(hr)) seedChain(d);
     return hr;
 }
 static HRESULT WINAPI createDevice(IDirect3D9 *api, UINT adapter, D3DDEVTYPE type, HWND window, DWORD flags,
@@ -114,7 +199,10 @@ static HRESULT WINAPI createDevice(IDirect3D9 *api, UINT adapter, D3DDEVTYPE typ
             proxyHook(table[16], reinterpret_cast<void *>(reset), originalReset, "Reset");
         if (!originalPresent)
             proxyHook(table[17], reinterpret_cast<void *>(present), originalPresent, "Present");
+        if (!originalAdditional)
+            proxyHook(table[13], reinterpret_cast<void *>(additionalChain), originalAdditional, "AdditionalSwapChain");
         ss2vr::game::deviceCreated(*out);
+        seedChain(*out);
     }
     return hr;
 }

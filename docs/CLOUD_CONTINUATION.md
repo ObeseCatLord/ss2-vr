@@ -635,3 +635,33 @@ no singlePlayer() gate was merely removed. Melee needs owner traces/lifetime and
 observer consumption. MP packet linking/queue/counters are not actor application
 or later correction; retained hands need separate coordinate provenance. These
 native gates remain distinct from the completed squeeze input repair.
+
+## PC native presentation trace and simulated actual host — 2026-10-07
+
+Target questions are resolved: SteamVR + Steam Frame and Envision/Monado +
+Bigscreen Beyond; brief SS2 focus and isolated simulated Monado testing are
+authorized. Keep Windows/Linux-Proton and simulation/actual-device acceptance
+separate. Native/Windows manifests remain distinct, with no global defaults
+changed. CPU D3D9 readback → separate D3D11 OpenXR host remains the architecture.
+
+The tracing-only checkpoint confirms recurring pinned native additional-chain
+Present calls after hook readiness, actual1280x720 backbuffer = RT0 and foreground
+game destination, with successful original returns. The inspected image shows
+rendered startup composition. Production capture still uses the unsuitable
+implicit buffer; all three consumers, mono/stereo allocation separation and
+replacement/reset ownership must be corrected. Astra/Max conditional design and
+Astra/xhigh corrected-probe GO are recorded in PRESENTATION_OWNER.md.
+
+The actual matching x64 host under Proton initializes D3D11 against private
+simulated Monado, reaches FOCUSED, resolves both WMR interaction profiles and
+successfully submits synthetic menu quads. A private fixture supplied IPC/menu
+data and exited normally with the host. This is actual-host bring-up, not native
+game transport, compositor image or hardware acceptance. PC_VALIDATION.md
+records exact products, source fingerprint, archive and observations.
+
+Next integration: admitted actual-chain capture with existing native/main-thread,
+UI/renderer/resource guards, mono menu color readback independent of stereo
+depth, and explicit references/TLS/lock cleanup around native unwinds/reset.
+No unconditional worker-thread host-start workaround or transport rewrite.
+Melee/MP plans already read remain separate later owner probes; steering still
+needs positively verified actual controls/geometry and broader model coverage.

@@ -139,6 +139,7 @@ struct Mutex {
 
 #define XR_INSTANCE_FUNCTIONS(X)                                                                             \
     X(DestroyInstance)                                                                                       \
+    X(GetInstanceProperties) X(PathToString)                                                                 \
     X(GetSystem)                                                                                             \
     X(GetSystemProperties)                                                                                   \
     X(EnumerateViewConfigurations)                                                                           \
@@ -298,6 +299,10 @@ struct Swapchain {
                        handle, count, &count, reinterpret_cast<XrSwapchainImageBaseHeader *>(images.data())),
                    "xrEnumerateSwapchainImages");
         images.resize(count);
+        char description[192];
+        std::snprintf(description, sizeof(description), "OpenXR swapchain: %ux%u format=%lld images=%u",
+                      width, height, static_cast<long long>(info.format), count);
+        api->log.write(description);
         for (auto &image : images) {
             if (!image.texture)
                 throw std::runtime_error("OpenXR returned null D3D11 texture");
@@ -386,7 +391,7 @@ struct Frame {
             api.cleanup(api.EndFrame(session, &end), "xrEndFrame zero layers during unwind");
         }
     }
-    void submit(const std::vector<const XrCompositionLayerBaseHeader *> &layers) {
+    XrResult submit(const std::vector<const XrCompositionLayerBaseHeader *> &layers) {
         XrFrameEndInfo end{XR_TYPE_FRAME_END_INFO};
         end.displayTime = time;
         end.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
@@ -395,7 +400,9 @@ struct Frame {
         // Khronos recommends discarding failed submissions rather than retrying
         // xrEndFrame with different parameters. Close our frame guard on attempt.
         active = false;
-        api.check(api.EndFrame(session, &end), "xrEndFrame");
+        const XrResult result = api.EndFrame(session, &end);
+        api.check(result, "xrEndFrame");
+        return result;
     }
 };
 
@@ -567,7 +574,7 @@ struct Actions {
         api.check(api.GetActionStateFloat(session, &info, &state), "xrGetActionStateFloat");
         return state;
     }
-    void sample(Api &api, XrSession session, XrSpace local, XrTime time, Input &input, bool validViews) {
+    void sample(Api &api, XrInstance instance, XrSession session, XrSpace local, XrTime time, Input &input, bool validViews) {
         XrActiveActionSet active{set, XR_NULL_PATH};
         XrActionsSyncInfo sync{XR_TYPE_ACTIONS_SYNC_INFO};
         sync.countActiveActionSets = 1;
@@ -589,6 +596,20 @@ struct Actions {
             api.check(api.GetCurrentInteractionProfile(session, hand[h], &profile), "xrGetCurrentInteractionProfile");
             if (profile.interactionProfile != currentProfile[h]) {
                 currentProfile[h] = profile.interactionProfile;
+                char pathName[XR_MAX_PATH_LENGTH] = "<none>";
+                uint32_t length = 0;
+                if (profile.interactionProfile) {
+                    const auto result = api.PathToString(instance, profile.interactionProfile,
+                        sizeof(pathName), &length, pathName);
+                    if (XR_FAILED(result)) {
+                        std::strcpy(pathName, "<unavailable>");
+                        api.log.result("Interaction profile diagnostic", result);
+                    }
+                }
+                char description[XR_MAX_PATH_LENGTH + 48];
+                std::snprintf(description, sizeof(description), "OpenXR %s profile: %s",
+                              h ? "right" : "left", pathName);
+                api.log.write(description);
                 primaryStream[h].invalidate();
                 zoomStream[h].invalidate();
                 squeeze[h].invalidate();
@@ -947,6 +968,7 @@ struct Host {
     std::vector<XrTime> referenceChanges;
     uint32_t sessionGeneration = 0, referenceGeneration = 1;
     uint64_t inputSequence = 0, requestSequence = 0;
+    uint64_t xrEndSuccess = 0, xrLayerSuccess = 0, xrMenuSuccess = 0;
     uint64_t completed = 0, timeouts = 0, fullSlots = 0, discarded = 0, imageTimeouts = 0, invalidViews = 0;
     uint64_t retired = 0, submissions = 0, reused = 0, lastSubmittedSequence = 0;
     ULONGLONG lastDiagnostics = 0, lastMutexDiagnostic = 0;
@@ -1090,6 +1112,16 @@ struct Host {
         create.enabledExtensionNames = enabled;
         api.check(api.CreateInstance(&create, &instance), "xrCreateInstance");
         api.instanceFunctions(instance);
+        XrInstanceProperties runtime{XR_TYPE_INSTANCE_PROPERTIES};
+        const auto propertiesResult = api.GetInstanceProperties(instance, &runtime);
+        if (XR_SUCCEEDED(propertiesResult)) {
+            char description[XR_MAX_RUNTIME_NAME_SIZE + 96];
+            std::snprintf(description, sizeof(description), "OpenXR runtime: %s version=%u.%u.%u",
+                runtime.runtimeName, XR_VERSION_MAJOR(runtime.runtimeVersion),
+                XR_VERSION_MINOR(runtime.runtimeVersion), XR_VERSION_PATCH(runtime.runtimeVersion));
+            log.write(description);
+        } else log.result("Runtime properties diagnostic", propertiesResult);
+        log.write("OpenXR enabled extension: XR_KHR_D3D11_enable");
         XrSystemGetInfo get{XR_TYPE_SYSTEM_GET_INFO};
         get.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
         api.check(api.GetSystem(instance, &get, &system), "xrGetSystem HMD");
@@ -1211,6 +1243,14 @@ struct Host {
                                        D3D11_SDK_VERSION, device.put(), &selected, context.put());
         }
         hresult(result, "D3D11CreateDevice on required adapter", log);
+        DXGI_ADAPTER_DESC1 selectedAdapter{};
+        if (SUCCEEDED(adapter->GetDesc1(&selectedAdapter))) {
+            char name[160]{}, description[256];
+            WideCharToMultiByte(CP_UTF8, 0, selectedAdapter.Description, -1, name, sizeof(name), nullptr, nullptr);
+            std::snprintf(description, sizeof(description), "D3D11 adapter: %s vendor=%04x device=%04x feature=%04x",
+                          name, selectedAdapter.VendorId, selectedAdapter.DeviceId, static_cast<unsigned>(selected));
+            log.write(description);
+        }
         if (selected < requirements.minFeatureLevel)
             throw std::runtime_error("D3D device below runtime minimum");
         D3D11_QUERY_DESC query{};
@@ -1474,7 +1514,7 @@ struct Host {
                           (a.p + b.p) * .5f};
             input.headValid = 1;
         }
-        actions.sample(api, session, local, time, input, validViews);
+        actions.sample(api, instance, session, local, time, input, validViews);
         return input;
     }
     void discardEyeAcquisitions() {
@@ -1877,15 +1917,18 @@ struct Host {
         if (now - lastDiagnostics < 5000)
             return;
         lastDiagnostics = now;
-        char line[384];
+        char line[512];
         std::snprintf(line, sizeof(line),
                       "Frame totals: ipc_complete=%llu deadline=%llu slots_full=%llu discarded=%llu "
-                      "image_wait=%llu invalid_views=%llu retired=%llu submitted=%llu reused=%llu",
+                      "image_wait=%llu invalid_views=%llu retired=%llu submitted=%llu reused=%llu "
+                      "xr_end_success=%llu xr_layers=%llu xr_menu=%llu",
                       static_cast<unsigned long long>(completed), static_cast<unsigned long long>(timeouts),
                       static_cast<unsigned long long>(fullSlots), static_cast<unsigned long long>(discarded),
                       static_cast<unsigned long long>(imageTimeouts),
                       static_cast<unsigned long long>(invalidViews), static_cast<unsigned long long>(retired),
-                      static_cast<unsigned long long>(submissions), static_cast<unsigned long long>(reused));
+                      static_cast<unsigned long long>(submissions), static_cast<unsigned long long>(reused),
+                      static_cast<unsigned long long>(xrEndSuccess), static_cast<unsigned long long>(xrLayerSuccess),
+                      static_cast<unsigned long long>(xrMenuSuccess));
         log.write(line);
     }
     void run() {
@@ -2028,7 +2071,13 @@ struct Host {
                     ++reused;
                 lastSubmittedSequence = cachedRequest.sequence;
             }
-            frame.submit(layers);
+            const auto endResult = frame.submit(layers);
+            if (endResult == XR_SUCCESS) {
+                ++xrEndSuccess;
+                if (!layers.empty()) ++xrLayerSuccess;
+                if (std::find(layers.begin(), layers.end(),
+                    reinterpret_cast<const XrCompositionLayerBaseHeader *>(&menuQuad)) != layers.end()) ++xrMenuSuccess;
+            }
             // Only point at the menu quad actually submitted in this XR frame.
             // Session/reference/focus and short expiry are checked again by the
             // native menu input dispatcher before any cursor or click mutation.

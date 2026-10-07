@@ -23,6 +23,9 @@ bool nativePresentationIdleForBodyMove() noexcept;
 void deviceLost();
 void invalidateRenderer();
 void present(IDirect3DDevice9 *device);
+// Bounded read-only startup probe. Does not admit a canvas or start capture.
+bool startupDeviceOwner(IDirect3DDevice9 *) noexcept;
+uint32_t traceChainPresent(IDirect3DSwapChain9 *, uintptr_t caller, HWND overrideWindow) noexcept;
 bool nativeUiProgramsCurrent(IDirect3DVertexShader9 *, IDirect3DPixelShader9 *);
 bool copyExecutedUiProjection(void *player, const Request &, int index, Matrix44 &out);
 bool nativeUiFrameCurrent(void *player, const Request &);

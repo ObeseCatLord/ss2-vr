@@ -19,6 +19,18 @@ No headset or network runtime acceptance exists. Older coding-first/no-runtime
 instructions are historical; actual observations remain separate from offline checks.
 GitHub Actions is disabled at the owner's request; checks remain local.
 
+User targets are now confirmed: SteamVR + Steam Frame and Envision/Monado +
+Bigscreen Beyond, with Windows/Linux-Proton coverage. Simulation and brief SS2
+focus are authorized. The private simulated Monado baseline and the actual x64
+host under Proton both reach FOCUSED. A synthetic IPC fixture exercises the actual
+host's D3D11 swapchains, WMR-profile hand/head input and successful menu-quad
+xrEndFrame calls; it does not prove native game transport or actual hardware.
+The game tracing checkpoint confirms recurring native additional-swapchain
+presentation and actual1280x720 RT0 ownership. See
+[PRESENTATION_OWNER.md](PRESENTATION_OWNER.md) for review disposition/native limits
+and [PC_VALIDATION.md](PC_VALIDATION.md) for exact test identities. The production
+capture adapter still needs all buffer consumers and lifecycle gates corrected.
+
 Current source connects default-off single-player roomscale body movement through
 native whole-body queries, the checked native setter and actual-anchor origin
 settlement. Default-off head-volume checks cover handheld and seated world queries,
