@@ -2080,7 +2080,7 @@ struct Host {
                     static uint64_t lastSequence=0;
                     static uint32_t lastSession=0,lastReference=0;
                     static unsigned receipts=0;
-                    if(labTrace && receipts<2048 && (lastSequence!=cachedRequest.sequence ||
+                    if(labTrace && receipts<8192 && (lastSequence!=cachedRequest.sequence ||
                         lastSession!=cachedRequest.session || lastReference!=cachedRequest.reference)) {
                         ++receipts;lastSequence=cachedRequest.sequence;lastSession=cachedRequest.session;lastReference=cachedRequest.reference;
                         char receipt[256]{};

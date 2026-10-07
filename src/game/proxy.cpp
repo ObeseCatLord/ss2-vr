@@ -145,7 +145,7 @@ static __attribute__((noinline)) HRESULT WINAPI present(IDirect3DDevice9 *d, con
     return hr;
 }
 static INIT_ONCE initialize = INIT_ONCE_STATIC_INIT;
-static bool vrEnabled = false;
+static bool vrEnabled = false, minHookReady = false, stockRenderer = false, labIsolationRequested = false;
 static DWORD WINAPI hookThread(void *) {
     for (int i = 0; i < 600; i++) {
         if (GetModuleHandleW(L"Sam2Game.dll") && GetModuleHandleW(L"Engine.dll") &&
@@ -181,9 +181,17 @@ static BOOL CALLBACK init(PINIT_ONCE, PVOID, PVOID *) {
         FreeLibrary(realDll); realDll=nullptr; create9ex=nullptr;
         return FALSE;
     }
+    // Latch the private comparator before even D3DPERF forwarding can create a
+    // VR worker. Later environment changes cannot switch an installed renderer.
+    wchar_t mode[2]{},isolation[2]{};
+    stockRenderer=GetEnvironmentVariableW(L"SS2VR_LAB_STOCK_RENDER",mode,2)==1 && mode[0]==L'1';
+    labIsolationRequested=GetEnvironmentVariableW(L"SS2VR_LAB_ISOLATE_ONLINE",isolation,2)==1 && isolation[0]==L'1';
+    if(stockRenderer && !labIsolationRequested) return FALSE;
     const auto hookStatus = MH_Initialize();
-    vrEnabled = hookStatus == MH_OK;
+    minHookReady = hookStatus == MH_OK;
+    vrEnabled = minHookReady && !stockRenderer;
     ss2vr::game::log("Startup MinHook initialize status=%d", static_cast<int>(hookStatus));
+    if(stockRenderer) ss2vr::game::log("Lab stock renderer selected before VR worker creation; graphics hooks disabled");
     if (vrEnabled) {
         HANDLE thread = CreateThread(nullptr, 0, hookThread, nullptr, 0, nullptr);
         const DWORD error = thread ? ERROR_SUCCESS : GetLastError();
@@ -227,6 +235,7 @@ static HRESULT WINAPI createDevice(IDirect3D9 *api, UINT adapter, D3DDEVTYPE typ
 }
 extern "C" __declspec(dllexport) IDirect3D9 *WINAPI Direct3DCreate9(UINT version) {
     const BOOL initialized = InitOnceExecuteOnce(&initialize, init, nullptr, nullptr);
+    if(stockRenderer && (!initialized || !minHookReady)) return nullptr;
     // On the fingerprinted native startup route this synchronous boundary
     // precedes onlInitialize. The lab adapter fails closed if unavailable.
     ss2vr::game::installLabOnlineIsolation();
@@ -244,6 +253,9 @@ extern "C" __declspec(dllexport) IDirect3D9 *WINAPI Direct3DCreate9(UINT version
 }
 extern "C" __declspec(dllexport) HRESULT WINAPI Direct3DCreate9Ex(UINT version, IDirect3D9Ex **out) {
     InitOnceExecuteOnce(&initialize, init, nullptr, nullptr);
+    // The inspected fixture startup/online barrier is the classic factory route.
+    // Do not silently run an unvalidated Ex path with profile isolation assumed.
+    if(stockRenderer || labIsolationRequested) return D3DERR_NOTAVAILABLE;
     return create9ex ? create9ex(version, out) : D3DERR_NOTAVAILABLE;
 }
 #define FORWARD(name, ret, args, callargs, fallback)                                                         \

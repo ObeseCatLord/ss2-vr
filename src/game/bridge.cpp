@@ -43,9 +43,7 @@ void log(const char *fmt, ...) {
     }
     ReleaseSRWLockExclusive(&logLock);
 }
-static bool matches(HMODULE module, const char *hash) {
-    std::wstring path;
-    if (!modulePath(module,path)) return false;
+static bool matchesFile(const std::wstring &path,const char *hash) {
     HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
     if (f == INVALID_HANDLE_VALUE)
         return false;
@@ -89,6 +87,10 @@ static bool matches(HMODULE module, const char *hash) {
     CloseHandle(f);
     return ok;
 }
+static bool matches(HMODULE module, const char *hash) {
+    std::wstring path;
+    return modulePath(module,path) && matchesFile(path,hash);
+}
 bool supported(bool headless) {
     struct Item {
         const wchar_t *file;
@@ -113,6 +115,7 @@ bool supported(bool headless) {
     return true;
 }
 static bool labOnlineIsolated = false;
+static std::atomic<uint32_t> labIsolationPhase{0}; // fresh, installing, complete
 template<class T> static T loadLabProc(HMODULE module,const char *name) {
     return reinterpret_cast<T>(GetProcAddress(module,name));
 }
@@ -196,6 +199,8 @@ static __attribute__((force_align_arg_pointer)) void __fastcall labOpenScene(voi
     withNativeFinally([&] {
         labOriginalOpen(stream,filename,mode); // Exactly once, including unrelated opens.
         if (!candidate) return;
+        if(!matches(GetModuleHandleW(L"Sam2Game.dll"),"5628b4ed30a966f10c8e8ea46bf0789257a35ea80127bacacebe28b1ce5303df"))
+            abortLab("loaded scene game-module fingerprint mismatch");
         if (labSceneReading || (GetCurrentThreadId()!=labStartupThread && !labIsLoadingThread()))
             abortLab("nested/foreign native scene open");
         labSceneReading=true;owns=true;
@@ -206,12 +211,14 @@ static __attribute__((noinline)) void __cdecl suppressLabOnlineInitialization() 
     const auto caller=reinterpret_cast<uintptr_t>(__builtin_extract_return_addr(__builtin_return_address(0)));
     uint32_t pointer = 0;
     std::memcpy(&pointer,reinterpret_cast<const void *>(labEngineBase+0x2ec890),sizeof(pointer));
-    if (!labOnlineIsolated || GetCurrentThreadId()!=labStartupThread || pointer || caller!=labInitializerCaller)
+    if (labIsolationPhase.load(std::memory_order_acquire)!=2 || !labOnlineIsolated ||
+        GetCurrentThreadId()!=labStartupThread || pointer || caller!=labInitializerCaller)
         abortLab("unexpected online initializer owner or existing interface");
     static bool reported = false;
     if (!reported) { reported=true; log("Lab native online initializer suppressed; interface=0; cloud/stats object not constructed"); }
 }
 static void __cdecl labOnlineUninitialize() {
+    if(labIsolationPhase.load(std::memory_order_acquire)!=2) abortLab("incomplete isolation reached native shutdown");
     uint32_t pointer=0;
     std::memcpy(&pointer,reinterpret_cast<const void *>(labEngineBase+0x2ec890),sizeof(pointer));
     if (pointer) abortLab("online interface appeared before native shutdown");
@@ -221,7 +228,10 @@ static void __cdecl labOnlineUninitialize() {
 void installLabOnlineIsolation() {
     wchar_t value[2]{};
     if (GetEnvironmentVariableW(L"SS2VR_LAB_ISOLATE_ONLINE",value,2)!=1 || value[0]!=L'1') return;
-    if (labOnlineIsolated) return;
+    if (labIsolationPhase.load(std::memory_order_acquire)==2) return;
+    uint32_t fresh=0;
+    if(!labIsolationPhase.compare_exchange_strong(fresh,1,std::memory_order_acq_rel))
+        abortLab("reentered or concurrent partial lab isolation installation");
     std::wstring bin;
     if (!moduleDirectory(nullptr,bin) ||
         GetFileAttributesW((bin+L"..\\.ss2vr-runtime-lab.json").c_str())==INVALID_FILE_ATTRIBUTES)
@@ -230,7 +240,8 @@ void installLabOnlineIsolation() {
     if (!engine || !matches(nullptr,"727901f161133ff653fcdc196858335b991b743e67deb448c03c808e5b33e28b") ||
         !matches(engine,"da6efc9f72637eb3b6f48eadca2107be89b09c00618b6e72d5d3632938a7d851") ||
         !matches(GetModuleHandleW(L"Core.dll"),"7a1bd56b9bfa3edfbb23f4d3c96490e40a7c0b031b85e797e1af91b2ba3cf207") ||
-        !matches(GetModuleHandleW(L"GfxD3D.dll"),"88749b79be36f0c0dccb623c4f1712685b5af603b451e25ed3c5029bedcdf3ed"))
+        !matches(GetModuleHandleW(L"GfxD3D.dll"),"88749b79be36f0c0dccb623c4f1712685b5af603b451e25ed3c5029bedcdf3ed") ||
+        !matchesFile(bin+L"Sam2Game.dll","5628b4ed30a966f10c8e8ea46bf0789257a35ea80127bacacebe28b1ce5303df"))
         abortLab("startup binary fingerprint mismatch");
     labEngineBase=reinterpret_cast<uintptr_t>(engine);
     uint32_t pointer=0;
@@ -281,10 +292,13 @@ void installLabOnlineIsolation() {
         abortLab("native scene stream ABI exports mismatch");
     if (MH_CreateHook(open,reinterpret_cast<void *>(labOpenScene),reinterpret_cast<void **>(&labOriginalOpen))!=MH_OK ||
         !labOriginalOpen || MH_EnableHook(open)!=MH_OK) abortLab("native scene observation hook unavailable");
+    labIsolationPhase.store(2,std::memory_order_release);
     log("Lab online isolation installed synchronously at D3D9 factory entry; interface=0");
 }
 void validateLabOnlineIsolation(bool gameplay) {
-    if (!labOnlineIsolated) return;
+    const auto phase=labIsolationPhase.load(std::memory_order_acquire);
+    if (!phase) return;
+    if(phase!=2 || !labOnlineIsolated) abortLab("partial lab isolation reached native gameplay");
     uint32_t pointer=0;
     std::memcpy(&pointer,reinterpret_cast<const void *>(labEngineBase+0x2ec890),sizeof(pointer));
     if (pointer) abortLab("online interface appeared during private fixture");
@@ -801,14 +815,45 @@ template<class Call> static HRESULT uiDrawCall(IDirect3DDevice9 *d,D3DPRIMITIVET
     if (!contained) nativeUiFault();
     return result;
 }
+struct LabWorldDraws {
+    IDirect3DDevice9 *device=nullptr;
+    uint64_t calls=0,primitives=0,readFailures=0;
+    uint64_t stateCalls[16]{},statePrimitives[16]{};
+    uint64_t fullRangeCalls[16]{},worldRangeCalls[16]{},otherRangeCalls[16]{};
+};
+static thread_local LabWorldDraws labWorldDraws{};
+static void traceWorldDraw(IDirect3DDevice9 *d,UINT count) {
+    auto &sample=labWorldDraws;
+    if(sample.device!=d) return;
+    ++sample.calls;sample.primitives+=count;
+    DWORD z=0,write=0,alpha=0,blend=0;
+    if(FAILED(d->GetRenderState(D3DRS_ZENABLE,&z)) || FAILED(d->GetRenderState(D3DRS_ZWRITEENABLE,&write)) ||
+        FAILED(d->GetRenderState(D3DRS_ALPHATESTENABLE,&alpha)) || FAILED(d->GetRenderState(D3DRS_ALPHABLENDENABLE,&blend))) {
+        ++sample.readFailures;return;
+    }
+    const unsigned key=(z?1:0)|(write?2:0)|(alpha?4:0)|(blend?8:0);
+    ++sample.stateCalls[key];sample.statePrimitives[key]+=count;
+    D3DVIEWPORT9 vp{};
+    if(FAILED(d->GetViewport(&vp))) { ++sample.readFailures;return; }
+    if(vp.MinZ==0 && vp.MaxZ==1) ++sample.fullRangeCalls[key];
+    else if(vp.MinZ==0 && vp.MaxZ==0.89999997615814208984375f) ++sample.worldRangeCalls[key];
+    else ++sample.otherRangeCalls[key];
+}
 static HRESULT WINAPI draw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,UINT start,UINT count) {
     scopeGpuOutput(d);
-    return uiDrawCall(d,type,[&]{ return scopeGpuForwardingAllowed() ? originalDraw(d,type,start,count) : D3DERR_INVALIDCALL; });
+    return uiDrawCall(d,type,[&]{
+        if(!scopeGpuForwardingAllowed()) return D3DERR_INVALIDCALL;
+        traceWorldDraw(d,count);
+        return originalDraw(d,type,start,count);
+    });
 }
 static HRESULT forwardIndexed(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base,UINT minimum,
                                UINT vertices,UINT start,UINT count) {
-    return uiDrawCall(d,type,[&]{ return scopeGpuForwardingAllowed() ?
-        originalDrawIndexed(d,type,base,minimum,vertices,start,count) : D3DERR_INVALIDCALL; });
+    return uiDrawCall(d,type,[&]{
+        if(!scopeGpuForwardingAllowed()) return D3DERR_INVALIDCALL;
+        traceWorldDraw(d,count);
+        return originalDrawIndexed(d,type,base,minimum,vertices,start,count);
+    });
 }
 static HRESULT WINAPI drawIndexed(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base,UINT minimum,
                                   UINT vertices,UINT start,UINT count) {
@@ -873,12 +918,12 @@ static HRESULT WINAPI clear(IDirect3DDevice9 *d,DWORD count,const D3DRECT *rects
 }
 static HRESULT WINAPI drawUp(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,UINT count,const void *vertices,UINT stride) {
     scopeGpuOutput(d);
-    return observeUiOutput(d,[&]{ return originalDrawUp(d,type,count,vertices,stride); },nullptr,true);
+    return observeUiOutput(d,[&]{ traceWorldDraw(d,count);return originalDrawUp(d,type,count,vertices,stride); },nullptr,true);
 }
 static HRESULT WINAPI drawIndexedUp(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,UINT minimum,UINT vertices,UINT count,
                                     const void *indices,D3DFORMAT format,const void *data,UINT stride) {
     scopeGpuOutput(d);
-    return observeUiOutput(d,[&]{ return originalDrawIndexedUp(d,type,minimum,vertices,count,indices,format,data,stride); },nullptr,true);
+    return observeUiOutput(d,[&]{ traceWorldDraw(d,count);return originalDrawIndexedUp(d,type,minimum,vertices,count,indices,format,data,stride); },nullptr,true);
 }
 static HRESULT WINAPI drawRect(IDirect3DDevice9 *d,UINT handle,const float *segments,const D3DRECTPATCH_INFO *info) {
     scopeGpuOutput(d);
@@ -1465,15 +1510,27 @@ static bool eyeTargetCurrent(int index) {
     uiFrame.probeColor=uiFrame.probeDepth=nullptr;
     return matches;
 }
+// SetRenderTarget resets the D3D viewport, but does not update the native
+// renderer's cached depth endpoints. Carry the pre-bind device endpoints into
+// the reshaped viewport so an equal-range native call may safely be elided.
+static bool preserveViewportDepth(IDirect3DDevice9 *d,D3DVIEWPORT9 &out) {
+    D3DVIEWPORT9 current{};
+    if(FAILED(d->GetViewport(&current)) || !std::isfinite(current.MinZ) || !std::isfinite(current.MaxZ) ||
+        current.MinZ<0 || current.MaxZ>1 || current.MinZ>current.MaxZ) return false;
+    out.MinZ=current.MinZ;out.MaxZ=current.MaxZ;
+    return true;
+}
 static bool restoreUiFrame() noexcept {
     if (!uiFrame.restore) return true;
     if (uiFrame.generation != graphicsResourceGeneration()) { uiFrame.restore = false; return false; }
     bool ok = true;
     uiBypass = true;
     auto *d=uiFrame.device;
+    auto viewport=uiFrame.viewport;
+    ok=preserveViewportDepth(d,viewport) && ok;
     ok = SUCCEEDED(originalSetRT(d,0,uiFrame.color)) && ok;
     ok = SUCCEEDED(originalSetDepth(d,uiFrame.ds)) && ok;
-    ok = SUCCEEDED(d->SetViewport(&uiFrame.viewport)) && ok;
+    ok = SUCCEEDED(d->SetViewport(&viewport)) && ok;
     ok = SUCCEEDED(d->SetScissorRect(&uiFrame.scissor)) && ok;
     uiBypass = false;
     uiFrame.restore = false;
@@ -1650,7 +1707,7 @@ static bool publishUiFrame(uint32_t presentation) {
     if(accepted) {
         static const bool labTrace=[] { wchar_t value[2]{}; return GetEnvironmentVariableW(L"SS2VR_LAB_TRACE",value,2)==1 && value[0]==L'1'; }();
         static unsigned receipts=0;
-        if(labTrace && receipts<2048) {
+        if(labTrace && receipts<8192) {
             ++receipts;
             log("Lab native pair request=%llu session=%u reference=%u tracking=%u presentation=%u",
                 static_cast<unsigned long long>(uiFrame.request.sequence),uiFrame.request.session,
@@ -1775,8 +1832,8 @@ static __attribute__((force_align_arg_pointer)) void __cdecl captureNativeScope(
 }
 static bool prepareScopeScratch() {
     auto *d = uiFrame.device;
-    const D3DVIEWPORT9 vp{0,0,uiFrame.request.width,uiFrame.request.height,0,1};
-    return SUCCEEDED(originalSetRT(d,0,uiFrame.target[0])) && SUCCEEDED(originalSetDepth(d,uiFrame.z[0])) &&
+    D3DVIEWPORT9 vp{0,0,uiFrame.request.width,uiFrame.request.height,0,1};
+    return preserveViewportDepth(d,vp) && SUCCEEDED(originalSetRT(d,0,uiFrame.target[0])) && SUCCEEDED(originalSetDepth(d,uiFrame.z[0])) &&
         SUCCEEDED(d->SetViewport(&vp)) && SUCCEEDED(d->SetScissorRect(&uiFrame.scissor)) &&
         SUCCEEDED(d->Clear(0,nullptr,D3DCLEAR_TARGET|D3DCLEAR_ZBUFFER|
             (hasStencil ? D3DCLEAR_STENCIL : 0),0xff000000,1,0));
@@ -1827,6 +1884,55 @@ static bool renderScopeSources(void *puppet,void(__thiscall *original)(void *),c
     }
     return ok;
 }
+// Lab-only observation: inspect the existing device state without changing
+// native renderer policy or retaining an attachment beyond this invocation.
+static void traceStereoDepth(IDirect3DDevice9 *d,const Request &request,int index,const char *stage) {
+    DWORD z=0,write=0,func=0,alpha=0,blend=0,stencil=0;
+    D3DVIEWPORT9 vp{};
+    IDirect3DSurface9 *color=nullptr,*ds=nullptr;
+    D3DSURFACE_DESC cd{},zd{};
+    bool ok=true;
+    withNativeFinally([&] {
+        ok=SUCCEEDED(d->GetRenderState(D3DRS_ZENABLE,&z)) && ok;
+        ok=SUCCEEDED(d->GetRenderState(D3DRS_ZWRITEENABLE,&write)) && ok;
+        ok=SUCCEEDED(d->GetRenderState(D3DRS_ZFUNC,&func)) && ok;
+        ok=SUCCEEDED(d->GetRenderState(D3DRS_ALPHATESTENABLE,&alpha)) && ok;
+        ok=SUCCEEDED(d->GetRenderState(D3DRS_ALPHABLENDENABLE,&blend)) && ok;
+        ok=SUCCEEDED(d->GetRenderState(D3DRS_STENCILENABLE,&stencil)) && ok;
+        ok=SUCCEEDED(d->GetViewport(&vp)) && ok;
+        ok=SUCCEEDED(d->GetRenderTarget(0,&color)) && color && ok;
+        ok=SUCCEEDED(d->GetDepthStencilSurface(&ds)) && ds && ok;
+        if(color) ok=SUCCEEDED(color->GetDesc(&cd)) && ok;
+        if(ds) ok=SUCCEEDED(ds->GetDesc(&zd)) && ok;
+        log("Lab depth stage request=%llu eye=%d stage=%s read=%u z=%lu write=%lu func=%lu alpha=%lu blend=%lu stencil=%lu viewport=%ux%u range=%.9g,%.9g color=%ux%u,%u,%u depth=%ux%u,%u,%u",
+            static_cast<unsigned long long>(request.sequence),index,stage,ok,z,write,func,alpha,blend,stencil,
+            vp.Width,vp.Height,vp.MinZ,vp.MaxZ,cd.Width,cd.Height,unsigned(cd.Format),unsigned(cd.MultiSampleType),
+            zd.Width,zd.Height,unsigned(zd.Format),unsigned(zd.MultiSampleType));
+    },[&](bool) noexcept {
+        if(ds) { auto *p=ds;ds=nullptr;p->Release(); }
+        if(color) { auto *p=color;color=nullptr;p->Release(); }
+    });
+}
+static void observedWorldRender(IDirect3DDevice9 *d,void *puppet,void(__thiscall *original)(void *),
+                                const Request &request,int index,bool trace) {
+    if(!trace || labWorldDraws.device) { original(puppet);return; }
+    labWorldDraws={};labWorldDraws.device=d;
+    withNativeFinally([&] { original(puppet); },[&](bool aborted) noexcept {
+        labWorldDraws.device=nullptr;
+        log("Lab world draw attempts request=%llu eye=%d aborted=%u calls=%llu primitives=%llu readFailures=%llu",
+            static_cast<unsigned long long>(request.sequence),index,aborted,
+            static_cast<unsigned long long>(labWorldDraws.calls),static_cast<unsigned long long>(labWorldDraws.primitives),
+            static_cast<unsigned long long>(labWorldDraws.readFailures));
+        for(unsigned key=0;key<16;++key) if(labWorldDraws.stateCalls[key])
+            log("Lab world draw state request=%llu eye=%d z=%u write=%u alpha=%u blend=%u calls=%llu primitives=%llu fullRange=%llu worldRange=%llu otherRange=%llu",
+                static_cast<unsigned long long>(request.sequence),index,key&1,(key>>1)&1,(key>>2)&1,(key>>3)&1,
+                static_cast<unsigned long long>(labWorldDraws.stateCalls[key]),
+                static_cast<unsigned long long>(labWorldDraws.statePrimitives[key]),
+                static_cast<unsigned long long>(labWorldDraws.fullRangeCalls[key]),
+                static_cast<unsigned long long>(labWorldDraws.worldRangeCalls[key]),
+                static_cast<unsigned long long>(labWorldDraws.otherRangeCalls[key]));
+    });
+}
 void stereo(void *puppet,void(__thiscall *original)(void *),EyePostRender postRender) {
     const auto generation = graphicsResourceGeneration();
     if (uiFrame.slot>=0) {
@@ -1866,6 +1972,10 @@ void stereo(void *puppet,void(__thiscall *original)(void *),EyePostRender postRe
         withNativeFinally([&]{ original(puppet); },[&](bool aborted) noexcept { if(aborted) uiHalted=true; });
         return;
     }
+    static const bool labDepthTrace=[] { wchar_t value[2]{}; return GetEnvironmentVariableW(L"SS2VR_LAB_TRACE",value,2)==1 && value[0]==L'1'; }();
+    static unsigned depthTraceRequests=0;
+    const bool traceDepth=labDepthTrace && depthTraceRequests<8;
+    if(traceDepth) ++depthTraceRequests;
     uiFrame.slot=chosen;
     uiFrame.request=request;
     uiFrame.player=puppet;
@@ -1924,18 +2034,23 @@ void stereo(void *puppet,void(__thiscall *original)(void *),EyePostRender postRe
         }
         if (generation != graphicsResourceGeneration()) { original(puppet); return; }
         const float visibility=ok ? frozenWorldVisibility() : 1;
+        if(traceDepth) traceStereoDepth(d,request,-1,"entry");
         if (ok) ok = renderScopeSources(puppet,original,request);
         if (generation != graphicsResourceGeneration()) { original(puppet); return; }
         for(int i=0;i<2 && ok;++i) {
             activeEye=i; eyeInvalid=false; renderRequest=request;
             beginEye(puppet,request,i);
-            ok=SUCCEEDED(originalSetRT(d,0,uiFrame.target[i])) && SUCCEEDED(originalSetDepth(d,uiFrame.z[i]));
-            const D3DVIEWPORT9 ev{0,0,width,height,0,1};
+            D3DVIEWPORT9 ev{0,0,width,height,0,1};
+            ok=preserveViewportDepth(d,ev) && SUCCEEDED(originalSetRT(d,0,uiFrame.target[i])) && SUCCEEDED(originalSetDepth(d,uiFrame.z[i]));
             ok=SUCCEEDED(d->SetViewport(&ev)) && ok;
             ok=SUCCEEDED(d->SetScissorRect(&uiFrame.scissor)) && ok;
             ok=ok && SUCCEEDED(d->Clear(0,nullptr,D3DCLEAR_TARGET|D3DCLEAR_ZBUFFER|
                 (hasStencil ? D3DCLEAR_STENCIL : 0),0xff000000,1,0));
-            if(ok) original(puppet);
+            if(ok) {
+                if(traceDepth) traceStereoDepth(d,request,i,"before-world");
+                observedWorldRender(d,puppet,original,request,i,traceDepth);
+                if(traceDepth && generation==graphicsResourceGeneration()) traceStereoDepth(d,request,i,"after-world");
+            }
             if (generation != graphicsResourceGeneration()) { ok = false; break; }
             static unsigned eyeDiagnostics=0;
             const bool traceEye=eyeDiagnostics<4;
@@ -1962,6 +2077,7 @@ void stereo(void *puppet,void(__thiscall *original)(void *),EyePostRender postRe
                 [&]{
                     const bool complete=generation==graphicsResourceGeneration() && (!postRender || postRender(puppet,request,i)) &&
                         generation==graphicsResourceGeneration();
+                    if(traceDepth && generation==graphicsResourceGeneration()) traceStereoDepth(d,request,i,"after-postlude");
                     if(traceEye) log("Native eye postlude eye=%d completed=%u",i,complete);
                     return complete;
                 });
@@ -1971,8 +2087,10 @@ void stereo(void *puppet,void(__thiscall *original)(void *),EyePostRender postRe
         activeEye=-1; endEye(); desktopTarget=desktopDepth=nullptr;
         ok=restoreUiFrame() && ok;
         // Native desktop rebuild remains exactly once; never replay brain/overlay.
-        original(puppet);
+        if(traceDepth && generation==graphicsResourceGeneration()) traceStereoDepth(d,request,-1,"before-desktop");
+        observedWorldRender(d,puppet,original,request,-1,traceDepth);
         if (generation != graphicsResourceGeneration()) return;
+        if(traceDepth) traceStereoDepth(d,request,-1,"after-desktop");
         uiFrame.world=ok && !uiFrame.fault && uiFrame.generation==resourceGeneration.load();
         static unsigned completionDiagnostics = 0;
         if (completionDiagnostics < 4) {

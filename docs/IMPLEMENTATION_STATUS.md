@@ -2,6 +2,26 @@
 
 ## Active PC implementation
 
+The right-eye Jungle terrain/vegetation/waterfall leak is corrected in the local
+source. Actual draw ranges exposed a native-cache/device mismatch introduced by
+raw target viewport resets. Astra/max verified the native early-return and geometry
+reference; the adapter preserves current depth endpoints across eye/scope/desktop
+target changes. Fixed actual eye captures and draw traces agree, with independent
+user confirmation. An old-build counterexample reproduced the defect; the fixed
+product is restored. See [STOCK_RENDERER_COMPARISON.md](STOCK_RENDERER_COMPARISON.md).
+Current product fingerprintf945770801a867e9ec9713066ab9b4e200e1b578cbf307851b4055520b8b391f.
+All61 Debug groups, compiled product contracts/native-artifact/layout checks pass.
+
+The automated bounded root-partition regression rejects both old-build probes and
+accepts the fixed trace. Image occlusion remains separately inspected, not inferred
+from counters. Full seven-pose follow-up after this repair encountered native
+loading-continuation/owned-window capture races; these launcher gates are being
+corrected without changing renderer/simulation policy. Run173527 reached actual
+gameplay and201 neutral complete pairs but its desktop capture failed. No new
+seven-pose, hardware, network or full-mod pass is claimed. Native dual-wield audit
+is complete; ordinary simulated per-hand trigger input and UI weapon/ammo/fire
+observations are being prepared for actual independent press/release probes.
+
 The current direct-scene run154502 verified the expected native Jungle stream hash,
 guarded loading continuation, complete native world/UI stereo and all seven head
 pose image pairs under private simulated Monado/Proton. The harness required300

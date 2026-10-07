@@ -100,6 +100,23 @@ def window_for(pid):
     x.XGetWindowProperty.argtypes = [D,U,U,ctypes.c_long,ctypes.c_long,ctypes.c_int,U,ctypes.POINTER(U),ctypes.POINTER(ctypes.c_int),ctypes.POINTER(U),ctypes.POINTER(U),ctypes.POINTER(ctypes.POINTER(ctypes.c_ubyte))]
     x.XSetInputFocus.argtypes = [D,U,ctypes.c_int,U]; x.XRaiseWindow.argtypes = [D,U]
     x.XSync.argtypes = [D,ctypes.c_int]
+    class Attributes(ctypes.Structure):
+        _fields_=[(name,ctypes.c_int) for name in ('x','y','width','height','border_width','depth')]+[
+            ('visual',D),('root',U),('c_class',ctypes.c_int),('bit_gravity',ctypes.c_int),
+            ('win_gravity',ctypes.c_int),('backing_store',ctypes.c_int),('backing_planes',U),
+            ('backing_pixel',U),('save_under',ctypes.c_int),('colormap',U),('map_installed',ctypes.c_int),
+            ('map_state',ctypes.c_int),('all_event_masks',ctypes.c_long),('your_event_mask',ctypes.c_long),
+            ('do_not_propagate_mask',ctypes.c_long),('override_redirect',ctypes.c_int),('screen',D)]
+    class XError(ctypes.Structure):
+        _fields_=[('type',ctypes.c_int),('display',D),('resourceid',U),('serial',U),
+                  ('error_code',ctypes.c_ubyte),('request_code',ctypes.c_ubyte),('minor_code',ctypes.c_ubyte)]
+    x.XGetWindowAttributes.argtypes=[D,U,ctypes.POINTER(Attributes)]
+    x.XSetErrorHandler.argtypes=[D];x.XSetErrorHandler.restype=D
+    errors=[]
+    @ctypes.CFUNCTYPE(ctypes.c_int,D,ctypes.POINTER(XError))
+    def on_error(display,error):
+        if len(errors)<16:errors.append((error.contents.error_code,error.contents.request_code))
+        return 0
     class ClientMessage(ctypes.Structure):
         _fields_=[('type',ctypes.c_int),('serial',U),('send_event',ctypes.c_int),('display',D),
                   ('window',U),('message_type',U),('format',ctypes.c_int),('data',ctypes.c_long*5)]
@@ -108,6 +125,7 @@ def window_for(pid):
     x.XSendEvent.argtypes=[D,U,ctypes.c_int,ctypes.c_long,ctypes.POINTER(Event)]
     d = x.XOpenDisplay(None)
     if not d: raise RuntimeError('No native desktop display')
+    previous=x.XSetErrorHandler(ctypes.cast(on_error,D))
     try:
         root = x.XDefaultRootWindow(d); atom = x.XInternAtom(d,b'_NET_WM_PID',0)
         def walk(w):
@@ -127,16 +145,27 @@ def window_for(pid):
             if owner!=pid: continue
             title=ctypes.c_char_p()
             if x.XFetchName(d,w,ctypes.byref(title)) and title.value:
-                if title.value==b'Serious Sam 2': found.append(w)
+                attrs=Attributes()
+                if (title.value==b'Serious Sam 2' and x.XGetWindowAttributes(d,w,ctypes.byref(attrs)) and
+                    attrs.map_state==2 and attrs.c_class==1 and attrs.width>0 and attrs.height>0):found.append(w)
                 x.XFree(title)
         if len(found)!=1: return None
+        x.XSync(d,0);errors.clear()
+        attrs=Attributes()
+        if not x.XGetWindowAttributes(d,found[0],ctypes.byref(attrs)) or attrs.map_state!=2:return None
         event=Event();event.client.type=33;event.client.display=d;event.client.window=found[0]
         event.client.message_type=x.XInternAtom(d,b'_NET_ACTIVE_WINDOW',0)
         event.client.format=32;event.client.data[0]=2
         x.XSendEvent(d,root,0,(1<<20)|(1<<19),ctypes.byref(event))
         x.XRaiseWindow(d,found[0]);x.XSetInputFocus(d,found[0],2,0);x.XSync(d,0)
+        # Mapping can change between inspection and focus. Reject that attempt;
+        # the existing bounded launcher waits, without mapping arbitrary windows.
+        if errors:
+            if any(code not in (3,8) for code,request in errors):raise RuntimeError('Owned-window X operation failed')
+            return None
         return found[0]
-    finally: x.XCloseDisplay(d)
+    finally:
+        x.XSync(d,0);x.XSetErrorHandler(previous);x.XCloseDisplay(d)
 
 class ObserverError(RuntimeError):
     def __init__(self, command, code):
@@ -146,9 +175,10 @@ class ObserverError(RuntimeError):
 def observer(cfg, env, command, token, output=None, timeout=20, deadline=None):
     args=[cfg['proton'], 'runinprefix', cfg['observer'], command, token]
     status_file=None
-    if command=='status':
+    if command in ('status','stock-status'):
         status_file=Path(cfg['observer_output_dir'])/('status-'+uuid.uuid4().hex+'.json')
-        args.extend(['Z:'+str(status_file),'Z:'+str(Path(cfg['game_lab'])/'Bin/Sam2.exe')])
+        args.append('Z:'+str(status_file))
+        if command=='status':args.append('Z:'+str(Path(cfg['game_lab'])/'Bin/Sam2.exe'))
     if output is not None:
         args.extend(map(str,output))
     before={i['pid'] for i in private_processes(cfg['observer'],token)}
@@ -171,7 +201,7 @@ def observer(cfg, env, command, token, output=None, timeout=20, deadline=None):
         raise
     if process.returncode:
         raise ObserverError(command,process.returncode)
-    if command=='status':
+    if command in ('status','stock-status'):
         if not status_file.is_file():
             (Path(cfg['observer_output_dir'])/'observer-output-diagnostic.txt').write_bytes(stdout+b'\n'+stderr)
             raise RuntimeError('Observer returned success without its private status record')
@@ -186,13 +216,29 @@ def validate(cfg):
     prefix=Path(cfg['prefix']).resolve(strict=True)
     for p in (lab,prefix):
         if not p.is_relative_to(private): raise ValueError('Lab and prefix must be private owned paths')
+    mode=cfg.get('renderer_mode','vr')
+    if mode not in ('vr','stock'):raise ValueError('Unknown renderer comparison mode')
+    from build_contract import read_contract
+    contracts={role:read_contract(lab/relative,role) for role,relative in
+        {'game':'Bin/d3d9.dll','server':'Bin/SS2VRServer.dll','host':'Bin/SS2VR/ss2vr_host.exe'}.items()}
+    reference={k:v for k,v in contracts['game'].items() if k!='component'}
+    if any({k:v for k,v in value.items() if k!='component'}!=reference for value in contracts.values()):
+        raise ValueError('Installed product contracts disagree')
+    cfg['compiled_product_contract']=reference
+    expected=cfg.get('expected_product_source')
+    if mode=='stock' or expected is not None:
+        if not isinstance(expected,str) or not re.fullmatch(r'[a-f0-9]{64}',expected):
+            raise ValueError('Comparator requires an exact compiled source identity')
+        if reference['source_fingerprint']!=expected:
+            raise ValueError('Installed products do not match the pinned source')
     marker=json.loads((lab/'.ss2vr-runtime-lab.json').read_text())
     checked_file(lab/'Bin/Sam2.exe',marker['game_sha256'])
     receipt=json.loads((lab/'Bin/SS2VR/install-receipt.json').read_text())
     for name, expected in receipt['files'].items(): checked_file(lab/name,expected)
     startup=cfg['startup']
     expected_arguments=['+mod','SeriousSam2','+sam_bBootSequence','0','+sam_bSkipMovies','1','+level',cfg['scene']['entry']]
-    if startup['arguments'] != expected_arguments:
+    zero_mouse_arguments=expected_arguments[:6]+['+inp_fMouseSensitivity','0']+expected_arguments[6:]
+    if startup['arguments'] not in (expected_arguments,zero_mouse_arguments):
         raise ValueError('Only the verified stock local +level startup is admitted')
     if not startup['evidence'] or not startup['arguments']:
         raise ValueError('Verified direct-start evidence and arguments are required')
@@ -241,6 +287,7 @@ def validate(cfg):
 
 def run(cfg):
     private,lab,prefix=validate(cfg)
+    stock=cfg.get('renderer_mode','vr')=='stock'
     # A copied directory does not isolate native Steam remote mutations. Keep
     # actual game launch closed until the reviewed early process-local adapter
     # is compiled and explicitly selected in this private configuration.
@@ -263,8 +310,9 @@ def run(cfg):
               'validated_config':cfg,
               'harness_sources':{name:digest(ROOT/'tools'/name) for name in
                   ('runtime_lab.py','runtime_observer.cpp','monado_pose_driver.cpp','assess_runtime.py')},
-              'simulation':True,'hardware_acceptance':False,'result':'incomplete'}
-    last_focus=0.0;last_state=None;loading_continue_sent=False
+              'simulation':not stock,'renderer_mode':'stock' if stock else 'vr','hardware_acceptance':False,'result':'incomplete'}
+    last_focus=0.0;last_state=None;loading_continue_sent=False;stock_creation=None
+    stock_token='Z:'+str(lab/'Bin/Sam2.exe')
     master,slave=pty.openpty(); service=None;launch=None;owned_game=None;owned_host=None;token=None;owned_window=None
     env=os.environ.copy()
     env.update({'STEAM_COMPAT_DATA_PATH':str(prefix),'STEAM_COMPAT_CLIENT_INSTALL_PATH':cfg['steam'],
@@ -274,6 +322,8 @@ def run(cfg):
         'LD_LIBRARY_PATH':cfg['runtime_libraries'],'WINEDLLOVERRIDES':'d3d9=n,b;d3d11,dxgi=n',
         'PROTON_LOG':'1','PROTON_LOG_DIR':str(run_dir),'SS2VR_LAB_TRACE':'1','SS2VR_LAB_ISOLATE_ONLINE':'1','SS2VR_LAB_SCENE':cfg['scene']['entry']})
     env.update(cfg['monado_environment'])
+    env.pop('SS2VR_LAB_STOCK_RENDER',None)
+    if stock:env['SS2VR_LAB_STOCK_RENDER']='1'
     files=[]; cleanup_errors=[]
     deadline=time.monotonic()+cfg.get('timeout',60)
     try:
@@ -285,33 +335,34 @@ def run(cfg):
             'config':[str(openvr)],'log':[str(run_dir)]}))
         config=(config_dir/'monado');config.mkdir()
         (config/'config_v0.json').write_text(json.dumps(cfg['monado_config']))
-        f=(run_dir/'monado.log').open('xb');files.append(f)
-        service=subprocess.Popen([cfg['monado_service']],stdin=slave,stdout=f,stderr=subprocess.STDOUT,env=env,start_new_session=True)
-        os.close(slave);slave=-1
-        while not (runtime/'monado_comp_ipc').exists():
-            if service.poll() is not None:raise RuntimeError('Private Monado startup failed')
-            if time.monotonic()>deadline:raise TimeoutError('Private Monado socket not ready')
-            time.sleep(.1)
-        # The native upstream listener is patched to loopback only. Certify the
-        # actual listening inode belongs to this exact private service before control.
-        while time.monotonic()<deadline:
-            sockets=set()
-            for p in Path('/proc',str(service.pid),'fd').iterdir():
-                try:sockets.add(p.readlink().name)
-                except OSError:pass
-            listeners=[]
-            for line in Path('/proc/net/tcp').read_text().splitlines()[1:]:
-                fields=line.split();address,port=fields[1].split(':')
-                if int(port,16)==cfg['remote_port'] and fields[3]=='0A':
-                    listeners.append((address,fields[9]))
-            if listeners:
-                if len(listeners)!=1 or listeners[0][0]!='0100007F' or ('socket:['+listeners[0][1]+']') not in sockets:
-                    raise RuntimeError('Remote listener is not private-service loopback owned')
-                break
-            if service.poll() is not None:raise RuntimeError('Private runtime stopped')
-            time.sleep(.1)
-        else:raise TimeoutError('Private exact-pose listener not ready')
-        subprocess.run([cfg['pose_driver'],str(cfg['remote_port']),*map(str,cfg['baseline_head'])],check=True,timeout=remaining(deadline,5))
+        if not stock:
+            f=(run_dir/'monado.log').open('xb');files.append(f)
+            service=subprocess.Popen([cfg['monado_service']],stdin=slave,stdout=f,stderr=subprocess.STDOUT,env=env,start_new_session=True)
+            os.close(slave);slave=-1
+            while not (runtime/'monado_comp_ipc').exists():
+                if service.poll() is not None:raise RuntimeError('Private Monado startup failed')
+                if time.monotonic()>deadline:raise TimeoutError('Private Monado socket not ready')
+                time.sleep(.1)
+            # The native upstream listener is patched to loopback only. Certify the
+            # actual listening inode belongs to this exact private service before control.
+            while time.monotonic()<deadline:
+                sockets=set()
+                for p in Path('/proc',str(service.pid),'fd').iterdir():
+                    try:sockets.add(p.readlink().name)
+                    except OSError:pass
+                listeners=[]
+                for line in Path('/proc/net/tcp').read_text().splitlines()[1:]:
+                    fields=line.split();address,port=fields[1].split(':')
+                    if int(port,16)==cfg['remote_port'] and fields[3]=='0A':
+                        listeners.append((address,fields[9]))
+                if listeners:
+                    if len(listeners)!=1 or listeners[0][0]!='0100007F' or ('socket:['+listeners[0][1]+']') not in sockets:
+                        raise RuntimeError('Remote listener is not private-service loopback owned')
+                    break
+                if service.poll() is not None:raise RuntimeError('Private runtime stopped')
+                time.sleep(.1)
+            else:raise TimeoutError('Private exact-pose listener not ready')
+            subprocess.run([cfg['pose_driver'],str(cfg['remote_port']),*map(str,cfg['baseline_head'])],check=True,timeout=remaining(deadline,5))
         # Existing runtime logs are preserved before each new process opens them.
         for path in (lab/'Bin/SS2VR.log',lab/'Bin/SS2VR/ss2vr_host.log',lab/'Sam2.log'):
             if path.exists():
@@ -325,7 +376,7 @@ def run(cfg):
             if len(games)>1:raise RuntimeError('Ambiguous game process ownership')
             if games:
                 owned_game=games[0]
-                if owned_window is None or ((not token or (last_state and last_state['menu'])) and time.monotonic()-last_focus>1):
+                if owned_window is None or ((not token or (last_state and last_state.get('menu',stock))) and time.monotonic()-last_focus>1):
                     # X11 calls can block; keep them in a deadline-bounded child.
                     focus=subprocess.run([sys.executable,str(Path(__file__)),
                         '--focus-owned',str(owned_game['pid']),'--start',owned_game['start'],'--lab',str(lab)],
@@ -344,7 +395,39 @@ def run(cfg):
                 args=[v.decode(errors='replace') for v in h['argv']]
                 if '--channel' in args:
                     token=args[args.index('--channel')+1];owned_host=h
-            if token:
+            if stock and owned_game and owned_window:
+                if owned_host:raise RuntimeError('Stock comparator unexpectedly started a VR host')
+                token=stock_token
+                try:state=observer(cfg,env,'stock-status',token,timeout=remaining(deadline),deadline=deadline)
+                except ObserverError as error:
+                    if error.code==4:
+                        time.sleep(.05);continue
+                    raise
+                if stock_creation is None:stock_creation=state['process_creation']
+                if state['process_creation']!=stock_creation:raise RuntimeError('Stock process incarnation changed')
+                last_state=state
+                native_log=(lab/'Bin/SS2VR.log').read_text(errors='replace')
+                if 'Native VR hooks attached' in native_log:raise RuntimeError('Stock reference has native VR hooks')
+                receipts=re.findall(r'Lab native scene stream bytes=(\d+) positionRestored=(\d+) sha256=([a-f0-9]{64})',native_log)
+                isolated=('Lab native online initializer suppressed; interface=0;' in native_log and
+                    'Lab stock renderer selected before VR worker creation; graphics hooks disabled' in native_log)
+                scene=(lab/'Sam2.log').read_text(errors='replace') if (lab/'Sam2.log').exists() else ''
+                if state['loading_ready'] and not loading_continue_sent:
+                    if not isolated or not receipts or any(h!=cfg['scene']['entry_sha256'] for size,pos,h in receipts):
+                        raise RuntimeError('Stock continuation lacks consistent scene/isolation evidence')
+                    try:observer(cfg,env,'stock-continue-loading',token,(stock_creation,),timeout=remaining(deadline),deadline=deadline)
+                    except ObserverError as error:
+                        if error.code==8:continue # Rejected before any input was posted.
+                        raise
+                    loading_continue_sent=True
+                    manifest['loading_continue_messages_posted']=True
+                if (isolated and state['local_transport'] and state['online_interface_null'] and receipts and
+                    state['menu_clear'] and state['camera_repeated_equal'] and state['view_pose_match'] and state['perspective_projection'] and
+                    ('+inp_fMouseSensitivity' not in cfg['startup']['arguments'] or state['mouse_zero']) and
+                    all(h==cfg['scene']['entry_sha256'] for size,pos,h in receipts) and
+                    re.search(r"Started simulation on '"+re.escape(cfg['scene']['entry'])+r"'",scene)):
+                    (run_dir/'ready.json').write_text(json.dumps(state,indent=2));break
+            elif token:
                 try:state=observer(cfg,env,'status',token,timeout=remaining(deadline),deadline=deadline)
                 except ObserverError as error:
                     if error.code==4:
@@ -357,15 +440,18 @@ def run(cfg):
                     if ('Lab native online initializer suppressed; interface=0;' not in native_log or
                         not native_receipts or any(h!=cfg['scene']['entry_sha256'] for size,pos,h in native_receipts)):
                         raise RuntimeError('Loading continuation lacks consistent native scene/isolation evidence')
+                    try:observer(cfg,env,'continue-loading',token,('Z:'+str(lab/'Bin/Sam2.exe'),),timeout=remaining(deadline),deadline=deadline)
+                    except ObserverError as error:
+                        if error.code==8:continue # Rejected before any input was posted.
+                        raise
                     loading_continue_sent=True
-                    observer(cfg,env,'continue-loading',token,('Z:'+str(lab/'Bin/Sam2.exe'),),timeout=remaining(deadline),deadline=deadline)
                     manifest['loading_continue_messages_posted']=True
                 if state['renderer'] and state['gameplay'] and not state['menu'] and state['focused'] and state['head_valid']:
                     (run_dir/'ready.json').write_text(json.dumps(state,indent=2));break
             if launch.poll() is not None and not games:raise RuntimeError('Game exited before world readiness')
             time.sleep(.2)
         else:raise TimeoutError('Verified scene did not reach gameplay readiness')
-        manifest['game_pid']=owned_game['pid'];manifest['host_pid']=owned_host['pid']
+        manifest['game_pid']=owned_game['pid'];manifest['host_pid']=owned_host['pid'] if owned_host else None
         scene_log=(lab/'Sam2.log').read_text(errors='replace')
         if not re.search(r"Started simulation on '"+re.escape(cfg['scene']['entry'])+r"'",scene_log):
             raise RuntimeError('Fresh native log does not certify requested simulation')
@@ -373,7 +459,8 @@ def run(cfg):
         isolation_log=(lab/'Bin/SS2VR.log').read_text(errors='replace')
         if 'Lab native online initializer suppressed; interface=0;' not in isolation_log:
             raise RuntimeError('Fresh native log does not certify early online isolation')
-        if 'Lab local gameplay observed with online interface=0' not in isolation_log:
+        if (not stock and 'Lab local gameplay observed with online interface=0' not in isolation_log) or \
+            (stock and not (state['local_transport'] and state['online_interface_null'])):
             raise RuntimeError('Fresh native local gameplay/isolation invariant not observed')
         receipts=re.findall(r'Lab native scene stream bytes=(\d+) positionRestored=(\d+) sha256=([a-f0-9]{64})',isolation_log)
         if not receipts: raise RuntimeError('No successful native scene-stream receipt')
@@ -383,6 +470,19 @@ def run(cfg):
         manifest['native_scene_receipts']=receipts
         if 'Steam initialize (AppID' in scene_log or 'from Steam cloud:' in scene_log:
             raise RuntimeError('Native Steam interface unexpectedly initialized')
+        if stock:
+            (run_dir/'stock-camera-before.json').write_text(json.dumps(state,indent=2))
+            desktop=run_dir/'stock-desktop.png'
+            subprocess.run([sys.executable,str(Path(__file__)),
+                '--focus-owned',str(owned_game['pid']),'--start',owned_game['start'],
+                '--lab',str(lab),'--capture-owned',str(desktop),'--private-root',str(private)],
+                capture_output=True,text=True,check=True,timeout=remaining(deadline,5))
+            after=observer(cfg,env,'stock-status',stock_token,timeout=remaining(deadline),deadline=deadline)
+            (run_dir/'stock-camera-after.json').write_text(json.dumps(after,indent=2))
+            if after['process_creation']!=stock_creation:raise RuntimeError('Stock capture process incarnation changed')
+            manifest['result']='stock_image_captured_camera_unverified'
+            manifest['camera_comparison_acceptance']=False
+            return run_dir
         baseline=cfg['expected_baseline_head'];baseline_packet=cfg['baseline_head']
         for step in cfg['pose_steps']:
             if not step['name'].replace('-','').isalnum():raise ValueError('Unsafe pose step name')
@@ -446,7 +546,10 @@ def run(cfg):
             except Exception as error:cleanup_errors.append(str(error))
         def graceful_close():
             if token and owned_game and still_owned(owned_game):
-                try:observer(cfg,env,'close',token,timeout=3,deadline=cleanup_deadline)
+                try:
+                    if stock and stock_creation:
+                        observer(cfg,env,'stock-close',stock_token,(stock_creation,),timeout=3,deadline=cleanup_deadline)
+                    elif not stock:observer(cfg,env,'close',token,timeout=3,deadline=cleanup_deadline)
                 except (RuntimeError,subprocess.TimeoutExpired,TimeoutError):pass
                 end=min(cleanup_deadline,time.monotonic()+3)
                 while still_owned(owned_game) and time.monotonic()<end:time.sleep(.1)
@@ -501,6 +604,11 @@ if __name__=='__main__':
         if not item or item['start']!=args.start or item['name']!='Sam2.exe' or not args.lab or not game_owned(item,args.lab.resolve()):
             raise SystemExit('Focus helper ownership mismatch')
         window=window_for(item['pid'])
+        if args.capture_owned:
+            capture_deadline=time.monotonic()+2
+            while not window and time.monotonic()<capture_deadline:
+                if not still_owned(item):raise SystemExit('Capture owner retired while waiting for its mapped window')
+                time.sleep(.1);window=window_for(item['pid'])
         if args.capture_owned:
             if not window or not args.private_root:raise SystemExit('Owned capture unavailable')
             destination=args.capture_owned.resolve()

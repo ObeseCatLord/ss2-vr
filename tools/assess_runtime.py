@@ -47,6 +47,42 @@ def complete_pairs_for_pose(game,host,head):
         if same_pose(entry['head'],head):observed.setdefault(request_key(entry),set()).add(entry['eye'])
     return {key for key in native & submitted if observed.get(key)=={0,1}}
 
+def first_person_depth_probe(game):
+    """Assess the bounded audited root-partition probe, not arbitrary game draws.
+
+    These initial request samples precede captures. State coherence cannot
+    certify image occlusion; actual eye images still require visual inspection.
+    """
+    attempts={}
+    for values in re.findall(r'Lab world draw attempts request=(\d+) eye=(-?\d+) aborted=(\d+) calls=(\d+) primitives=(\d+) readFailures=(\d+)',game):
+        request,eye,aborted,calls,primitives,failures=map(int,values)
+        key=(request,eye)
+        if key in attempts:return {'observed':True,'coherent':False,'reason':'duplicate pass'}
+        attempts[key]=(aborted,calls,primitives,failures)
+    states={}
+    pattern=r'Lab world draw state request=(\d+) eye=(-?\d+) z=(\d+) write=(\d+) alpha=(\d+) blend=(\d+) calls=(\d+) primitives=(\d+) fullRange=(\d+) worldRange=(\d+) otherRange=(\d+)'
+    for values in re.findall(pattern,game):
+        request,eye,z,write,alpha,blend,calls,primitives,full,world,other=map(int,values)
+        states.setdefault((request,eye),[]).append((z,write,alpha,blend,calls,primitives,full,world,other))
+    if not attempts or not states:return {'observed':False,'coherent':False,'reason':'no complete draw-range observations'}
+    bad=[];complete=[];full_opaque=0
+    for request in sorted({r for r,e in attempts}):
+        valid=True
+        for eye in (0,1,-1):
+            key=(request,eye);entry=attempts.get(key);rows=states.get(key,[])
+            if not entry or entry[0] or entry[3] or not rows or not entry[1]:valid=False;continue
+            if (sum(v[4] for v in rows)!=entry[1] or sum(v[5] for v in rows)!=entry[2] or
+                any(v[6]+v[7]+v[8]!=v[4] for v in rows) or
+                len({v[:4] for v in rows})!=len(rows)):valid=False;continue
+            opaque=[v for v in rows if v[0]==1 and v[1]==1 and v[3]==0]
+            if not opaque:valid=False;continue
+            wrong=sum(v[6] for v in opaque);full_opaque+=wrong
+            if wrong:bad.append({'request':request,'eye':eye,'full_range_opaque_calls':wrong})
+        if valid:complete.append(request)
+    return {'observed':True,'coherent':bool(complete) and len(complete)==len({r for r,e in attempts}) and not bad,
+        'complete_initial_requests':complete,'full_range_opaque_calls':full_opaque,'wrong_ranges':bad,
+        'image_occlusion_acceptance':'required_visual_review'}
+
 def assess(run):
     result=json.loads((run/'result.json').read_text())
     host=(run/'ss2vr_host.log').read_text(errors='replace') if (run/'ss2vr_host.log').exists() else ''
@@ -57,6 +93,8 @@ def assess(run):
         'hardware_acceptance':False,'successful_projection_frames':max(counts,default=0),
         'poses':{},'visual_parallax_acceptance':'required_unreviewed','full_vr_acceptance':False,
         'run_result':result.get('result'),'run_error':result.get('error')}
+    if result.get('validated_config',{}).get('depth_range_probe')=='native-first-person-root-partition':
+        report['first_person_depth_probe']=first_person_depth_probe(game)
     base_path=run/'baseline-left.ppm';base=read_ppm(base_path) if base_path.exists() else None
     for path in sorted(run.glob('*-metadata.json')):
         name=path.name.removesuffix('-metadata.json');meta=json.loads(path.read_text())

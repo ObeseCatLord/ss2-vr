@@ -2127,7 +2127,7 @@ static Pose *__fastcall camera(void *p, void *, Pose *out) {
         static uint32_t observedSession[2]{},observedReference[2]{},observedTracking[2]{};
         static unsigned cameraDiagnostics = 0;
         const auto &head = eyeRequest.input.head;
-        if (labTrace && cameraDiagnostics < 4096 && (observedRequest[eyeIndex]!=eyeRequest.sequence || observedSession[eyeIndex]!=eyeRequest.session ||
+        if (labTrace && cameraDiagnostics < 16384 && (observedRequest[eyeIndex]!=eyeRequest.sequence || observedSession[eyeIndex]!=eyeRequest.session ||
             observedReference[eyeIndex]!=eyeRequest.reference || observedTracking[eyeIndex]!=eyeRequest.trackingGeneration)) {
             ++cameraDiagnostics; observedRequest[eyeIndex]=eyeRequest.sequence;
             observedSession[eyeIndex]=eyeRequest.session;observedReference[eyeIndex]=eyeRequest.reference;observedTracking[eyeIndex]=eyeRequest.trackingGeneration;

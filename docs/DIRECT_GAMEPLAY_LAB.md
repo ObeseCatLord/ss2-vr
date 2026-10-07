@@ -107,3 +107,41 @@ Toolhelp module enumeration had failed with error299 and could not certify menu
 readiness. Distinct eye-image transport has since been observed for one fresh
 pair; sustained UI-complete capture and translated/rotated/parallax acceptance
 remain unverified. See PC_GAMEPLAY_READINESS.md for the precise limits.
+
+
+## Stock reference and bounded depth regression
+
+The launcher can select the lab-only stock renderer before worker/device-hook
+creation, retaining native scene and isolated-profile startup receipts. It captures
+owned process-incarnation stock camera candidates without a host/channel. See
+STOCK_RENDERER_COMPARISON.md for actual observations and limits. Both renderer
+modes verify matching installed game/server/host source, IPC and wire contracts;
+expected_product_source can pin the exact compiled snapshot.
+
+The verified +inp_fMouseSensitivity0 assignment may be inserted before +level
+for stable fixture camera orientation. It affects mouse axes/menu cursor motion;
+keyboard/button semantics remain native. Use only private lab settings.
+
+Optional depth_range_probe=native-first-person-root-partition enables the assessor's
+bounded initial-request draw-range report. It checks complete paired-eye and
+desktop observations, read/unwind errors and the audited world partition. It
+rejects the reproduced0..1 opaque/alpha-tested versus later0..0.9 mismatch. This
+is a state regression for the verified first-person scene route; it does not
+classify arbitrary vehicle/scope/postprocess draws or certify image occlusion.
+Actual captures and visual terrain/tree/waterfall comparisons remain required.
+
+The owned-window helper now requires mapped InputOutput windows and handles
+mapping races as unavailable instead of a fatal XSetInputFocus BadMatch. Its
+ctypes layouts were checked against the local Xlib headers. The native loading
+command may return8 only before posting input; the launcher waits and rechecks
+that rejection within its existing deadline. Successful posting is never repeated,
+and partial posting remains a failure. Native acknowledgement/transition remains
+under bounded review; a posted Enter alone is not scene readiness.
+
+The observer now exposes existing published per-hand weapon/ammo/fire counters,
+trigger validity/generations and UI health/age alongside input identity. These
+scalars do not pin native entities or prove releases. The private remote pose
+helper accepts optional left/right trigger values and hand yaw, using the actual
+Monado wire fields and normal OpenXR input path. Zero/default, separate and both
+trigger packets plus invalid-input rejection were transport-checked; gameplay
+firing, aim and lifecycle acceptance remain open.

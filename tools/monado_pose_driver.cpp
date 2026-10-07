@@ -36,9 +36,15 @@ static xrt_quat multiply(xrt_quat a,xrt_quat b) {
         a.w*b.w-a.x*b.x-a.y*b.y-a.z*b.z};
 }
 int main(int n,char **a) {
-    if(n!=8){std::fprintf(stderr,"usage: pose_driver port x y z yaw pitch roll (metres, radians)\n");return 2;}
+    if(n!=8 && n!=12){std::fprintf(stderr,"usage: pose_driver port x y z yaw pitch roll [left_trigger right_trigger left_yaw right_yaw] (metres, radians; triggers0..1)\n");return 2;}
     char *end=nullptr;long port=std::strtol(a[1],&end,10);if(end==a[1]||*end||port<1||port>65535)return 2;
     double v[6]{};for(unsigned i=0;i<6;++i){v[i]=std::strtod(a[i+2],&end);if(end==a[i+2]||*end||!std::isfinite(v[i])||std::abs(v[i])>10)return 2;}
+    double controls[4]{};
+    if(n==12)for(unsigned i=0;i<4;++i) {
+        controls[i]=std::strtod(a[i+8],&end);
+        if(end==a[i+8]||*end||!std::isfinite(controls[i]) ||
+            (i<2 ? controls[i]<0 || controls[i]>1 : std::abs(controls[i])>3.141592653589793))return 2;
+    }
     auto deadline=Clock::now()+std::chrono::seconds(2);
     int sock=socket(AF_INET,SOCK_STREAM|SOCK_CLOEXEC|SOCK_NONBLOCK,0);if(sock<0)return 3;
     sockaddr_in address{};address.sin_family=AF_INET;address.sin_port=htons(static_cast<uint16_t>(port));address.sin_addr.s_addr=htonl(INADDR_LOOPBACK);
@@ -71,8 +77,12 @@ int main(int n,char **a) {
         view.fov={-.85f,.85f,.85f,-.85f};
         auto &controller=h?packet.right:packet.left;
         controller.active=true;controller.hand_tracking_active=false;
-        controller.pose.orientation.w=1;
+        controller.pose.orientation={0,static_cast<float>(std::sin(controls[h+2]/2)),0,
+            static_cast<float>(std::cos(controls[h+2]/2))};
         controller.pose.position={h?.25f:-.25f,1.3f,-.5f};
+        controller.trigger_value.x=static_cast<float>(controls[h]);
+        controller.trigger_click=controls[h]>.65;
+        controller.trigger_touch=controls[h]>0;
     }
     bool ok=transfer(sock,&packet,sizeof(packet),true,deadline);close(sock);
     if(!ok)return 5;
