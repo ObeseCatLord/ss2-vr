@@ -301,60 +301,74 @@ static bool receiveServer(void *server, void *rpc, bool reliableTransport) {
     const uint64_t now = GetTickCount64();
     network::Message ack{};
     ack.kind = network::Kind::Ack;
-    std::vector<network::Ack> discarded;
+    // A capability replacement can retire at most the current interval and
+    // one pending token. Fixed storage owns no heap across native getters.
+    std::array<network::Ack, 2> discarded{};
+    size_t discardCount = 0;
+    uint32_t incarnation = 0;
     bool reply = false;
-    AcquireSRWLockExclusive(&lock);
-    if (activeServer != server) {
-        peers = {};
-        activeServer = server;
-    }
-    auto &peer = peers[slot];
-    uint32_t avatar = avatarFor(brain);
-    if (peer.avatar != avatar || peer.brain != brain)
-        peer = {};
-    if (message.kind == network::Kind::Hello) {
-        if (peer.validation.clientNonce != message.hello.nonce) {
-            uint64_t serverNonce = nonce();
-            if (serverNonce && nextIncarnation != UINT32_MAX) {
-                network::Ack old{};
-                if (peer.finishInterval(old))
-                    discarded.push_back(old);
-                if (peer.discardPending(old))
-                    discarded.push_back(old);
-                peer = {};
-                peer.brain = brain;
-                peer.avatar = avatar;
-                peer.incarnation = ++nextIncarnation;
-                peer.validation.bindCapability(message.hello.nonce, serverNonce);
+    if (!withPeerLock([&] {
+        if (activeServer != server) {
+            peers = {};
+            activeServer = server;
+        }
+        auto &peer = peers[slot];
+        uint32_t avatar = avatarFor(brain);
+        if (peer.avatar != avatar || peer.brain != brain)
+            peer = {};
+        if (message.kind == network::Kind::Hello) {
+            if (peer.validation.clientNonce != message.hello.nonce) {
+                uint64_t serverNonce = nonce();
+                if (serverNonce && nextIncarnation != UINT32_MAX) {
+                    network::Ack old{};
+                    if (peer.finishInterval(old))
+                        discarded[discardCount++] = old;
+                    if (peer.discardPending(old))
+                        discarded[discardCount++] = old;
+                    peer = {};
+                    peer.brain = brain;
+                    peer.avatar = avatar;
+                    peer.incarnation = ++nextIncarnation;
+                    peer.validation.bindCapability(message.hello.nonce, serverNonce);
+                }
             }
+            reply = peer.validation.clientNonce == message.hello.nonce && peer.validation.serverNonce != 0;
+        } else if (message.kind == network::Kind::Pose && reliableTransport) {
+            if (now - peer.rateStart >= 1000) {
+                peer.rateStart = now;
+                peer.rateCount = 0;
+            }
+            // Discard ACKs name the submitted capability, including retired ones;
+            // they return credit without reviving that capability on either peer.
+            reply = !receivePeer(peer, message.pose, now, ack.ack, ++peer.rateCount <= 40);
         }
-        reply = peer.validation.clientNonce == message.hello.nonce && peer.validation.serverNonce != 0;
-    } else if (message.kind == network::Kind::Pose && reliableTransport) {
-        if (now - peer.rateStart >= 1000) {
-            peer.rateStart = now;
-            peer.rateCount = 0;
-        }
-        // Discard ACKs name the submitted capability, including retired ones;
-        // they return credit without reviving that capability on either peer.
-        reply = !receivePeer(peer, message.pose, now, ack.ack, ++peer.rateCount <= 40);
-    }
-    if (message.kind == network::Kind::Hello)
-        ack.ack = {peer.validation.clientNonce, peer.validation.serverNonce, 0};
-    const uint32_t incarnation = peer.incarnation;
-    ReleaseSRWLockExclusive(&lock);
-    for (const auto &token : discarded)
-        sendPeerAck(server, slot, brain, incarnation, token);
+        if (message.kind == network::Kind::Hello)
+            ack.ack = {peer.validation.clientNonce, peer.validation.serverNonce, 0};
+        incarnation = peer.incarnation;
+    }))
+        return true; // Tagged mod input failed; never forward it as native chat.
+    for (size_t i = 0; i < discardCount; ++i)
+        sendPeerAck(server, slot, brain, incarnation, discarded[i]);
     if (reply)
         sendPeerAck(server, slot, brain, incarnation, ack.ack);
     return true;
 }
+static void dispatchServer(void *server, void *rpc, bool reliableTransport) noexcept {
+    // Decode may allocate and native entity lookup can unwind. Each reentered
+    // RPC boundary contains GNU errors locally; native SEH still propagates.
+    withNativeFinally([&] {
+        if (!receiveServer(server, rpc, reliableTransport))
+            (reliableTransport ? originalReliable : originalUnreliable)(server, rpc);
+    }, [](bool aborted) noexcept {
+        if (aborted)
+            nativeInputFailed();
+    });
+}
 static void __fastcall reliable(void *server, void *, void *rpc) {
-    if (!receiveServer(server, rpc, true))
-        originalReliable(server, rpc);
+    dispatchServer(server, rpc, true);
 }
 static void __fastcall unreliable(void *server, void *, void *rpc) {
-    if (!receiveServer(server, rpc, false))
-        originalUnreliable(server, rpc);
+    dispatchServer(server, rpc, false);
 }
 static void __fastcall setAvatar(void *server, void *, uint32_t avatar, int slot) {
     if (!hooksReady.load(std::memory_order_acquire)) {

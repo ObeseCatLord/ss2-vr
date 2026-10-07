@@ -1285,3 +1285,20 @@ helper passes ASan/UBSan and x86/x64 compile-only checks; artifact identity chec
 pass. The restored native Linux vkd3d1.17 compiler reproduces the exact embedded
 opaque scope shader and passes both shader-program gates. No game, Wine, Windows
 executable, headset, deployment or native input consumption was executed.
+
+## Multiplayer server receive containment — 2026-10-07
+
+Fixed a separate server-side RPC unwind gap: native avatar lookup ran while the
+MP lock had no foreign-unwind cleanup, and a growing discard-token vector could
+throw through the reentered callback. Server reliable/unreliable entries now
+contain GNU failures and preserve native exception propagation; the existing
+peer-lock extent explicitly releases ownership. Two bounded discard slots avoid
+heap ownership across native calls. Native forwarding, gameplay and wire6 stay
+unchanged. See MULTIPLAYER_SERVER_UNWIND.md for exact scope and remaining limits.
+
+All59 Debug/Release groups, game/server/host builds and the full40 native/compiled
+checks pass normally and under Python optimization. The compiled checker rejects
+missing unlock calls and an altered reliable/unreliable flag. An initial sweep
+had compiler lookup failures from an incomplete PATH; the corrected toolchain
+sweep passes all40, without changing any product or gate to accommodate them.
+No native runtime, game, headset, network session or deployment was executed.
