@@ -1319,3 +1319,27 @@ Direct3D context creation; inspected screenshot, no host log. Not a VR pass.
 Hash-checked removal touched only lab payload for stock comparison. Astra handles
 bounded steering-asset inspection and initial crash triage; main owns integration
 and runtime. See docs/PC_VALIDATION.md for identities, limits and remaining goal.
+
+## 2026-10-07 — Durable squeeze cancellation, IPC10 and visible desktop menu
+
+Astra rejected transient producer blocking: latest-value coalescing can lose the
+cancel event and comfort blocking suppresses healthy fire/zoom. Added producer
+release admission plus durable per-hand cancellation epochs through the existing
+input path; existing wheel clears old latch/selection and handles skipped recovery
+release. Native manual160/348, selection policy and fire/zoom predicates preserved.
+IPC10/wire6 layout verified on both architectures. Physical steering still open.
+
+Fixed review findings: target assertion ordering, explicit NDEBUG guard, skipped
+release/press regression and verifier ABI labels. All60 Debug/Release groups and
+UBSan pass; deliberately disabled assertions fail compile. Full product rebuild,
+artifact, primary/zoom/finally, client/server dispatch and head-volume gates pass.
+Astra/xhigh approves bounded source follow-up; startup diagnostics worker preserved
+behavior and disjoint edits. PC_VALIDATION.md records exact products/fingerprint.
+
+Brief focus explicitly authorized. Inspected compositor capture: native main menu
+renders correctly with proxy. Hook create/enable succeeds; first RT0 precedes
+native attachment, no device Present/post-ready RT0/host launch observed. Desktop
+menu pass only; no headset/gameplay/network pass. Test ended at exact lab PID.
+Astra/Max examines actual presentation owner before any startup adapter. Full
+private melee/MP reports read; effective-review limitations preserved. No source
+integration inferred from counters, inactive helpers or hypothesis alone.

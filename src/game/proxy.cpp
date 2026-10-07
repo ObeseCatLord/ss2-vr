@@ -19,9 +19,27 @@ static CreateDevice originalCreate = nullptr;
 static Reset originalReset = nullptr;
 using Present = HRESULT(WINAPI *)(IDirect3DDevice9 *, const RECT *, const RECT *, HWND, const RGNDATA *);
 static Present originalPresent = nullptr;
+// Diagnostic latches never gate hook installation or forwarding. Keep both
+// first success and first failure visible if an existing caller retries.
+static void logHook(const char *name, const char *operation, MH_STATUS status,
+                    std::atomic<bool> &succeeded, std::atomic<bool> &failed) {
+    auto &reported = status == MH_OK ? succeeded : failed;
+    if (!reported.exchange(true, std::memory_order_relaxed))
+        ss2vr::game::log("Startup hook=%s operation=%s status=%d thread=%lu", name, operation,
+                        static_cast<int>(status), GetCurrentThreadId());
+}
+template <class T> static void proxyHook(void *address, void *detour, T &original, const char *name) {
+    static std::atomic<bool> createOk{false}, createFailed{false}, enableOk{false}, enableFailed{false};
+    const auto created = MH_CreateHook(address, detour, reinterpret_cast<void **>(&original));
+    logHook(name, "create", created, createOk, createFailed);
+    if (created == MH_OK) {
+        const auto enabled = MH_EnableHook(address);
+        logHook(name, "enable", enabled, enableOk, enableFailed);
+    }
+}
 static HRESULT WINAPI present(IDirect3DDevice9 *d, const RECT *src, const RECT *dst, HWND window,
                               const RGNDATA *region) {
-    ss2vr::game::present();
+    ss2vr::game::present(d);
     return originalPresent(d, src, dst, window, region);
 }
 static INIT_ONCE initialize = INIT_ONCE_STATIC_INIT;
@@ -61,9 +79,13 @@ static BOOL CALLBACK init(PINIT_ONCE, PVOID, PVOID *) {
         FreeLibrary(realDll); realDll=nullptr; create9ex=nullptr;
         return FALSE;
     }
-    vrEnabled = MH_Initialize() == MH_OK;
+    const auto hookStatus = MH_Initialize();
+    vrEnabled = hookStatus == MH_OK;
+    ss2vr::game::log("Startup MinHook initialize status=%d", static_cast<int>(hookStatus));
     if (vrEnabled) {
         HANDLE thread = CreateThread(nullptr, 0, hookThread, nullptr, 0, nullptr);
+        const DWORD error = thread ? ERROR_SUCCESS : GetLastError();
+        ss2vr::game::log("Startup hook worker created=%d error=%lu", thread != nullptr, error);
         if (thread)
             CloseHandle(thread);
     }
@@ -79,26 +101,34 @@ static HRESULT WINAPI reset(IDirect3DDevice9 *d, D3DPRESENT_PARAMETERS *p) {
 static HRESULT WINAPI createDevice(IDirect3D9 *api, UINT adapter, D3DDEVTYPE type, HWND window, DWORD flags,
                                    D3DPRESENT_PARAMETERS *p, IDirect3DDevice9 **out) {
     HRESULT hr = originalCreate(api, adapter, type, window, flags, p, out);
+    static std::atomic<bool> createOk{false}, createFailed{false};
+    auto &reported = SUCCEEDED(hr) ? createOk : createFailed;
+    if (!reported.exchange(true, std::memory_order_relaxed))
+        ss2vr::game::log("Startup CreateDevice hr=%08lx device=%p type=%u flags=%08lx thread=%lu",
+                        static_cast<unsigned long>(hr),
+                        SUCCEEDED(hr) && out ? static_cast<void *>(*out) : nullptr,
+                        static_cast<unsigned>(type), flags, GetCurrentThreadId());
     if (SUCCEEDED(hr) && out && *out && type == D3DDEVTYPE_HAL) {
         auto table = *reinterpret_cast<void ***>(*out);
-        if (!originalReset && MH_CreateHook(table[16], reinterpret_cast<void *>(reset),
-                                            reinterpret_cast<void **>(&originalReset)) == MH_OK)
-            MH_EnableHook(table[16]);
-        if (!originalPresent && MH_CreateHook(table[17], reinterpret_cast<void *>(present),
-                                              reinterpret_cast<void **>(&originalPresent)) == MH_OK)
-            MH_EnableHook(table[17]);
+        if (!originalReset)
+            proxyHook(table[16], reinterpret_cast<void *>(reset), originalReset, "Reset");
+        if (!originalPresent)
+            proxyHook(table[17], reinterpret_cast<void *>(present), originalPresent, "Present");
         ss2vr::game::deviceCreated(*out);
     }
     return hr;
 }
 extern "C" __declspec(dllexport) IDirect3D9 *WINAPI Direct3DCreate9(UINT version) {
-    InitOnceExecuteOnce(&initialize, init, nullptr, nullptr);
+    const BOOL initialized = InitOnceExecuteOnce(&initialize, init, nullptr, nullptr);
     IDirect3D9 *api = create9 ? create9(version) : nullptr;
+    static std::atomic<bool> apiOk{false}, apiFailed{false};
+    auto &reported = api ? apiOk : apiFailed;
+    if (!reported.exchange(true, std::memory_order_relaxed))
+        ss2vr::game::log("Startup Direct3DCreate9 initialized=%d api=%p hooksEnabled=%d thread=%lu",
+                        static_cast<int>(initialized), static_cast<void *>(api), vrEnabled, GetCurrentThreadId());
     if (api && vrEnabled && !originalCreate) {
         auto v = *reinterpret_cast<void ***>(api);
-        if (MH_CreateHook(v[16], reinterpret_cast<void *>(createDevice),
-                          reinterpret_cast<void **>(&originalCreate)) == MH_OK)
-            MH_EnableHook(v[16]);
+        proxyHook(v[16], reinterpret_cast<void *>(createDevice), originalCreate, "CreateDevice");
     }
     return api;
 }

@@ -203,6 +203,31 @@ struct NativeUiFrame {
 static thread_local NativeUiFrame uiFrame;
 static thread_local bool scopeTransaction = false, scopeInterference = false;
 static thread_local uint64_t scopeTransactionGeneration = 0;
+// Written once by the first deviceCreated diagnostic, then immutable. This
+// snapshot correlates startup events; it never establishes current ownership.
+static struct {
+    IDirect3DDevice9 *device = nullptr;
+    DWORD thread = 0;
+} startupCreation;
+static std::atomic<bool> startupCreationPublished{false};
+// Startup observations only: no COM/native calls or shared-memory dereferences.
+// Callback observations use arguments, immutable metadata, TLS and atomics.
+// Local idle excludes cross-thread deferred state; unavailable fields are -1.
+static void logStartup(const char *event, IDirect3DDevice9 *d, bool ready,
+                       int routingReady = -1, int channelPresent = -1) {
+    const DWORD currentThread = GetCurrentThreadId();
+    const bool published = startupCreationPublished.load(std::memory_order_acquire);
+    auto *firstDevice = published ? startupCreation.device : nullptr;
+    const DWORD firstThread = published ? startupCreation.thread : 0;
+    const int ownerMatch = published ? currentThread == firstThread && d == firstDevice : -1;
+    const bool idleLocal = uiFrame.slot < 0 && activeEye < 0 && !scopeScratch && !scopeTransaction;
+    log("Startup %s device=%p firstCreationDevice=%p firstCreationThread=%lu thread=%lu "
+        "firstOwnerMatch=%d idleLocal=%d hooksReady=%d routingReady=%d channel=%d "
+        "stopping=%d halted=%d eye=%d uiSlot=%d scratch=%d transaction=%d",
+        event, static_cast<void *>(d), static_cast<void *>(firstDevice), firstThread, currentThread,
+        ownerMatch, idleLocal, ready, routingReady, channelPresent, stopping.load(), uiHalted.load(),
+        activeEye, uiFrame.slot, scopeScratch, scopeTransaction);
+}
 void scopeGpuOutput(IDirect3DDevice9 *d) noexcept {
     if (scopeTransaction && d == uiFrame.device) scopeInterference = true;
 }
@@ -569,6 +594,15 @@ static HRESULT WINAPI setRT(IDirect3DDevice9 *d, DWORD index, IDirect3DSurface9 
     HRESULT result = originalSetRT(d, index, target);
     if ((activeEye >= 0 || scopeScratch) && FAILED(result))
         eyeInvalid = true;
+    if (index == 0 && target && activeEye < 0 && !scopeScratch && SUCCEEDED(result)) {
+        static std::atomic<bool> first{false}, firstReady{false};
+        const bool ready = hooksReady.load(std::memory_order_acquire);
+        if (!first.load(std::memory_order_relaxed) && !first.exchange(true, std::memory_order_relaxed))
+            logStartup("first ordinary RT0", d, ready);
+        if (ready && !firstReady.load(std::memory_order_relaxed) &&
+            !firstReady.exchange(true, std::memory_order_relaxed))
+            logStartup("first ordinary RT0 after hooksReady", d, ready);
+    }
     return result;
 }
 void deviceLost() {
@@ -654,15 +688,25 @@ template <class T> static bool deviceHook(void *address, void *detour, T &origin
     static void *boundAddress = nullptr;
     if (original)
         return address == boundAddress;
-    if (MH_CreateHook(address, detour, reinterpret_cast<void **>(&original)) == MH_OK) {
-        if (MH_EnableHook(address) == MH_OK) {
+    static std::atomic<bool> createOk{false}, createFailed{false}, enableOk{false}, enableFailed{false};
+    const auto created = MH_CreateHook(address, detour, reinterpret_cast<void **>(&original));
+    auto &createReported = created == MH_OK ? createOk : createFailed;
+    if (!createReported.exchange(true, std::memory_order_relaxed))
+        log("Startup routing hook=%s operation=create status=%d thread=%lu", name,
+            static_cast<int>(created), GetCurrentThreadId());
+    if (created == MH_OK) {
+        const auto enabled = MH_EnableHook(address);
+        auto &enableReported = enabled == MH_OK ? enableOk : enableFailed;
+        if (!enableReported.exchange(true, std::memory_order_relaxed))
+            log("Startup routing hook=%s operation=enable status=%d thread=%lu", name,
+                static_cast<int>(enabled), GetCurrentThreadId());
+        if (enabled == MH_OK) {
             boundAddress = address;
             return true;
         }
         MH_RemoveHook(address);
         original = nullptr;
     }
-    log("%s routing hook failed; stereo disabled", name);
     return false;
 }
 // Component admission only: the native main-thread/owner/resource-epoch checks
@@ -688,6 +732,13 @@ void deviceCreated(IDirect3DDevice9 *d) {
     creationDevice = d;
     creationThread = GetCurrentThreadId();
     uiHalted = false; // A newly created device is a new admitted resource lifetime.
+    static std::atomic<bool> first{false};
+    if (!first.exchange(true, std::memory_order_relaxed)) {
+        startupCreation.device = d;
+        startupCreation.thread = GetCurrentThreadId();
+        startupCreationPublished.store(true, std::memory_order_release);
+        logStartup("deviceCreated", d, hooksReady.load(std::memory_order_acquire));
+    }
     deviceReady(d);
 }
 void deviceReady(IDirect3DDevice9 *d) {
@@ -714,18 +765,28 @@ void deviceReady(IDirect3DDevice9 *d) {
     uiRoutingReady = deviceHook(v[115], reinterpret_cast<void *>(drawRect), originalDrawRect, "Native UI rectangle observer") && uiRoutingReady;
     uiRoutingReady = deviceHook(v[116], reinterpret_cast<void *>(drawTri), originalDrawTri, "Native UI triangle observer") && uiRoutingReady;
     uiRoutingReady = deviceHook(v[30], reinterpret_cast<void *>(update), originalUpdate, "Native UI update observer") && uiRoutingReady;
-    if (!hooksReady)
+    const bool ready = hooksReady.load();
+    static std::atomic<bool> firstWaiting{false}, firstReady{false};
+    auto &reported = ready ? firstReady : firstWaiting;
+    if (!reported.exchange(true, std::memory_order_relaxed))
+        logStartup("deviceReady", d, ready, uiRoutingReady);
+    if (!ready)
         return;
     if (!channel.shared) {
         wchar_t token[64];
         swprintf(token, 64, L"%lu-%llu", GetCurrentProcessId(), GetTickCount64());
         if (!channel.open(token, true)) {
-            log("IPC create failed");
+            static std::atomic<bool> failed{false};
+            if (!failed.exchange(true, std::memory_order_relaxed))
+                logStartup("IPC create success=0", d, ready);
             return;
         }
+        static std::atomic<bool> opened{false};
+        if (!opened.exchange(true, std::memory_order_relaxed))
+            logStartup("IPC create success=1", d, ready, -1, 1);
         std::wstring root;
         if (!moduleDirectory(nullptr,root)) {
-            log("Cannot locate game directory for OpenXR host");
+            log("Startup OpenXR host creation skipped: directory unavailable");
             return;
         }
         const auto executable=root+L"SS2VR\\ss2vr_host.exe";
@@ -739,10 +800,13 @@ void deviceReady(IDirect3DDevice9 *d) {
         // Null environment preserves Steam/Proton's prefix and runtime context.
         if (CreateProcessW(executable.c_str(), arg.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr,
                            root.c_str(), &si, &pi)) {
+            log("Startup OpenXR host created=1 process=%lu thread=%lu", pi.dwProcessId, GetCurrentThreadId());
             CloseHandle(pi.hThread);
             CloseHandle(pi.hProcess);
-        } else
-            log("OpenXR host launch failed: %lu", GetLastError());
+        } else {
+            const DWORD error = GetLastError();
+            log("Startup OpenXR host created=0 error=%lu thread=%lu", error, GetCurrentThreadId());
+        }
     }
     allocate();
 }
@@ -775,7 +839,10 @@ bool foregroundGame() {
     HWND foreground = GetForegroundWindow();
     return foreground && GetAncestor(foreground, GA_ROOT) == GetAncestor(params.hFocusWindow, GA_ROOT);
 }
-void present() {
+void present(IDirect3DDevice9 *d) {
+    static std::atomic<bool> first{false};
+    if (!first.load(std::memory_order_relaxed) && !first.exchange(true, std::memory_order_relaxed))
+        logStartup("first device Present", d, hooksReady.load(std::memory_order_acquire));
     nativeUiFault(); // A nested presentation cannot reuse the retained eye resources.
     if (pendingKey && GetTickCount64() >= releaseKeyAt) {
         keyEvent(pendingKey, true);

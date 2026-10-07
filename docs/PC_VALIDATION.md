@@ -46,10 +46,21 @@ The native game reached Direct3D context creation, then displayed its crash
 dialog and wrote a minidump. The captured image was inspected. No VR host log
 was produced. This is a startup **failure**, not a headset or rendering pass.
 
-The exact lab game PID was stopped; the collision-refusing installer verified
-and removed only unchanged mod-owned payload. An unmodified control launch in
-the same lab/prefix is being compared. Astra is examining the preserved first-run
-logs and native boundary. No cause is claimed before that comparison/evidence.
+The exact lab game PID was stopped; the installer verified and removed only
+unchanged mod-owned payload. Stock reproduced the same exception. Astra/xhigh
+identified integer divide-by-zero0xC0000094 at DXVK3.1 x86 D3D9 RVA0xCC34B:
+GetRasterStatus divides1,000,000 by a zero D3DDISPLAYMODEEX refresh rate. The stack
+reaches native GfxD3D/Engine; application proxy and system D3D9 load at distinct
+addresses. This does not establish a mod regression or loader recursion.
+
+The real Xwayland display reports approximately75Hz. Stock proceeds beyond the
+failed point and completes native boot there. Restoring the exact verified proxy
+package in the same lab/prefix/display also completes boot and logs native hooks
+attached. A window-only boot config was created only in the lab. The original
+config syntax warning persists on both controls; it is not claimed as the crash
+cause. The game remains in the background. A captured window was black, so a
+rendered-menu pass is not claimed from boot logs. No host process/log is observed
+yet; a bounded lifecycle review and foreground observation remain open.
 
 No active Monado/SteamVR/WiVRn service or USB headset was observed at initial
 inventory. A Vulkan-capable RTX4090 is available. Hardware/runtime availability
@@ -64,3 +75,52 @@ observer delivery, wider vehicles including actual wheel grabbing, remote-head
 worker/model lifetime/enablement and final full-project review/package readiness
 remain unfinished. Inactive helpers are not completed features. The rejected
 melee patch remains unapplied and native160/348 remain manual-only.
+
+## IPC10 source checkpoint and focused desktop test
+
+The connected weapon-wheel squeeze cancellation repair is documented in
+SQUEEZE_ADMISSION.md. The earlier new-test Release result lacked assertion
+coverage; target ordering was corrected, a compile-time NDEBUG guard added, and
+all60 Debug/Release groups rerun successfully. UBSan passes. A deliberately
+NDEBUG-disabled compile is rejected. Astra/xhigh approved the bounded follow-up.
+All products rebuilt together. Artifact, primary, zoom, native-finally,
+client/server RPC and head-volume compiled gates pass. Artifact/head JSON labels
+both report10 after removing the old hardcoded head label.
+
+Build-input fingerprint: `d2e0be422d2dd16d0d64a258eecc6b2ffc7bb07324d31137940a4ee4cf112dcc`.
+Both architectures agree on IPC10/wire6: Input272, Request440, Shared83887840.
+
+| Product | SHA256 |
+|---|---|
+| x86 d3d9.dll | `aa23c339927a33eaa6ce4fe4be652cc3ee1f181932167f64b081aa098bcb4814` |
+| x86 SS2VRServer.dll | `e1a1be2bd0b8c77ed9f518dd2a25449e776b55b45da9a0961642288adf38763f` |
+| x64 ss2vr_host.exe | `819e044f9ec0e585162d970f6dbd386b5ac95255e4f483bbf7e71761e7109636` |
+| x64 official loader | `bb011caa82528c541a73967ce6408f82198ff4fd0358b38b54884719d863bd1d` |
+
+The private initial IPC10 test archive is SHA256
+`2941f8e5cb263bec86e0cc6f0e1e52c36357281d051c171dc44fbf05bf560ee2`.
+It predates the head-report label/documentation correction; its tested binaries
+have the identities above. It is not a public/test-ready release. Later packaging
+must use a fresh directory and corrected source/docs.
+
+The user explicitly permitted brief game focus. The focused proxy run rendered
+the native Serious Sam2 main menu (v2.224.00:747079) correctly. A compositor
+capture of the verified game window was inspected; the earlier direct-window
+black capture was not accepted as rendering proof. No unrelated window was
+captured or input sent. Native boot and hook attachment succeeded. All logged
+MinHook create/enable results are successful. Device creation and the first
+ordinary RT0 occurred before hooksReady on the recorded creation thread/device.
+Despite a visible focused menu, there is no intercepted device Present,
+post-ready RT0, channel creation or host-launch event. The exact lab PID was
+stopped at the end of the bounded test and logs preserved privately.
+
+This is a **desktop startup/menu pass**, not a VR pass. The pinned native renderer
+has separate device/swapchain presentation routes; exact recurring route and
+actual canvas ownership remain to prove. No unconditional host-start workaround
+was added. Astra/Max is reviewing the smallest actual presentation-owner adapter,
+including the implicit16x16 device buffer versus native window canvas.
+
+No real HMD/controllers, stereo submission, scope/UI-in-headset, gameplay or
+multiplayer runtime acceptance exists. Headset/runtime preference is pending;
+WinBoat is stopped and Windows GPU/OpenXR capability is unverified. Do not change
+passthrough/security/credentials to make that platform appear tested.

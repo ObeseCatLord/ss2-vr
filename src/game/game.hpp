@@ -22,7 +22,7 @@ bool nativeUiDeviceCurrent(IDirect3DDevice9 *device);
 bool nativePresentationIdleForBodyMove() noexcept;
 void deviceLost();
 void invalidateRenderer();
-void present();
+void present(IDirect3DDevice9 *device);
 bool nativeUiProgramsCurrent(IDirect3DVertexShader9 *, IDirect3DPixelShader9 *);
 bool copyExecutedUiProjection(void *player, const Request &, int index, Matrix44 &out);
 bool nativeUiFrameCurrent(void *player, const Request &);

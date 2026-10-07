@@ -33,8 +33,30 @@ A road-wheel physics joint is not the driver's steering wheel. Wheeled class
 identity alone does not prove a visible steering wheel, its center, rotation
 axis, radius, driver seat, grip locations or current visual angle. Native model,
 mechanism, skeleton and attachment metadata must establish those separately.
-The required asset inventory is pending transfer from the user's offline PC.
-No generic wheel placement or guessed model offset has been installed.
+The local stock inventory is now complete:14 root archives,12,342 entries and
+4,385 model/mesh/skeleton/mechanism/parameter entries with CRC, identifier-table
+round-trip and serialized object-count checks. Astra/xhigh found no positively
+identified driver-wheel geometry. This does not prove an unnamed wheel absent.
+Center, axis, rim radius, wheel-to-seat transform and visual angle remain unknown.
+No generic wheel placement or guessed model offset is installed.
+
+Notable candidates are Sirius_Car_05/Car_Blue, Sirius_Car_11/transport_vehicle_open,
+HoverFighter/Fighter_Final, FlyingSaucer/FlyingSaucer, RollerBall/RollerBall_Vehicle
+and Helicopter/Helicopter_Player under the stock Models/Vehicles tree. Named
+Seat/Console/CockPit metadata is not a proven attachment/transform. Car_Blue's
+referencing parameters serialize aircraft parameters; its filename does not
+establish a steerable wheeled ride. Eight serialized wheel-joint templates occur
+in turret/shooter models, so template type alone does not identify road or driver
+wheels. Catapult's Wheel/Wheels_Front/Wheels_Back names remain geometry candidates,
+not driver controls. Runtime precedence, loose overrides, world-embedded content
+and mod-subdirectory archives were outside this bounded inventory.
+
+Next content proof: identify an actual visible driver wheel in a fingerprinted
+loaded model, its surface/bone/attachment ownership, rim and non-spinning parent
+frame relative to the driver seat. Then reuse the guarded native attachment
+query with explicit success/current rider/model/seat ownership. The existing
+turret-specific gate does not authorize other classes. Private inventory and
+asset hashes remain outside public source; no assets/disassembly are published.
 
 Croteam's [game description](https://www.croteam.com/serious-sam-2/) covers varied
 vehicles and mountable animals. The publisher's [original manual, pages21–23](https://www.mogelpower.de/manuals/Serious_Sam_2_Handbuch.pdf)
@@ -67,4 +89,5 @@ The recenter chord must interrupt/release any steering grasp safely.
 - Ordinary joystick steering remains usable when there is no admitted grasp.
   No input helper, fixture or compilation result constitutes native integration.
 
-No game, Wine, Windows executable, headset or driving session has been executed.
+The inventory/review used no runtime. Subsequent PC startup tests are recorded
+in PC_VALIDATION.md; no steering drive or headset/controller acceptance exists.

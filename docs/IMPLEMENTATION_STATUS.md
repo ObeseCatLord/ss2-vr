@@ -9,10 +9,12 @@ are historical evidence, not the current pause state or feature count.
 Windows and Linux via Proton are required. Native magnified scope source views
 and ordered cap imagery are connected in source, alongside native zoom, mounted
 controls/turret lasers, native flat/world overlays and multiplayer integration.
-The current offline suite has59 groups. Native products cross-build. The user now
+The current offline suite has60 groups. Native products cross-build. The user now
 permits PC runtime testing and additional sessions before feature completion.
-The first isolated Proton game launch crashed after Direct3D context creation;
-see [PC_VALIDATION.md](PC_VALIDATION.md) for exact build identities and observations.
+Initial Xvfb launches hit a stock-reproduced zero-refresh DXVK failure. A focused
+real-display IPC10 proxy run now renders the native desktop menu. See
+[PC_VALIDATION.md](PC_VALIDATION.md) for identities and observations. Host startup
+and actual stereo are not yet established; startup-route diagnostics are connected.
 No headset or network runtime acceptance exists. Older coding-first/no-runtime
 instructions are historical; actual observations remain separate from offline checks.
 GitHub Actions is disabled at the owner's request; checks remain local.
@@ -20,11 +22,17 @@ GitHub Actions is disabled at the owner's request; checks remain local.
 Current source connects default-off single-player roomscale body movement through
 native whole-body queries, the checked native setter and actual-anchor origin
 settlement. Default-off head-volume checks cover handheld and seated world queries,
-with IPC9 head/eye clearance limits on cached frames; native exclusions can omit
+with IPC10 head/eye clearance limits on cached frames; native exclusions can omit
 the ridden vehicle itself. Optional immersive swimming preserves head-directed
 joystick input as the default. Remote renderer native-unwind cleanup now explicitly
 retires TLS, locks and owned scratch. Packaging checks matching compiled build-input
 fingerprints and version/layout contracts instead of hardcoding an obsolete ABI.
+
+Current PC source fixes squeeze-loss weapon-wheel cancellation using durable
+per-hand epochs and separate producer admission. All60 Debug/Release groups,
+UBSan and compiled/layout checks pass after correcting Release assertion coverage;
+Astra/xhigh approved the bounded source follow-up. This is not physical vehicle
+steering. See SQUEEZE_ADMISSION.md.
 
 Full implementation is NOT complete: multiplayer roomscale body/origin settlement,
 physical melee consumption/observer delivery, broader vehicle coverage, complete

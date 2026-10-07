@@ -57,7 +57,8 @@ def verify(obj,root):
         require(guard in host,'Missing late-frame head receipt check: '+guard)
     require(host.count('admitFinalWorld(layers, world, input, validViews,views)')==3,
             'Recheck head clearance after potentially waiting HUD uploads')
-    require('Abi = 9' in protocol and 'static_assert(sizeof(HeadClearance)==40)' in protocol,
+    ipc_abi = int(re.search(r'\bAbi\s*=\s*(\d+)', protocol).group(1))
+    require('Abi = 10' in protocol and 'static_assert(sizeof(HeadClearance)==40)' in protocol,
             'Versioned fixed-width head receipt ABI missing')
     require('!captureHeadQueryBinding(h,h.binding)' in engine and 'headQueryOwnerCurrent(&h)' in engine,
             'Head filters must use their separate owned binding, not a fabricated foot body')
@@ -65,7 +66,7 @@ def verify(obj,root):
             'Mounted head admission must retain explicit native rider state')
     return {'object_sha256':hashlib.sha256(obj.read_bytes()).hexdigest(),
             'post_simulation_head_query':True,'initial_contact_rejected':True,
-            'host_late_pose_and_age_gate':True,'ipc_abi':9,'runtime_executed':False,
+            'host_late_pose_and_age_gate':True,'ipc_abi':ipc_abi,'runtime_executed':False,
             'mounted_world_head_query_enabled':True}
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--object',type=Path,required=True)

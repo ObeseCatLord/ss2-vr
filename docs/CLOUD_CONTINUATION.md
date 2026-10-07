@@ -608,3 +608,30 @@ missing unlock calls and an altered reliable/unreliable flag. An initial sweep
 had compiler lookup failures from an incomplete PATH; the corrected toolchain
 sweep passes all40, without changing any product or gate to accommodate them.
 No native runtime, game, headset, network session or deployment was executed.
+
+## PC squeeze cancellation and first visible native menu — 2026-10-07
+
+Current PC source adds durable per-hand squeeze cancellation and separate wheel
+admission, fixes skipped-recovery presses, and carries them through IPC10/wire6.
+It repairs connected weapon-wheel input; physical vehicle steering remains open.
+All60 Debug/Release groups pass after correcting new-target assertion ordering;
+UBSan and the disabled-assertion negative control pass. Astra/xhigh source
+follow-up is GO for that slice. All products rebuild with matching contracts and
+compiled/native gates. See SQUEEZE_ADMISSION.md and PC_VALIDATION.md.
+
+Startup diagnostics preserve existing routes and report hook/create/enable,
+first RT0/device Present, readiness, channel and host launch. A focused real-display
+Proton proxy run visibly renders the native main menu; the compositor screenshot
+was inspected. No device-Present/post-ready RT0/host-launch callback is observed.
+The test ended by exact lab PID; original game/user data remain untouched. No
+HMD/controller/VR/network pass follows. Actual-canvas/presentation ownership is
+under bounded Astra/Max review; no unconditional host workaround is enabled.
+
+The full independent melee and multiplayer reports were read and their private
+SHA256 identities checked before choosing integration. Both are source-f40affc4
+investigations, with configured Astra/xhigh but unavailable effective introspection;
+neither grants formal source GO. No rejected melee/history patch is activated and
+no singlePlayer() gate was merely removed. Melee needs owner traces/lifetime and
+observer consumption. MP packet linking/queue/counters are not actor application
+or later correction; retained hands need separate coordinate provenance. These
+native gates remain distinct from the completed squeeze input repair.

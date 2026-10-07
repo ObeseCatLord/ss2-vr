@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <type_traits>
 namespace ss2vr {
-constexpr uint32_t Magic = 0x32565253, Abi = 9, MaxDimension = 2048, WeaponCount = 17;
+constexpr uint32_t Magic = 0x32565253, Abi = 10, MaxDimension = 2048, WeaponCount = 17;
 constexpr size_t EyeBytes = size_t(MaxDimension) * MaxDimension * 4;
 enum Button : uint32_t { Wheel = 1, Use = 2, Jump = 4, Menu = 8, Recenter = 16, Sprint = 32 };
 enum FramePresentation : uint32_t { NativeUiComplete = 1 };
@@ -36,6 +36,9 @@ struct Input {
     uint32_t primaryActiveMask = 0, zoomActiveMask = 0, zoomDownMask = 0;
     uint32_t primaryInputGeneration[2]{}, zoomInputGeneration[2]{};
     uint32_t zoomSourceButton[2]{};
+    // Producer release admission and durable cancellation identity for squeeze.
+    // An unavailable action is not a release; skipped samples retain the epoch.
+    uint32_t wheelAdmissionMask = 0, wheelInputEpoch[2]{};
 };
 struct Request {
     uint64_t sequence = 0;
@@ -110,6 +113,6 @@ struct Shared {
 static_assert(sizeof(Vec3) == 12 && sizeof(Quat) == 16 && sizeof(Pose) == 28);
 static_assert(std::is_trivially_copyable_v<Request> && std::is_standard_layout_v<Shared>);
 static_assert(offsetof(Shared, latest) == 48);
-static_assert(sizeof(Input) == 264 && sizeof(Request) == 432);
+static_assert(sizeof(Input) == 272 && sizeof(Request) == 440);
 static_assert(sizeof(MenuPointer) == 64);
 } // namespace ss2vr

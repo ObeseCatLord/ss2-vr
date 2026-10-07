@@ -101,7 +101,7 @@ def verify(game):
     for name in re.findall(r'"(\?[^"\n]+)"',plugin):
         if name not in symbols['Core.dll']:raise ValueError('Missing server startup API: '+name)
     layouts=[]
-    expected=(0x32565253,9,264,432,352,33554920,83887816,48,664,67110504)
+    expected=(0x32565253,10,272,440,352,33554928,83887840,48,672,67110528)
     for prefix,folder in [('i686','build-game'),('x86_64','build-host')]:
         object_path=ROOT/folder/'ipc-layout.o';binary=ROOT/folder/'ipc-layout.bin'
         subprocess.run([prefix+'-w64-mingw32-g++','-std=c++20','-I'+str(ROOT/'src'),'-c',str(ROOT/'tests/abi_layout.cpp'),'-o',str(object_path)],check=True)
@@ -110,7 +110,7 @@ def verify(game):
         if layout!=expected:raise ValueError('IPC ABI differs from frozen layout: '+prefix)
         layouts.append(layout)
     if layouts[0]!=layouts[1]:raise ValueError('IPC architecture mismatch')
-    report['ipc_layout']={'abi':9,'mapping_bytes':expected[6],'architectures_agree':True}
+    report['ipc_layout']={'abi':layouts[0][1],'mapping_bytes':expected[6],'architectures_agree':True}
     print(json.dumps(report,indent=2))
 
 if __name__=='__main__':

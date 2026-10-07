@@ -779,8 +779,7 @@ static void update(void *p) {
             }
         bool valid = enabled && !resettingControls && input.handValid[h] && finite(input.hand[h]);
         bool wheelAllowed = valid && rider.handheld() && !(input.blockedWheels & (1u << h));
-        int selected = wheels[h].update((input.buttons[h] & Button::Wheel) != 0, input.axis[h][0],
-                                        input.axis[h][1], ui.weapon, ui.count, wheelAllowed);
+        int selected = wheels[h].sample(input, unsigned(h), ui.weapon, ui.count, wheelAllowed);
         ui.open = wheels[h].open;
         ui.hover = wheels[h].hover;
         const bool fireAllowed = rider.seated() || (rider.handheld() && wheelAllowed &&

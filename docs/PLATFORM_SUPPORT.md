@@ -1,8 +1,8 @@
 # Windows and Linux/Proton targets
 
 Both are required targets. The mod is still a development build. PC runtime
-testing is now authorized; the first isolated Proton launch crashed during
-startup. See [PC_VALIDATION.md](PC_VALIDATION.md). No headset/network acceptance
+testing is now authorized; initial Xvfb launches crashed on zero-refresh DXVK, while a focused
+real-display run renders the native desktop menu. See [PC_VALIDATION.md](PC_VALIDATION.md). No headset/network acceptance
 or native Windows test exists. Offline checks cannot establish playability,
 headset coverage or performance.
 

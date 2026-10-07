@@ -407,10 +407,12 @@ struct Actions {
     XrSpace aimSpace[2]{}, gripSpace[2]{};
     XrPath viveProfile = XR_NULL_PATH, currentProfile[2]{};
     ActionStream primaryStream[2], zoomStream[2];
+    SqueezeAdmission squeeze[2];
     void invalidateStreams() {
         for (unsigned h = 0; h != 2; ++h) {
             primaryStream[h].invalidate();
             zoomStream[h].invalidate();
+            squeeze[h].invalidate();
         }
     }
     XrPath path(Api &api, XrInstance instance, const char *name) {
@@ -559,14 +561,13 @@ struct Actions {
         api.check(api.GetActionStateBoolean(session, &info, &state), "xrGetActionStateBoolean");
         return state;
     }
-    float value(Api &api, XrSession session, XrAction a, unsigned h) {
+    XrActionStateFloat floatState(Api &api, XrSession session, XrAction a, unsigned h) {
         auto info = get(a, h);
         XrActionStateFloat state{XR_TYPE_ACTION_STATE_FLOAT};
         api.check(api.GetActionStateFloat(session, &info, &state), "xrGetActionStateFloat");
-        return state.isActive && std::isfinite(state.currentState) ? std::clamp(state.currentState, 0.f, 1.f)
-                                                                   : 0.f;
+        return state;
     }
-    void sample(Api &api, XrSession session, XrSpace local, XrTime time, Input &input) {
+    void sample(Api &api, XrSession session, XrSpace local, XrTime time, Input &input, bool validViews) {
         XrActiveActionSet active{set, XR_NULL_PATH};
         XrActionsSyncInfo sync{XR_TYPE_ACTIONS_SYNC_INFO};
         sync.countActiveActionSets = 1;
@@ -574,9 +575,15 @@ struct Actions {
         const XrResult result = api.SyncActions(session, &sync);
         if (result == XR_SESSION_NOT_FOCUSED) {
             input.focused = 0;
+            for (unsigned h = 0; h != 2; ++h) {
+                squeeze[h].sample(0, false, false, false);
+                input.wheelInputEpoch[h] = squeeze[h].epoch;
+            }
             return;
         }
         api.check(result, "xrSyncActions");
+        uint32_t squeezeSources[2]{};
+        bool squeezeValuesValid[2]{};
         for (unsigned h = 0; h != 2; ++h) {
             XrInteractionProfileState profile{XR_TYPE_INTERACTION_PROFILE_STATE};
             api.check(api.GetCurrentInteractionProfile(session, hand[h], &profile), "xrGetCurrentInteractionProfile");
@@ -584,6 +591,7 @@ struct Actions {
                 currentProfile[h] = profile.interactionProfile;
                 primaryStream[h].invalidate();
                 zoomStream[h].invalidate();
+                squeeze[h].invalidate();
             }
             auto info = get(aim, h);
             XrActionStatePose state{XR_TYPE_ACTION_STATE_POSE};
@@ -625,8 +633,15 @@ struct Actions {
                 input.axis[h][0] = std::clamp(axis.currentState.x, -1.f, 1.f);
                 input.axis[h][1] = std::clamp(axis.currentState.y, -1.f, 1.f);
             }
-            if (boolean(api, session, wheel, h) || value(api, session, wheelValue, h) > .65f)
-                input.buttons[h] |= Wheel;
+            // Query both sources; an active malformed analog value is unavailable,
+            // even when the boolean source is pressed. Preserve raw chord input.
+            const auto wheelClick = booleanState(api, session, wheel, h);
+            const auto wheelAnalog = floatState(api, session, wheelValue, h);
+            const auto rawSqueeze = squeezeSample(wheelClick.isActive != XR_FALSE, wheelClick.currentState,
+                wheelAnalog.isActive != XR_FALSE, wheelAnalog.currentState);
+            squeezeSources[h] = rawSqueeze.sources;
+            squeezeValuesValid[h] = rawSqueeze.valid;
+            if (rawSqueeze.down) input.buttons[h] |= Wheel;
             if (boolean(api, session, use, h))
                 input.buttons[h] |= Use;
             const auto jumpState = booleanState(api, session, jump, h);
@@ -649,6 +664,13 @@ struct Actions {
             }
         }
         applyRecenterChord(input, boolean(api, session, recenter, 0));
+        for (unsigned h = 0; h != 2; ++h) {
+            const bool admitted = squeeze[h].sample(squeezeSources[h], squeezeValuesValid[h],
+                (input.buttons[h] & Wheel) != 0,
+                input.focused && input.headValid && input.handValid[h] && validViews && !recenterHeld(input));
+            input.wheelInputEpoch[h] = squeeze[h].epoch;
+            if (admitted) input.wheelAdmissionMask |= 1u << h;
+        }
     }
     bool pulse(Api &api, XrSession session, unsigned handIndex, float amplitude, XrDuration duration) {
         XrHapticActionInfo info{XR_TYPE_HAPTIC_ACTION_INFO};
@@ -1452,7 +1474,7 @@ struct Host {
                           (a.p + b.p) * .5f};
             input.headValid = 1;
         }
-        actions.sample(api, session, local, time, input);
+        actions.sample(api, session, local, time, input, validViews);
         return input;
     }
     void discardEyeAcquisitions() {

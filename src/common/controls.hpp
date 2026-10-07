@@ -17,6 +17,42 @@ struct ActionStream {
         return active;
     }
 };
+// One producer owns squeeze release admission. The epoch makes cancellation
+// survive latest-value publication/coalescing; consumers only compare identity.
+struct SqueezeSample {
+    uint32_t sources = 0;
+    bool valid = false, down = false;
+};
+inline SqueezeSample squeezeSample(bool clickActive, uint32_t clickDown, bool analogActive, float value) {
+    return {(clickActive ? 1u : 0u) | (analogActive ? 2u : 0u),
+            (!clickActive || clickDown <= 1) && (!analogActive ||
+                (std::isfinite(value) && value >= 0.f && value <= 1.f)),
+            (clickActive && clickDown == 1) ||
+                (analogActive && std::isfinite(value) && value > .65f)};
+}
+struct SqueezeAdmission {
+    uint32_t epoch = 1, sources = 0;
+    bool eligible = false, armed = false;
+    void invalidate() {
+        epoch = epoch && epoch != UINT32_MAX ? epoch + 1 : 0;
+        sources = 0;
+        eligible = armed = false;
+    }
+    bool sample(uint32_t sourceMask, bool valuesValid, bool down, bool allowed) {
+        const bool current = sourceMask && valuesValid && allowed;
+        if (sourceMask != sources || (eligible && !current)) {
+            invalidate();
+        }
+        sources = sourceMask;
+        eligible = current && epoch != 0;
+        if (!eligible) {
+            armed = false;
+            return false;
+        }
+        if (!down) armed = true; // Positive, currently available release only.
+        return armed;
+    }
+};
 inline bool primaryActionEligible(const Input &input, unsigned hand) {
     return hand < 2 && (input.primaryActiveMask & (1u << hand)) && input.primaryInputGeneration[hand];
 }
@@ -220,6 +256,22 @@ struct WeaponWheel {
         open = false;
         hover = -1;
         selected = -1;
+    }
+    uint32_t inputEpoch = 0;
+    int sample(const Input &input, unsigned hand, const int *ids, uint32_t count, bool allowed) {
+        if (hand >= 2) { cancel(); return -1; }
+        if (inputEpoch != input.wheelInputEpoch[hand]) {
+            inputEpoch = input.wheelInputEpoch[hand];
+            cancel(); // May have missed every intermediate unavailable sample.
+            previousHold = false; // Producer may already have observed release and a new press.
+        }
+        if (!inputEpoch || !(input.wheelAdmissionMask & (1u << hand))) {
+            cancel();
+            previousHold = false;
+            return -1;
+        }
+        return update((input.buttons[hand] & Wheel) != 0, input.axis[hand][0], input.axis[hand][1],
+                      ids, count, allowed);
     }
     int update(bool held, float x, float y, const int *ids, uint32_t count, bool allowed) {
         selected = -1;

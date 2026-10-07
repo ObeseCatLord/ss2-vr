@@ -51,6 +51,8 @@ inline bool sameInput(const Input &a, const Input &b) {
            !std::memcmp(a.buttons, b.buttons, sizeof(a.buttons)) &&
            !std::memcmp(a.grip, b.grip, sizeof(a.grip)) &&
            !std::memcmp(a.gripValid, b.gripValid, sizeof(a.gripValid)) && a.blockedWheels == b.blockedWheels &&
+           a.wheelAdmissionMask == b.wheelAdmissionMask &&
+           !std::memcmp(a.wheelInputEpoch, b.wheelInputEpoch, sizeof(a.wheelInputEpoch)) &&
            a.primaryActiveMask == b.primaryActiveMask && a.zoomActiveMask == b.zoomActiveMask &&
            a.zoomDownMask == b.zoomDownMask &&
            !std::memcmp(a.primaryInputGeneration,b.primaryInputGeneration,sizeof(a.primaryInputGeneration)) &&
