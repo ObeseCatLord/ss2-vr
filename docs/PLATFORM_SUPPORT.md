@@ -90,3 +90,8 @@ These portable helper checks use no proprietary game inputs, Windows executable,
 Wine, graphics API or headset. Passing them is offline regression evidence only,
 not a native mod build or platform runtime certification. Native PE/ABI checks
 continue separately with private owned inputs.
+
+Rollback also records an exclusively created destination before reopening its
+source. A source-open failure after preflight therefore cannot leave an empty
+payload file blocking the next installation. A synthetic failure-and-retry
+fixture covers this boundary on the installer itself.

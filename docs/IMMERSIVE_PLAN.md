@@ -23,7 +23,7 @@ Wire real features through native producer/consumer paths. Record concrete imple
 
 ## Current source checkpoint — 2026-10-07
 
-Current source uses IPC9/wire6 and passes58 portable groups; x86 proxy/server and
+Current source uses IPC9/wire6 and passes59 portable groups; x86 proxy/server and
 x64 OpenXR host/official loader build. Native zoom and magnified per-hand scope
 captures/ordered cap imagery are connected for their admitted renderer subset.
 Default-off single-player roomscale uses native body queries, checked placement

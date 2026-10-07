@@ -79,3 +79,35 @@ try:
  installer.paths({'files':{'Bin/SS2VR/file':'0'*64,'Bin/SS2VR/file/child':'1'*64,'Bin/SS2VR/file-other':'2'*64}})
  raise AssertionError('File/directory collision accepted')
 except ValueError: pass
+
+# A source can disappear after preflight, before its second open for copying.
+# Opening the destination succeeds first: its ownership must already be tracked
+# when opening the source fails, otherwise rollback leaves an empty collision.
+with tempfile.TemporaryDirectory(prefix='ss2vr-source-open-failure-') as folder:
+ root=Path(folder);game=root/'game';package=root/'package'
+ (game/'Bin').mkdir(parents=True);(package/'Bin/SS2VR').mkdir(parents=True)
+ (game/'Bin/Sam2.exe').write_bytes(b'fixture')
+ source=package/'Bin/SS2VR/ss2vr_host.exe';source.write_bytes(b'expected')
+ manifest={'files':{'Bin/SS2VR/ss2vr_host.exe':digest(b'expected')},'version':'fixture',
+           'game_fingerprints':{'Sam2.exe':{'sha256':digest(b'fixture')}}}
+ (package/'manifest.json').write_text(json.dumps(manifest))
+ original_open=Path.open
+ source_reads=0
+ def fail_second_source_open(path, mode='r', *args, **kwargs):
+  global source_reads
+  if path==source and mode=='rb':
+   source_reads+=1
+   if source_reads==2: raise OSError('injected source-open failure after preflight')
+  return original_open(path,mode,*args,**kwargs)
+ Path.open=fail_second_source_open
+ try:
+  try: installer.install(game,package,False); raise AssertionError('Missing source accepted')
+  except OSError as error:
+   assert 'injected source-open failure' in str(error)
+ finally: Path.open=original_open
+ assert source_reads==2
+ assert not (game/'Bin/SS2VR').exists(), 'Source-open failure left an orphan destination'
+ assert (game/'Bin/Sam2.exe').read_bytes()==b'fixture'
+ installer.install(game,package,False)
+ installer.uninstall(game,False)
+ print('Source-open rollback and clean retry passed.')

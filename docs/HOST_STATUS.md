@@ -2,7 +2,7 @@
 
 ## Current source — 2026-10-07
 
-Current game/host IPC is9 and the offline suite has58 groups. A response-owned
+Current game/host IPC is9 and the offline suite has59 groups. A response-owned
 head-clearance receipt now limits current head/eye placement and cached-image
 age when the default-off head guard is enabled. Game, server and host also carry
 read-only exported build-input/version/layout contracts for package verification.

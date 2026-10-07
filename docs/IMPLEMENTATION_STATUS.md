@@ -9,7 +9,7 @@ are historical evidence, not the current pause state or feature count.
 Windows and Linux via Proton are required. Native magnified scope source views
 and ordered cap imagery are connected in source, alongside native zoom, mounted
 controls/turret lasers, native flat/world overlays and multiplayer integration.
-The current offline suite has58 groups. Native products cross-build; no Windows,
+The current offline suite has59 groups. Native products cross-build; no Windows,
 Wine, game, headset or network runtime has been executed. The owner explicitly
 requires coding to finish first and will perform device testing afterward.
 GitHub Actions is disabled at the owner's request; checks remain local.

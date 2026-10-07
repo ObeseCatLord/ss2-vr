@@ -80,8 +80,12 @@ def install(game, package, dry):
                 except FileExistsError:
                     if not parent.is_dir(): raise
             # Exclusive creation prevents a race from overwriting another mod.
-            with target.open('xb') as output, (package/relative).open('rb') as source:
-                created.append(target); shutil.copyfileobj(source, output)
+            with target.open('xb') as output:
+                # Exclusive creation has already succeeded. Record ownership
+                # before opening the source, which can fail after preflight.
+                created.append(target)
+                with (package/relative).open('rb') as source:
+                    shutil.copyfileobj(source, output)
             if digest(target) != entries[relative]:
                 raise ValueError('Copied package content changed: ' + relative)
         with destination(game, str(RECEIPT)).open('x') as output:

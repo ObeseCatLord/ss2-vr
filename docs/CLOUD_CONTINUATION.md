@@ -561,3 +561,25 @@ sweep passes normally and with optimization. This includes the exact supplied
 mesh/skeleton bytes through private archive adapters, not a claim about complete
 installed-archive provenance. No Windows/game/headset execution or deployment
 occurred. Native integration work and final full-project review remain open.
+
+## Binding ownership and installer rollback — 2026-10-07
+
+The inactive native-consumption metadata now has a noncopyable owner-bound slot.
+It rejects same-binding refresh while active, keeps a monotonic lifetime epoch,
+and rejects an older callback after explicit retirement/replacement, including
+same-address reuse. Tests cover completed nested observations and epoch exhaustion.
+This is not connected to native callbacks or copied authority rows; physical
+melee, native completion admission and observer delivery remain unfinished.
+
+An installer failure fixture exposed an orphan file when exclusive destination
+creation succeeded but reopening the source failed after preflight. Ownership is
+now recorded immediately after destination creation, before the fallible source
+open. Rollback removes that new file and its new empty directories; retry works.
+The baseline fails the fixture, the fix passes, and existing game bytes remain
+unchanged. Only synthetic installation trees were used.
+
+All59 Debug/Release groups and game/server/host cross-builds pass. The binding
+helper passes ASan/UBSan and x86/x64 compile-only checks; artifact identity checks
+pass. The restored native Linux vkd3d1.17 compiler reproduces the exact embedded
+opaque scope shader and passes both shader-program gates. No game, Wine, Windows
+executable, headset, deployment or native input consumption was executed.
