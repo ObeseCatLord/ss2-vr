@@ -6,6 +6,13 @@ using namespace ss2vr;
 #error Idle diagnostic checks need active assertions
 #endif
 int main() {
+    {IdleWeaponTrace t;t.admitted=true;t.placementObserved=true;t.stage=IdleWeaponTrace::Stage::Event;
+     t.noteRejection(IdleWeaponTrace::Rejection::RasterPrerequisites,1);
+     assert(t.stage==IdleWeaponTrace::Stage::Event); // Recording adds no retirement policy.
+     t.callbacks|=IdleWeaponTrace::RasterSeen;
+     t.reject(IdleWeaponTrace::Rejection::GpuAdmission,3);t.reject();
+     assert(t.rejection==IdleWeaponTrace::Rejection::RasterPrerequisites && t.precedingStage==IdleWeaponTrace::Stage::Event);
+     assert(t.rejectionChecks==1 && (t.rejectionState&3)==3 && t.callbacks==4 && t.stage==IdleWeaponTrace::Stage::Rejected);}
     const IdleDrawIdentity id{100,90,1,2,3,4,0,1};
     const IdleConfigIdentity cfg{20,30,5};
     const auto identity=matrix(Pose{});
@@ -61,7 +68,8 @@ int main() {
     for(unsigned failure=0;failure<3;++failure) {
         IdleWeaponTrace t;copiedEvent(t);assert(t.palette(id,cfg,true,1));
         assert(t.pose(identity,{1,1,1},{&identity,1}));
-        if(failure==0)t.placementObserved=false;assert(!t.finish(failure!=1,failure!=2));
+        if(failure==0)t.placementObserved=false;
+        assert(!t.finish(failure!=1,failure!=2));
     }
     const auto ready=[&] {
         IdleWeaponTrace t;assert(t.admit(id));assert(t.placement(id,identity,identity,identity));assert(t.references(id,identity,true,identity));

@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <initializer_list>
 #include <span>
 
 namespace ss2vr {
@@ -57,7 +58,21 @@ struct IdleGeometryCopy {
 struct IdleWeaponTrace {
     static constexpr unsigned MaxContributors=16,MaxMatrices=64,MaxDraws=8;
     enum class Stage : uint8_t { Empty,Event,Palette,Rejected,Complete };
-    Stage stage=Stage::Empty;
+    // Invocation-local scalars only; first rejection survives later cleanup.
+    enum class Rejection : uint8_t { None,Unspecified,Admit,Placement,References,Event,Palette,Animation,Pose,PoseMatrix,Draw,DrawDuplicate,DrawConstants,Finish,
+        QueryBorrow,QueryMemory,QueryConfig,QueryEntries,QueryAnimationMemory,QueryAnimationName,QueryCurrent,QueryAbort,
+        PaletteRecords,PaletteRootConfig,PaletteEvaluated,PaletteMatrices,PaletteCurrent,PaletteAbort,
+        RasterPrerequisites,RasterMapping,RasterClip,CollectDevice,CollectInputs,CollectRanges,CollectProgram,CollectSlice,CollectHash,
+        CollectRebind,CollectChanged,CollectRaster,CollectLifetime,GpuAdmission,GpuAbort,GpuRetired,GpuReentry,NestedGun,GunAbort };
+    // QuerySeen includes unrelated child queries; QueryRootSeen requires the
+    // existing typed queue borrow and matching selected model instance.
+    enum Callback : uint32_t { QuerySeen=1,PaletteSeen=2,RasterSeen=4,GeometrySeen=8,FinishSeen=16,QueryRootSeen=32 };
+    Stage stage=Stage::Empty,precedingStage=Stage::Empty;
+    Rejection rejection=Rejection::None;
+    uint32_t callbacks=0,rejectionChecks=0,rejectionState=0;
+    static constexpr uint32_t checks(std::initializer_list<bool> values) noexcept {
+        uint32_t result=0,bit=1;for(bool value:values){if(value)result|=bit;bit<<=1;}return result;
+    }
     IdleDrawIdentity binding{};
     IdleConfigIdentity config{};
     std::array<IdleAnimationValue,MaxContributors> animations{};
@@ -71,11 +86,19 @@ struct IdleWeaponTrace {
     bool admitted=false,placementObserved=false,poseCopied=false;
     unsigned contributors=0,animationsCopied=0,matrixCount=0;
 
-    void reject() noexcept {stage=Stage::Rejected;} // Scalar abnormal retirement.
+    void noteRejection(Rejection reason,uint32_t passedChecks=0) noexcept {
+        if(rejection==Rejection::None) {
+            rejection=reason;precedingStage=stage;rejectionChecks=passedChecks;
+            rejectionState=checks({admitted,placementObserved,referencesCopied,poseCopied,rawGripValid,animationsCopied==contributors});
+        }
+    }
+    void reject(Rejection reason=Rejection::Unspecified,uint32_t passedChecks=0) noexcept {
+        noteRejection(reason,passedChecks);stage=Stage::Rejected;
+    }
     bool admit(const IdleDrawIdentity &identity) noexcept {
         if(admitted || stage!=Stage::Empty || !identity.request || !identity.input || !identity.owner ||
            !identity.weapon || !identity.model || !identity.generation || identity.hand>=2 || identity.eye>=2) {
-            reject();return false;
+            reject(Rejection::Admit);return false;
         }
         binding=identity;admitted=true;return true;
     }
@@ -83,53 +106,54 @@ struct IdleWeaponTrace {
                    const Matrix34 &physicalController) noexcept {
         if(!admitted || stage!=Stage::Empty || binding!=identity || placementObserved ||
            !finiteMatrix(native) || !finiteMatrix(tracked) || !finiteMatrix(physicalController)) {
-            reject();return false;
+            reject(Rejection::Placement);return false;
         }
         nativePlacement=native;trackedPlacement=tracked;controller=physicalController;
         placementObserved=true;return true;
     }
     bool references(const IdleDrawIdentity &identity,const Matrix34 &grip,bool gripAvailable,const Matrix34 &aim) noexcept {
         if(!admitted || binding!=identity || stage!=Stage::Empty || !placementObserved || referencesCopied ||
-           !finiteMatrix(aim) || (gripAvailable && !finiteMatrix(grip))) {reject();return false;}
+           !finiteMatrix(aim) || (gripAvailable && !finiteMatrix(grip))) {reject(Rejection::References);return false;}
         rawAim=aim;rawGripValid=gripAvailable;if(gripAvailable)rawGrip=grip;
         referencesCopied=true;return true;
     }
     bool event(const IdleDrawIdentity &identity,const IdleConfigIdentity &resource,
                bool callerQueueCurrent,int count) noexcept {
         if(!admitted || binding!=identity || stage!=Stage::Empty || !callerQueueCurrent || count<=0 || unsigned(count)>MaxContributors) {
-            reject();return false;
+            reject(Rejection::Event,checks({admitted,binding==identity,stage==Stage::Empty,callerQueueCurrent,count>0,count>0 && unsigned(count)<=MaxContributors}));return false;
         }
         config=resource;contributors=unsigned(count);stage=Stage::Event;return true;
     }
     bool palette(const IdleDrawIdentity &identity,const IdleConfigIdentity &resource,
                  bool evaluatedCurrent,int count) noexcept {
         if(stage!=Stage::Event || animationsCopied!=contributors || binding!=identity || config!=resource || !evaluatedCurrent ||
-           count<=0 || unsigned(count)>MaxMatrices) {reject();return false;}
+           count<=0 || unsigned(count)>MaxMatrices) {reject(Rejection::Palette,checks({stage==Stage::Event,animationsCopied==contributors,binding==identity,config==resource,evaluatedCurrent,count>0,count>0 && unsigned(count)<=MaxMatrices}));return false;}
         matrixCount=unsigned(count);stage=Stage::Palette;return true;
     }
     bool animation(unsigned index,const IdleAnimationValue &value) noexcept {
-        if(stage!=Stage::Event || index!=animationsCopied || index>=contributors) {reject();return false;}
+        if(stage!=Stage::Event || index!=animationsCopied || index>=contributors) {reject(Rejection::Animation);return false;}
         animations[index]=value;++animationsCopied;return true;
     }
     bool pose(const Matrix34 &transform,Vec3 scale,std::span<const Matrix34> source) noexcept {
         if(stage!=Stage::Palette || source.size()!=matrixCount || !finiteMatrix(transform) ||
-           !std::isfinite(scale.x) || !std::isfinite(scale.y) || !std::isfinite(scale.z)) {reject();return false;}
-        for(const auto &m:source)if(!finiteMatrix(m)) {reject();return false;}
+           !std::isfinite(scale.x) || !std::isfinite(scale.y) || !std::isfinite(scale.z)) {reject(Rejection::Pose,checks({stage==Stage::Palette,source.size()==matrixCount,finiteMatrix(transform),std::isfinite(scale.x),std::isfinite(scale.y),std::isfinite(scale.z)}));return false;}
+        for(const auto &m:source)if(!finiteMatrix(m)) {reject(Rejection::PoseMatrix);return false;}
         world=transform;stretch=scale;std::copy(source.begin(),source.end(),matrices.begin());poseCopied=true;return true;
     }
     bool draw(const IdleGeometryCopy &copy,bool originalCompleted,bool current) noexcept {
         if(stage!=Stage::Palette || !poseCopied || copy.raster.binding!=binding || copy.raster.rootConfig!=config ||
            !copy.raster.clipValid || !originalCompleted || !current || draws>=MaxDraws || copy.words<2 || copy.words>IdleGeometryCopy::MaxProgramWords ||
            !copy.declarationCount || copy.declarationCount>65 || !copy.constantCount || copy.constantCount>IdleGeometryCopy::MaxConstants || !finiteMatrix(copy.raster.affine)) {
-            reject();return false;
+            reject(Rejection::Draw,checks({stage==Stage::Palette,poseCopied,copy.raster.binding==binding,copy.raster.rootConfig==config,copy.raster.clipValid,originalCompleted,current,draws<MaxDraws,copy.words>=2,copy.words<=IdleGeometryCopy::MaxProgramWords,copy.declarationCount>0,copy.declarationCount<=65,copy.constantCount>0,copy.constantCount<=IdleGeometryCopy::MaxConstants,finiteMatrix(copy.raster.affine)}));return false;
         }
-        for(unsigned i=0;i<draws;++i)if(geometry[i].raster.drawRecord==copy.raster.drawRecord) {reject();return false;}
+        for(unsigned i=0;i<draws;++i)if(geometry[i].raster.drawRecord==copy.raster.drawRecord) {reject(Rejection::DrawDuplicate);return false;}
         for(unsigned i=0;i<copy.constantCount;++i)for(float value:copy.constants[i])
-            if(!std::isfinite(value)) {reject();return false;}
+            if(!std::isfinite(value)) {reject(Rejection::DrawConstants);return false;}
         geometry[draws++]=copy;return true;
     }
     bool finish(bool nativeCompleted,bool generationCurrent) noexcept {
-        if(stage!=Stage::Palette || !poseCopied || !placementObserved || !referencesCopied || !nativeCompleted || !generationCurrent) {reject();return false;}
+        callbacks|=FinishSeen;
+        if(stage!=Stage::Palette || !poseCopied || !placementObserved || !referencesCopied || !nativeCompleted || !generationCurrent) {reject(Rejection::Finish,checks({stage==Stage::Palette,poseCopied,placementObserved,referencesCopied,nativeCompleted,generationCurrent}));return false;}
         stage=Stage::Complete;return true;
     }
 };

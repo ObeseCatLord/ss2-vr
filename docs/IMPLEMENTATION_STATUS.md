@@ -1,5 +1,29 @@
 # Implementation status — 2026-10-08
 
+## Latest gameplay and diagnostic build
+
+The eager private runtime setup reached actual Jungle gameplay in the subsequent
+neutral capture. Scene identity, 106 complete projection pairs and two distinct
+world-eye images were recorded; native loading continuation and isolation shutdown
+were observed. Owned cleanup and protected original files passed. This fixed-pose
+simulation does not certify head motion, hardware, firing, vehicles or multiplayer.
+
+Geometry remained rejected in all 32 trace records. First-failure instrumentation
+is now implemented and Astra-reviewed, preserving all native borrows/calls/gates.
+The associated compiled TLS check follows entry/capture origins and all exits;
+negative controls cover the previously unsupported compiler shape. All four
+products rebuilt; 65 Debug/65 Release groups and28 normal/optimized native/compiled
+gates pass. No capture has yet run this newer diagnostic build.
+Current source fingerprint `bf13df0ebf1c35cd0a1d25b10cf35479882d53518f3221fe9a0749be074b0093`, IPC10/wire7 unchanged. Product hashes: game
+`7446f348fefac0e9aa65f37e570ccc0f6ce851e3972f6837d11b2942bbb7ef35`, server
+`fa2bd5cd4962211f8bf0d865fed4ecca2c3a68ae56f79102e24f0b4e640172e2`, host
+`952700de14722ee6510961bbedb06f8e8a34b2a8262c201b0048f0eb77535ecb`, loader
+`bb011caa82528c541a73967ce6408f82198ff4fd0358b38b54884719d863bd1d`.
+Actual consumed geometry/grasp, evidenced driver steering and remaining physical/
+device/network acceptance stay open; no native release or alignment is inferred.
+Earlier entries below retain their original identities and evidence limits.
+
+
 ## Latest continuation — repeated neutral capture authority
 
 The user explicitly permits necessary private neutral SS2 captures for the

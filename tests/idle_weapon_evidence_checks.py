@@ -13,6 +13,18 @@ STRETCH='Lab idle stretch request=100 eye=1 hand=0 values=-1,1,1'
 VALID='\n'.join([DRAW,ANIM,*MATRICES,STRETCH])
 
 class Checks(unittest.TestCase):
+    def test_first_rejection_diagnostics_never_promote_geometry_and_require_one_matching_record(self):
+        rejected=DRAW.replace('stage=4','stage=3')
+        reason='Lab idle rejection request=100 eye=1 hand=0 reason=28 preceding=2 checks=1 state=7 callbacks=31'
+        r=assess(rejected+'\n'+reason,SOURCE)
+        self.assertFalse(r['copied_event_pose_observations'])
+        self.assertEqual(r['rejected_or_missing_observations'][0]['rejection']['reason'],28)
+        for text in (reason,rejected+'\n'+reason+'\n'+reason,DRAW+'\n'+reason,
+                     rejected+'\n'+reason.replace('request=100','request=101'),
+                     rejected+'\n'+reason.replace('preceding=2','preceding=3'),
+                     rejected+'\n'+reason.replace('reason=28','reason=47'),
+                     rejected+'\n'+reason.replace('callbacks=31','callbacks=64')):
+            with self.subTest(text=text),self.assertRaises(ValueError):assess(text,SOURCE)
     def test_complete_copy_is_not_alignment(self):
         r=assess(VALID,SOURCE)
         self.assertEqual(len(r['copied_event_pose_observations']),1)

@@ -1,5 +1,54 @@
 # Event-time ID1 collection — source implemented
 
+## Current first-failure instrumentation and runtime evidence
+
+The latest private neutral capture reached native Jungle gameplay, with matched
+scene identity, 106 complete native/world/projection pairs and both world-eye
+images. The two eye camera positions and captured images differ at the same
+neutral head pose. This is static simulated stereo evidence; translated/rotated
+head, physical controls, firing, vehicle and multiplayer acceptance remain open.
+Isolation shutdown and exact owned cleanup passed; original protected files stayed
+unchanged. No desktop input or gameplay movement/firing was sent.
+
+The geometry collection correctly failed: all 32 observations were Rejected,
+with no accepted draws. Sixteen eye-1 records had no admitted event; twelve eye-0
+records had an admitted palette, including both hand identities; four eye-0/hand-0
+records had contributors without palette admission. These do not identify the
+first failing predicate. Screenshots cannot substitute for consumed geometry.
+
+The existing invocation-local trace now preserves first reason, preceding stage,
+passed-check mask, copied state flags and qualified callback flags. An optional
+`Lab idle rejection` companion belongs to exactly one matching rejected record;
+the reader never promotes it to successful geometry. Old rejected schema-3
+records remain readable. Original queue borrows, animation/render calls, native
+finally, COM retirement, 32-record budget and acceptance gates are retained.
+Recording a raster-prerequisite failure does not add early retirement policy.
+Aborted outer gun extents may still emit no record; diagnostics do not prove their
+native exception behavior or the trace's borrowed lifetime.
+
+`Rejection` numeric values are defined in `src/common/idle_weapon_trace.hpp`.
+Callback bits: query-family 1, palette 2, raster 4, geometry 8, finish 16,
+matching root query 32. Query-family includes unrelated children; root requires
+the existing typed borrow and matching model. State bits in order: admitted,
+placement copied, references copied, pose copied, raw grip valid, contributor
+copies equal count. Equality at zero is not event admission. Passed-check bits
+follow the copied predicate list at the reason's source site; unset predicates
+remain failures, not guessed native state.
+
+Astra/xhigh approved instrumentation and the bounded compiled-verifier correction.
+The TLS verifier now follows entry native TLS through immutable saved captures to
+both cleanup exits, rather than requiring one particular byte-load count. It
+rejects unknown instructions/edges, overlapping writes, narrowed pointers and
+wrong origin/destination. The typed trace's disjointness is a reviewed source
+assumption, not compiled lifetime proof. Public counterexamples cover shared and
+duplicated loads, wrong captures, constants/clobbers/current TLS, bypasses,
+overlap, width and indexed-address changes. Eight private compiled controls reject
+in normal/optimized Python while production object bytes stay unchanged.
+All products rebuilt, 65 Debug/65 Release groups and 28 normal/optimized
+compiled/native gates pass. This validates the next diagnostic build, not a
+successful geometry association or finished grasp/physical-release feature.
+
+
 This is a connected, default-off diagnostic collector, not accepted grasp
 alignment. At the original source checkpoint no runtime run occurred. A later
 user-approved private-display neutral attempt crashed before scene load and

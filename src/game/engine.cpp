@@ -4017,13 +4017,16 @@ bool currentIdleDraw(ScopeDrawBinding &out,IdleDrawIdentity &identity,IdleWeapon
 bool currentIdleRaster(IdleRasterCopy &out,IdleWeaponTrace *&trace) {
     out={};trace=nullptr;ScopeDrawBinding binding;IdleDrawIdentity identity;
     if(!currentIdleDraw(binding,identity,trace))return false;
-    if(trace->stage!=IdleWeaponTrace::Stage::Palette || !trace->poseCopied)return false;
+    trace->callbacks|=IdleWeaponTrace::RasterSeen;
+    if(trace->stage!=IdleWeaponTrace::Stage::Palette || !trace->poseCopied) {
+        trace->noteRejection(IdleWeaponTrace::Rejection::RasterPrerequisites,IdleWeaponTrace::checks({trace->stage==IdleWeaponTrace::Stage::Palette,trace->poseCopied}));return false;
+    }
     if(!remote_render::copyIdleRaster(binding.modelInstance,out) || out.rootConfig!=trace->config) {
-        trace->reject();return false;
+        trace->reject(IdleWeaponTrace::Rejection::RasterMapping);return false;
     }
     out.binding=identity;
     out.clipValid=executedUiProjectionValid && scopeCapClip(executedUiProjection,physicalWeapon->pass.world.view,out.affine,out.clip);
-    if(!out.clipValid){trace->reject();return false;}
+    if(!out.clipValid){trace->reject(IdleWeaponTrace::Rejection::RasterClip);return false;}
     return true;
 }
 static bool idleWeaponDiagnosticsEnabled() {
@@ -4037,6 +4040,9 @@ static void emitIdleWeaponTrace(const IdleWeaponTrace &trace) {
         unsigned(trace.rawGripValid),trace.draws,64,ss2vrBuildContract.sourceFingerprint.data(),ss2vrBuildContract.ipcAbi,ss2vrBuildContract.wireVersion,
         b.request,b.input,b.owner,b.weapon,b.model,b.generation,b.hand,b.eye,unsigned(trace.stage),
         trace.config.configuration,trace.config.file,trace.config.resource,trace.contributors,trace.matrixCount);
+    if(trace.rejection!=IdleWeaponTrace::Rejection::None)
+        log("Lab idle rejection request=%llu eye=%u hand=%u reason=%u preceding=%u checks=%u state=%u callbacks=%u",
+            b.request,b.eye,b.hand,unsigned(trace.rejection),unsigned(trace.precedingStage),trace.rejectionChecks,trace.rejectionState,trace.callbacks);
     if(trace.stage!=IdleWeaponTrace::Stage::Complete)return;
     for(unsigned i=0;i<trace.contributors;++i) {
         const auto &a=trace.animations[i];
@@ -4415,7 +4421,7 @@ static void renderTrackedWeapon(void *w, Matrix34 m, bool sniper, uintptr_t call
     const auto generation = graphicsResourceGeneration();
     auto *previous = physicalWeapon;
     if (previous) { previous->pass.failed = true; weaponPairFault = true;
-        if(previous->idle)previous->idle->reject(); }
+        if(previous->idle)previous->idle->reject(IdleWeaponTrace::Rejection::NestedGun); }
     physicalWeapon = nullptr;
     PhysicalWeaponInvocation invocation;
     std::optional<IdleWeaponTrace> idleStorage;
@@ -4467,7 +4473,7 @@ static void renderTrackedWeapon(void *w, Matrix34 m, bool sniper, uintptr_t call
         if (!aborted && physical && generation == graphicsResourceGeneration())
             finishPhysicalWeapon(invocation, generation);
         physicalWeapon = !aborted && generation == graphicsResourceGeneration() ? previous : nullptr;
-        if (aborted) {weaponPairFault = true;if(invocation.idle)invocation.idle->reject();}
+        if (aborted) {weaponPairFault = true;if(invocation.idle)invocation.idle->reject(IdleWeaponTrace::Rejection::GunAbort);}
     });
 }
 static void __fastcall weaponRender(void *w, void *, Matrix34 m) {

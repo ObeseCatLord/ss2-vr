@@ -94,6 +94,16 @@ def assess(text,expected_source):
             records.append(current)
             if len(records)>32:raise ValueError('Idle collection budget exceeded')
             continue
+        if kind=='rejection':
+            if current is None or current['stage']!=3 or 'rejection' in current or set(f)!={'request','eye','hand','reason','preceding','checks','state','callbacks'}:
+                raise ValueError('Rejection without one rejected native-copy record')
+            if any(integer(f[k])!=current[k] for k in ('request','eye','hand')):
+                raise ValueError('Interleaved/foreign rejection evidence')
+            reason=integer(f['reason'],1,46);preceding=integer(f['preceding'],0,4)
+            if preceding==3:raise ValueError('First rejection cannot follow an earlier rejected stage')
+            current['rejection']={'reason':reason,'preceding':preceding,'checks':integer(f['checks'],0,32767),
+                                  'state':integer(f['state'],0,63),'callbacks':integer(f['callbacks'],0,63)}
+            continue
         if current is None or current['stage']!=4:raise ValueError('Data without complete native-copy record')
         if any(integer(f[k])!=current[k] for k in ('request','eye','hand')):
             raise ValueError('Interleaved/foreign idle data')

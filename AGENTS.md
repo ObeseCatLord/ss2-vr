@@ -170,3 +170,13 @@ foreground and retired normally; same Monado XID remained viewable. Sequential
 observations do not prove sustained focus, pure map-order cause, frames or SS2
 repair. Fresh neutral capture under active repeated authority is prepared, final
 handoff review pending. No native loading/input gate or production product changed.
+
+## Current diagnostic products and next observation
+Private eager Monado now reached actual native Jungle gameplay with106complete
+projectionpairs/two world-eye images at a fixed neutral head. Geometry failed32
+Rejected records; do not mislabel stage3 as Palette or claim accepted grasp.
+First-failure instrumentation plus bounded entry/capture TLS verifier is reviewed
+and rebuilt on `bf13df0ebf1c35cd0a1d25b10cf35479882d53518f3221fe9a0749be074b0093`. All65Debug/65Release and28normal/-O
+gates pass;8compiled negative controls reject. A fresh neutral capture of this
+new diagnostic build is next; no native gate relaxation, reuse of another eye's
+cache, Low priming or guessed alignment. Current capture has not run newer build.

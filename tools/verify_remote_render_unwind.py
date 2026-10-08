@@ -105,11 +105,10 @@ def verify(obj):
         instructions = code(body)
         restores = [i for i in instructions if re.fullmatch(
             r'mov BYTE PTR \[[a-z]{3}\+' + hex(offset(state)) + r'\],[abcd]l', i)]
-        saved = [re.fullmatch(r'movzx e([abcd])x,BYTE PTR \[[a-z]{3}\]', i) for i in instructions]
-        saved = [match for match in saved if match]
-        require(len(saved) == 1 and len(restores) == 2 and
-                all(i.endswith(',' + saved[0][1] + 'l') for i in restores),
+        require(len(restores) == 2,
                 'Both normal and abnormal paths must restore saved outer TLS: ' + name)
+        from verify_saved_tls import verify_saved_tls
+        verify_saved_tls(one('ss2vr::game::remote_render::',name),body,offset(state))
     idle_entry=one('ss2vr::game::remote_render::','copyIdleRaster(void*, ss2vr::IdleRasterCopy&)')
     require(idle_entry.count('DISP32\tss2vrNativeFinally')==1,'Idle raster scratch lacks local containment')
     require(sum(i.startswith('call ') for i in code(idle_entry))==9,'Idle entry lost actual finally/deletion calls')

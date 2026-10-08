@@ -125,7 +125,7 @@ static bool unlock() noexcept {
 }
 static void cleanup(bool aborted) noexcept {
     const bool retired = probe.generation != graphicsResourceGeneration();
-    if (aborted && probe.idleTrace) probe.idleTrace->reject();
+    if (aborted && probe.idleTrace) probe.idleTrace->reject(IdleWeaponTrace::Rejection::GpuAbort);
     if (aborted) { retireScopeGeometry(); if (!retired) scopeGpuFault(); }
     if (probe.imageChanged) restoreImageState(probe.device);
     if (probe.lock.phase == ScopeLockPhase::Acquired) unlock();
@@ -147,7 +147,7 @@ static void cleanup(bool aborted) noexcept {
     if (probe.transaction) {
         // Current performs identity comparisons only, never dereferences device.
         const bool afterRelease=scopeGpuTransactionCurrent(device);
-        if(probe.idleTrace && (retired || !current || !afterRelease))probe.idleTrace->reject();
+        if(probe.idleTrace && (retired || !current || !afterRelease))probe.idleTrace->reject(IdleWeaponTrace::Rejection::GpuRetired,IdleWeaponTrace::checks({!retired,current,afterRelease}));
         if (!retired && probe.split && (!current || !afterRelease)) scopeGpuFault();
         scopeGpuTransactionEnd();
     }
@@ -345,19 +345,22 @@ static bool sameInputs(const BoundInputs &a,const BoundInputs &b) {
         !std::memcmp(a.constants.data(),b.constants.data(),a.constantCount*4*sizeof(float));
 }
 static bool collectIdleGeometry(IDirect3DDevice9 *d,const ScopeIndexedDraw &draw) {
-    if(!nativeUiDeviceCurrent(d))return false;
+    auto reject=[](IdleWeaponTrace::Rejection reason) {if(probe.idleTrace)probe.idleTrace->reject(reason);return false;};
+    if(probe.idleTrace)probe.idleTrace->callbacks|=IdleWeaponTrace::GeometrySeen;
+    if(!nativeUiDeviceCurrent(d))return reject(IdleWeaponTrace::Rejection::CollectDevice);
     ScopeCopyRanges ranges;
-    if(!boundInputs(d,probe.bindings[0],draw,true) ||
-       !idleBufferRanges(probe.bindings[0].values,std::span(probe.bindings[0].elements).first(probe.bindings[0].count),ranges) ||
-       !boundProgram(true))return false;
+    if(!boundInputs(d,probe.bindings[0],draw,true))return reject(IdleWeaponTrace::Rejection::CollectInputs);
+    if(!idleBufferRanges(probe.bindings[0].values,std::span(probe.bindings[0].elements).first(probe.bindings[0].count),ranges))return reject(IdleWeaponTrace::Rejection::CollectRanges);
+    if(!boundProgram(true))return reject(IdleWeaponTrace::Rejection::CollectProgram);
     const std::array<std::span<uint8_t>,5> storage{probe.positions,probe.indices,probe.weights,probe.localIndices,probe.uv};
     for(unsigned i=0;i<5;++i)
-        if(ranges.slices[i].size>storage[i].size() || !copySlice(i==1,ranges.slices[i],storage[i].first(ranges.slices[i].size)))return false;
-    if(!hashIdleSlices(ranges) || !boundInputs(d,probe.bindings[1],draw,true) ||
-       !sameInputs(probe.bindings[0],probe.bindings[1]))return false;
+        if(ranges.slices[i].size>storage[i].size() || !copySlice(i==1,ranges.slices[i],storage[i].first(ranges.slices[i].size)))return reject(IdleWeaponTrace::Rejection::CollectSlice);
+    if(!hashIdleSlices(ranges))return reject(IdleWeaponTrace::Rejection::CollectHash);
+    if(!boundInputs(d,probe.bindings[1],draw,true))return reject(IdleWeaponTrace::Rejection::CollectRebind);
+    if(!sameInputs(probe.bindings[0],probe.bindings[1]))return reject(IdleWeaponTrace::Rejection::CollectChanged);
     IdleRasterCopy now;IdleWeaponTrace *trace=nullptr;
-    if(!currentIdleRaster(now,trace) || trace!=probe.idleTrace || now!=probe.idle.raster ||
-       !nativeUiDeviceCurrent(d) || probe.generation!=graphicsResourceGeneration() || !scopeGpuTransactionCurrent(d))return false;
+    if(!currentIdleRaster(now,trace) || trace!=probe.idleTrace || now!=probe.idle.raster)return reject(IdleWeaponTrace::Rejection::CollectRaster);
+    if(!nativeUiDeviceCurrent(d) || probe.generation!=graphicsResourceGeneration() || !scopeGpuTransactionCurrent(d))return reject(IdleWeaponTrace::Rejection::CollectLifetime);
     probe.idle.inputs=probe.bindings[0].values;
     probe.idle.words=unsigned(probe.programWords);
     std::copy_n(probe.program.begin(),probe.programWords,probe.idle.program.begin());
@@ -458,7 +461,7 @@ static HRESULT probeScopeDraw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base
                      UINT start,UINT primitives,uintptr_t caller,ScopeIndexedForward forward) noexcept {
     if (!scopeGpuForwardingAllowed()) return D3DERR_INVALIDCALL;
     const auto gfx=reinterpret_cast<uintptr_t>(GetModuleHandleW(L"GfxD3D.dll"));
-    if(probe.busy && probe.idleTrace)probe.idleTrace->reject();
+    if(probe.busy && probe.idleTrace)probe.idleTrace->reject(IdleWeaponTrace::Rejection::GpuReentry);
     if (probe.busy || !gfx || caller != gfx+0xa011) return forward(d,type,base,minimum,vertices,start,primitives);
     // All owning state exists above NativeFinally; no stack-native pointer is
     // kept through any COM call, and no allocation/native callback occurs locked.
@@ -537,7 +540,7 @@ static HRESULT probeScopeDraw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base
             probe.transaction=scopeGpuTransactionBegin(d);
             idleAdmitted=probe.transaction && collectIdleGeometry(d,{uint32_t(type),base,minimum,vertices,start,primitives});
         }
-        if(probe.idleTrace && !idleAdmitted)probe.idleTrace->reject();
+        if(probe.idleTrace && !idleAdmitted)probe.idleTrace->reject(IdleWeaponTrace::Rejection::GpuAdmission,IdleWeaponTrace::checks({idleCandidate,probe.transaction!=0}));
         if (!scopeGpuForwardingAllowed()) return;
         if (!probe.split) result=forward(d,type,base,minimum,vertices,start,primitives);
         if(probe.idleTrace && idleAdmitted) {
