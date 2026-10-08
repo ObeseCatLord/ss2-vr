@@ -5,9 +5,22 @@ from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 from assess_runtime import (complete_pairs_for_pose,first_person_depth_probe,dual_topologies,
     DualPhaseEvidence,require_dual_capture,dual_weapon_events,successful_dual_fire)
-from runtime_lab import native_grip_resource_receipts
+from runtime_lab import native_grip_resource_receipts,validate_idle_probe
 
 HEAD={'p':[0,0,0],'q':[0,0,0,1]}
+
+class IdleProbeSelectionChecks(unittest.TestCase):
+    def test_stationary_pinned_collection_and_mode_separation(self):
+        cfg={'idle_weapon_probe':True,'expected_product_source':'a'*64,
+             'baseline_head':[0,1.6,0,0,0,0],
+             'pose_steps':[{'name':'baseline','head':[0,1.6,0,0,0,0]}]}
+        validate_idle_probe(cfg)
+        for key,value in [('idle_weapon_probe',1),('renderer_mode','stock'),('expected_product_source','a'),
+                          ('native_dual_probe','zap-initial-inventory'),('background_controls_probe','joystick-native-movement'),
+                          ('native_input_probe','read-only-three-samples'),('grip_resource_probe',True),
+                          ('pose_steps',cfg['pose_steps']+[{'name':'turned','head':[0,1.6,0,1,0,0]}])]:
+            with self.subTest(key=key),self.assertRaises(ValueError):validate_idle_probe({**cfg,key:value})
+        validate_idle_probe({})
 
 class ResourceReceiptChecks(unittest.TestCase):
     @staticmethod

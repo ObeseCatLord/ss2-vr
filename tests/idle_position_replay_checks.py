@@ -1,0 +1,146 @@
+import hashlib
+import json
+from pathlib import Path
+import struct
+import subprocess
+import sys
+import tempfile
+import unittest
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
+from replay_idle_geometry import replay
+from assess_idle_weapon import assess
+from measure_idle_reference import measure
+
+EVALUATOR=Path(sys.argv.pop(1)).resolve()
+IDENTITY=[1.,0.,0.,0.,0.,1.,0.,0.,0.,0.,1.,0.,0.,0.,0.,1.]
+PROGRAM=[0xfffe0101,31,0x80000005,0x900f0000,20,0xc00f0000,0x90e40000,0xa0e40000,0xffff]
+
+def fixture(program=PROGRAM,constants=None,points=None,clip=IDENTITY,weights=1):
+    constants=constants or [IDENTITY[i:i+4] for i in range(0,16,4)]
+    points=points or [(1.,2.,3.,.25,.75)]
+    data=b'SS2VIRP1'+struct.pack('<5I',1,len(program),len(constants),len(points),weights)
+    data+=struct.pack('<16f',*clip)+struct.pack('<'+str(len(program))+'I',*program)
+    data+=struct.pack('<'+str(len(constants)*4)+'f',*[v for row in constants for v in row])
+    return data+b''.join(struct.pack('<5f',*p)+bytes([255,0,0,0,0,0,0,0]) for p in points)
+
+class Checks(unittest.TestCase):
+    def run_fixture(self,data):
+        with tempfile.TemporaryDirectory() as tmp:
+            p=Path(tmp)/'input.bin';p.write_bytes(data)
+            return subprocess.run([str(EVALUATOR),str(p)],capture_output=True,text=True,timeout=5)
+    def test_known_position_and_scope_independence(self):
+        r=self.run_fixture(fixture())
+        self.assertEqual(r.returncode,0,r.stderr)
+        result=json.loads(r.stdout);self.assertTrue(result['position_replay_agrees_with_reference'])
+        self.assertFalse(result['gpu_execution']);self.assertFalse(result['alignment_accepted'])
+        changed=IDENTITY.copy();changed[3]=.01
+        result=json.loads(self.run_fixture(fixture(clip=changed)).stdout)
+        self.assertEqual(result['reason'],'projection-mismatch')
+    def test_unknown_dependency_and_local_defs(self):
+        unknown=[0xfffe0101,31,0x80010005,0x900f0001,31,0x80000005,0x900f0000,
+                 20,0xc00f0000,0x90e40001,0xa0e40000,0xffff]
+        self.assertEqual(json.loads(self.run_fixture(fixture(program=unknown)).stdout)['reason'],'unknown-position-dependency')
+        defined=PROGRAM[:-1]+[81,0xa00f0000,0,0,0,0,0xffff]
+        self.assertEqual(json.loads(self.run_fixture(fixture(program=defined)).stdout)['reason'],'projection-mismatch')
+    def test_malformed_and_influence(self):
+        original=fixture()
+        for bad in [original[:-1],original+b'x',b'x'+original[1:],
+                    original[:8]+struct.pack('<I',2)+original[12:],
+                    original[:12]+struct.pack('<I',513)+original[16:]]:
+            self.assertNotEqual(self.run_fixture(bad).returncode,0)
+        unsupported=bytearray(original);unsupported[-8]=127
+        self.assertEqual(json.loads(self.run_fixture(unsupported).stdout)['reason'],'unsupported-influence')
+        for end in range(1,len(PROGRAM)):
+            r=self.run_fixture(fixture(program=PROGRAM[:end]))
+            if r.returncode==0:self.assertFalse(json.loads(r.stdout)['position_replay_agrees_with_reference'])
+        incomplete=[0xfffe0101,31,0x80000005,0x900f0000,1,0xc0010000,0x90000000,0xffff]
+        self.assertEqual(json.loads(self.run_fixture(fixture(program=incomplete)).stdout)['reason'],'unknown-position-dependency')
+        p=PROGRAM.copy();p[0]=0xfffe0200
+        self.assertEqual(json.loads(self.run_fixture(fixture(program=p)).stdout)['reason'],'unsupported-program')
+    def test_all_vertices_not_just_first(self):
+        points=[(0.,0.,0.,0.,0.),(1.,2.,3.,.25,.75)]
+        result=json.loads(self.run_fixture(fixture(points=points)).stdout)
+        self.assertTrue(result['position_replay_agrees_with_reference']);self.assertEqual(result['vertex'],2)
+        collapsed=[[0.,0.,0.,0.],[0.,0.,0.,0.],[0.,0.,0.,0.],[0.,0.,0.,1.]]
+        result=json.loads(self.run_fixture(fixture(points=points,constants=collapsed)).stdout)
+        self.assertFalse(result['position_replay_agrees_with_reference']);self.assertEqual(result['vertex'],1)
+    def test_full_private_log_channel_roundtrip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);asset=b'owned-synthetic-test-candidate';(root/'test.mesh').write_bytes(asset)
+            channels={'positions':struct.pack('<9f',0.,0.,0.,1.,0.,0.,0.,1.,0.),
+                      'indices':struct.pack('<3H',0,1,2),'weights':bytes([255,0,0,0])*3,
+                      'local_indices':bytes(12),'uv':struct.pack('<6f',0.,0.,1.,0.,0.,1.)}
+            ranges={'positions':(0,36,133),'indices':(0,6,135),'weights':(36,12,128),
+                    'local_indices':(48,12,128),'uv':(60,24,132)}
+            files={}
+            for name,data in channels.items():files[name]=name+'.bin';(root/files[name]).write_bytes(data)
+            index={'test.mesh':{'asset_sha256':hashlib.sha256(asset).hexdigest(),'candidate_channels':[{
+                'mesh_object':1,'lod':0,'vertices':3,'triangles':1,'whole_vertex_buffer_bytes':84,'whole_index_buffer_bytes':6,
+                'single_body_influence':True,'channel_files':files,
+                'channel_ranges':{n:{'offset':v[0],'size':v[1],'format':v[2],'buffer':0} for n,v in ranges.items()},
+                'channel_sha256':{n:hashlib.sha256(v).hexdigest() for n,v in channels.items()}}]}}
+            source='a'*64
+            lines=[f'Lab idle draw schema=3 rawGripValid=1 draws=1 source={source} ipc=10 wire=7 request=1 input=1 owner=1 weapon=2 model=3 generation=4 hand=0 eye=0 stage=4 cfg=20 file=30 resource=5 contributors=1 matrices=1 historicalBytes=0 grasp=0',
+                   'Lab idle animation request=1 eye=0 hand=0 index=0 raw='+','.join(['00000000']*8)+' header='+','.join(['00000001']*4)]
+            for kind in ('world','nativePlacement','trackedPlacement','controller','canonical','rawAim','rawGrip'):
+                lines.append(f'Lab idle matrix request=1 eye=0 hand=0 kind={kind} index=0 values=1,0,0,0,0,1,0,0,0,0,1,0')
+            lines+=['Lab idle stretch request=1 eye=0 hand=0 values=1,1,1',
+                    'Lab idle geometry request=1 eye=0 hand=0 index=0 modelRecord=1 drawRecord=0 surface=40 instance=50 surfaceName=60 boneName=70 bone=0 cfg=20 file=30 resource=5 words=9 constants=4 declaration=5']
+            def row(kind,chunk,values):lines.append('Lab idle geometryData request=1 eye=0 hand=0 index=0 kind='+kind+' chunk='+str(chunk)+' values='+','.join(f'{x:08x}' for x in values))
+            affine=[0.,0.,1.,10.,0.,1.,0.,20.,-1.,0.,0.,30.]
+            clip=[0.,0.,2.,20.,0.,3.,0.,60.,-4.,0.,0.,120.,0.,0.,0.,1.]
+            row('affine',0,struct.unpack('<12I',struct.pack('<12f',*affine)))
+            row('clip',0,struct.unpack('<16I',struct.pack('<16f',*clip)))
+            row('layout',0,[3,1,0,133,0,0,135,0,36,128,0,48,128,0]);row('buffers',0,[84,0,1,100,0,6,0,1,101,0])
+            row('draw',0,[4,0,0,3,0,1]);row('streams',0,[1,0,12,1,1,48,4,1,1,36,4,1,1,60,8,1,2,0])
+            for i,name in enumerate(('positions','indices','weights','local_indices','uv')):
+                row('hash',i,struct.unpack('<8I',hashlib.sha256(channels[name]).digest()))
+            for i,e in enumerate([[0,0,2,0,5,0],[5,0,8,0,5,5],[6,0,8,0,5,6],[3,0,1,0,5,3],[255,0,17,0,0,0]]):row('declaration',i,e)
+            row('program',0,PROGRAM)
+            for i in range(4):row('constant',i,struct.unpack('<4I',struct.pack('<4f',*clip[i*4:i*4+4])))
+            evidence=assess('\n'.join(lines),source)
+            result=replay(evidence,index,root,EVALUATOR,root)
+            self.assertTrue(result['all_consumed_positions_agree_with_native_reference']);self.assertFalse(result['alignment_accepted'])
+            self.assertEqual(result['draws'][0]['render_geometry']['triangle_indices'],[0,1,2])
+            self.assertEqual(result['draws'][0]['render_geometry']['world_positions'],[[10.,20.,30.],[10.,20.,29.],[10.,21.,30.]])
+            annotation={'schema':1,'reference_kind':'indexed-surface-convention','semantic_status':'reviewed-convention',
+                'asset_sha256':index['test.mesh']['asset_sha256'],'mesh_object':1,'lod':0,'channel_index':0,
+                'channel_sha256':index['test.mesh']['candidate_channels'][0]['channel_sha256'],
+                'landmarks':{name:{'triangle':0,'ordered_vertex_indices':[0,1,2],'barycentric':w}
+                             for name,w in zip(('P','I','T'),([1,0,0],[0,1,0],[0,0,1]))}}
+            measured=measure(result,annotation);ref=measured['measured_references'][0]
+            self.assertEqual(ref['world_landmarks'],[[10.,20.,30.],[10.,20.,29.],[10.,21.,30.]])
+            self.assertEqual(ref['world_reference_frame'],[0.,0.,1.,10.,0.,1.,0.,20.,-1.,0.,0.,30.])
+            self.assertFalse(measured['positive_grasp_verified']);self.assertFalse(measured['alignment_accepted'])
+            import copy
+            reflected=copy.deepcopy(result)
+            reflected['draws'][0]['render_geometry']['affine']=[-1.,0.,0.,10.,0.,1.,0.,20.,0.,0.,1.,30.]
+            ref=measure(reflected,annotation)['measured_references'][0]
+            self.assertTrue(ref['captured_affine_reflected'])
+            self.assertEqual(ref['world_reference_frame'],[-1.,0.,0.,10.,0.,1.,0.,20.,0.,0.,-1.,30.])
+            for bad_grip in ([0]*11,[0]*3+[float('nan')]+[0]*8,[0]*7+[float('inf')]+[0]*4,
+                             [0]*3+[1e300]+[0]*8,[True]*12):
+                broken=copy.deepcopy(result);broken['draws'][0]['render_geometry']['raw_grip']=bad_grip
+                with self.assertRaises(ValueError):measure(broken,annotation)
+            for bad in ('index','barycentric','degenerate','hash'):
+                broken=copy.deepcopy(annotation)
+                if bad=='index':broken['landmarks']['P']['ordered_vertex_indices']=[2,1,0]
+                elif bad=='barycentric':broken['landmarks']['P']['barycentric']=[-1,1,1]
+                elif bad=='degenerate':broken['landmarks']['I']=broken['landmarks']['P']
+                else:broken['channel_sha256']['positions']='0'*64
+                with self.assertRaises(ValueError):measure(result,broken)
+            failed_log=lines+[lines[0].replace('request=1','request=2').replace('stage=4','stage=3')]
+            incomplete=replay(assess('\n'.join(failed_log),source),index,root,EVALUATOR,root)
+            self.assertFalse(incomplete['all_consumed_positions_agree_with_native_reference'])
+            self.assertFalse(incomplete['copied_geometry_coverage_complete'])
+            self.assertEqual(incomplete['observations_without_geometry'][0]['request'],2)
+            self.assertTrue(incomplete['draws'][0]['position_replay']['position_replay_agrees_with_reference'])
+            changed_log='\n'.join(lines).replace('kind=constant chunk=0 values=00000000,00000000,40000000,41a00000',
+                'kind=constant chunk=0 values=00000000,00000000,40000000,41a80000')
+            mismatch=replay(assess(changed_log,source),index,root,EVALUATOR,root)
+            self.assertFalse(mismatch['all_consumed_positions_agree_with_native_reference'])
+            self.assertNotIn('render_geometry',mismatch['draws'][0])
+            (root/'positions.bin').write_bytes(bytes(36))
+            with self.assertRaises(ValueError):replay(evidence,index,root,EVALUATOR,root)
+
+if __name__=='__main__':unittest.main()

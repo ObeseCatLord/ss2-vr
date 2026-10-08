@@ -2,17 +2,19 @@
 
 ## Full-project closure disposition
 
-The [ID1 collector](IDLE_EVENT_COLLECTOR.md) now connects event/palette/placement
-and consumed D3D9 geometry, exact five-channel matching, and retained actual
-shader/constants/declarations. Astra source GO covers bounded collection only.
-Private shader replay and measured grasp remain source work before a runnable
-user handoff. No game/debugger/headset/firing/vehicle probe or deployment occurred.
-Current source fingerprint `8d86d4912fbf263bc5ee62762ce1f301062cec6c1115c5123822333b226b3d07`;
-64 Debug + 64 Release groups, 28 normal/optimized compiled/native gates and five
-private compiled-byte rejection controls pass. No native exception/COM reentry ran.
-Current products: game `c2d6b8fdd1661e1970bd583605c5307d33180b4694b4b0a4cff306e6b659079c`,
-server `9195d006a904cac8453213604b4bad43a7eb575a97545998aeb572f4f663e5fd`,
-host `80ee612a9ae6b5cfad8cef2bceee22aed0fd3dfadbc6bfe16ad63a4b6425dae8`,
+The [ID1 collector](IDLE_EVENT_COLLECTOR.md) now includes bounded offline shader
+replay, exact channel/hash/index-bound surface reference measurement, uncalibrated
+world grip/aim capture, and a separate neutral user-operated lab mode. Source GO
+covers these boundaries, with backend routing unattested. No actual native capture
+was replayed and no physical-grasp/controller correction is accepted. A fresh exact
+private lab/configuration and final collection handoff review remain before user
+operation. No gameplay/debugger/headset/firing/vehicle run or deployment occurred.
+Current source fingerprint `425fe8a5ada7aac7fa8f02bc0d301f2fab43a0b2d14c79dbadb47e475b59177a`;
+65 Debug + 65 Release groups, 28 normal/optimized compiled/native gates and five
+private compiled-byte controls pass. No native exception/COM reentry was executed.
+Current products: game `156bfb4885ba748c648df1831d83a1c617ecc95b8d0b125f4cceab1ed839e65f`,
+server `953789fe903a3fdf94dd462361e5583a9d3fb57b67e478c3a6e3a26d3810ee93`,
+host `73c174b4737c2a18a60402dcbd59c069fd61be91c98d8c49b34121792a8216cd`,
 loader `bb011caa82528c541a73967ce6408f82198ff4fd0358b38b54884719d863bd1d`.
 Earlier source/package identities below are historical and immutable.
 

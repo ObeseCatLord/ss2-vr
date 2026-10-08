@@ -12,7 +12,7 @@ int main() {
     IdleAnimationValue borrowed{{1,2,3,4,5,6,7,0x1000},{55,0,10,0x3f800000}};
     std::array<Matrix34,1> nativePose{identity};
     IdleWeaponTrace trace;
-    assert(trace.admit(id));assert(trace.placement(id,identity,identity,identity));
+    assert(trace.admit(id));assert(trace.placement(id,identity,identity,identity));assert(trace.references(id,identity,true,identity));
     assert(trace.event(id,cfg,true,1));
     assert(trace.animation(0,borrowed));
     borrowed={}; // Hostile original End destroys/reuses its entry and value storage.
@@ -23,7 +23,7 @@ int main() {
     assert(trace.finish(true,true));
     assert(trace.matrices[0].m[0]==1 && trace.stretch.x==-1);
     const auto copiedEvent=[&](IdleWeaponTrace &t) {
-        assert(t.admit(id));assert(t.placement(id,identity,identity,identity));
+        assert(t.admit(id));assert(t.placement(id,identity,identity,identity));assert(t.references(id,identity,true,identity));
         assert(t.event(id,cfg,true,1));
         assert(t.animation(0,{}));
     };
@@ -64,7 +64,7 @@ int main() {
         if(failure==0)t.placementObserved=false;assert(!t.finish(failure!=1,failure!=2));
     }
     const auto ready=[&] {
-        IdleWeaponTrace t;assert(t.admit(id));assert(t.placement(id,identity,identity,identity));
+        IdleWeaponTrace t;assert(t.admit(id));assert(t.placement(id,identity,identity,identity));assert(t.references(id,identity,true,identity));
         assert(t.event(id,cfg,true,1));assert(t.animation(0,{}));assert(t.palette(id,cfg,true,1));
         assert(t.pose(identity,{1,1,1},{&identity,1}));return t;
     };
@@ -84,5 +84,13 @@ int main() {
     {auto changed=g.raster;changed.clip.m[0]=1;assert(!(changed==g.raster));}
     {auto changed=g.raster;changed.affine.m[3]=.1f;assert(!(changed==g.raster));}
     {auto t=ready();g.raster.clipValid=false;assert(!t.draw(g,true,true));}
+
+    {IdleWeaponTrace t;assert(t.admit(id));assert(t.placement(id,identity,identity,identity));
+     auto changed=id;changed.input++;assert(!t.references(changed,identity,true,identity));}
+    {IdleWeaponTrace t;assert(t.admit(id));assert(t.placement(id,identity,identity,identity));
+     Matrix34 bad=identity;bad.m[0]=std::numeric_limits<float>::quiet_NaN();
+     assert(t.references(id,bad,false,identity));assert(!t.rawGripValid && t.referencesCopied);}
+    {IdleWeaponTrace t;assert(t.admit(id));assert(t.placement(id,identity,identity,identity));
+     assert(t.references(id,identity,true,identity));assert(!t.references(id,identity,true,identity));}
 
 }

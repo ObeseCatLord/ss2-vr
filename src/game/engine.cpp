@@ -4032,8 +4032,8 @@ static bool idleWeaponDiagnosticsEnabled() {
 }
 static void emitIdleWeaponTrace(const IdleWeaponTrace &trace) {
     const auto &b=trace.binding;
-    log("Lab idle draw schema=2 draws=%u source=%.*s ipc=%u wire=%u request=%llu input=%llu owner=%u weapon=%u model=%u generation=%u hand=%u eye=%u stage=%u cfg=%u file=%u resource=%d contributors=%u matrices=%u historicalBytes=0 grasp=0",
-        trace.draws,64,ss2vrBuildContract.sourceFingerprint.data(),ss2vrBuildContract.ipcAbi,ss2vrBuildContract.wireVersion,
+    log("Lab idle draw schema=3 rawGripValid=%u draws=%u source=%.*s ipc=%u wire=%u request=%llu input=%llu owner=%u weapon=%u model=%u generation=%u hand=%u eye=%u stage=%u cfg=%u file=%u resource=%d contributors=%u matrices=%u historicalBytes=0 grasp=0",
+        unsigned(trace.rawGripValid),trace.draws,64,ss2vrBuildContract.sourceFingerprint.data(),ss2vrBuildContract.ipcAbi,ss2vrBuildContract.wireVersion,
         b.request,b.input,b.owner,b.weapon,b.model,b.generation,b.hand,b.eye,unsigned(trace.stage),
         trace.config.configuration,trace.config.file,trace.config.resource,trace.contributors,trace.matrixCount);
     if(trace.stage!=IdleWeaponTrace::Stage::Complete)return;
@@ -4053,6 +4053,8 @@ static void emitIdleWeaponTrace(const IdleWeaponTrace &trace) {
     emitMatrix("nativePlacement",0,trace.nativePlacement);
     emitMatrix("trackedPlacement",0,trace.trackedPlacement);
     emitMatrix("controller",0,trace.controller);
+    emitMatrix("rawAim",0,trace.rawAim);
+    if(trace.rawGripValid)emitMatrix("rawGrip",0,trace.rawGrip);
     for(unsigned i=0;i<trace.matrixCount;++i)emitMatrix("canonical",i,trace.matrices[i]);
     log("Lab idle stretch request=%llu eye=%u hand=%u values=%.9g,%.9g,%.9g",b.request,b.eye,b.hand,
         trace.stretch.x,trace.stretch.y,trace.stretch.z);
@@ -4393,8 +4395,13 @@ static int __fastcall weaponAbs(void *w, void *, const Matrix34 &view, Matrix34 
                           GetTickCount64(), calibrated ? rotate(relative.q, flatCharge) : Vec3{}};
         if(physical && physicalWeapon->idle) {
             auto &trace=*physicalWeapon->idle;
-            trace.placement({eyeRequest.sequence,eyeRequest.input.sequence,s.playerHandle,s.handle[h],
-                primaryField(w,0x24),s.generation,unsigned(h),unsigned(eyeIndex)},out,staged,matrix(hand));
+            const IdleDrawIdentity identity{eyeRequest.sequence,eyeRequest.input.sequence,s.playerHandle,s.handle[h],
+                primaryField(w,0x24),s.generation,unsigned(h),unsigned(eyeIndex)};
+            trace.placement(identity,out,staged,matrix(hand));
+            const bool gripValid=tracking.gripValid[h] && finite(tracking.grip[h]);
+            const auto rawGrip=gripValid?matrix(worldHandTracking(body,s.origin,s.turn,tracking.head,tracking.grip[h])):Matrix34{};
+            const auto rawAim=matrix(worldHandTracking(body,s.origin,s.turn,tracking.head,tracking.hand[h]));
+            trace.references(identity,rawGrip,gripValid,rawAim);
         }
         out = staged;
     }

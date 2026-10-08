@@ -52,9 +52,10 @@ inline unsigned sources(unsigned opcode) {
     }
 }
 } // namespace scope_program
-// UV-interface proof only. It establishes neither native position/skinning/
-// alpha identity nor material/purpose/image validity. Unknown encodings decline.
-inline bool scopeUvProgram(std::span<const uint32_t> words) {
+// Bounded framing shared with the scope UV proof. The true mode additionally
+// requires its exact UV interface; neither mode proves native position, skinning,
+// alpha, material or image validity. Unknown encodings decline.
+inline bool boundedVertexProgram(std::span<const uint32_t> words,bool requireScopeUv) {
     using namespace scope_program;
     if (words.size()<2 || words.size()>ScopeProgramMaxWords || words.front()!=0xfffe0101u) return false;
     std::array<bool,16> declared{};
@@ -63,7 +64,7 @@ inline bool scopeUvProgram(std::span<const uint32_t> words) {
     size_t cursor=1;
     while(cursor<words.size()) {
         const uint32_t instruction=words[cursor++];
-        if (instruction==0xffffu) return cursor==words.size() && declared[3] && x && y;
+        if (instruction==0xffffu) return cursor==words.size() && (requireScopeUv?(declared[3] && x && y):declared[0]);
         if ((instruction&0xffffu)==0xfffeu) {
             if (instruction&0x80000000u) return false;
             const size_t count=(instruction>>16)&0x7fff;
@@ -87,7 +88,7 @@ inline bool scopeUvProgram(std::span<const uint32_t> words) {
             if (words.size()-cursor<5) return false;
             Register reg;
             if (!destination(words[cursor++],reg) || reg.type!=2 || reg.index>=definitions.size() ||
-                reg.channels!=15 || reg.index==8 || reg.index==9 || definitions[reg.index]) return false;
+                reg.channels!=15 || (requireScopeUv && (reg.index==8 || reg.index==9)) || definitions[reg.index]) return false;
             definitions[reg.index]=true;
             cursor+=4; // Literal float bits are opaque, not register/instruction tokens.
             continue;
@@ -119,7 +120,7 @@ inline bool scopeUvProgram(std::span<const uint32_t> words) {
         }
         if ((opcode==16 || opcode==17) &&
             (inputs[0].channels!=0xe4 || (count==2 && inputs[1].channels!=0xe4))) return false;
-        if (target.type==6 && target.index==3) {
+        if (requireScopeUv && target.type==6 && target.index==3) {
             if (opcode!=9 || operands[0]!=0x90e40003u) return false;
             if (dest==0xe0010003u && operands[1]==0xa0e40008u && !x) x=true;
             else if (dest==0xe0020003u && operands[1]==0xa0e40009u && !y) y=true;
@@ -128,4 +129,9 @@ inline bool scopeUvProgram(std::span<const uint32_t> words) {
     }
     return false; // Missing terminal END.
 }
+// Keep the existing scope UV policy as the production reference.
+inline bool scopeUvProgram(std::span<const uint32_t> words) {return boundedVertexProgram(words,true);}
+// Framing only for offline position replay. Unsupported inputs propagate unknown
+// in the existing evaluator; this does not admit a new native shader/image path.
+inline bool vertexPositionProgram(std::span<const uint32_t> words) {return boundedVertexProgram(words,false);}
 } // namespace ss2vr

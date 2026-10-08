@@ -78,6 +78,12 @@ int main(int argc,char **argv) {
         mutated[index]^=random;
         (void)scopeCapPosition(mutated,constants,cap,true,expected);
     }
+    auto offline=fixture(false);
+    for(uint32_t reg:{8u,9u}) {
+        auto defined=offline;
+        defined.insert(defined.end()-1,{81,0xa00f0000u|reg,0,0,0,0});
+        assert(vertexPositionProgram(defined));assert(!scopeUvProgram(defined));
+    }
     if (argc==3 && std::string(argv[1])=="--write-fixture") {
         const auto bytes=color;
         std::ofstream output(argv[2],std::ios::binary);

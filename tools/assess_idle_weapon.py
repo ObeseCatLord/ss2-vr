@@ -75,13 +75,13 @@ def assess(text,expected_source):
             raise ValueError('Truncated reserved idle prefix')
         kind=line.split()[2];f=fields(line)
         if kind=='draw':
-            names={'schema','draws','source','ipc','wire','request','input','owner','weapon','model','generation','hand','eye',
+            names={'rawGripValid','schema','draws','source','ipc','wire','request','input','owner','weapon','model','generation','hand','eye',
                    'stage','cfg','file','resource','contributors','matrices','historicalBytes','grasp'}
             if set(f)!=names or f['source']!=expected_source:raise ValueError('Idle build/schema mismatch')
             current={k:integer(v,-(1<<31),(1<<31)-1) if k=='resource' else
                      integer(v,0,(1<<64)-1 if k in ('request','input') else (1<<32)-1)
                      for k,v in f.items() if k!='source'}
-            if current['schema']!=2 or current['draws']>8:raise ValueError('Geometry schema/budget mismatch')
+            if current['schema']!=3 or current['rawGripValid'] not in (0,1) or current['draws']>8:raise ValueError('Geometry schema/budget mismatch')
             if current['ipc']!=10 or current['wire']!=7 or current['historicalBytes'] or current['grasp']:
                 raise ValueError('Unsupported layout or provenance/grasp claim')
             if current['stage'] not in range(5) or not 0<=current['contributors']<=16 or not 0<=current['matrices']<=64:
@@ -106,7 +106,7 @@ def assess(text,expected_source):
         elif kind=='matrix':
             if set(f)!={'request','eye','hand','kind','index','values'}:raise ValueError('Matrix schema mismatch')
             index=integer(f['index']);which=f['kind']
-            if which not in ('world','nativePlacement','trackedPlacement','controller','canonical'):
+            if which not in ('world','nativePlacement','trackedPlacement','controller','rawAim','rawGrip','canonical'):
                 raise ValueError('Unknown matrix source')
             if not 0<=index<(current['matrices'] if which=='canonical' else 1):raise ValueError('Matrix outside bounded copy')
             key=which+':'+str(index)
@@ -156,6 +156,8 @@ def assess(text,expected_source):
         if any(r[k]<=0 for k in ('request','input','owner','weapon','model','generation','cfg')):
             raise ValueError('Missing complete native-copy identity')
         wanted={k+':0' for k in ('world','nativePlacement','trackedPlacement','controller')}
+        wanted.add('rawAim:0')
+        if r['rawGripValid']:wanted.add('rawGrip:0')
         wanted.update('canonical:'+str(i) for i in range(r['matrices']))
         if not r['contributors'] or not r['matrices'] or set(r['pose'])!=wanted or r['stretch'] is None or \
            set(r['animations'])!=set(range(r['contributors'])):raise ValueError('Truncated idle copy emission')
@@ -189,7 +191,7 @@ def assess(text,expected_source):
         r['evidence_class']='event-pose-and-consumed-draws' if r['draws'] else 'event-pose-only'
         r['geometry_observed']=bool(r['draws'])
         completed.append(r)
-    return {'schema':2,'source_fingerprint':expected_source,'native_execution_by_assessor':False,
+    return {'schema':3,'source_fingerprint':expected_source,'native_execution_by_assessor':False,
             'copied_event_pose_observations':completed,'rejected_or_missing_observations':rejected,
             'historical_loaded_bytes_verified':False,'positive_grasp_verified':False,'alignment_accepted':False,
             'remaining':['rendered geometry content association','interpreted winning blend/cache evidence','positive measured grasp reference']}

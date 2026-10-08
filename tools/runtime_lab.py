@@ -238,7 +238,20 @@ def observer(cfg, env, command, token, output=None, timeout=20, deadline=None):
         return json.loads(status_file.read_text())
     return None
 
+def validate_idle_probe(cfg):
+    enabled=cfg.get('idle_weapon_probe',False)
+    if type(enabled) is not bool:raise ValueError('Idle collection selection must be explicit boolean')
+    if not enabled:return
+    if cfg.get('renderer_mode','vr')!='vr' or not isinstance(cfg.get('expected_product_source'),str) or \
+       not re.fullmatch('[a-f0-9]{64}',cfg['expected_product_source']):
+        raise ValueError('Idle collection requires pinned VR products')
+    if any(cfg.get(k) for k in ('native_dual_probe','background_controls_probe','native_input_probe','grip_resource_probe')):
+        raise ValueError('Idle collection cannot mix firing, movement or other diagnostic modes')
+    if cfg.get('pose_steps')!=[{'name':'baseline','head':cfg.get('baseline_head')}]:
+        raise ValueError('Idle collection requires only the stationary baseline pose')
+
 def validate(cfg):
+    validate_idle_probe(cfg)
     private=Path(cfg['private_root']).resolve(strict=True)
     if private.is_relative_to(ROOT) or ROOT.is_relative_to(private):
         raise ValueError('Runtime data must be outside the source tree')
@@ -623,6 +636,8 @@ def run(cfg):
     env.pop('SS2VR_LAB_STOCK_RENDER',None)
     env.pop('SS2VR_LAB_BACKGROUND_MOVE',None)
     if cfg.get('background_controls_probe')=='joystick-native-movement':env['SS2VR_LAB_BACKGROUND_MOVE']='1'
+    env.pop('SS2VR_LAB_IDLE_WEAPON',None)
+    if cfg.get('idle_weapon_probe'):env['SS2VR_LAB_IDLE_WEAPON']='1'
     env.pop('SS2VR_LAB_GRIP_RESOURCES',None)
     if cfg.get('grip_resource_probe'):env['SS2VR_LAB_GRIP_RESOURCES']='1'
     if stock:env['SS2VR_LAB_STOCK_RENDER']='1'
@@ -892,6 +907,19 @@ def run(cfg):
                 if captured.returncode:
                     manifest.setdefault('desktop_capture_errors',[]).append({'pose':step['name'],
                         'returncode':captured.returncode,'stderr':captured.stderr[-4096:]})
+        if cfg.get('idle_weapon_probe'):
+            from assess_idle_weapon import assess
+            log=(lab/'Bin/SS2VR.log').read_text(errors='strict')
+            if len(log.encode())>16*1024*1024:raise ValueError('Idle log exceeds the bounded reader budget')
+            evidence=assess(log,cfg['compiled_product_contract']['source_fingerprint'])
+            path=run_dir/'idle-event-pose-geometry.json';path.write_text(json.dumps(evidence,indent=2)+'\n')
+            manifest['idle_collection']={'schema':3,'evidence_file':path.name,
+                'complete_event_pose_observations':len(evidence['copied_event_pose_observations']),
+                'rejected_observations':len(evidence['rejected_or_missing_observations']),
+                'copied_geometry_draws':sum(o['draws'] for o in evidence['copied_event_pose_observations']),
+                'positive_grasp_verified':False,'alignment_accepted':False}
+            manifest['result']='idle_collection_copied_unreviewed'
+            return run_dir
         if cfg.get('background_controls_probe'):
             manifest['background_controls_probe']=background_controls_probe(cfg,env,token,deadline,run_dir,state)
         if cfg.get('native_dual_probe')=='zap-initial-inventory':

@@ -65,7 +65,8 @@ struct IdleWeaponTrace {
     std::array<IdleGeometryCopy,MaxDraws> geometry{};
     unsigned draws=0;
     Matrix34 world{};
-    Matrix34 nativePlacement{},trackedPlacement{},controller{};
+    Matrix34 nativePlacement{},trackedPlacement{},controller{},rawGrip{},rawAim{};
+    bool referencesCopied=false,rawGripValid=false;
     Vec3 stretch{};
     bool admitted=false,placementObserved=false,poseCopied=false;
     unsigned contributors=0,animationsCopied=0,matrixCount=0;
@@ -86,6 +87,12 @@ struct IdleWeaponTrace {
         }
         nativePlacement=native;trackedPlacement=tracked;controller=physicalController;
         placementObserved=true;return true;
+    }
+    bool references(const IdleDrawIdentity &identity,const Matrix34 &grip,bool gripAvailable,const Matrix34 &aim) noexcept {
+        if(!admitted || binding!=identity || stage!=Stage::Empty || !placementObserved || referencesCopied ||
+           !finiteMatrix(aim) || (gripAvailable && !finiteMatrix(grip))) {reject();return false;}
+        rawAim=aim;rawGripValid=gripAvailable;if(gripAvailable)rawGrip=grip;
+        referencesCopied=true;return true;
     }
     bool event(const IdleDrawIdentity &identity,const IdleConfigIdentity &resource,
                bool callerQueueCurrent,int count) noexcept {
@@ -122,7 +129,7 @@ struct IdleWeaponTrace {
         geometry[draws++]=copy;return true;
     }
     bool finish(bool nativeCompleted,bool generationCurrent) noexcept {
-        if(stage!=Stage::Palette || !poseCopied || !placementObserved || !nativeCompleted || !generationCurrent) {reject();return false;}
+        if(stage!=Stage::Palette || !poseCopied || !placementObserved || !referencesCopied || !nativeCompleted || !generationCurrent) {reject();return false;}
         stage=Stage::Complete;return true;
     }
 };
