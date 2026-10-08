@@ -438,7 +438,7 @@ struct Actions {
         api.check(api.CreateAction(set, &create, &result), "xrCreateAction");
         return result;
     }
-    void create(Api &api, XrInstance instance, XrSession session) {
+    void create(Api &api, XrInstance instance, XrSession session, bool frameController) {
         hand[0] = path(api, instance, "/user/hand/left");
         hand[1] = path(api, instance, "/user/hand/right");
         viveProfile = path(api, instance, "/interaction_profiles/htc/vive_controller");
@@ -458,7 +458,7 @@ struct Actions {
         menu = action(api, "menu", "Pause and menu", XR_ACTION_TYPE_BOOLEAN_INPUT);
         recenter = action(api, "recenter_chord", "Recenter with both grips", XR_ACTION_TYPE_BOOLEAN_INPUT);
         sprint = action(api, "sprint", "Sprint / sniper zoom", XR_ACTION_TYPE_BOOLEAN_INPUT);
-        suggest(api, instance);
+        suggest(api, instance, frameController);
         XrSessionActionSetsAttachInfo attach{XR_TYPE_SESSION_ACTION_SETS_ATTACH_INFO};
         attach.countActionSets = 1;
         attach.actionSets = &set;
@@ -473,7 +473,7 @@ struct Actions {
             api.check(api.CreateActionSpace(session, &space, &gripSpace[h]), "xrCreateActionSpace grip");
         }
     }
-    void suggest(Api &api, XrInstance instance) {
+    void suggest(Api &api, XrInstance instance, bool frameController) {
         struct Profile {
             const char *name;
             const char *axis;
@@ -484,9 +484,11 @@ struct Actions {
             {"/interaction_profiles/oculus/touch_controller", "thumbstick", true, 0},
             {"/interaction_profiles/valve/index_controller", "thumbstick", true, 1},
             {"/interaction_profiles/htc/vive_controller", "trackpad", false, 2},
-            {"/interaction_profiles/microsoft/motion_controller", "thumbstick", false, 3}};
+            {"/interaction_profiles/microsoft/motion_controller", "thumbstick", false, 3},
+            {"/interaction_profiles/valve/frame_controller_valve", "thumbstick", true, 4}};
         unsigned accepted = 0;
         for (const auto &profile : profiles) {
+            if (profile.kind==4 && !frameController) continue;
             std::vector<XrActionSuggestedBinding> bindings;
             auto bind = [&](XrAction a, unsigned h, const std::string &component) {
                 const std::string name =
@@ -533,6 +535,17 @@ struct Actions {
                 bind(use, 0, "trackpad/click");
                 bind(jump, 1, "trackpad/click");
                 bind(menu, 0, "menu/click");
+                bind(menu, 1, "menu/click");
+                break;
+            case 4:
+                // Valve Frame has a left D-pad/view and right ABXY/menu.
+                // Keep the established action semantics; no invented left XY.
+                bind(sprint, 1, click);
+                bind(use, 0, "dpad_down/click");
+                bind(use, 1, "a/click");
+                bind(jump, 0, "dpad_up/click");
+                bind(jump, 1, "b/click");
+                bind(menu, 0, "view/click");
                 bind(menu, 1, "menu/click");
                 break;
             }
@@ -1101,16 +1114,22 @@ struct Host {
             if (wine) log.write("Proton: check wineopenxr registration, DXVK and native OpenXR runtime visibility in Steam's container");
             throw std::runtime_error("Runtime does not offer XR_KHR_D3D11_enable");
         }
-        const char *enabled[] = {XR_KHR_D3D11_ENABLE_EXTENSION_NAME};
+        constexpr const char *frameExtension="XR_VALVE_frame_controller_interaction";
+        const bool frameController=std::any_of(extensions.begin(),extensions.end(),[](const auto &e) {
+            return !std::strcmp(e.extensionName,"XR_VALVE_frame_controller_interaction");
+        });
+        const char *enabled[] = {XR_KHR_D3D11_ENABLE_EXTENSION_NAME,frameExtension};
         XrInstanceCreateInfo create{XR_TYPE_INSTANCE_CREATE_INFO};
         std::strcpy(create.applicationInfo.applicationName, "Serious Sam 2 VR");
         std::strcpy(create.applicationInfo.engineName, "SS2VR host");
         create.applicationInfo.applicationVersion = create.applicationInfo.engineVersion = 1;
         // All used core calls are 1.0; this admits 1.0 runtimes with the required extension.
         create.applicationInfo.apiVersion = XR_MAKE_VERSION(1, 0, 0);
-        create.enabledExtensionCount = 1;
+        create.enabledExtensionCount = frameController?2:1;
         create.enabledExtensionNames = enabled;
         api.check(api.CreateInstance(&create, &instance), "xrCreateInstance");
+        log.write(frameController ? "Frame controller extension enabled; native profile bindings available" :
+                                   "Frame controller extension unavailable; existing runtime profile fallbacks retained");
         api.instanceFunctions(instance);
         XrInstanceProperties runtime{XR_TYPE_INSTANCE_PROPERTIES};
         const auto propertiesResult = api.GetInstanceProperties(instance, &runtime);
@@ -1175,7 +1194,7 @@ struct Host {
         api.check(api.CreateReferenceSpace(session, &space, &local), "xrCreateReferenceSpace LOCAL");
         space.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_VIEW;
         api.check(api.CreateReferenceSpace(session, &space, &viewSpace), "xrCreateReferenceSpace VIEW");
-        actions.create(api, instance, session);
+        actions.create(api, instance, session, frameController);
         api.check(api.EnumerateSwapchainFormats(session, 0, &count, nullptr),
                   "xrEnumerateSwapchainFormats count");
         std::vector<int64_t> formats(count);

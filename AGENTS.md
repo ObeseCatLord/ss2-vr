@@ -7,6 +7,12 @@ The user explicitly approved publishing SS2 VR source and sanitized reverse-engi
 This historical hold blocked public publication pending renewed confirmation. It superseded earlier authority at that time; the explicit delivered approval above now supersedes it. During that hold, local development/tests continued and pushes, public PRs/releases and external publication were prohibited. Local commits may be preserved with strictly empty author/committer emails; Actions remains disabled and workflows absent. Explicit renewed user confirmation has now lifted the hold for source and sanitized notes only. Private game assets/captures, original checkout/WIP, installation and user saves/settings remain protected.
 
 ## Current PC continuation — start here
+The latest user instruction delegates individual weapon-firing tests to the user
+in VR. Do not run more individual weapon-firing probes. Continue remaining
+implementation and other authorized tests, then supply a comprehensive in-VR
+acceptance procedure. Existing firing-probe source and historical records are
+supporting tools/evidence, not instructions to keep executing those probes.
+
 The user's 2026-10-07 authority permits PC development, additional sessions and runtime testing where feasible. It supersedes older root-only, transfer-only, pause and no-runtime instructions. Read docs/CLOUD_CONTINUATION.md and docs/IMPLEMENTATION_STATUS.md; docs/HANDOFF.md is historical evidence, not a pause instruction. Use this isolated sanitized latest-source checkout. Preserve the old installed-game checkout, rejected melee patch, user changes and old ancestry; never merge/reset it into this checkout. Cloud source edits have stopped. One main integration owner coordinates disjoint workers and publication.
 
 ## Scope and authorization

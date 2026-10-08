@@ -16,6 +16,27 @@ static bool near(float a, float b) {
     return std::abs(a - b) < 1e-4f;
 }
 int main() {
+    {
+        Input input; input.axis[0][0]=.25f; input.axis[0][1]=.5f;
+        const auto zero=[](Vec3 v){return v.x==0 && v.y==0 && v.z==0;};
+        auto move=horizontalStickMovement(input,false,0);
+        check(near(move.x,.25f)&&near(move.y,0)&&near(move.z,-.5f),
+              "Horizontal native stick convention is right/up/backward");
+        auto turned=horizontalStickMovement(input,false,1.57079632679f);
+        check(near(turned.x,-.5f)&&near(turned.y,0)&&near(turned.z,-.25f),
+              "Calibrated quarter turn applies exactly once to movement");
+        check(zero(horizontalStickMovement(input,true,0)),
+              "An open movement-hand wheel cancels horizontal demand");
+        input.axis[0][0]=std::numeric_limits<float>::quiet_NaN();
+        check(zero(horizontalStickMovement(input,false,0)),
+              "Nonfinite stick input cannot become native movement");
+        input.axis[0][0]=1.01f;
+        check(zero(horizontalStickMovement(input,false,0)),
+              "Out-of-range axes fail neutral");
+        input.axis[0][0]=0;
+        check(zero(horizontalStickMovement(input,false,std::numeric_limits<float>::infinity())),
+              "Invalid turn cannot become a movement basis");
+    }
     // Native alpha must survive pre-UI dimming, including black and passthrough.
     for (float visibility : {0.f, .5f, 1.f}) {
         uint8_t pixels[]{0, 1, 255, 17, 254, 128, 3, 231};

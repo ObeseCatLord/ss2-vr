@@ -2,12 +2,15 @@
 
 ## Current source — 2026-10-07
 
-Current game/host IPC is9 and the offline suite has59 groups. A response-owned
+Current game/host IPC is10 and the offline suite has61 groups. A response-owned
 head-clearance receipt now limits current head/eye placement and cached-image
 age when the default-off head guard is enabled. Game, server and host also carry
 read-only exported build-input/version/layout contracts for package verification.
 See HEAD_VOLUME_INTEGRATION.md and PACKAGE_IDENTITY.md. All products cross-build;
-Windows and Linux/Proton runtime behavior remains untested. The original integration
+Controlled Linux/Proton simulated-Monado gameplay has produced distinct native
+eye images and seven-pose camera response. Native Windows and both actual headset
+targets remain unverified. See RUNTIME_ACCEPTANCE_MATRIX.md and USER_VR_TEST.md.
+The original integration
 record below retains historical ABI6 wording and delegation provenance.
 
 ## Original host integration record
@@ -36,6 +39,16 @@ Profile/component paths were checked against pinned Khronos xr.xml. Triggers are
 | Valve Index | Thumbsticks | Either A | Right B | Left B | Either stick click |
 | HTC Vive | Trackpads | Right menu | Right trackpad click | Left menu | Left trackpad click |
 | Microsoft Motion | Thumbsticks | Left trackpad click | Right trackpad click | Either menu | Either stick click |
+| Valve Frame (extension advertised) | Thumbsticks | Left D-pad down / right A | Left D-pad up / right B | Left view / right menu | Either stick click |
+
+The host enables XR_VALVE_frame_controller_interaction only when enumerated, then
+suggests /interaction_profiles/valve/frame_controller_valve. Left X/Y paths are
+not used for that native profile. Its squeeze/value uses the existing release and
+availability gates. Older runtimes retain all existing suggestions; Valve's
+documented Frame → Generic Controller → Touch fallback is separate from Index.
+See [Valve's input documentation](https://partner.steamgames.com/doc/steamhardware/steamframe/input).
+Native Frame bindings are source implementation pending actual controller/runtime
+acceptance; simulated Monado does not certify Frame remapping or streaming.
 
 Recenter: both grips plus left stick/trackpad click. That chord suppresses gameplay actions and resets the common origin while retaining real grip and trigger values for physical-release gating. It cannot fabricate a release or incidentally reopen a wheel. Reserved system buttons are not bound. In a menu, left axis navigates, Use or a freshly pressed trigger confirms, and Menu goes back. Holding a trigger across menu entry does not confirm. The selected pointing hand's trigger clicks native items; invalid hand/reference/menu/focus releases the owned mouse button and requires neutral rearming.
 

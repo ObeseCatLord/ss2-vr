@@ -3521,7 +3521,164 @@ using OperatorMoveDir = Vec3 *(__thiscall *)(void *, Vec3 *, Vec3, Vec3);
 static PlayerControls originalPlayerControls = nullptr;
 static OperatorMoveDir nativeOperatorMoveDir = nullptr;
 static uintptr_t playerControlsReturn = 0, swimmingPlayerVtable = 0;
+static uintptr_t inactivePlayerControlsReturn = 0;
+static uintptr_t controlsGameBase = 0, controlsExeBase = 0;
 static SwimmingStrokes swimmingStrokes;
+static bool currentControls(int, const Snapshot &, const ControlSample &, bool);
+
+// A bounded local producer experiment, not a native exclusivity override.
+// Disabled in ordinary installations until source/runtime acceptance is complete.
+static bool labBackgroundMovement() {
+    static const bool enabled=[] { wchar_t v[2]{};return GetEnvironmentVariableW(L"SS2VR_LAB_BACKGROUND_MOVE",v,2)==1 && v[0]==L'1'; }();
+    return enabled && labDualTrace();
+}
+static bool nativeInactiveInputReady() {
+    auto read=[](uintptr_t base, unsigned offset, uint32_t &value) {
+        if (!base || base > UINTPTR_MAX-offset || !readableMemory(reinterpret_cast<void *>(base+offset),4)) return false;
+        memcpy(&value,reinterpret_cast<void *>(base+offset),4);return true;
+    };
+    uint32_t instance=0,sam=0,exe=0,table=0,enabled=0,running=0,sim=0,
+             dispatch=0,q=0,blocked=1,worldBlocked=1,registeredSim=0,exclusive=1;
+    return read(roomscaleEngineBase,0x2f19b0,instance) && instance &&
+        read(controlsGameBase,0x403350,sam) && sam==instance &&
+        read(controlsExeBase,0x849c,exe) && exe==instance &&
+        read(instance,0,table) && table==controlsGameBase+0x29cf10 &&
+        read(instance,0x10,enabled) && enabled==1 && read(instance,0x0c,running) && running==1 &&
+        read(instance,0x24,dispatch) && dispatch==1 && read(instance,0x08,sim) && sim &&
+        read(instance,0x30,q) && read(q,0xfc,blocked) && blocked==0 &&
+        read(roomscaleEngineBase,0x2f1a70,registeredSim) && registeredSim==sim &&
+        read(sim,0x48,worldBlocked) && worldBlocked==0 &&
+        read(roomscaleEngineBase,0x2e9fd4,exclusive) && exclusive==0;
+}
+#ifdef _MSC_VER
+__declspec(noinline)
+#else
+__attribute__((noinline))
+#endif
+static bool inactiveJoystick(void *brain, uint8_t fire, Vec3 look, Vec3 nativeMove, Vec3 &out) {
+    // Preserve the audited native inactive call, including native look/zero
+    // fire; unknown original arguments cannot be silently replaced.
+    if (!labBackgroundMovement() || fire || nativeMove.x || nativeMove.y || nativeMove.z ||
+        !std::isfinite(look.x) || !std::isfinite(look.y) || !std::isfinite(look.z) ||
+        !nativeInputHealthy() || !nativeInactiveInputReady()) return false;
+    const auto s=copySnapshot();const auto now=GetTickCount64();
+    if (!vrSession(s) || !livePlayer(s) || !trackingEligible(s.player) || !fresh(s.input) ||
+        !s.rider.handheld() || recenterHeld(s.input) || !s.ui.gameplay || s.ui.tickMs>now ||
+        now-s.ui.tickMs>=200 || s.ui.wheel[0].open || s.ui.wheel[1].open ||
+        !validNativeBodyPose(s.origin) || !std::isfinite(s.turn)) return false;
+    const auto brainHandle=pointerHandle(brain);
+    if (!brainHandle || resolve(brainHandle)!=brain ||
+        !readableMemory(static_cast<uint8_t *>(brain)+0x28,4) ||
+        !readableMemory(static_cast<uint8_t *>(s.player)+0x38c,4) ||
+        primaryField(brain,0x28)!=s.playerHandle || primaryField(s.player,0x38c)!=brainHandle)
+        return false;
+    // This first proof is walking only. Existing swimming/mounted producers
+    // keep their current native look/turn and all other control behavior.
+    uint32_t table=0;memcpy(&table,s.player,4);
+    const auto flags=primaryField(s.player,0x4cc);
+    if (table!=swimmingPlayerVtable || (flags&2u) || nativeWaterInputMode(flags,
+                                                        primaryField(s.player,0x610))) return false;
+    const ControlSample captured{s.rider,s.generation,{s.intentEpoch[0],s.intentEpoch[1]},
+                                s.input,s.origin,s.turn,multiplayer::remoteClient(),true};
+    const auto direction=horizontalStickMovement(s.input,false,s.turn);
+    const auto latest=copySnapshot();
+    if (!vrSession(latest) || !fresh(latest.input) || !latest.ui.gameplay ||
+        latest.ui.wheel[0].open || latest.ui.wheel[1].open ||
+        !currentControls(0,latest,captured,true) || !nativeInactiveInputReady() ||
+        resolve(brainHandle)!=brain || primaryField(brain,0x28)!=s.playerHandle ||
+        primaryField(s.player,0x38c)!=brainHandle) return false;
+    // Handle lookups above can wait on the native resource lock. Recheck time
+    // and the copied admission after the last native getter, not before it.
+    const auto submit=copySnapshot();const auto submitNow=GetTickCount64();
+    if (!nativeInputHealthy() || !vrSession(submit) || !fresh(submit.input) ||
+        submit.player!=s.player || submit.playerHandle!=s.playerHandle || submit.rider!=s.rider ||
+        submit.generation!=s.generation || submit.rigRevision!=s.rigRevision ||
+        submit.input.session!=s.input.session || submit.input.reference!=s.input.reference ||
+        submit.input.sequence!=s.input.sequence || submit.turn!=s.turn ||
+        std::memcmp(&submit.origin,&s.origin,sizeof(Pose)) || !submit.ui.gameplay ||
+        submit.ui.tickMs>submitNow || submitNow-submit.ui.tickMs>=200 ||
+        submit.ui.wheel[0].open || submit.ui.wheel[1].open || recenterHeld(submit.input)) return false;
+    out=direction;return true;
+}
+
+// Private-lab observation only. Neither caller admission nor native arguments
+// change. In particular, observing the inactive route does not enable device
+// polling, desktop cursor movement, fire or an alternate movement producer.
+struct LabControlObservation {
+    bool enabled=false,binding=false,bodyValid=false,saturated=false;
+    unsigned ordinal=0;
+    uint32_t brain=0,player=0,mechanism=0,root=0,session=0,reference=0,generation=0,focused=0,headValid=0;
+    uint64_t tick=0,sequence=0,rig=0;
+    Pose origin{},body{};
+    float turn=0;
+};
+#ifdef _MSC_VER
+__declspec(noinline)
+#else
+__attribute__((noinline))
+#endif
+static void collectLocalControls(void *brain, uintptr_t caller, LabControlObservation &observation) {
+    if (!labDualTrace() || !hooksReady.load(std::memory_order_acquire) ||
+        (caller != playerControlsReturn && caller != inactivePlayerControlsReturn) ||
+        !nativeMainThread || !nativeMainThread()) return;
+    const auto s = copySnapshot();
+    if (!s.initialized || !s.ui.gameplay || !s.player || !s.playerHandle) return;
+    static unsigned ordinary = 0, inactive = 0;
+    auto &count = caller == playerControlsReturn ? ordinary : inactive;
+    if (count >= 120) {
+        if(count==120){++count;observation.saturated=true;}
+        return;
+    }
+    ++count;
+    // Capture the bidirectional binding before the original native call; no
+    // borrowed receiver is accessed after that call or retained by this trace.
+    const auto brainHandle = pointerHandle(brain);
+    uint32_t playerHandle = 0, ownedBrain = 0;
+    const bool recognized = brainHandle && resolve(brainHandle) == brain &&
+        resolve(s.playerHandle) == s.player &&
+        readableMemory(static_cast<uint8_t *>(brain) + 0x28, 4) &&
+        readableMemory(static_cast<uint8_t *>(s.player) + 0x38c, 4);
+    if (recognized) {
+        memcpy(&playerHandle, static_cast<uint8_t *>(brain) + 0x28, 4);
+        memcpy(&ownedBrain, static_cast<uint8_t *>(s.player) + 0x38c, 4);
+    }
+    Pose body{};bool bodyValid=false;uint32_t mechanism=0,root=0;
+    if (recognized && playerHandle==s.playerHandle && ownedBrain==brainHandle &&
+        nativeBodyPlacement && nativeRiderCurrent(s.player,s.rider) &&
+        readableMemory(static_cast<uint8_t *>(s.player)+0x114,0x10)) {
+        mechanism=primaryField(s.player,0x114);
+        void *source=mechanism?resolve(mechanism):nullptr;
+        if (source && readableMemory(static_cast<uint8_t *>(source)+0x38,4)) root=primaryField(source,0x38);
+        const bool hasSource=source && root && resolve(root);
+        if (hasSource && nativeBodyPlacement(s.player,&body)==&body && validNativeBodyPose(body) &&
+            resolve(brainHandle)==brain && nativeRiderCurrent(s.player,s.rider) &&
+            primaryField(brain,0x28)==s.playerHandle && primaryField(s.player,0x38c)==brainHandle &&
+            primaryField(s.player,0x114)==mechanism && resolve(mechanism)==source &&
+            primaryField(source,0x38)==root && resolve(root))
+            bodyValid=true;
+    }
+    observation={true,recognized && playerHandle==s.playerHandle && ownedBrain==brainHandle,
+        bodyValid,false,count,brainHandle,s.playerHandle,mechanism,root,s.input.session,s.input.reference,
+        s.generation,s.input.focused,s.input.headValid,GetTickCount64(),s.input.sequence,s.rigRevision,
+        s.origin,body,s.turn};
+}
+#ifdef _MSC_VER
+__declspec(noinline)
+#else
+__attribute__((noinline))
+#endif
+static void logLocalControls(const LabControlObservation &o, uintptr_t caller, uint8_t fire, Vec3 look, Vec3 move) {
+    // Called only after normal original completion. All native observations
+    // precede movement admission; only copied scalar/value fields remain here.
+    if(o.saturated)log("Lab controls observation saturated route=%s",caller==playerControlsReturn?"ordinary":"inactive");
+    if(!o.enabled)return;
+    log("Lab controls observation route=%s ordinal=%u brain=%u player=%u mechanism=%u root=%u binding=%u tick=%llu sequence=%llu session=%llu reference=%llu generation=%u focused=%u headValid=%u rig=%llu origin=%.9g,%.9g,%.9g turn=%.9g fire=%u look=%.9g,%.9g,%.9g move=%.9g,%.9g,%.9g bodyValid=%u body=%.9g,%.9g,%.9g completed=1",
+        caller==playerControlsReturn?"ordinary":"inactive",o.ordinal,o.brain,o.player,o.mechanism,o.root,o.binding,
+        static_cast<unsigned long long>(o.tick),static_cast<unsigned long long>(o.sequence),
+        static_cast<unsigned long long>(o.session),static_cast<unsigned long long>(o.reference),o.generation,
+        o.focused,o.headValid,static_cast<unsigned long long>(o.rig),o.origin.p.x,o.origin.p.y,o.origin.p.z,o.turn,
+        fire,look.x,look.y,look.z,move.x,move.y,move.z,o.bodyValid,o.body.p.x,o.body.p.y,o.body.p.z);
+}
 
 static bool currentControls(int index, const Snapshot &snapshot, const ControlSample &captured,
                             bool active = true) {
@@ -3558,11 +3715,23 @@ static void __fastcall waterPlayerControls(void *brain, void *, uint8_t fire, Ve
 #else
     const auto caller = reinterpret_cast<uintptr_t>(__builtin_return_address(0));
 #endif
+    LabControlObservation observation;
+    collectLocalControls(brain,caller,observation);
+    // Inactive native submissions are kept separate from ordinary polling and
+    // swimming history. No cached command values are borrowed for this route.
+    if (hooksReady.load(std::memory_order_acquire) && caller==inactivePlayerControlsReturn &&
+        nativeMainThread && nativeMainThread()) {
+        Vec3 adapted{};
+        if (inactiveJoystick(brain,fire,look,move,adapted)) move=adapted;
+        // Continue to the existing native forwarding path below. This route
+        // does not enter or reset the ordinary swimming sample history.
+    }
     // This state belongs solely to the audited main-thread input producer.
     // Other callers pass through without reading or resetting stroke history.
     if (!hooksReady.load(std::memory_order_acquire) || caller != playerControlsReturn ||
         !nativeMainThread || !nativeMainThread()) {
         originalPlayerControls(brain, fire, look, move);
+        logLocalControls(observation,caller,fire,look,move);
         return;
     }
     ControlSample captured;
@@ -3639,6 +3808,7 @@ static void __fastcall waterPlayerControls(void *brain, void *, uint8_t fire, Ve
     }
     if (!waterAdapted) swimmingStrokes.reset();
     originalPlayerControls(brain, fire, look, move);
+    logLocalControls(observation,caller,fire,look,move);
 }
 static void __fastcall mountedLookClamp(void *brain, void *, Vec3 &look) {
 #ifdef _MSC_VER
@@ -3725,9 +3895,8 @@ static void __fastcall poll(void *b, void *) {
         s.input, s.origin, s.turn, client, enabled};
     std::fill(std::begin(values), std::end(values), 0);
     if (enabled) {
-        float x = s.ui.wheel[0].open ? 0 : s.input.axis[0][0],
-              y = s.ui.wheel[0].open ? 0 : s.input.axis[0][1];
-        auto direction = rotate(yaw(s.rider.seated() ? 0.f : s.turn), Vec3{x, 0, -y});
+        auto direction = horizontalStickMovement(s.input, s.ui.wheel[0].open,
+                                                s.rider.seated() ? 0.f : s.turn);
         // Verified native labels: X+ right, X- left, Z- forward, Z+ backward.
         values[0] = std::max(0.f, direction.x);
         values[1] = std::max(0.f, -direction.x);
@@ -4297,6 +4466,9 @@ bool attach(bool headless) {
     mountedAvatarReturn = reinterpret_cast<uintptr_t>(g) + 0x943b6;
     mountedClampReturn = reinterpret_cast<uintptr_t>(g) + 0xf3255;
     playerControlsReturn = reinterpret_cast<uintptr_t>(g) + 0xf35d3;
+    inactivePlayerControlsReturn = reinterpret_cast<uintptr_t>(g) + 0xf2ddc;
+    controlsGameBase = reinterpret_cast<uintptr_t>(g);
+    controlsExeBase = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
     swimmingPlayerVtable = reinterpret_cast<uintptr_t>(g) + 0x29e878;
     if (!headless) {
         expectedDepthRange = reinterpret_cast<DepthRange>(reinterpret_cast<uint8_t *>(graphics) + 0x56a0);

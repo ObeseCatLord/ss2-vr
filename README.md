@@ -81,6 +81,11 @@ This is an installation recipe, not verified Linux support. Valve supplies a [wi
 
 ## Controls
 
+The comprehensive hardware acceptance procedure is being prepared in
+[USER_VR_TEST.md](docs/USER_VR_TEST.md). Several immersive features remain unfinished;
+the checklist is not a readiness claim. Individual weapon-firing tests are now
+reserved for the user in VR while development continues on the remaining scope.
+
 | Action | Input |
 |---|---|
 | Fire | Trigger on that weapon's hand |

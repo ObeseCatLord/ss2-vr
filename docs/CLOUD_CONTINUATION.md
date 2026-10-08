@@ -1,6 +1,22 @@
 # Cloud continuation — 2026-10-05
 
 Latest PC direct-scene work is in PC_GAMEPLAY_READINESS.md and DIRECT_GAMEPLAY_LAB.md.
+The user will perform individual weapon-firing tests in VR. Codex stops those
+probes and continues remaining implementation/non-firing tests. A comprehensive
+in-VR procedure is required when the remaining implementation is ready.
+The preparation checklist is docs/USER_VR_TEST.md; it does not certify unfinished
+features. Current non-firing work observes the existing native inactive controls
+producer; see VR_BACKGROUND_CONTROLS_REVIEW.md. Do not override native exclusivity
+to open desktop polling, and do not reuse stale sampledControls on that route.
+Run204618 subsequently proved default-off, lab-only background walking through the
+original ClientAction:2.216559m native physics-body displacement then zero demand,
+0.005253m final250ms drift, unchanged origin/owner and zero firing counters.320
+complete neutral native stereo pairs preceded it; shutdown was normal/errors empty.
+It does not enable production background actions or settle multiplayer roomscale.
+Optional native Frame profile suggestions now require the advertised extension;
+this Monado instance did not advertise it and retained its original Index profile.
+Physical hand/model alignment still needs resolved asset/grip evidence; see
+HAND_MODEL_ALIGNMENT.md. No individual weapon-firing probes are resumed.
 Native +level reaches Jungle with guarded loading confirmation and isolated scene
 receipts. Native depth-partition/UI fixes enabled actual stereo. The right-eye
 terrain/vegetation/waterfall leak was reproduced and corrected by preserving native

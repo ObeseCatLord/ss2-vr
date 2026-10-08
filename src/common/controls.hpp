@@ -82,6 +82,14 @@ inline bool primaryCommandHistoryCompatible(const Input &previous, const Input &
 inline bool recenterHeld(const Input &input) {
     return ((input.buttons[0] | input.buttons[1]) & Button::Recenter) != 0;
 }
+// Same horizontal convention for native bindings and an admitted local input
+// adapter: right/up/backward, with calibrated snap/smooth turn applied once.
+inline Vec3 horizontalStickMovement(const Input &input, bool blocked, float turn) {
+    const float x=input.axis[0][0], y=input.axis[0][1];
+    if (blocked || !std::isfinite(turn) || !std::isfinite(x) || !std::isfinite(y) ||
+        std::abs(x)>1.f || std::abs(y)>1.f) return {};
+    return rotate(yaw(turn), Vec3{x,0,-y});
+}
 // Coordinates and trigger belong to the same submitted XR input sample.
 // Newer input may invalidate focus/tracking, but cannot supply another click.
 inline bool menuPointerEligible(const MenuPointer &pointer, const Input &input, uint64_t menuSequence,

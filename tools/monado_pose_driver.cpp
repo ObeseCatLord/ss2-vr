@@ -36,14 +36,24 @@ static xrt_quat multiply(xrt_quat a,xrt_quat b) {
         a.w*b.w-a.x*b.x-a.y*b.y-a.z*b.z};
 }
 int main(int n,char **a) {
-    if(n!=8 && n!=12){std::fprintf(stderr,"usage: pose_driver port x y z yaw pitch roll [left_trigger right_trigger left_yaw right_yaw] (metres, radians; triggers0..1)\n");return 2;}
+    if(n!=8 && n!=12 && n!=13){std::fprintf(stderr,"usage: pose_driver port x y z yaw pitch roll [left_trigger right_trigger left_yaw right_yaw | --move left_x left_y right_x right_y] (metres, radians; triggers0..1; sticks-1..1)\n");return 2;}
     char *end=nullptr;long port=std::strtol(a[1],&end,10);if(end==a[1]||*end||port<1||port>65535)return 2;
     double v[6]{};for(unsigned i=0;i<6;++i){v[i]=std::strtod(a[i+2],&end);if(end==a[i+2]||*end||!std::isfinite(v[i])||std::abs(v[i])>10)return 2;}
     double controls[4]{};
+    double sticks[4]{};
     if(n==12)for(unsigned i=0;i<4;++i) {
         controls[i]=std::strtod(a[i+8],&end);
         if(end==a[i+8]||*end||!std::isfinite(controls[i]) ||
             (i<2 ? controls[i]<0 || controls[i]>1 : std::abs(controls[i])>3.141592653589793))return 2;
+    }
+    // A separate movement mode cannot carry trigger values. All omitted buttons
+    // remain neutral in the zero-initialized packet, including both triggers.
+    if(n==13) {
+        if(std::strcmp(a[8],"--move")!=0)return 2;
+        for(unsigned i=0;i<4;++i) {
+            sticks[i]=std::strtod(a[i+9],&end);
+            if(end==a[i+9]||*end||!std::isfinite(sticks[i])||std::abs(sticks[i])>1)return 2;
+        }
     }
     auto deadline=Clock::now()+std::chrono::seconds(2);
     int sock=socket(AF_INET,SOCK_STREAM|SOCK_CLOEXEC|SOCK_NONBLOCK,0);if(sock<0)return 3;
@@ -83,6 +93,8 @@ int main(int n,char **a) {
         controller.trigger_value.x=static_cast<float>(controls[h]);
         controller.trigger_click=controls[h]>.65;
         controller.trigger_touch=controls[h]>0;
+        controller.thumbstick={static_cast<float>(sticks[2*h]),static_cast<float>(sticks[2*h+1])};
+        controller.thumbstick_touch=sticks[2*h]!=0 || sticks[2*h+1]!=0;
     }
     bool ok=transfer(sock,&packet,sizeof(packet),true,deadline);close(sock);
     if(!ok)return 5;

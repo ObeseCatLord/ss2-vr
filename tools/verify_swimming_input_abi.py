@@ -52,7 +52,7 @@ def verify(game):
                 'Water pose name changed')
     md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32)
     ranges = [(0x61030, 0x27), (0x60d60, 0xaf), (0xee0f0, 0x164),
-              (0xee260, 0x5e0), (0x8d930, 0xa0), (0xf2df0, 0xcf7)]
+              (0xee260, 0x5e0), (0x8d930, 0xa0), (0xf2df0, 0xcf7), (0xf2d50, 0x92)]
     decoded = {i.address - 0x10000000: (i.mnemonic, i.op_str)
                for start, length in ranges
                for i in md.disasm(pe.get_data(start, length), 0x10000000 + start)}
@@ -94,6 +94,18 @@ def verify(game):
         0xf2f72: ('fsubr', 'dword ptr [ebp - 0x1c]'),
         0xf2f85: ('mov', 'dword ptr [ebp - 0x24], 0x3f800000'),
         0xf35cd: ('call', 'dword ptr [edx + 0x384]'),
+        # Inactive local producer: native pause guard, unchanged native look,
+        # zero movement/fire and the same native ClientAction transport.
+        0xf2d87: ('call', 'dword ptr [0x10294868]'),
+        0xf2d8d: ('test', 'eax, eax'),
+        0xf2d8f: ('jne', '0x100f2ddc'),
+        0xf2d97: ('call', '0x100e9590'),
+        0xf2d9c: ('mov', 'edi, dword ptr [0x104069b4]'),
+        0xf2dab: ('mov', 'edi, dword ptr [0x104069b8]'),
+        0xf2db4: ('mov', 'edi, dword ptr [0x104069bc]'),
+        0xf2dd2: ('push', '0'),
+        0xf2dd6: ('call', 'dword ptr [edx + 0x384]'),
+        0xf2ddc: ('pop', 'edi'),
     }
     # Exact canonical disassembly, with explicit exceptions rather than asserts,
     # remains enforced under Python -O.
@@ -101,9 +113,17 @@ def verify(game):
         require(decoded.get(rva) == instruction, 'Swimming instruction changed: ' + hex(rva))
     require(struct.unpack('<f', pe.get_data(0x2a749c, 4))[0] == -0.5235987901687622,
             'Native surface-swimming pitch threshold changed')
+    require(imports.get(0x10294868) == b'?simIsPaused@SeriousEngine@@YAHXZ',
+            'Inactive controls pause guard changed')
+    zero = pe.get_section_by_rva(0x4069b4)
+    require(zero is not None and 0x4069b4 >= zero.VirtualAddress + zero.SizeOfRawData and
+            0x4069c0 <= zero.VirtualAddress + zero.Misc_VirtualSize,
+            'Inactive controls initial zero vector is not in image zero-fill')
     return {'sam_sha256': PIN, 'dive_pose': 3, 'swim_pose': 4,
             'native_movement_vector_offset': '0x144', 'native_look_offset': '0x138',
             'native_rpc_carries_all_three_movement_components': True,
+            'inactive_controls_return': '0xf2ddc', 'inactive_controls_pause_guard_verified': True,
+            'inactive_controls_vector_initially_zero_filled': True,
             'runtime_executed': False, 'native_water_input_path_verified': True}
 
 
@@ -131,23 +151,77 @@ def verify_object(path):
     require('mov ebx,edi' in code[:12], 'Incoming argument anchor not retained')
     this = re.search(r'mov DWORD PTR (\[ebp-0x[0-9a-f]+\]),ecx', '\n'.join(code[:25]))
     fire = re.search(r'mov BYTE PTR (\[ebp-0x[0-9a-f]+\]),al', '\n'.join(code[:25]))
-    require(this and fire and 'movzx eax,BYTE PTR [edi]' in code[:25], 'Receiver/fire capture changed')
+    if fire and 'movzx eax,BYTE PTR [edi]' in code[:25]:
+        fire_load = 'movzx eax,BYTE PTR ' + fire.group(1)
+        fire_argument = 'eax'
+    elif 'movzx edi,BYTE PTR [edi]' in code[:25]:
+        # Scalar post-original logging retains the byte in a callee-saved
+        # register while collecting the pre-admission observation record.
+        captured=code.index('movzx edi,BYTE PTR [edi]')
+        copied=code.index('mov eax,edi')
+        require(captured<copied and code[copied+1]=='movzx eax,al' and
+                all(not re.match(r'\w+ edi(?:,|$)',v) for v in code[captured+1:copied]),
+                'Saved incoming fire register changed')
+        candidates=[(j,re.fullmatch(r'mov DWORD PTR (\[ebp-0x[0-9a-f]+\]),eax',v))
+                    for j,v in enumerate(code[copied+2:copied+8],copied+2)]
+        candidates=[(j,m) for j,m in candidates if m]
+        require(len(candidates)==1,'Saved fire spill changed')
+        stored,fire=candidates[0]
+        require(all(not re.match(r'(?:j\w+|call|ret)\b',v) and
+                    not re.match(r'\w+ eax(?:,|$)',v) for v in code[copied+2:stored]),
+                'Saved fire overwritten before spill')
+        require(not any(re.match(r'(?:mov|fstp) DWORD PTR '+re.escape(fire.group(1))+r'[, ]',v)
+                        for v in code[stored+1:]),'Saved fire spill overwritten')
+        fire_argument='esi'
+        fire_load='mov esi,DWORD PTR '+fire.group(1)
+    else:
+        # The noinline read-only trace makes GNU retain the incoming byte as a
+        # zero-extended DWORD. Accept only the exact capture/forwarding chain.
+        if 'movzx esi,BYTE PTR [ebx]' in code[:25]:
+            capture,register='movzx esi,BYTE PTR [ebx]','esi'
+        else:
+            require('movzx eax,BYTE PTR [edi]' in code[:25], 'Incoming fire is not byte-zero-extended')
+            capture,register='movzx eax,BYTE PTR [edi]','eax'
+        fire = re.search(r'mov DWORD PTR (\[ebp-0x[0-9a-f]+\]),'+register, '\n'.join(code[:25]))
+        require(fire is not None, 'Zero-extended fire capture changed')
+        load=code.index(capture);store=code.index(fire.group(0))
+        require(load<store and all(not re.match(r'(?:j\w+|call|ret)\b',v) and
+                not re.match(r'\w+ '+register+r'(?:,|$)',v) for v in code[load+1:store]),
+                'Incoming fire provenance overwritten before capture')
+        fire_load = 'mov eax,DWORD PTR ' + fire.group(1)
+        fire_argument = 'eax'
+    require(this and fire, 'Receiver/fire capture changed')
     original = 'DWORD PTR ds:0x%x' % symbols['originalPlayerControls']
     calls = [i for i, value in enumerate(code) if value == 'call ' + original]
-    require(len(calls) == 1 and code.count('jmp ' + original) == 1, 'Native forwarding paths changed')
+    tails = code.count('jmp ' + original)
+    require(len(calls) == 1 and tails in (0,1), 'Native forwarding paths changed')
     expected = []
     for offset in (0x14, 0x18, 4, 8, 12):
         expected += [f'mov eax,DWORD PTR [ebx+0x{offset:x}]',
                      f'mov DWORD PTR [esp+0x{offset:x}],eax']
-    expected += ['movzx eax,BYTE PTR ' + fire.group(1), 'mov DWORD PTR [esp],eax',
+    expected += [fire_load, 'mov DWORD PTR [esp],'+fire_argument,
                  'mov ecx,DWORD PTR ' + this.group(1)]
     i = calls[0]
     require(code[i-len(expected):i] == expected, 'Native look/fire/move slots changed')
     prefix = code[i-len(expected)-4:i-len(expected)]
-    require(prefix[0] == 'mov eax,DWORD PTR [ebx+0x10]' and
-            prefix[-1] == 'mov DWORD PTR [esp+0x10],eax', 'First movement component changed')
-    require(code[i+1] == 'sub esp,0x1c' and code.count('ret 0x1c') == 1,
+    if not (prefix[0] == 'mov eax,DWORD PTR [ebx+0x10]' and
+            prefix[-1] == 'mov DWORD PTR [esp+0x10],eax'):
+        prefix = code[i-len(expected)-5:i-len(expected)]
+        require(prefix[:2] == ['mov eax,DWORD PTR [ebx+0x10]', 'fstp DWORD PTR [ebx+0x14]'] and
+                re.fullmatch(r'fld DWORD PTR \[ebp-0x[0-9a-f]+\]', prefix[2]) is not None and
+                prefix[3:] == ['fstp DWORD PTR [ebx+0x18]', 'mov DWORD PTR [esp+0x10],eax'],
+                'First movement component changed')
+    cleanup=code[i+1:i+4]
+    require((cleanup[0]=='sub esp,0x1c' or cleanup==[
+                'mov eax,DWORD PTR [ebx+0x10]','mov ecx,esi','sub esp,0x1c']) and
+            code.count('ret 0x1c') == 1,
             'Native callee stack cleanup changed')
+    if tails and fire_load.startswith('mov eax,DWORD PTR'):
+        tail = code.index('jmp ' + original)
+        require(code[tail-10:tail] == [fire_load, 'mov DWORD PTR [ebx],eax',
+                'mov ecx,DWORD PTR ' + this.group(1), 'lea esp,[ebp-0xc]',
+                'pop ebx', 'pop esi', 'pop edi', 'pop ebp', 'lea esp,[edi-0x8]', 'pop edi'],
+                'Inactive native tail forwarding changed')
     direction = 'call DWORD PTR ds:0x%x' % symbols['nativeOperatorMoveDir']
     sites = [i for i, value in enumerate(code) if value == direction]
     require(len(sites) == 4, 'Expected three basis queries and one desired-direction query')
@@ -155,7 +229,8 @@ def verify_object(path):
         require('sub esp,0x1c' in code[i+1:i+10], 'Direction query cleanup changed')
         require(any(v.startswith('cmp eax,') for v in code[i+1:i+12]), 'Hidden output identity unchecked')
     return {'object': str(path), 'stack_argument_bytes': 28, 'direction_calls': 4,
-            'native_call_and_tail_forward_verified': True, 'windows_code_executed': False}
+            'native_forward_call_sites':len(calls), 'native_forward_tail_sites':tails,
+            'native_forwarding_verified': True, 'windows_code_executed': False}
 
 
 if __name__ == '__main__':

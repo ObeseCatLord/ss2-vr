@@ -1,5 +1,11 @@
 # Native dual-wield exploratory gameplay probe
 
+Current user direction: Codex must stop individual weapon-firing tests. The user
+will perform them in VR after the remaining implementation is ready. The optional
+probe below records reviewed tooling and historical preparation, not active
+authorization to continue firing probes. It does not replace comprehensive
+user VR acceptance.
+
 Full native dual wield remains required, including multiplayer. Native eligibility,
 projectiles, ammo, charge, reload and command history are retained. Two displayed
 weapons and source tests do not establish independent firing or complete compatibility.

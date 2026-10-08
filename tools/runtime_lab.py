@@ -284,6 +284,11 @@ def validate(cfg):
         raise ValueError('Only the verified process-local Proton sync comparison is admitted')
     if cfg.get('native_dual_probe') not in (None,'zap-initial-inventory'):
         raise ValueError('Only the verified native ID1 charge/release fixture is admitted')
+    if cfg.get('background_controls_probe') not in (None,'inactive-native-route','joystick-native-movement'):
+        raise ValueError('Unknown background controls diagnostic')
+    if cfg.get('background_controls_probe') and (cfg.get('native_dual_probe') or
+        cfg.get('renderer_mode','vr')!='vr' or cfg.get('native_input_probe')):
+        raise ValueError('Background controls diagnostic requires a separate non-firing VR run')
     if type(cfg.get('capture_desktop',True)) is not bool:
         raise ValueError('Desktop capture selection must be explicit boolean')
     if not cfg['pose_steps'] or cfg['pose_steps'][0]['name']!='baseline' or cfg['pose_steps'][0]['head']!=cfg['baseline_head']:
@@ -295,6 +300,158 @@ def validate(cfg):
     if expected!={'p':[0,0,0],'q':[0,0,0,1]} or cfg['baseline_head']!=[0,1.6,0,0,0,0]:
         raise ValueError('Initial remote STAGE head and native LOCAL reference must match the verified baseline')
     return private,lab,prefix
+
+def background_controls_probe(cfg,env,token,deadline,run_dir,state):
+    """Bounded neutral or walking-only input; both triggers stay neutral."""
+    lab=Path(cfg['game_lab']);stock_token='Z:'+str(lab/'Bin/Sam2.exe')
+    record={'movement_injected':False,'fire_injected':False,'samples':[], 'inactive_route_observed':False}
+    incarnation=observer(cfg,env,'stock-status',stock_token,timeout=remaining(deadline,3),deadline=deadline)
+    if incarnation['game_pid']!=state['game_pid']:
+        raise RuntimeError('Background probe process differs from channel')
+    if state.get('trigger')!=[0,0] or not state.get('gameplay') or state.get('menu'):
+        raise RuntimeError('Background probe requires neutral gameplay')
+    try:
+        receipt=run_dir/'background-window-request.json'
+        observer(cfg,env,'stock-background',stock_token,(incarnation['process_creation'],'Z:'+str(receipt)),
+                 timeout=remaining(deadline,3),deadline=deadline)
+        stop=min(deadline-4,time.monotonic()+5);previous=state['input_sequence']
+        while time.monotonic()<stop:
+            sample=observer(cfg,env,'status',token,timeout=remaining(stop,2),deadline=stop)
+            if sample.get('trigger')!=[0,0]:raise RuntimeError('Non-neutral trigger in background probe')
+            if (sample['input_sequence']>previous and sample.get('native_activation_repeated') and
+                sample.get('native_core_foreground')==0 and sample.get('native_input_exclusive')==0 and
+                sample.get('native_host_iconic') and sample.get('focused') and sample.get('head_valid') and
+                sample.get('gameplay') and not sample.get('menu') and sample['input_age_ms']<150):
+                record['samples'].append(sample);previous=sample['input_sequence']
+            log_path=lab/'Bin/SS2VR.log'
+            rows=re.findall(r'Lab controls observation route=inactive ([^\n]+)',log_path.read_text(errors='replace'))
+            matching=[r for r in rows if 'binding=1 ' in r and 'fire=0 ' in r and 'move=0,0,0' in r and
+                      int(re.search(r'tick=(\d+)',r)[1])>=state['input_tick_ms']]
+            if len(matching)>=3 and len(record['samples'])>=3:
+                record['inactive_route_observed']=True;record['native_receipt_count']=len(matching);break
+            if len(record['samples'])>3:record['samples']=record['samples'][-3:]
+            time.sleep(.05)
+        if not record['inactive_route_observed']:
+            raise RuntimeError('No current owned inactive-controls receipt under fresh background XR input')
+        if cfg['background_controls_probe']=='joystick-native-movement':
+            record['movement']=background_joystick_probe(cfg,env,token,deadline,run_dir,record['samples'][-1])
+            record['movement_injected']=True
+        return record
+    finally:
+        # Normal owned-window restoration only, including failed diagnostics.
+        restore=run_dir/'background-restore-request.json'
+        try:
+            observer(cfg,env,'stock-focus',stock_token,(incarnation['process_creation'],'Z:'+str(restore)),
+                     timeout=remaining(deadline,3),deadline=deadline)
+        except ObserverError as error:
+            if error.code!=8:raise
+            record['restore_immediate_foreground_observed']=False
+        finally:
+            (run_dir/'background-controls.json').write_text(json.dumps(record,indent=2))
+
+def background_joystick_probe(cfg,env,token,deadline,run_dir,state):
+    """One small walking demand/release through actual native ClientAction."""
+    report={'phases':[],'body_movement_observed':False,'origin_settlement_acceptance':False,
+            'fire_injected':False}
+    identity=(state['session'],state['reference'],state['tracking_generation'],state['game_pid'])
+    if deadline-time.monotonic()<15:raise TimeoutError('Insufficient full movement/neutral/restoration budget')
+    boundary=state['input_tick_ms'];baseline=cfg['expected_baseline_head']
+    def admitted(s):
+        return (tuple(s[k] for k in ('session','reference','tracking_generation','game_pid'))==identity and
+            s['focused'] and s['head_valid'] and s['gameplay'] and not s['menu'] and s['input_age_ms']<150 and
+            s.get('native_activation_repeated') and s.get('native_input_exclusive')==0 and
+            s.get('native_core_foreground')==0 and s.get('health',0)>0 and s.get('wheel_open')==[0,0] and
+            s.get('trigger')==[0,0] and s.get('fire_sequence')==[0,0] and
+            max(abs(a-b) for a,b in zip(s['head']['p'],baseline['p']))<.001 and
+            abs(sum(a*b for a,b in zip(s['head']['q'],baseline['q'])))>.99999)
+    try:
+        for name,y,duration in [('walk',.3,.6),('release',0,1.2)]:
+            subprocess.run([cfg['pose_driver'],str(cfg['remote_port']),*map(str,cfg['baseline_head']),
+                '--move','0',str(y),'0','0'],check=True,timeout=remaining(deadline,3))
+            observations=[];previous=state['input_sequence'];stop=None;confirm=time.monotonic()+3
+            while stop is None or time.monotonic()<stop:
+                if stop is None and time.monotonic()>confirm:raise TimeoutError('Movement axis not confirmed')
+                s=observer(cfg,env,'status',token,timeout=remaining(deadline,2),deadline=deadline)
+                if not admitted(s):raise RuntimeError('Non-firing background movement lost fixture admission')
+                if s['input_sequence']>previous:
+                    previous=s['input_sequence']
+                    axes=s.get('axes');expected_axes=[0,y,0,0]
+                    if axes and max(abs(v-e) for v,e in zip(axes[0]+axes[1],expected_axes))<.001:
+                        if stop is None:stop=time.monotonic()+duration
+                        observations.append(s)
+                    elif stop is not None:raise RuntimeError('Held movement axes changed after confirmation')
+                time.sleep(.02)
+            endpoint=observer(cfg,env,'status',token,timeout=remaining(deadline,2),deadline=deadline)
+            if not admitted(endpoint) or not endpoint.get('axes') or max(abs(v-e) for v,e in
+                    zip(endpoint['axes'][0]+endpoint['axes'][1],[0,y,0,0]))>=.001:
+                raise RuntimeError('Movement endpoint lost matching admitted axes')
+            observations.append(endpoint)
+            if len(observations)<3:raise RuntimeError('Movement phase lacks fresh matching axis observations: '+name)
+            state=observations[-1];report['phases'].append({'name':name,'observations':observations})
+        endpoint_tick=report['phases'][-1]['observations'][-1]['input_tick_ms']+report['phases'][-1]['observations'][-1]['input_age_ms']
+        log_path=Path(cfg['game_lab'])/'Bin/SS2VR.log';receipt_deadline=min(deadline-4,time.monotonic()+2)
+        while True:
+            native=log_path.read_text(errors='replace')
+            if 'Lab controls observation saturated route=inactive' in native:
+                raise RuntimeError('Native movement trace budget exhausted')
+            rows=re.findall(r'Lab controls observation route=inactive ([^\n]+)',native)
+            if rows and int(re.search(r'tick=(\d+)',rows[-1])[1])>=endpoint_tick:break
+            if time.monotonic()>=receipt_deadline:raise TimeoutError('Native receipts do not reach release endpoint')
+            time.sleep(.02)
+        rows=[r for r in rows if int(re.search(r'tick=(\d+)',r)[1])>=boundary]
+        if len(rows)<6 or any('binding=1 ' not in r or 'fire=0 ' not in r or 'bodyValid=1 ' not in r or
+                             'completed=1' not in r for r in rows):
+            raise RuntimeError('Movement lacks owned zero-fire actual native body receipts')
+        def field(r,name):return re.search(r'(?:^| )'+name+r'=([^ ]+)',r)[1]
+        if any(tuple(int(field(r,k)) for k in ('session','reference','generation'))!=identity[:3] for r in rows):
+            raise RuntimeError('Native movement receipt differs from admitted XR identity')
+        owners={(field(r,'brain'),field(r,'player'),field(r,'mechanism'),field(r,'root'),field(r,'session'),field(r,'reference'),
+                 field(r,'generation'),field(r,'rig'),field(r,'origin'),field(r,'turn')) for r in rows}
+        if len(owners)!=1:raise RuntimeError('Movement changed owner/origin/basis during probe')
+        bodies=[list(map(float,field(r,'body').split(','))) for r in rows]
+        if not all(math.isfinite(v) for b in bodies for v in b):raise RuntimeError('Invalid native body receipt')
+        walk_start=report['phases'][0]['observations'][0]['input_sequence']
+        walk_end=report['phases'][0]['observations'][-1]['input_sequence']
+        moving=[r for r in rows if walk_start<=int(field(r,'sequence'))<=walk_end]
+        if len(moving)<3:raise RuntimeError('Stick demand did not reach inactive native movement')
+        for r in moving:
+            turn=float(field(r,'turn'));actual=list(map(float,field(r,'move').split(',')))
+            if len(actual)!=3 or not math.isfinite(turn) or not all(math.isfinite(v) for v in actual):
+                raise RuntimeError('Nonfinite or malformed native movement receipt')
+            expected=[-.3*math.sin(turn),0,-.3*math.cos(turn)]
+            if max(abs(v-e) for v,e in zip(actual,expected))>.001:
+                raise RuntimeError('Native movement direction/magnitude differs from commanded stick')
+        release_sequence=report['phases'][-1]['observations'][0]['input_sequence']
+        released=[r for r in rows if int(field(r,'sequence'))>=release_sequence]
+        if len(released)<3 or any(any(float(v)!=0 for v in field(r,'move').split(',')) for r in released):
+            raise RuntimeError('Neutral did not clear native movement demand')
+        distance=math.hypot(bodies[-1][0]-bodies[0][0],bodies[-1][2]-bodies[0][2])
+        before=[r for r in released if int(field(r,'tick'))<=endpoint_tick-250]
+        after=[r for r in released if int(field(r,'tick'))>=endpoint_tick]
+        if not before or not after:raise RuntimeError('Cessation receipts do not bracket full final250ms')
+        start=int(field(before[-1],'tick'));end_tick=int(field(after[0],'tick'))
+        settled=[r for r in released if start<=int(field(r,'tick'))<=end_tick]
+        ticks=[int(field(r,'tick')) for r in settled]
+        if (len(settled)<3 or ticks[0]<endpoint_tick-350 or ticks[-1]>endpoint_tick+100 or
+                any(b-a>100 or b<=a for a,b in zip(ticks,ticks[1:]))):
+            raise RuntimeError('Cessation receipt coverage has a gap or misses endpoint')
+        end=list(map(float,field(settled[-1],'body').split(',')))
+        drift=max(math.hypot(float(field(r,'body').split(',')[0])-end[0],
+                             float(field(r,'body').split(',')[2])-end[2]) for r in settled)
+        if distance<.02 or drift>.02:raise RuntimeError('Actual native body movement/cessation not established')
+        report.update(body_movement_observed=True,horizontal_displacement_m=distance,
+                      last_250ms_horizontal_drift_m=drift,release_endpoint_tick=endpoint_tick,
+                      cessation_receipt_ticks=ticks,native_receipts=len(rows),native_owner=list(owners)[0])
+        return report
+    finally:
+        try:
+            subprocess.run([cfg['pose_driver'],str(cfg['remote_port']),*map(str,cfg['baseline_head']),
+                '--move','0','0','0','0'],check=True,timeout=3)
+        except Exception as error:
+            report['neutral_release_error']=str(error)
+            raise RuntimeError('Movement probe final neutral release failed') from error
+        finally:
+            (run_dir/'background-movement.json').write_text(json.dumps(report,indent=2))
 
 def native_dual_probe(cfg,env,token,deadline,run_dir,state):
     """Bounded unchanged-inventory Zap probe via ordinary simulated input.
@@ -433,6 +590,8 @@ def run(cfg):
     env.update(cfg['monado_environment'])
     env.update(cfg.get('proton_environment',{}))
     env.pop('SS2VR_LAB_STOCK_RENDER',None)
+    env.pop('SS2VR_LAB_BACKGROUND_MOVE',None)
+    if cfg.get('background_controls_probe')=='joystick-native-movement':env['SS2VR_LAB_BACKGROUND_MOVE']='1'
     if stock:env['SS2VR_LAB_STOCK_RENDER']='1'
     files=[]; cleanup_errors=[]
     deadline=time.monotonic()+cfg.get('timeout',60)
@@ -697,6 +856,8 @@ def run(cfg):
                 if captured.returncode:
                     manifest.setdefault('desktop_capture_errors',[]).append({'pose':step['name'],
                         'returncode':captured.returncode,'stderr':captured.stderr[-4096:]})
+        if cfg.get('background_controls_probe'):
+            manifest['background_controls_probe']=background_controls_probe(cfg,env,token,deadline,run_dir,state)
         if cfg.get('native_dual_probe')=='zap-initial-inventory':
             # Retain the same normal window activation policy for actual input
             # probes; native eye capture does not establish exclusive input.

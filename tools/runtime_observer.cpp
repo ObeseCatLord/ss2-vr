@@ -199,7 +199,7 @@ static StockCameraRead stockCameraRead(const OwnedStockProcess &process) {
     return out;
 }
 static int stockCommand(int argc,wchar_t **argv) {
-    if(argc!=4&&!(argc==5&&!wcscmp(argv[1],L"stock-focus")))return 2;
+    if(argc!=4&&!(argc==5&&(!wcscmp(argv[1],L"stock-focus")||!wcscmp(argv[1],L"stock-background"))))return 2;
     OwnedStockProcess process;if(!stockProcess(argv[2],process))return 4;
     if(!wcscmp(argv[1],L"stock-status")) {
         auto *file=_wfopen(argv[3],L"wbx");if(!file)return 6;
@@ -217,7 +217,7 @@ static int stockCommand(int argc,wchar_t **argv) {
     wchar_t *end=nullptr;const auto expected=std::wcstoull(argv[3],&end,10);
     if(!expected||!end||*end||expected!=process.creation)return 8;
     // Retain the original process handle through posting to prevent PID reuse.
-    if(!wcscmp(argv[1],L"stock-focus")) {
+    if(!wcscmp(argv[1],L"stock-focus")||!wcscmp(argv[1],L"stock-background")) {
         OwnedLoading native{};loadingOwner(process.pid,argv[2],native);
         if(!native.activationRepeated)return 8;
         const HWND window=reinterpret_cast<HWND>(uintptr_t(native.hostHwnd));DWORD owner=0;
@@ -226,6 +226,17 @@ static int stockCommand(int argc,wchar_t **argv) {
         FILE *receipt=argc==5?_wfopen(argv[4],L"wbx"):nullptr;
         if(argc==5&&!receipt)return 6;
         const bool visible=IsWindowVisible(window),iconic=IsIconic(window);
+        if(!wcscmp(argv[1],L"stock-background")) {
+            // Explicit private-lab diagnostic on the same retained process and
+            // native-associated root window. No flags or foreign input injected.
+            const bool requested=ShowWindowAsync(window,SW_MINIMIZE);
+            if(receipt) {
+                std::fprintf(receipt,"{\"native_host_hwnd\":%u,\"visible_before\":%u,\"iconic_before\":%u,\"minimize_requested\":%u}\n",
+                    native.hostHwnd,visible,iconic,requested);
+                if(std::fclose(receipt)!=0)return 7;
+            }
+            return requested?0:8;
+        }
         bool showRequested=false;
         if(iconic)showRequested=ShowWindowAsync(window,SW_RESTORE);
         const bool foregroundRequested=SetForegroundWindow(window);
@@ -262,6 +273,8 @@ int wmain(int argc,wchar_t **argv) {
             static_cast<unsigned long long>(i.sequence),static_cast<unsigned long long>(i.tickMs),
             static_cast<unsigned long long>(age),i.focused,i.headValid);
         pose(output,i.head);std::fprintf(output,",\"hands\":[");pose(output,i.hand[0]);std::fprintf(output,",");pose(output,i.hand[1]);
+        std::fprintf(output,"],\"axes\":[[%.9g,%.9g],[%.9g,%.9g]],\"grip_valid\":[%u,%u],\"grips\":[",
+            i.axis[0][0],i.axis[0][1],i.axis[1][0],i.axis[1][1],i.gripValid[0],i.gripValid[1]);pose(output,i.grip[0]);std::fprintf(output,",");pose(output,i.grip[1]);
         const auto &ui=s.ui;
         std::fprintf(output,"],\"session\":%u,\"reference\":%u,\"tracking_generation\":%u,\"hand_valid\":[%u,%u],\"trigger\":[%.9g,%.9g],\"primary_active_mask\":%u,\"primary_generations\":[%u,%u],\"ui_tick_ms\":%llu,\"ui_tracking_generation\":%u,\"health\":%d,\"armor\":%d,\"current_weapon\":[%d,%d],\"current_ammo\":[%d,%d],\"fire_sequence\":[%u,%u],\"wheel_open\":[%u,%u]",
             i.session,i.reference,s.trackingGeneration,i.handValid[0],i.handValid[1],i.trigger[0],i.trigger[1],
@@ -360,7 +373,9 @@ int wmain(int argc,wchar_t **argv) {
     std::fprintf(f,"{\"sequence\":%llu,\"input_sequence\":%llu,\"input_tick_ms\":%llu,\"width\":%u,\"height\":%u,\"presentation\":%u,\"session\":%u,\"reference\":%u,\"tracking_generation\":%u,\"ui_requested\":%u,\"head\":",
         static_cast<unsigned long long>(request.sequence),static_cast<unsigned long long>(request.input.sequence),
         static_cast<unsigned long long>(request.input.tickMs),request.width,request.height,presentation,request.session,request.reference,request.trackingGeneration,request.uiRequested);
-    pose(f,request.input.head);std::fprintf(f,",\"eyes\":[");pose(f,request.eye[0]);std::fprintf(f,",");pose(f,request.eye[1]);
+    pose(f,request.input.head);std::fprintf(f,",\"hands\":[");pose(f,request.input.hand[0]);std::fprintf(f,",");pose(f,request.input.hand[1]);
+    std::fprintf(f,"],\"grip_valid\":[%u,%u],\"grips\":[",request.input.gripValid[0],request.input.gripValid[1]);pose(f,request.input.grip[0]);std::fprintf(f,",");pose(f,request.input.grip[1]);
+    std::fprintf(f,"],\"eyes\":[");pose(f,request.eye[0]);std::fprintf(f,",");pose(f,request.eye[1]);
     std::fprintf(f,"],\"trigger\":[%.9g,%.9g],\"hand_valid\":[%u,%u],\"primary_active_mask\":%u,\"primary_generations\":[%u,%u],\"fov\":[",
         request.input.trigger[0],request.input.trigger[1],request.input.handValid[0],request.input.handValid[1],
         request.input.primaryActiveMask,request.input.primaryInputGeneration[0],request.input.primaryInputGeneration[1]);
