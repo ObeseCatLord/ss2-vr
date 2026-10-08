@@ -1,6 +1,14 @@
 # Cloud continuation — 2026-10-05
 
 Latest PC direct-scene work is in PC_GAMEPLAY_READINESS.md and DIRECT_GAMEPLAY_LAB.md.
+Current remote-head follow-up restricts writes to frozen VR stereo pairs and
+enables that bounded option. Ordinary desktop heads remain native. Typed resource
+exclusion and Astra source GO are recorded in REMOTE_HEAD_RESOURCE_OWNERSHIP.md.
+UI-fault native cleanup now uses an already admitted frame pointer; compiled
+helper/clones cannot initialize TLS, call out or branch outside their bodies.
+All products/61 Debug groups, both cleanup gates, eight compiled negative controls
+and matching artifact/layout contracts pass on source6993876190e0beb3fc10e966a1edab6280eb5bcc8617e912bda686d4e589ac56.
+No new game/MP probe; primary gameplay testing remains user-operated.
 Current source charge/muzzle follow-up is NATIVE_WEAPON_DISPLACEMENT.md: native
 charge translation captured without extra getter calls, common model/muzzle
 accounting and explicit native-unwind TLS cleanup. Astra source GO and all-product

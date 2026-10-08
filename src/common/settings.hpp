@@ -12,7 +12,7 @@ struct VrSettings {
     bool immersiveSwimming = false;
     bool roomscale = false; // Development gate until controller/replication completion.
     bool headFade = false;
-    bool remoteHeadTracking = false;
+    bool remoteHeadTracking = true;
     float headRadius = .12f, headClearanceMargin = .05f;
     Pose gripOffset[WeaponCount];
 };

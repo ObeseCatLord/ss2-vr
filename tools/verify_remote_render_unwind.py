@@ -50,7 +50,30 @@ def verify(obj):
 
     cleanup_names = ['palettePass()', 'modelPass()', 'freezePair()', 'commitPair(',
                      'postModelPass()', 'postPalette()', 'observeLocalScope()']
-    allowed = {'ss2vr::game::nativeUiFault()',
+    fault = 'ss2vr::game::nativeUiFault(char const*)'
+    # The diagnostic reason changed this ABI after the historical gate was
+    # written. Verify its actual implementation, not just a trusted name.
+    bridge = obj.with_name('bridge.cpp.obj')
+    bridge_assembly = subprocess.check_output(['objdump', '-drC', '-Mintel', str(bridge)], text=True)
+    bridge_parts = re.split(r'^[0-9a-f]+ <(.+)>:\n', bridge_assembly, flags=re.M)
+    bridge_bodies = dict(zip(bridge_parts[1::2], bridge_parts[2::2]))
+    fault_bodies = [body for name, body in bridge_bodies.items()
+                    if name == fault or name.startswith(fault + ' [clone ')]
+    require(fault in bridge_bodies and fault_bodies,
+            'Missing UI-fault cleanup implementation')
+    for fault_body in fault_bodies:
+        require(not re.findall(r'DISP32\s+', fault_body) and
+                not any(re.match(r'call\b|f[a-z]', i) or re.search(r'\b(?:xmm|ymm|zmm)[0-9]', i)
+                        for i in code(fault_body)),
+                'UI-fault cleanup must remain scalar with no callbacks or allocation')
+        addresses = {int(address, 16) for address in
+                     re.findall(r'^\s*([0-9a-f]+):\s', fault_body, re.M)}
+        for instruction in code(fault_body):
+            if re.match(r'(?:j[a-z]+|loop(?:e|ne)?)\b', instruction):
+                target = re.fullmatch(r'\S+ ([0-9a-f]+)', instruction)
+                require(target and int(target[1], 16) in addresses,
+                        'UI-fault cleanup branch must stay inside its inspected body')
+    allowed = {fault,
                'ss2vr::game::multiplayer::PresentationReadGuard::release()',
                'ReleaseSRWLockShared@4', 'ReleaseSRWLockExclusive@4',
                'operator delete(void*, unsigned int)'}
@@ -58,7 +81,7 @@ def verify(obj):
         body = one(name, '::Context::finish(void*, int)')
         instructions = code(body)
         calls = set(re.findall(r'DISP32\s+([^\n]+)', body))
-        require(calls <= allowed and 'ss2vr::game::nativeUiFault()' in calls,
+        require(calls <= allowed and fault in calls,
                 'Cleanup gained a native callback or lost fault retirement: ' + name)
         require(not any(re.match(r'f[a-z]', i) or re.search(r'\b(?:xmm|ymm|zmm)[0-9]', i) or
                         re.match(r'call (?:DWORD PTR|(?:eax|ebx|ecx|edx|esi|edi|ebp|esp)$)', i) for i in instructions),
@@ -86,7 +109,10 @@ def verify(obj):
                 'Both normal and abnormal paths must restore saved outer TLS: ' + name)
     return {'object_sha256': hashlib.sha256(obj.read_bytes()).hexdigest(),
             'explicit_native_cleanup_boundaries': len(cleanup_names),
-            'scratch_and_lock_retirement': True, 'runtime_executed': False}
+            'scratch_and_lock_retirement': True,
+            'ui_fault_object_sha256': hashlib.sha256(bridge.read_bytes()).hexdigest(),
+            'ui_fault_cleanup_scalar': True, 'ui_fault_variants_checked': len(fault_bodies),
+            'runtime_executed': False}
 
 
 if __name__ == '__main__':

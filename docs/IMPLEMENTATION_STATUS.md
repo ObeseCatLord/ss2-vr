@@ -2,6 +2,18 @@
 
 ## Active PC implementation
 
+Remote head palettes now require an admitted frozen VR stereo pair; ordinary
+desktop draws retain native heads and no longer recapture a post-producer anchor.
+Typed stock loading/reference evidence closes the selected resource-cleanup edge,
+without new retention, worker locks or scheduling. The restricted option is enabled
+by default. Actual multiplayer appearance/lifecycle remains user acceptance.
+The transitive compiled cleanup audit found and removed lazy TLS initialization
+from UI-fault retirement; original and cloned helpers remain scalar with local
+branches. Astra source GO, all-product build/61 Debug groups, both x86 cleanup
+gates, eight compiled negative controls and artifact/layout checks pass on source
+6993876190e0beb3fc10e966a1edab6280eb5bcc8617e912bda686d4e589ac56.
+No runtime was launched for this change. See REMOTE_HEAD_RESOURCE_OWNERSHIP.md.
+
 Tracked native weapon charge/recoil translation now survives model placement and
 the shared muzzle/laser conversion. The adapter captures the existing getter
 invocation, preserves native scale/reflection and performs no guessed gripping
@@ -10,7 +22,7 @@ state. Astra source GO follows four cache/forwarding fixes; all products rebuilt
 61 Debug groups, compiled callback/cleanup negative controls and artifact/layout
 gates pass on sourceff8a2d050e3f81ba18c6f1c4d6df4b7e2955edbf0c903e2206ef8bb71c70d628. No game or firing probe
 ran for this change. See NATIVE_WEAPON_DISPLACEMENT.md. Full implementation remains
-open in the native melee, MP roomscale, driver-control and remote-head gates.
+open in native melee, MP roomscale, driver controls and remaining presentation coverage.
 
 
 The latest user instruction reserves primary in-VR gameplay testing, including

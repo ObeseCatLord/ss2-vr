@@ -440,25 +440,13 @@ struct HeadPassStorage {
 };
 static void postPaletteBody(const multiplayer::PresentationReadGuard& presentationGuard,
                             HeadPassStorage& storage) {
-    if (!hooksReady.load(std::memory_order_acquire) || !ready.load(std::memory_order_acquire))
+    if (!frozenPair || !hooksReady.load(std::memory_order_acquire) || !ready.load(std::memory_order_acquire))
         return;
-    if (!checkNativeThread() || (frozenPair && !validatePair(presentationGuard))) {
+    if (!checkNativeThread() || !validatePair(presentationGuard)) {
         paletteFault();
         return;
     }
-    std::array<FrozenBinding, MaxBindings> bank{};
-    if (frozenPair)
-        bank = frozen;
-    else {
-        for (size_t i = 0; i < bindings.size(); ++i) {
-            auto &entry = bank[i];
-            entry.binding = bindings[i];
-            entry.binding.sample = presentationGuard.sample(entry.binding.playerHandle);
-            void *player = nullptr;
-            entry.bodyValid = currentBinding(entry.binding, entry.binding.sample, player) &&
-                              bodyAnchor(player, entry.binding.rider, entry.body);
-        }
-    }
+    const auto bank = frozen; // Captured before native stereo production, once per pair.
     bool eligible = false;
     for (const auto &entry : bank)
         eligible |= entry.bodyValid && (entry.binding.sample.pose.validMask & 1) &&
@@ -573,6 +561,9 @@ static void postPaletteBody(const multiplayer::PresentationReadGuard& presentati
             palette[i] = changed[i];
 }
 static void postPalette() {
+    // Head writes are restricted to the admitted frozen native render extent.
+    // Ordinary desktop draws do not enter binding reads or recapture an anchor.
+    if (!frozenPair) return;
     std::optional<HeadPassStorage> storage(std::in_place);
     withPresentationBindings([&](const auto& guard) {postPaletteBody(guard,*storage);},
                              [&](bool) noexcept {storage.reset();});
@@ -792,7 +783,7 @@ bool initialize(HMODULE engine, HMODULE core, HMODULE sam, HookInstallerRva inst
         !install(engine, 0xdde30, reinterpret_cast<void *>(palettePass),
                  reinterpret_cast<void **>(&originalPalettePass)) || !originalPalettePass)
         return false;
-    headTrackingEnabled = enableHeadTracking; // Head mutation remains default disabled.
+    headTrackingEnabled = enableHeadTracking; // Writes require a frozen stereo pair.
     ready.store(true, std::memory_order_release);
     return true;
 }

@@ -42,7 +42,7 @@ The 0.2.11 development checkpoint includes admitted native flat UI and full-eye 
 
 Experimental head-volume protection can be enabled with `[HeadComfort] Enabled=1` in `Bin/SS2VR/SS2VR.ini`. Current source waits for a matching query attempt and makes obstructed or unavailable owned attempts opaque in both world views while preserving UI. Clear cached images must remain inside their admitted volume and lifetime. It remains disabled by default and runtime-unverified. See [current head-volume integration](docs/HEAD_VOLUME_INTEGRATION.md); the [earlier head comfort review](docs/HEAD_COMFORT_REVIEW_DISPOSITION.md) describes the superseded opportunistic ray implementation.
 
-Native remote head bones can be requested with `[Multiplayer] RemoteHeadTracking=1` in that INI. The adapter retains native animation and applies full XYZ/quaternion tracking about the body eye. It remains disabled by default: complete native concurrent-worker/model lifetime and appearance are unverified. This does not affect the existing local 6DOF headset and hand tracking. See [head review disposition](docs/HEAD_ANIMATION_REVIEW_DISPOSITION.md).
+Native remote head bones are enabled by default inside admitted frozen VR stereo pairs. The adapter retains native animation and applies full XYZ/quaternion tracking about the body eye. Ordinary desktop observers retain native heads. Set `[Multiplayer] RemoteHeadTracking=0` to disable the adapter; actual multiplayer appearance and lifecycle still need your in-VR acceptance. This does not affect local 6DOF tracking. See [current ownership and coverage](docs/REMOTE_HEAD_RESOURCE_OWNERSHIP.md).
 
 ## Requirements and installation
 

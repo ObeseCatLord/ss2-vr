@@ -1,5 +1,13 @@
 # Remote renderer native-unwind retirement — 2026-10-07
 
+Current follow-up: UI-fault retirement uses a constant-initialized TLS pointer to
+the already admitted frame, avoiding lazy frame construction during native unwind.
+The compiled gate inspects both actual helper variants and requires all branches
+to stay inside their inspected bodies. Both x86 products pass; eight modified
+compiled-object controls for calls, FP and outgoing/indirect tail jumps reject.
+Remote heads now require a frozen VR stereo pair and are enabled for that bounded
+extent. See REMOTE_HEAD_RESOURCE_OWNERSHIP.md. Historical findings follow.
+
 Root-owned source correction; no game, Windows/Wine, host, OpenXR, headset or
 network session executed. This does not close native worker/model lifetime or
 enable the default-off RemoteHeadTracking option.

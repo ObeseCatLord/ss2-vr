@@ -1393,3 +1393,21 @@ products/61 Debug groups/native-finally/artifact contracts and five compiled
 negative controls pass. Source fingerprintff8a2d050e3f81ba18c6f1c4d6df4b7e2955edbf0c903e2206ef8bb71c70d628.
 No game, firing, Windows hardware or MP session ran for this code. Native melee,
 MP origin, actual driver controls and full remote-head enablement remain open.
+
+## Frozen VR remote heads and scalar fault retirement
+
+Enabled remote head palettes only inside admitted frozen VR stereo pairs; removed
+ordinary desktop binding/anchor recapture. The completed typed loading/reference
+exclusion supports the stock selected-model extent, without a new retain scheme,
+worker lock or task pump. Astra/xhigh source GO; appearance remains user acceptance.
+
+Compiled transitive auditing found nativeUiFault's lazy TLS initialization despite
+its scalar source body. Normal slot admission now publishes an already constructed
+frame pointer and retirement clears it. Both helper variants and seven cleanup
+extents pass in both x86 products. Adopted Astra's verifier improvement: no branch
+can leave an inspected helper. Eight private compiled-byte controls reject injected
+calls/FP/indirect/outgoing jumps. All products rebuilt,61 Debug groups/artifact/
+IPC10/wire6/native-finally checks pass on source
+6993876190e0beb3fc10e966a1edab6280eb5bcc8617e912bda686d4e589ac56.
+No runtime launch or firing probe. Primary vehicle/shooting/gameplay tests belong
+to the user. Full melee, MP body/origin and actual driver controls remain active.

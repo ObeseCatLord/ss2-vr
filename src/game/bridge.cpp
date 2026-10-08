@@ -443,6 +443,10 @@ struct NativeUiFrame {
     bool scopeReady[2]{};
 };
 static thread_local NativeUiFrame uiFrame;
+// Publish only after normal-path TLS construction. Native unwind retirement
+// must not evaluate uiFrame's TLS initializer (vectors/destructor registration).
+// Same-thread, non-owning pointer; admission and retirement remain slot-owned.
+static constinit thread_local NativeUiFrame *admittedUiFrame = nullptr;
 static thread_local bool scopeTransaction = false, scopeInterference = false;
 static thread_local uint64_t scopeTransactionGeneration = 0;
 static void retireNativeFrameForReset() noexcept;
@@ -579,12 +583,13 @@ static thread_local bool uiBypass = false;
 static void releaseUiFrame() noexcept;
 static bool restoreUiFrame() noexcept;
 __attribute__((noinline)) void nativeUiFault(const char *reason) noexcept {
-    if(uiFrame.slot>=0) {
-        if(!uiFrame.fault) {
-            uiFrame.faultOrigin=reinterpret_cast<uintptr_t>(__builtin_extract_return_addr(__builtin_return_address(0)));
-            uiFrame.faultReason=reason;
+    auto *frame = admittedUiFrame;
+    if(frame && frame->slot>=0) {
+        if(!frame->fault) {
+            frame->faultOrigin=reinterpret_cast<uintptr_t>(__builtin_extract_return_addr(__builtin_return_address(0)));
+            frame->faultReason=reason;
         }
-        uiFrame.fault=true;
+        frame->fault=true;
     }
 }
 void scopeGpuFault() noexcept {
@@ -1602,6 +1607,7 @@ static void releaseUiFrame() noexcept {
     uiFrame.color=uiFrame.ds=nullptr;
     uiFrame.player=nullptr;
     uiFrame.slot=-1;
+    admittedUiFrame=nullptr;
     uiFrame.ui=uiFrame.fault=uiFrame.world=uiFrame.restore=false;
     uiFrame.overlay=uiFrame.overlaySeen=uiFrame.complete=uiFrame.fade=false;
     uiFrame.faultOrigin=0;
@@ -2006,6 +2012,7 @@ void stereo(void *puppet,void(__thiscall *original)(void *),EyePostRender postRe
     const bool traceDepth=labDepthTrace && depthTraceRequests<8;
     if(traceDepth) ++depthTraceRequests;
     uiFrame.slot=chosen;
+    admittedUiFrame=&uiFrame;
     uiFrame.request=request;
     uiFrame.player=puppet;
     uiFrame.generation=resourceGeneration.load();
