@@ -10,24 +10,25 @@ consumed; its private logs and cleanup reconciliation are preserved. No second
 game/Proton/host attempt has run. Original installation/user data remain intact.
 
 A separate headless Weston/Xwayland display-only check reports a nonzero refresh.
-The new `tools/display_timing_probe.cpp` builds as x86 with warnings treated as
-errors, but has not executed. The optional prerequisite in `tools/runtime_lab.py`
-runs inside the existing validated private run, before Monado/game, and declines
-invalid modes or failed raster queries. `tools/private_display_lab.py` reuses the
-neutral collector on a separate display, tracks exact process incarnations and
-requires an explicit collector completion receipt, rather than accepting a
-normal compositor exit as success. Default/`--check` never starts a process.
+The launcher now places its runtime beneath the private root, rejects overlong
+socket paths, and starts lazy Xwayland with a read-only query before certifying
+its exact server. Its actual display-only preflight passed ownership and cleanup
+without starting a collector/Wine/game. Astra/xhigh gave scoped source GO.
 
-A fresh private lab uses the current b1b0086367de products below, independent
-known private profile/prefix copies, five muted audio settings and exact tool/
-file/link receipts. Both offline preflights pass. Eight new source-only mocked
-prerequisite/ownership checks pass normally and with optimized Python; these are
-not native startup or cleanup proof. Astra/xhigh gave scoped source/offline GO after the late-interruption
-classification correction; local routing metadata was verified, while independent
-backend attestation remains unavailable. A replacement
-capture needs renewed bounded authority after review. See
-[private collection procedure](PRIVATE_DISPLAY_COLLECTION.md). Full grasp,
-physical steering and user-operated acceptance remain incomplete.
+The user-authorized native prerequisite then executed, loading the x86 probe and
+DXVK, but returned no admitted JSON result. SS2/Monado never launched. Exact-owned
+cleanup had no errors/survivors and all 12 protected files remain unchanged.
+The old collector guide is marked historical; do not run its command. The attempt
+is consumed, with no automatic retry. There is still no captured idle geometry.
+
+Source follow-up isolates the probe's stdout from Proton's log redirection,
+records process exit separately after cleanup, and emits diagnostics for native
+window registration/creation failures. The revised probe builds with `-Werror`;
+12 mocked groups and 22 runtime-evidence groups pass normally and with optimized
+Python. This follow-up is not runtime verified. No src/CMake edits occurred;
+current native products below stay unchanged. Full grasp/driver steering and
+user-operated HMD/MP/firing/vehicle acceptance remain open. See
+[private collection procedure](PRIVATE_DISPLAY_COLLECTION.md).
 
 ## Full-project closure disposition
 

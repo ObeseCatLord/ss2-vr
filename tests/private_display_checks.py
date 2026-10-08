@@ -5,13 +5,13 @@ from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 import runtime_lab as lab
 import private_display_lab as display
-GOOD={'schema':1,'stage':'swapchain-query','desktop_hz':60,'adapter_hz':60,'swapchain_hz':60,
+GOOD={'schema':1,'stage':'swapchain-query','operation':'get-raster-status','desktop_hz':60,'adapter_hz':60,'swapchain_hz':60,
       'width':1280,'height':720,'raster_called':True,'hresult':0,'scanline':0,'in_vblank':True}
 class Checks(unittest.TestCase):
     def test_zero_current_mode_failure_or_forged_success_is_not_readiness(self):
         lab.require_display_timing(GOOD)
         for key,value in [('schema',True),('stage','invalid-current-mode'),('raster_called',1),
-                          ('hresult',False),('hresult',2289436780),('swapchain_hz',0),
+                          ('operation','create-device'),('hresult',False),('hresult',2289436780),('swapchain_hz',0),
                           ('adapter_hz',1),('desktop_hz',0),('width',False),('height',16385)]:
             with self.subTest(key=key),self.assertRaises(RuntimeError):lab.require_display_timing(GOOD|{key:value})
     def test_private_display_environment_removes_desktop_routes_and_ownership_is_exact(self):
@@ -49,6 +49,7 @@ class Checks(unittest.TestCase):
                     def kill(self):calls.append('kill');self.code=-9
                 process=Process()
                 def popen(args,**kw):
+                    self.assertEqual(kw['env']['PROTON_LOG'],'0')
                     report=GOOD|({'swapchain_hz':0} if fault=='zero-mode' else {})
                     text=json.dumps(report)+'\n'
                     if fault=='duplicate-json':text*=2
@@ -59,11 +60,68 @@ class Checks(unittest.TestCase):
                         lab.display_timing_probe(cfg,{'SS2VR_LAB_PRIVATE_DISPLAY':'1','DISPLAY':':2'},lab.time.monotonic()+40,root)
                 self.assertIn(123,calls);self.assertFalse((root/'display-timing.json').exists())
                 if fault=='timeout':self.assertIn('term',calls)
+    def test_probe_report_write_failure_cannot_skip_exact_retirement(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);exe=root/'probe.exe';exe.write_bytes(b'pinned');calls=[]
+            cfg={'proton':'never-run','display_timing_probe':{'path':str(exe),'sha256':lab.digest(exe)}}
+            env={'SS2VR_LAB_PRIVATE_DISPLAY':'1','DISPLAY':':2','PROTON_LOG':'1'}
+            class Process:
+                def poll(self):return 0
+                def wait(self,timeout):return 0
+            def popen(args,**kw):
+                self.assertEqual(kw['env']['PROTON_LOG'],'0')
+                kw['stdout'].write((json.dumps(GOOD)+'\n').encode());kw['stdout'].flush();return Process()
+            original=Path.write_text
+            def write(path,*args,**kw):
+                if path.name=='display-timing-process.json':raise OSError('injected diagnostic write failure')
+                return original(path,*args,**kw)
+            with patch.object(lab.subprocess,'Popen',side_effect=popen),patch.object(lab,'private_processes',side_effect=[[],[{'pid':99}]]),patch.object(lab,'stop_exact',side_effect=lambda p,budget:calls.append(p['pid'])),patch.object(Path,'write_text',write):
+                with self.assertRaisesRegex(RuntimeError,'cleanup'):
+                    lab.display_timing_probe(cfg,env,lab.time.monotonic()+40,root)
+            self.assertEqual(calls,[99]);self.assertEqual(env['PROTON_LOG'],'1')
     def test_desktop_selector_or_wayland_never_reaches_proton(self):
         with patch.object(lab.subprocess,'Popen') as process:
             for env in ({'DISPLAY':':1'},{'SS2VR_LAB_PRIVATE_DISPLAY':'1','DISPLAY':':2','WAYLAND_DISPLAY':'wayland-0'}):
                 with self.assertRaises(RuntimeError):lab.display_timing_probe({'display_timing_probe':{}},env,0,Path('.'))
             process.assert_not_called()
+    def test_lazy_xwayland_starts_before_ownership_and_display_only_never_imports_collector(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);out=root/'display-check';out.mkdir();runtime=root/'runtime';runtime.mkdir()
+            cfg=root/'config.json';cfg.write_text(json.dumps({'private_root':str(root)}))
+            parent={'pid':456,'start':'cookie','argv':[b'weston']}
+            (out/'owner.json').write_text(json.dumps({'pid':456,'start':'cookie','argv':['weston'],'runtime':str(runtime)}))
+            started=[False];events=[];own_pid=display.os.getpid()
+            def identify(pid):
+                if int(pid)==456:return parent
+                if int(pid)==own_pid:return {'start':'self'}
+                events.append('server-check')
+                if started[0]:return {'pid':789,'parent':456,'name':'Xwayland','argv':[b'Xwayland',b':2'],'start':'x'}
+                return None
+            def query(args,**kw):
+                self.assertEqual(args,['xrandr','--current']);started[0]=True;events.append('x-client')
+                return subprocess.CompletedProcess(args,0,b'positive-refresh',b'')
+            original=Path.iterdir
+            def list_paths(path):return iter([Path('/proc/1')]) if str(path)=='/proc' else original(path)
+            env=display.private_environment({},runtime,'token')|{'DISPLAY':':2','WAYLAND_DISPLAY':'ss2-vr-private'}
+            with patch.dict(display.os.environ,env,clear=True),patch.object(display.os,'getppid',return_value=456),patch.object(display,'identity',side_effect=identify),patch.object(Path,'iterdir',list_paths),patch.object(display.subprocess,'run',side_effect=query),patch.object(display.importlib.util,'spec_from_file_location') as load:
+                display.inside(cfg,out,True);load.assert_not_called()
+            self.assertLess(events.index('x-client'),events.index('server-check'))
+            outcome=json.loads((out/'collection-outcome.json').read_text())
+            self.assertTrue(outcome['display_only']);self.assertFalse(outcome['game_launched']);self.assertFalse(outcome['data_ready_for_review'])
+    def test_check_cannot_be_combined_with_display_launch(self):
+        with tempfile.TemporaryDirectory() as d:
+            cfg=Path(d)/'config.json';cfg.write_text('{}')
+            with patch.object(display.sys,'argv',['tool','--config',str(cfg),'--check','--display-only']),patch.object(display,'prepared_configuration',return_value={'display_timing_probe':True}),patch.object(display,'launch') as launch:
+                with self.assertRaises(SystemExit) as error:display.main()
+                self.assertEqual(error.exception.code,2);launch.assert_not_called()
+    def test_overlong_socket_path_refuses_before_any_process_or_attempt(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)/('long-fixture-name-'*4);root.mkdir()
+            cfg={'private_root':str(root),'display_timing_probe':True,'expected_product_source':'a'*64}
+            with patch.object(display.subprocess,'Popen') as process:
+                with self.assertRaisesRegex(RuntimeError,'socket path'):display.launch(root/'config.json',cfg)
+                process.assert_not_called()
+            self.assertFalse((root/'agent-capture-attempt.json').exists())
     def test_weston_exit_without_collector_receipt_is_not_success(self):
         self.wrapper_mock(False,False)
     def test_wrapper_preexec_certificate_and_cleanup_survive_failure(self):
@@ -72,7 +130,7 @@ class Checks(unittest.TestCase):
         self.wrapper_mock(True,False,True)
     def wrapper_mock(self, completed, fail_cleanup, late=False):
         with tempfile.TemporaryDirectory() as d:
-            root=Path(d);cfg={'display_timing_probe':True,'expected_product_source':'a'*64}
+            root=Path(d);cfg={'private_root':str(root),'display_timing_probe':True,'expected_product_source':'a'*64}
             (root/'config.json').write_text(json.dumps(cfg));command=[];calls=[];live={101,102};identified=[0]
             class Process:
                 pid=100;returncode=0
@@ -80,7 +138,8 @@ class Checks(unittest.TestCase):
             def popen(cmd,**kw):
                 command[:]=cmd
                 self.assertNotIn('DISPLAY',kw['env']);self.assertNotIn('WAYLAND_DISPLAY',kw['env'])
-                self.assertEqual(kw['env']['XDG_RUNTIME_DIR'],str(root/'private-display/runtime'))
+                self.assertEqual(Path(kw['env']['XDG_RUNTIME_DIR']).parent,root)
+                self.assertLess(len((kw['env']['XDG_RUNTIME_DIR']+'/ss2-vr-private').encode()),108)
                 if completed:(root/'private-display/collection-outcome.json').write_text(json.dumps({'completed':True,'data_ready_for_review':True}))
                 return Process()
             def identify(pid):

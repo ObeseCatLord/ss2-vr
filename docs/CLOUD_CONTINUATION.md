@@ -2,81 +2,21 @@
 
 ## Latest private idle capture follow-up
 
-One approved noninterfering private-display capture failed before scene load in
-a DXVK zero-refresh raster-status query. No geometry/host/eye-world result was
-obtained. Its single-attempt authority is consumed; do not retry automatically.
-Exact-owned cleanup reconciliation and original-data preservation are private.
-A separate Weston/Xwayland display-only preflight has a positive refresh; actual
-Windows D3D9/game readiness there is still unknown. The new source timing probe,
-optional existing-run prerequisite and private display wrapper are compiled/
-offline checked only. A fresh independent muted lab passes offline preflights;
-Astra/xhigh gave scoped source/offline GO for the corrected preparation; local
-routing metadata verified, independent backend attestation unavailable. See PRIVATE_DISPLAY_COLLECTION.md. Do not use
-historical no-launch/blocked notes as current evidence or claim grasp/steering
-completed. Comprehensive HMD/firing/vehicle/MP acceptance remains user-operated.
+The first private Xvfb capture crashed before scene in a DXVK zero-refresh raster
+query. A separately approved replacement had two display-only setup failures
+before native launch; socket length and lazy Xwayland ordering were corrected.
+Actual wrapper `--display-only` then passed parent/server ownership and cleanup.
+Astra/xhigh scoped source GO; private original/failed fixtures are preserved.
 
-Current PC checkpoint: MP controlling-local settlement and immutable raw per-hand
-capture have bounded Astra Source GO. Default-off unique-saw gesture/native
-consumption now includes local, authoritative and remote-observer roles with
-wire7 delivery. Integrated Astra Source GO corrected stop/quiet ordering,
-source-loss cancellation, consumed-latest pulse extension, delayed pulse borrowing
-later arming and inherited manual-query G. Native160/348 stay manual-only.
-All products/61 Debug+Release groups and compiled gates pass; exact identities
-are in IMPLEMENTATION_STATUS.md. No new runtime/firing/MP probe. Actual driver
-control geometry and first/copy saw usability remain open. Primary VR/firing/
-vehicle/MP acceptance belongs to the user. See MP_LOCAL_ORIGIN_CAPTURE.md,
-PHYSICAL_MELEE_CONSUMPTION.md and USER_VR_TEST.md. Historical entries retain their
-original scope.
-
-
-Latest PC direct-scene work is in PC_GAMEPLAY_READINESS.md and DIRECT_GAMEPLAY_LAB.md.
-Current remote-head follow-up restricts writes to frozen VR stereo pairs and
-enables that bounded option. Ordinary desktop heads remain native. Typed resource
-exclusion and Astra source GO are recorded in REMOTE_HEAD_RESOURCE_OWNERSHIP.md.
-UI-fault native cleanup now uses an already admitted frame pointer; compiled
-helper/clones cannot initialize TLS, call out or branch outside their bodies.
-All products/61 Debug groups, both cleanup gates, eight compiled negative controls
-and matching artifact/layout contracts pass on source6993876190e0beb3fc10e966a1edab6280eb5bcc8617e912bda686d4e589ac56.
-No new game/MP probe; primary gameplay testing remains user-operated.
-Current source charge/muzzle follow-up is NATIVE_WEAPON_DISPLACEMENT.md: native
-charge translation captured without extra getter calls, common model/muzzle
-accounting and explicit native-unwind TLS cleanup. Astra source GO and all-product
-build/61 Debug groups/compiled/artifact checks pass on ff8a2d050e3f81ba18c6f1c4d6df4b7e2955edbf0c903e2206ef8bb71c70d628.
-No runtime/firing probe for this source change. Full implementation still open.
-Latest user steering: testing is primarily user-operated. Finish implementation
-and source reviews with local builds/offline checks; vehicles, shooting and broad
-in-VR acceptance belong to the user. Avoid routine additional game launches.
-The user will perform individual weapon-firing tests in VR. Codex stops those
-probes and continues remaining implementation/non-firing tests. A comprehensive
-in-VR procedure is required when the remaining implementation is ready.
-The preparation checklist is docs/USER_VR_TEST.md; it does not certify unfinished
-features. Current non-firing work observes the existing native inactive controls
-producer; see VR_BACKGROUND_CONTROLS_REVIEW.md. Do not override native exclusivity
-to open desktop polling, and do not reuse stale sampledControls on that route.
-Run204618 subsequently proved default-off, lab-only background walking through the
-original ClientAction:2.216559m native physics-body displacement then zero demand,
-0.005253m final250ms drift, unchanged origin/owner and zero firing counters.320
-complete neutral native stereo pairs preceded it; shutdown was normal/errors empty.
-It does not enable production background actions or settle multiplayer roomscale.
-Optional native Frame profile suggestions now require the advertised extension;
-this Monado instance did not advertise it and retained its original Index profile.
-Physical hand/model alignment still needs resolved asset/grip evidence; see
-HAND_MODEL_ALIGNMENT.md. No individual weapon-firing probes are resumed.
-Native +level reaches Jungle with guarded loading confirmation and isolated scene
-receipts. Native depth-partition/UI fixes enabled actual stereo. The right-eye
-terrain/vegetation/waterfall leak was reproduced and corrected by preserving native
-depth endpoints; subsequent fixed images and independent user confirmation agree.
-Run190429 captured all seven native head-pose pairs with same-request world/UI,
-camera and successful projection receipts. Translation/rotation measured0.1m and
-0.15rad; static near/mid/far image patches showed22/7/1pixel eye disparity.
-A bounded minimized-window restore repairs native foreground/exclusive acquisition.
-A process-local fsync comparison passed startup; an earlier ntsync run exited with
-a Wine assertion before scene receipt, which is not a proven mod-hook cause.
-Native dual firing remains unverified. Live Jungle starts with ID1 Zap guns, not
-the earlier pictured-Colt assumption; native charge/release timing requires a
-cycle-based probe. Body/origin, model alignment, lifecycle, hardware and MP remain open.
-Public source/RE-note approval is renewed below; online MP with mod users remains
-explicitly required. Do not activate the lab-only online barrier in MP tests.
+The authorized native D3D9 prerequisite subsequently ran but returned no admitted
+JSON result, so SS2/Monado did not launch. No geometry/eye-world evidence was
+obtained. Cleanup reports no exact-owned survivors/errors, 12 protected files
+unchanged. Native attempt consumed: no automatic retry. The old collector guide
+is explicitly historical; do not ask the user to run its stale command. Current
+source fixes stdout redirection/exit reporting and silent window-error paths;
+compiled/offline checks only, actual failure operation remains unverified. See
+PRIVATE_DISPLAY_COLLECTION.md. No grasp, driver steering or full VR completion
+is claimed; comprehensive gameplay acceptance remains user-operated.
 
 ## PC continuation authority — 2026-10-07
 

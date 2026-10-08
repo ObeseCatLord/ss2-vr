@@ -22,25 +22,33 @@ int main() {
     // outside the separately owned display/prefix selected by the launcher.
     WNDCLASSW wc{};wc.lpfnWndProc=DefWindowProcW;wc.hInstance=GetModuleHandleW(nullptr);
     wc.lpszClassName=L"SS2VRPrivateDisplayTiming";
-    if (!RegisterClassW(&wc)) {api->Release();return 6;}
+    if (!RegisterClassW(&wc)) {
+        std::printf("{\"schema\":1,\"stage\":\"window-registration-failed\",\"win32_error\":%lu,\"raster_called\":false}\n",GetLastError());
+        api->Release();return 6;
+    }
     HWND window=CreateWindowW(wc.lpszClassName,L"SS2VR private display prerequisite",WS_POPUP,
                              0,0,int(adapter.Width),int(adapter.Height),nullptr,nullptr,wc.hInstance,nullptr);
-    if (!window) {UnregisterClassW(wc.lpszClassName,wc.hInstance);api->Release();return 7;}
+    if (!window) {
+        std::printf("{\"schema\":1,\"stage\":\"window-create-failed\",\"win32_error\":%lu,\"raster_called\":false}\n",GetLastError());
+        UnregisterClassW(wc.lpszClassName,wc.hInstance);api->Release();return 7;
+    }
     D3DPRESENT_PARAMETERS pp{};pp.hDeviceWindow=window;pp.Windowed=FALSE;
     pp.BackBufferWidth=adapter.Width;pp.BackBufferHeight=adapter.Height;pp.BackBufferFormat=adapter.Format;
     pp.BackBufferCount=1;pp.SwapEffect=D3DSWAPEFFECT_DISCARD;pp.PresentationInterval=D3DPRESENT_INTERVAL_IMMEDIATE;
     IDirect3DDevice9 *device=nullptr;
+    const char *operation="create-device";
     hr=api->CreateDevice(0,D3DDEVTYPE_HAL,window,D3DCREATE_SOFTWARE_VERTEXPROCESSING,&pp,&device);
     IDirect3DSwapChain9 *chain=nullptr;D3DDISPLAYMODE actual{};D3DRASTER_STATUS raster{};bool called=false;
-    if (SUCCEEDED(hr)) hr=device->GetSwapChain(0,&chain);
-    if (SUCCEEDED(hr)) hr=chain->GetDisplayMode(&actual);
+    if (SUCCEEDED(hr)) {operation="get-swap-chain";hr=device->GetSwapChain(0,&chain);}
+    if (SUCCEEDED(hr)) {operation="get-display-mode";hr=chain->GetDisplayMode(&actual);}
     if (SUCCEEDED(hr)) {
+        operation="validate-swapchain-mode";
         if (!actual.Width || !actual.Height || actual.RefreshRate<=1) hr=D3DERR_INVALIDCALL;
-        else {called=true;hr=chain->GetRasterStatus(&raster);}
+        else {operation="get-raster-status";called=true;hr=chain->GetRasterStatus(&raster);}
     }
-    std::printf("{\"schema\":1,\"stage\":\"swapchain-query\",\"desktop_hz\":%lu,\"adapter_hz\":%u,\"swapchain_hz\":%u,"
+    std::printf("{\"schema\":1,\"stage\":\"swapchain-query\",\"operation\":\"%s\",\"desktop_hz\":%lu,\"adapter_hz\":%u,\"swapchain_hz\":%u,"
                 "\"width\":%u,\"height\":%u,\"raster_called\":%s,\"hresult\":%lu,\"scanline\":%u,\"in_vblank\":%s}\n",
-                desktop.dmDisplayFrequency,adapter.RefreshRate,actual.RefreshRate,actual.Width,actual.Height,
+                operation,desktop.dmDisplayFrequency,adapter.RefreshRate,actual.RefreshRate,actual.Width,actual.Height,
                 called?"true":"false",static_cast<unsigned long>(hr),raster.ScanLine,raster.InVBlank?"true":"false");
     if (chain) chain->Release();
     if (device) device->Release();

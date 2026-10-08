@@ -81,7 +81,7 @@ def validate_display_probe(cfg, private):
 
 def require_display_timing(report):
     if not isinstance(report,dict) or type(report.get('schema')) is not int or report['schema']!=1 or report.get('stage')!='swapchain-query' or \
-       report.get('raster_called') is not True or type(report.get('hresult')) is not int or report['hresult']!=0:
+       report.get('operation')!='get-raster-status' or report.get('raster_called') is not True or type(report.get('hresult')) is not int or report['hresult']!=0:
         raise RuntimeError('Private D3D9 display prerequisite did not complete its raster query')
     for key in ('desktop_hz','adapter_hz','swapchain_hz','width','height'):
         value=report.get(key)
@@ -97,10 +97,15 @@ def display_timing_probe(cfg,env,deadline,run_dir):
     # The outer private-display owner also tracks Wine descendants. This function
     # retires the exact probe executable and Popen launcher on every exit.
     if private_processes(path):raise RuntimeError('Display prerequisite is already running')
-    process=None;output=run_dir/'display-timing-probe.log'
+    process=None;output=run_dir/'display-timing-probe.log';code=None
+    probe_env=env.copy()
+    # Installed Proton redirects child stdout/stderr to its own log when
+    # PROTON_LOG=1. Keep the tiny probe's result on its explicit output handle;
+    # retain normal Proton logging for the subsequent game/session.
+    probe_env['PROTON_LOG']='0'
     try:
         with output.open('xb') as log:
-            process=subprocess.Popen([cfg['proton'],'run',str(path)],env=env,stdout=log,stderr=subprocess.STDOUT)
+            process=subprocess.Popen([cfg['proton'],'run',str(path)],env=probe_env,stdout=log,stderr=subprocess.STDOUT)
             code=process.wait(timeout=remaining(deadline,30))
         # Wine/bootstrap diagnostics may surround the one JSON result.
         rows=[json.loads(line) for line in output.read_text(errors='replace').splitlines() if line.startswith('{')]
@@ -122,6 +127,10 @@ def display_timing_probe(cfg,env,deadline,run_dir):
                 except subprocess.TimeoutExpired:
                     safe(process.kill);safe(lambda:process.wait(timeout=2))
             for item in private_processes(path):safe(lambda item=item:stop_exact(item,cleanup_deadline))
+            # Reporting failure must not skip retirement. Hash identity was
+            # already validated before launch; don't reopen the executable here.
+            safe(lambda:(run_dir/'display-timing-process.json').write_text(json.dumps({'schema':1,'returncode':code,
+                'probe_sha256':selected['sha256'],'proton_log':False,'game_launched':False},indent=2)+'\n'))
         finally:
             for sig,handler in handlers.items():signal.signal(sig,handler)
         if errors or requests:raise RuntimeError('Display prerequisite cleanup interrupted or failed')

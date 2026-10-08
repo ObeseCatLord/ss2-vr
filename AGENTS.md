@@ -8,6 +8,18 @@ This historical hold blocked public publication pending renewed confirmation. It
 
 ## Current PC continuation — start here
 
+### Consumed replacement native prerequisite — current source work
+The user approved ONE replacement private capture. Two display-only setup
+failures occurred before any collector/Proton/game; logs were preserved and the
+actual corrected launcher display-only preflight then passed. The authorized
+native D3D9 prerequisite was subsequently executed and failed to return its
+JSON result; SS2 and Monado were not launched, zero geometry was collected.
+Exact-owned cleanup reported no survivors/errors; protected files are unchanged.
+That native attempt is consumed. Do not automatically launch another Proton/game/
+host capture or send the user to an old package. Continue source/offline fixes
+and reviews, then present a concrete corrected path if another observation is
+necessary. Historical old collector instructions are not current user actions.
+
 ### Consumed one-capture exception — user-approved private display
 The user explicitly allowed ONE agent-operated reviewed idle capture, provided it
 uses a private test window and does not interfere with their PC activity. This
