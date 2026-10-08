@@ -25,6 +25,67 @@ def same_pose(a,b):
 def request_key(value):
     return tuple(value.get(k) for k in ('sequence','session','reference','tracking_generation'))
 
+def dual_identity(value):
+    return tuple(value.get(k) for k in ('session','reference','tracking_generation'))+tuple(value.get('primary_generations',[]))
+
+def dual_controls_match(value,expected):
+    trigger=value.get('trigger',[])
+    return len(trigger)==2 and all(math.isfinite(v) and abs(v-w)<.01 for v,w in zip(trigger,expected))
+
+class DualPhaseEvidence:
+    """Reject loss after convergence; never filter contradictions into a pass."""
+    def __init__(self,boundary,expected):
+        self.boundary=boundary;self.expected=expected;self.observations=[]
+
+    def observe(self,value):
+        matching=value['input_sequence']>self.boundary and dual_controls_match(value,self.expected)
+        if self.observations and not matching:
+            raise RuntimeError('Controller phase contradicted after convergence')
+        if matching:
+            if self.observations and value['input_sequence']<self.observations[-1]['input_sequence']:
+                raise RuntimeError('Controller input sequence regressed')
+            self.observations.append(value)
+
+    def require_progress(self):
+        if not self.observations or self.observations[-1]['input_sequence']<=self.observations[0]['input_sequence']:
+            raise RuntimeError('Controller phase lacks advancing matching input')
+
+    def confirmed_boundary(self):
+        self.require_progress()
+        # The interval parser uses minimum < sequence. Include the first
+        # confirmed high sample, and exclude preceding convergence packets.
+        return self.observations[0]['input_sequence']-1
+
+    def require_stopped(self):
+        self.require_progress()
+        # UI published before confirmed neutral input cannot prove cessation.
+        anchor=self.observations[0]['input_tick_ms']
+        fresh=[v for v in self.observations if v['ui_tick_ms']>anchor]
+        if len({v['ui_tick_ms'] for v in fresh})<3 or len({tuple(v['fire_sequence']) for v in fresh})!=1:
+            raise RuntimeError('Final neutral lacks stable counters across post-neutral UI updates')
+
+    def require_quiet_after(self,input_tick,seconds=1):
+        """Charged release may fire; require a later measured quiet UI window."""
+        self.require_progress()
+        fresh={v['ui_tick_ms']:v for v in self.observations if v['ui_tick_ms']>input_tick}
+        if len(fresh)<3:raise RuntimeError('Release lacks post-completion UI updates')
+        ordered=[fresh[k] for k in sorted(fresh)];last=ordered[-1]
+        anchors=[i for i,v in enumerate(ordered) if last['ui_tick_ms']-v['ui_tick_ms']>=seconds*1000]
+        quiet=ordered[max(anchors):] if anchors else []
+        if len(quiet)<3 or len({tuple(v['fire_sequence']) for v in quiet})!=1:
+            raise RuntimeError('Release lacks a bounded advancing quiet UI interval')
+
+def require_dual_capture(metadata,phase,identity,after):
+    """Bind copied native eyes to held controls and the frozen fixture identity."""
+    first=phase.observations[0]
+    sequence=metadata['input_sequence']
+    if (not first['input_sequence']<=sequence<=after['input_sequence'] or
+        metadata['input_tick_ms']<first['input_tick_ms'] or
+        dual_identity(metadata)!=identity or dual_identity(after)!=identity or
+        metadata.get('hand_valid')!=[1,1] or metadata.get('primary_active_mask')!=3 or
+        not dual_controls_match(metadata,phase.expected) or not dual_controls_match(after,phase.expected)):
+        raise RuntimeError('Native eye capture does not belong to confirmed controller phase')
+
 def correlated_records(game,host):
     camera=[]
     pattern=r'Lab native camera eye=(\d) request=(\d+) session=(\d+) reference=(\d+) tracking=(\d+) head=([-\d.eE+,]+) camera=([-\d.eE+,]+)'
@@ -46,6 +107,37 @@ def complete_pairs_for_pose(game,host,head):
     for entry in camera:
         if same_pose(entry['head'],head):observed.setdefault(request_key(entry),set()).add(entry['eye'])
     return {key for key in native & submitted if observed.get(key)=={0,1}}
+
+def dual_topologies(game,identity,minimum,maximum):
+    pattern=(r'Lab native primary topology input=(\d+) session=(\d+) reference=(\d+) tracking=(\d+) owner=(\d+) '
+        r'weapons=(\d+),(\d+) receivers=(\d+),(\d+) hands=(\d+) combo=(-?\d+) dual=(-?\d+) flip=(-?\d+) '
+        r'buttons=(-?\d+),(-?\d+) topology_compatible=(\d+)')
+    matches=[]
+    for row in re.findall(pattern,game):
+        seq,session,reference,tracking,owner,left,right,lptr,rptr,hands,combo,dual,flip,lbutton,rbutton,compatible=map(int,row)
+        if (minimum<seq<=maximum and (session,reference,tracking)==tuple(identity[:3]) and owner and
+            hands==3 and left and right and left!=right and lptr and rptr and lptr!=rptr and combo and dual and
+            {lbutton,rbutton}=={0,1} and compatible==1):
+            matches.append({'input':seq,'owner':owner,'weapon':[left,right],'receiver':[lptr,rptr]})
+    return matches
+
+def dual_weapon_events(game,identity,minimum,maximum,topologies,event):
+    pattern=(r'Lab native weapon event='+event+r' input=(\d+) session=(\d+) reference=(\d+) tracking=(\d+) owner=(\d+) '
+        r'weaponHint=(\d+) receiver=(\d+) id=(\d+) hand=(\d+) stateBefore=(\d+) returned=(\d+) aborted=(\d+) result=(-?\d+)')
+    pattern+=r' tick=(\d+) actions=(\d+),(\d+) trigger=([-\d.eE+]+),([-\d.eE+]+) completion=(\d+)'
+    events=[]
+    for row in re.findall(pattern,game):
+        seq,session,reference,tracking,owner,hint,receiver,weapon_id,hand,state,returned,aborted,result,tick,lg,rg=map(int,row[:16])
+        trigger=list(map(float,row[16:18]));completion=int(row[18])
+        if (minimum<seq<=maximum and (session,reference,tracking,lg,rg)==tuple(identity) and weapon_id==1 and
+            hand in (0,1) and returned==1 and not aborted and (result if event=='fire' else result==0) and
+            completion>=tick and all(math.isfinite(v) and 0<=v<=1 for v in trigger) and
+            any(t['owner']==owner and t['receiver'][hand]==receiver and t['weapon'][hand]==hint for t in topologies)):
+            events.append({'input':seq,'tick':tick,'completion_tick':completion,'hand':hand,'trigger':trigger,'owner':owner,'weapon':hint,'receiver':receiver})
+    return events
+
+def successful_dual_fire(game,identity,minimum,maximum,topologies):
+    return {v['hand'] for v in dual_weapon_events(game,identity,minimum,maximum,topologies,'fire')}
 
 def first_person_depth_probe(game):
     """Assess the bounded audited root-partition probe, not arbitrary game draws.

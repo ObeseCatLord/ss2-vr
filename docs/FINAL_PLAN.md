@@ -1,5 +1,10 @@
 # Final implementation plan
 
+Current authority: PC development and actual private/runtime testing are authorized.
+Older no-runtime/no-launch statements below record the original plan and are
+superseded by AGENTS.md and CLOUD_CONTINUATION.md. Full native dual wield and
+multiplayer with mod users remain required; teleport is excluded.
+
 Target: installed Steam Serious Sam 2, fingerprints in installed-build.json. Create source and compiled development package for proper OpenXR stereo, six-DOF head and hand tracking, independent native dual weapons, per-hand wheels, smooth movement and snap turn. No actual game/headset testing or launch. No claim of tested playability.
 
 ## Architecture

@@ -1,5 +1,34 @@
 # Mod journal
 
+## 2026-10-07 — Stereo follow-up and native-input probe repair
+
+Preserved native depth endpoints across target changes; fixed actual right-eye
+Jungle occlusion was independently confirmed. Astra found and main corrected
+new lab observation cleanup logging during native unwind. Compiled client/server
+cleanup symbols now retain only scalar/TLS cleanup across all branches.
+Native input investigation isolated minimized-window foreground loss; a normal
+owned restore gave Core foreground/exclusive reacquisition with no injected controls.
+The direct-launch harness retains exact owner/deadline/isolation/shutdown guards.
+
+Run190429 captured seven actual native head-pose eye pairs with matching native
+world/UI/projection and camera receipts,500 neutral complete pairs,64mm IPD,
+0.1m translation/0.15rad rotation and near/mid/far static disparity22/7/1pixels.
+Root depth ranges and inspected right-eye occlusion remain coherent. Seven
+external desktop captures failed separately. This private simulated Proton/fsync
+scene result does not establish hands/body collision, complete features, real
+headsets, Windows or multiplayer. An earlier ntsync startup exited with a Wine
+assertion before scene/host readiness; no mod-hook diagnosis is claimed.
+
+Native initial ID1 Zap guns corrected an earlier pictured-Colt assumption.
+Astra verified charge/release/projectile and separate reload-counter routes.
+The exploratory probe now evaluates full press–release cycles, copied normal
+receipt completion/identity and later bounded quiet UI, preserving all native
+mechanics. Conditional Astra source GO follows completion-timestamp and confirmed-rise
+corrections. All61 Debug groups/current compiled gates and16 evidence negative
+controls pass. Actual firing/impact/lifecycle results remain open.
+Private assets/settings/captures stay local, original checkout/WIP untouched,
+Actions off and public source history strictly empty-email.
+
 ## 2026-10-05 — Cloud resumption and optimized portable checks
 
 User resumed development in dot's cloud workspace after a public source-only

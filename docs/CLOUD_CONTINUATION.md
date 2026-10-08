@@ -1,13 +1,19 @@
 # Cloud continuation — 2026-10-05
 
 Latest PC direct-scene work is in PC_GAMEPLAY_READINESS.md and DIRECT_GAMEPLAY_LAB.md.
-Native +level now reaches Jungle without menu navigation, with a guarded loading-screen Enter adapter prepared. Actual records do not
-show it sent; the observed dismissal source remains unknown. Scene stream bytes/hash, null online interface, native
-shutdown and thirty neutral OpenXR input observations were recorded privately.
-First-eye completion rejects executed depth0..0.9 against prepared0..1; no world
-eye pair/projection or translated/rotated-camera acceptance exists. Astra is
-reviewing native partition evidence before a narrow fix. The user reports desktop
-trees/waterfall through terrain; matched renderer/eye comparisons remain required.
+Native +level reaches Jungle with guarded loading confirmation and isolated scene
+receipts. Native depth-partition/UI fixes enabled actual stereo. The right-eye
+terrain/vegetation/waterfall leak was reproduced and corrected by preserving native
+depth endpoints; subsequent fixed images and independent user confirmation agree.
+Run190429 captured all seven native head-pose pairs with same-request world/UI,
+camera and successful projection receipts. Translation/rotation measured0.1m and
+0.15rad; static near/mid/far image patches showed22/7/1pixel eye disparity.
+A bounded minimized-window restore repairs native foreground/exclusive acquisition.
+A process-local fsync comparison passed startup; an earlier ntsync run exited with
+a Wine assertion before scene receipt, which is not a proven mod-hook cause.
+Native dual firing remains unverified. Live Jungle starts with ID1 Zap guns, not
+the earlier pictured-Colt assumption; native charge/release timing requires a
+cycle-based probe. Body/origin, model alignment, lifecycle, hardware and MP remain open.
 Public source/RE-note approval is renewed below; online MP with mod users remains
 explicitly required. Do not activate the lab-only online barrier in MP tests.
 

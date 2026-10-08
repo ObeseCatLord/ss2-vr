@@ -982,6 +982,10 @@ static bool primaryBindingsCurrent(const PreparedPlayer &entry) {
     }
     return !entry.revoked;
 }
+static bool labDualTrace() {
+    static const bool enabled=[] { wchar_t value[2]{};return GetEnvironmentVariableW(L"SS2VR_LAB_TRACE",value,2)==1 && value[0]==L'1'; }();
+    return enabled;
+}
 static bool primaryTopology(PreparedPlayer &entry, bool capture) {
     if (!primaryBindingsCurrent(entry) || !isAlive(entry.subject) || entry.revoked ||
         !primaryBindingsCurrent(entry)) return false;
@@ -1006,8 +1010,20 @@ static bool primaryTopology(PreparedPlayer &entry, bool capture) {
     uint32_t liveGame = 0;
     nativeGameInfo(&liveGame);
     if (entry.revoked || liveGame != gameHandle || resolve(gameHandle) != game ||
-        !primaryBindingsCurrent(entry) ||
-        (entry.hands == 3 && (!combo || !dual || button[0] == button[1]))) return false;
+        !primaryBindingsCurrent(entry)) return false;
+    const bool compatible=entry.hands!=3 || (combo && dual && button[0]!=button[1]);
+    // A full bounded lab run can precede the firing sequence. Keep a finite
+    // whole-run budget and make exhaustion visible instead of losing evidence.
+    static std::atomic<unsigned> topologyReceipts{0};
+    const unsigned topologyOrdinal=capture&&labDualTrace()?topologyReceipts.fetch_add(1):~0u;
+    if(topologyOrdinal==65536)log("Lab native weapon trace saturated event=topology");
+    if(topologyOrdinal<65536) {
+        log("Lab native primary topology input=%llu session=%u reference=%u tracking=%u owner=%u weapons=%u,%u receivers=%u,%u hands=%u combo=%d dual=%d flip=%d buttons=%d,%d topology_compatible=%u",
+            static_cast<unsigned long long>(entry.sequence),entry.session,entry.reference,entry.authoritative?entry.trackingGeneration:entry.generation,
+            entry.handle,entry.weaponHandle[0],entry.weaponHandle[1],uint32_t(reinterpret_cast<uintptr_t>(entry.weapon[0])),
+            uint32_t(reinterpret_cast<uintptr_t>(entry.weapon[1])),entry.hands,combo,dual,flip,button[0],button[1],compatible);
+    }
+    if(!compatible)return false;
     if (capture) {
         entry.gameHandle = gameHandle; entry.game = game;
         entry.combo = combo; entry.dual = dual; entry.flip = flip;
@@ -2831,10 +2847,62 @@ static void drawLasers() {
         (*enableAlpha)();
     (*setDepthComparison)(priorComparison);
 }
+struct LabWeaponReceipt {
+    bool active=false;
+    uint32_t owner=0,weaponHint=0,receiver=0,id=0,hand=0,state=0,session=0,reference=0,tracking=0;
+    uint64_t sequence=0;
+    uint64_t inputTick=0;
+    uint32_t actionGeneration[2]{};
+    float trigger[2]{};
+};
+static LabWeaponReceipt labWeaponReceipt(void *weapon,const Snapshot &s,int hand) {
+    if(!labDualTrace() || hand<0 || hand>1 || !vrSession(s) || !fresh(s.input) || !s.ui.gameplay)return {};
+    // The incoming native method owns its receiver here. Copy scalar fields
+    // before calling the original; no receiver/pointee is retained for logging
+    // after native callbacks, deletion or foreign unwinding.
+    const uint32_t owner=primaryField(weapon,0x28);
+    if(owner!=s.playerHandle)return {};
+    return {true,owner,s.handle[hand],uint32_t(reinterpret_cast<uintptr_t>(weapon)),primaryField(weapon,0xb4),
+        primaryField(weapon,0xbc),primaryField(weapon,0xb0),s.input.session,s.input.reference,s.generation,s.input.sequence,
+        s.input.tickMs,{s.input.primaryInputGeneration[0],s.input.primaryInputGeneration[1]},{s.input.trigger[0],s.input.trigger[1]}};
+}
+static void logWeaponReceipt(const char *event,const LabWeaponReceipt &r,bool returned,bool aborted,int result) {
+    const auto completionTick=GetTickCount64(); // After original return; never called in cleanup.
+    log("Lab native weapon event=%s input=%llu session=%u reference=%u tracking=%u owner=%u weaponHint=%u receiver=%u id=%u hand=%u stateBefore=%u returned=%u aborted=%u result=%d tick=%llu actions=%u,%u trigger=%.9g,%.9g completion=%llu",
+        event,static_cast<unsigned long long>(r.sequence),r.session,r.reference,r.tracking,r.owner,r.weaponHint,r.receiver,r.id,r.hand,r.state,
+        returned,aborted,result,static_cast<unsigned long long>(r.inputTick),r.actionGeneration[0],r.actionGeneration[1],r.trigger[0],r.trigger[1],
+        static_cast<unsigned long long>(completionTick));
+}
+static VoidThis originalLabFireRelease=nullptr;
+static void __fastcall labFireRelease(void *weapon,void *) {
+    const auto snapshot=copySnapshot();
+    // No added native getter or handle lookup on this formerly unhooked path.
+    // Receiver ownership comes from the incoming native method, not the snapshot.
+    auto receipt=labWeaponReceipt(weapon,snapshot,int(primaryField(weapon,0xbc)));
+    static std::atomic<unsigned> releaseReceipts{0};
+    if(receipt.active) {
+        const auto ordinal=releaseReceipts.fetch_add(1,std::memory_order_relaxed);
+        if(ordinal==256)log("Lab native weapon trace saturated event=release");
+        receipt.active=ordinal<256;
+    }
+    bool returned=false,aborted=false;
+    withNativeFinally([&] { originalLabFireRelease(weapon);returned=true; },[&](bool unwind) noexcept {
+        aborted=unwind;
+    });
+    if(receipt.active)logWeaponReceipt("release",receipt,returned,aborted,0);
+}
 static int __fastcall nativeFire(void *w, void *, float amount) {
     auto s = copySnapshot();
     int hand = handOf(w, s);
+    auto receipt=labWeaponReceipt(w,s,hand);
+    static std::atomic<unsigned> fireReceipts{0};
+    if(receipt.active) {
+        const auto ordinal=fireReceipts.fetch_add(1,std::memory_order_relaxed);
+        if(ordinal==256)log("Lab native weapon trace saturated event=fire");
+        receipt.active=ordinal<256;
+    }
     int result = originalNativeFire(w, amount);
+    if(receipt.active)logWeaponReceipt("fire",receipt,true,false,result);
     if (result && hand >= 0 && vrSession(s) && fresh(s.input) && s.ui.gameplay)
         fireFeedback[hand].fetch_add(1, std::memory_order_relaxed);
     return result; // Feedback observes the native event; it never initiates damage/fire.
@@ -4402,6 +4470,7 @@ bool attach(bool headless) {
       originalSniperShot);
     if (!headless) {
         H(g, "?DoTheFiring@CBaseWeaponEntity@SeriousEngine@@UAEHM@Z", nativeFire, originalNativeFire);
+        if(labDualTrace())H(g,"?OnFireReleased@CBaseWeaponEntity@SeriousEngine@@UAEXXZ",labFireRelease,originalLabFireRelease);
         H(g, "?GetWeaponAbsPlacement@CBaseWeaponEntity@SeriousEngine@@QAEHABVMatrix34f@2@AAV32@@Z", weaponAbs,
           originalWeaponAbs);
         H(g, "?Render@CBaseWeaponEntity@SeriousEngine@@UAEXVMatrix34f@2@@Z", weaponRender,

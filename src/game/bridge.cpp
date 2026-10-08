@@ -1913,17 +1913,22 @@ static void traceStereoDepth(IDirect3DDevice9 *d,const Request &request,int inde
         if(color) { auto *p=color;color=nullptr;p->Release(); }
     });
 }
-static void observedWorldRender(IDirect3DDevice9 *d,void *puppet,void(__thiscall *original)(void *),
+static bool observedWorldRender(IDirect3DDevice9 *d,void *puppet,void(__thiscall *original)(void *),
                                 const Request &request,int index,bool trace) {
-    if(!trace || labWorldDraws.device) { original(puppet);return; }
+    if(!trace || labWorldDraws.device) { original(puppet);return true; }
     labWorldDraws={};labWorldDraws.device=d;
-    withNativeFinally([&] { original(puppet); },[&](bool aborted) noexcept {
+    bool aborted=false;
+    const bool contained=withNativeFinally([&] { original(puppet); },[&](bool unwind) noexcept {
         labWorldDraws.device=nullptr;
-        log("Lab world draw attempts request=%llu eye=%d aborted=%u calls=%llu primitives=%llu readFailures=%llu",
+        aborted=unwind;
+    });
+    // Foreign unwind propagates without logging. Only a returned observation
+    // reaches file I/O; native-finally cleanup remains scalar and allocation-free.
+    log("Lab world draw attempts request=%llu eye=%d aborted=%u calls=%llu primitives=%llu readFailures=%llu",
             static_cast<unsigned long long>(request.sequence),index,aborted,
             static_cast<unsigned long long>(labWorldDraws.calls),static_cast<unsigned long long>(labWorldDraws.primitives),
             static_cast<unsigned long long>(labWorldDraws.readFailures));
-        for(unsigned key=0;key<16;++key) if(labWorldDraws.stateCalls[key])
+    for(unsigned key=0;key<16;++key) if(labWorldDraws.stateCalls[key])
             log("Lab world draw state request=%llu eye=%d z=%u write=%u alpha=%u blend=%u calls=%llu primitives=%llu fullRange=%llu worldRange=%llu otherRange=%llu",
                 static_cast<unsigned long long>(request.sequence),index,key&1,(key>>1)&1,(key>>2)&1,(key>>3)&1,
                 static_cast<unsigned long long>(labWorldDraws.stateCalls[key]),
@@ -1931,7 +1936,8 @@ static void observedWorldRender(IDirect3DDevice9 *d,void *puppet,void(__thiscall
                 static_cast<unsigned long long>(labWorldDraws.fullRangeCalls[key]),
                 static_cast<unsigned long long>(labWorldDraws.worldRangeCalls[key]),
                 static_cast<unsigned long long>(labWorldDraws.otherRangeCalls[key]));
-    });
+    if(!contained || aborted) { nativeUiFault();uiHalted=true;return false; }
+    return true;
 }
 void stereo(void *puppet,void(__thiscall *original)(void *),EyePostRender postRender) {
     const auto generation = graphicsResourceGeneration();
@@ -2048,7 +2054,7 @@ void stereo(void *puppet,void(__thiscall *original)(void *),EyePostRender postRe
                 (hasStencil ? D3DCLEAR_STENCIL : 0),0xff000000,1,0));
             if(ok) {
                 if(traceDepth) traceStereoDepth(d,request,i,"before-world");
-                observedWorldRender(d,puppet,original,request,i,traceDepth);
+                ok=observedWorldRender(d,puppet,original,request,i,traceDepth);
                 if(traceDepth && generation==graphicsResourceGeneration()) traceStereoDepth(d,request,i,"after-world");
             }
             if (generation != graphicsResourceGeneration()) { ok = false; break; }
@@ -2088,7 +2094,7 @@ void stereo(void *puppet,void(__thiscall *original)(void *),EyePostRender postRe
         ok=restoreUiFrame() && ok;
         // Native desktop rebuild remains exactly once; never replay brain/overlay.
         if(traceDepth && generation==graphicsResourceGeneration()) traceStereoDepth(d,request,-1,"before-desktop");
-        observedWorldRender(d,puppet,original,request,-1,traceDepth);
+        ok=observedWorldRender(d,puppet,original,request,-1,traceDepth) && ok;
         if (generation != graphicsResourceGeneration()) return;
         if(traceDepth) traceStereoDepth(d,request,-1,"after-desktop");
         uiFrame.world=ok && !uiFrame.fault && uiFrame.generation==resourceGeneration.load();

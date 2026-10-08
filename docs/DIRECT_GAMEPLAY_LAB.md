@@ -145,3 +145,79 @@ helper accepts optional left/right trigger values and hand yaw, using the actual
 Monado wire fields and normal OpenXR input path. Zero/default, separate and both
 trigger packets plus invalid-input rejection were transport-checked; gameplay
 firing, aim and lifecycle acceptance remain open.
+
+
+## Native loading acknowledgement follow-up
+
+Astra/xhigh verified that CMSLoading6C is the confirmation-readiness latch, not an
+acknowledgement. Accepted MC_OK closes the current menu and invokes native
+UnblockWorldStart, clearing simulation48. The latch need not clear. The observer
+now samples/rechecks current simulation and its blocked flag, exclusive input
+and the dispatcher enable gate; the pre-post receipt records the actual tuple.
+The launcher distinguishes posting, observed native transition and actual scene
+readiness. External repeated reads do not pin native objects or prove that the
+injected Enter specifically caused the transition.
+
+The latest bounded launch174743 found ready CMSLoading and enabled dispatcher,
+but exclusive input remained0 after four owned normal SetForegroundWindow
+attempts. No Enter was posted; normal null-interface shutdown was observed.
+The finite follow-up184951 sampled three stable native instance/window tuples:
+input enabled1, running1, simulation present, blocking flag0, Core foreground0
+and exclusive0. All three instance aliases and stock window/canvas associations
+agreed. Probe185155 found the actual host window visible but minimized. One normal
+owned ShowWindowAsync(SW_RESTORE) request produced foreground1, Core foreground1,
+exclusive1 and minimized0 in two subsequent stable observations. The immediate
+SetForegroundWindow return was0; subsequent native state, not request success,
+establishes activation. No Enter/controller input was sent in either finite probe;
+both shut down normally with no cleanup errors. The launcher now resolves the
+native host window afresh, validates process incarnation/ownership, restores it
+when minimized, and retains the original readiness guards before confirmation.
+Source/native dual probe preparation proceeds independently. Full-mod acceptance
+is open, and no direct native method invocation or memory write bypass is added.
+
+Actual native eye captures now precede optional per-pose desktop captures. A
+desktop mapping/capture error is recorded separately and cannot discard valid
+native camera/pixel/projection evidence. Desktop occlusion comparison still needs
+its own successful images; it is not accepted when those captures are absent.
+See NATIVE_DUAL_PROBE.md for the subsequent unchanged-inventory firing sequence.
+
+Optional native_input_probe selects read-only-three-samples or
+owned-activation-three-samples. These bounded diagnostics record at most three
+ready native tuples and return through normal cleanup. They never send loading
+confirmation or controller inputs. The activation variant requests the same
+ordinary owned-window restore/focus once; it does not synthesize WM_ACTIVATEAPP
+or change native flags. Repeated external reads do not pin object lifetime.
+
+## Post-repair seven-pose run and native firing prerequisite
+
+Run190429 on source725425de9c8dd4315399e65bf7c28c353bc1390e176747935b4477a4f2d0eb48
+completed all seven actual native eye pairs, matching cameras/world/UI/projection,
+with normal isolated shutdown and no cleanup errors. The exact Jungle receipt is
+10562049bytes, SHA256106f9e287110988720cc717aaaa22190cafcf90fb184fd5a83e9d467d93165df.
+All seven attempted desktop captures failed and remain separately unaccepted.
+The repeatable first-person depth regression passes; actual right-eye images were
+inspected again. Native camera changes and static patch disparity are recorded
+in IMPLEMENTATION_STATUS.md and PC_GAMEPLAY_READINESS.md.
+
+The earlier run185525 exited before native scene receipt/host readiness and logged
+EXCEPTION_WINE_ASSERTION while using ntsync. This is not a demonstrated mod cause.
+The installed Proton wineserver contains PROTON_NO_NTSYNC; Valve's
+[server source](https://github.com/ValveSoftware/wine/blob/proton_11.0/server/inproc_sync.c)
+checks it before choosing the synchronization backend. Optional per-process
+proton_environment={"PROTON_NO_NTSYNC":"1"} selected fsync in run190429. Global
+runtime/kernel/security settings are untouched; other applications are not affected.
+
+A background loading screen can precede the Present that starts the host. The
+launcher therefore permits its same bounded native-owned restore/focus path
+before that later channel exists. It still requires native loading readiness,
+process incarnation, exact native host-window association, and ownership. Loading
+confirmation remains guarded through the actual channel. No unconditional host
+start or synthesized native activation event is introduced.
+
+Config capture_desktop=false omits optional external desktop captures, retaining
+actual native eye capture and its admission checks. This is useful for focused
+controller probes; it supplies no desktop-comparison acceptance. Before native
+firing probes, normal owned activation is rechecked separately from XR focus;
+background/minimized gameplay images alone do not establish native input readiness.
+Native initial Jungle weapons are ID1 Zap guns, not Colt. See NATIVE_DUAL_PROBE.md
+for the required charge/release-cycle adaptation and unresolved actual firing gate.

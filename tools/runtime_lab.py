@@ -4,7 +4,8 @@
 Configuration, owned game assets, prefixes, logs and images stay outside source.
 This launcher never installs, changes global runtimes, joins multiplayer or clicks menus.
 """
-from assess_runtime import complete_pairs_for_pose
+from assess_runtime import (complete_pairs_for_pose,dual_topologies,successful_dual_fire,
+    dual_identity,DualPhaseEvidence,require_dual_capture,dual_weapon_events)
 
 import argparse
 import ctypes
@@ -275,6 +276,16 @@ def validate(cfg):
     if set(cfg['monado_environment'])-allowed_environment or cfg['monado_environment'].get('P_OVERRIDE_ACTIVE_CONFIG')!='remote':
         raise ValueError('Only process-local simulation settings are admitted')
     if not 0<cfg.get('timeout',60)<=180: raise ValueError('Runtime budget must be between zero and 180 seconds')
+    if cfg.get('native_input_probe') not in (None,'read-only-three-samples','owned-activation-three-samples'):
+        raise ValueError('Unknown bounded native input probe')
+    if cfg.get('native_input_probe') and cfg.get('renderer_mode','vr')!='vr':
+        raise ValueError('Native input diagnostic requires the actual VR channel')
+    if cfg.get('proton_environment',{}) not in ({},{'PROTON_NO_NTSYNC':'1'}):
+        raise ValueError('Only the verified process-local Proton sync comparison is admitted')
+    if cfg.get('native_dual_probe') not in (None,'zap-initial-inventory'):
+        raise ValueError('Only the verified native ID1 charge/release fixture is admitted')
+    if type(cfg.get('capture_desktop',True)) is not bool:
+        raise ValueError('Desktop capture selection must be explicit boolean')
     if not cfg['pose_steps'] or cfg['pose_steps'][0]['name']!='baseline' or cfg['pose_steps'][0]['head']!=cfg['baseline_head']:
         raise ValueError('First held-pose case must certify the commanded baseline')
     for head in [cfg['baseline_head'],*[step['head'] for step in cfg['pose_steps']]]:
@@ -284,6 +295,103 @@ def validate(cfg):
     if expected!={'p':[0,0,0],'q':[0,0,0,1]} or cfg['baseline_head']!=[0,1.6,0,0,0,0]:
         raise ValueError('Initial remote STAGE head and native LOCAL reference must match the verified baseline')
     return private,lab,prefix
+
+def native_dual_probe(cfg,env,token,deadline,run_dir,state):
+    """Bounded unchanged-inventory Zap probe via ordinary simulated input.
+
+    Native receipts and visible impacts need subsequent review. This function
+    never grants weapons, changes native eligibility or edits command history.
+    """
+    steps=[('neutral',0,0,2),('right',0,1,2),('neutral-after-right',0,0,3),
+        ('left',1,0,2),('neutral-after-left',0,0,3),('both-first',1,1,2),
+        ('right-retained',0,1,2),('neutral-after-both',0,0,3),('both-second',1,1,2),
+        ('left-retained',1,0,2),('final-neutral',0,0,3)]
+    identity_key=dual_identity(state)
+    def ready(value):
+        return (value['focused'] and value['head_valid'] and value['gameplay'] and not value['menu'] and
+            value.get('health',0)>0 and value.get('current_weapon')==[1,1] and
+            value.get('native_activation_repeated') and value.get('native_input_enabled') and
+            value.get('native_input_exclusive') and value.get('native_core_foreground') and value.get('native_host_foreground') and
+            value.get('hand_valid')==[1,1] and value.get('primary_active_mask')==3 and
+            value.get('wheel_open')==[0,0] and value['input_age_ms']<=150 and
+            value['input_tick_ms']+value['input_age_ms']>=value.get('ui_tick_ms',0) and
+            value['input_tick_ms']+value['input_age_ms']-value.get('ui_tick_ms',0)<=250 and
+            value.get('ui_tracking_generation')==value.get('tracking_generation') and
+            dual_identity(value)==identity_key)
+    report={'result':'incomplete','steps':[],'native_compatibility_acceptance':False}
+    prior=[0,0];cycles={};last_release_tick=0
+    def send(left,right):
+        subprocess.run([cfg['pose_driver'],str(cfg['remote_port']),*map(str,cfg['baseline_head']),
+            str(left),str(right),'-0.2','0.2'],check=True,timeout=remaining(deadline,3))
+    def native_trace():
+        text=(Path(cfg['game_lab'])/'Bin/SS2VR.log').read_text(errors='replace')
+        if 'Lab native weapon trace saturated' in text:
+            raise RuntimeError('Native dual observation trace saturated; evidence incomplete')
+        return text
+    try:
+        if not ready(state):raise RuntimeError('Native dual Zap fixture lacks fresh owned two-hand/native foreground readiness')
+        for name,left,right,duration in steps:
+            boundary=state['input_sequence'];send(left,right)
+            stop=min(deadline,time.monotonic()+duration);phase=DualPhaseEvidence(boundary,[left,right])
+            while time.monotonic()<stop:
+                state=observer(cfg,env,'status',token,timeout=remaining(deadline,2),deadline=deadline)
+                if not ready(state):raise RuntimeError('Native dual probe lost its fixture/identity/readiness')
+                phase.observe(state)
+                time.sleep(.02)
+            phase.require_progress();observations=phase.observations
+            for hand,high in enumerate((left,right)):
+                if high and not prior[hand]:cycles[hand]=phase.confirmed_boundary()
+            report['steps'].append({'name':name,'input_boundary':boundary,
+                'end_sequence':observations[-1]['input_sequence'],'expected_trigger':[left,right],'observations':observations})
+            (run_dir/'native-dual-probe.json').write_text(json.dumps(report,indent=2))
+            if left or right:
+                native=native_trace()
+                topologies=dual_topologies(native,identity_key,boundary,observations[-1]['input_sequence'])
+                if not topologies:raise RuntimeError('Native independent two-hand topology was not compatible')
+            report['steps'][-1]['successful_fire_hands_in_phase']=sorted(successful_dual_fire(
+                native_trace(),identity_key,boundary,state['input_sequence'],dual_topologies(
+                    native_trace(),identity_key,boundary,state['input_sequence'])))
+            if left or right or name=='final-neutral':
+                q=cfg['expected_baseline_head']['q'];p=cfg['expected_baseline_head']['p']
+                capture=run_dir/('dual-'+name)
+                observer(cfg,env,'capture',token,(capture,observations[0]['input_sequence'],*p,*q),timeout=remaining(deadline),deadline=deadline)
+                metadata=json.loads(Path(str(capture)+'-metadata.json').read_text())
+                state=observer(cfg,env,'status',token,timeout=remaining(deadline,2),deadline=deadline)
+                if not ready(state):raise RuntimeError('Native dual capture lost fixture/identity/readiness')
+                phase.observe(state)
+                require_dual_capture(metadata,phase,identity_key,state)
+                report['steps'][-1]['capture']=metadata
+                report['steps'][-1]['end_sequence']=state['input_sequence']
+                native_trace()
+            closed={hand for hand,high in enumerate((left,right)) if prior[hand] and not high}
+            for hand in closed:
+                native=native_trace();start=cycles.pop(hand);end=state['input_sequence']
+                topologies=dual_topologies(native,identity_key,start,end)
+                bindings={(v['owner'],tuple(v['weapon']),tuple(v['receiver'])) for v in topologies}
+                if len(bindings)!=1:raise RuntimeError('Zap cycle lacks one stable compatible native topology')
+                releases=[v for v in dual_weapon_events(native,identity_key,boundary,end,topologies,'release')
+                    if v['hand']==hand and v['trigger'][hand]<.01]
+                if not releases or hand not in successful_dual_fire(native,identity_key,start,end,topologies):
+                    raise RuntimeError('Zap press/release cycle lacks successful native fire/release receipts: '+name)
+                last_release_tick=max(last_release_tick,max(v['completion_tick'] for v in releases))
+                report['steps'][-1].setdefault('closed_cycles',[]).append({'hand':hand,'start_input':start,
+                    'end_input':end,'normal_release_receipts':releases})
+            if not left and not right and name!='neutral':phase.require_quiet_after(last_release_tick)
+            prior=[left,right]
+            native_trace()
+        if cycles:raise RuntimeError('Native Zap probe ended with an unclosed ordinary input cycle')
+        native_trace()
+        report['result']='ordinary_input_sequence_observed_native_receipts_unreviewed'
+    finally:
+        # Release ordinary synthetic controls even if the runtime deadline expired.
+        # This bounded release is not a native history/gesture manipulation.
+        try:
+            subprocess.run([cfg['pose_driver'],str(cfg['remote_port']),*map(str,cfg['baseline_head']),
+                '0','0','-0.2','0.2'],check=True,timeout=3)
+        except Exception as error:
+            report['release_error']=str(error);report['result']='incomplete'
+        (run_dir/'native-dual-probe.json').write_text(json.dumps(report,indent=2))
+    return report
 
 def run(cfg):
     private,lab,prefix=validate(cfg)
@@ -312,6 +420,7 @@ def run(cfg):
                   ('runtime_lab.py','runtime_observer.cpp','monado_pose_driver.cpp','assess_runtime.py')},
               'simulation':not stock,'renderer_mode':'stock' if stock else 'vr','hardware_acceptance':False,'result':'incomplete'}
     last_focus=0.0;last_state=None;loading_continue_sent=False;stock_creation=None
+    loading_receipt=None;last_native_focus=0;native_focus_requests=0
     stock_token='Z:'+str(lab/'Bin/Sam2.exe')
     master,slave=pty.openpty(); service=None;launch=None;owned_game=None;owned_host=None;token=None;owned_window=None
     env=os.environ.copy()
@@ -322,6 +431,7 @@ def run(cfg):
         'LD_LIBRARY_PATH':cfg['runtime_libraries'],'WINEDLLOVERRIDES':'d3d9=n,b;d3d11,dxgi=n',
         'PROTON_LOG':'1','PROTON_LOG_DIR':str(run_dir),'SS2VR_LAB_TRACE':'1','SS2VR_LAB_ISOLATE_ONLINE':'1','SS2VR_LAB_SCENE':cfg['scene']['entry']})
     env.update(cfg['monado_environment'])
+    env.update(cfg.get('proton_environment',{}))
     env.pop('SS2VR_LAB_STOCK_RENDER',None)
     if stock:env['SS2VR_LAB_STOCK_RENDER']='1'
     files=[]; cleanup_errors=[]
@@ -376,7 +486,7 @@ def run(cfg):
             if len(games)>1:raise RuntimeError('Ambiguous game process ownership')
             if games:
                 owned_game=games[0]
-                if owned_window is None or ((not token or (last_state and last_state.get('menu',stock))) and time.monotonic()-last_focus>1):
+                if not cfg.get('native_input_probe') and (owned_window is None or ((not token or (last_state and last_state.get('menu',stock))) and time.monotonic()-last_focus>1)):
                     # X11 calls can block; keep them in a deadline-bounded child.
                     focus=subprocess.run([sys.executable,str(Path(__file__)),
                         '--focus-owned',str(owned_game['pid']),'--start',owned_game['start'],'--lab',str(lab)],
@@ -395,6 +505,21 @@ def run(cfg):
                 args=[v.decode(errors='replace') for v in h['argv']]
                 if '--channel' in args:
                     token=args[args.index('--channel')+1];owned_host=h
+            # Native background/minimized loading can precede the presentation
+            # that starts the host. Restore the verified game window without
+            # requiring that later IPC channel; confirmation still needs it.
+            if (not stock and not token and owned_game and not cfg.get('native_input_probe') and
+                native_focus_requests<4 and time.monotonic()-last_native_focus>=2):
+                incarnation=observer(cfg,env,'stock-status',stock_token,timeout=remaining(deadline,3),deadline=deadline)
+                if incarnation.get('loading_native_ready')==1:
+                    receipt=run_dir/('early-activation-'+str(native_focus_requests)+'.json')
+                    try:observer(cfg,env,'stock-focus',stock_token,(incarnation['process_creation'],'Z:'+str(receipt)),timeout=remaining(deadline,3),deadline=deadline)
+                    except ObserverError as error:
+                        if error.code!=8:raise
+                    native_focus_requests+=1
+                    manifest['native_focus_requests']=native_focus_requests
+                    if receipt.exists():manifest.setdefault('early_activation_requests',[]).append(json.loads(receipt.read_text()))
+                last_native_focus=time.monotonic()
             if stock and owned_game and owned_window:
                 if owned_host:raise RuntimeError('Stock comparator unexpectedly started a VR host')
                 token=stock_token
@@ -434,18 +559,54 @@ def run(cfg):
                         time.sleep(.05);continue
                     raise
                 last_state=state
+                if cfg.get('native_input_probe'):
+                    if state.get('native_state_repeated') and state.get('loading_native_ready')==1:
+                        samples=manifest.setdefault('native_input_samples',[]);samples.append(state)
+                        if len(samples)==1 and cfg['native_input_probe']=='owned-activation-three-samples':
+                            if not (state.get('native_activation_repeated') and state.get('native_input_enabled') and
+                                state.get('native_running') and state.get('native_simulation_present') and state.get('native_exclusive_block')==0):
+                                raise RuntimeError('Native activation probe lacks verified eligible owned state')
+                            incarnation=observer(cfg,env,'stock-status',stock_token,timeout=remaining(deadline),deadline=deadline)
+                            if incarnation['game_pid']!=state['game_pid']:raise RuntimeError('Activation owner differs from channel')
+                            receipt=run_dir/'activation-request.json'
+                            try:observer(cfg,env,'stock-focus',stock_token,(incarnation['process_creation'],'Z:'+str(receipt)),timeout=remaining(deadline),deadline=deadline)
+                            except ObserverError as error:
+                                if error.code!=8:raise
+                            if receipt.exists():manifest['activation_request']=json.loads(receipt.read_text())
+                            manifest['activation_attempted_once']=True
+                        if len(samples)==3:
+                            manifest['game_pid']=owned_game['pid'];manifest['host_pid']=owned_host['pid'] if owned_host else None
+                            manifest['result']='native_input_state_sampled_no_controls_injected'
+                            return run_dir
+                    time.sleep(.2);continue
+                if (state.get('loading_native_ready')==1 and not state.get('loading_ready') and
+                    native_focus_requests<4 and time.monotonic()-last_native_focus>=2):
+                    incarnation=observer(cfg,env,'stock-status',stock_token,timeout=remaining(deadline),deadline=deadline)
+                    if incarnation['game_pid']!=state['game_pid']:raise RuntimeError('Native focus owner differs from the channel')
+                    try:observer(cfg,env,'stock-focus',stock_token,(incarnation['process_creation'],),timeout=remaining(deadline),deadline=deadline)
+                    except ObserverError as error:
+                        if error.code!=8:raise
+                    native_focus_requests+=1;last_native_focus=time.monotonic()
+                    manifest['native_focus_requests']=native_focus_requests
                 if state.get('loading_ready') and not loading_continue_sent:
                     native_log=(lab/'Bin/SS2VR.log').read_text(errors='replace')
                     native_receipts=re.findall(r'Lab native scene stream bytes=(\d+) positionRestored=(\d+) sha256=([a-f0-9]{64})',native_log)
                     if ('Lab native online initializer suppressed; interface=0;' not in native_log or
                         not native_receipts or any(h!=cfg['scene']['entry_sha256'] for size,pos,h in native_receipts)):
                         raise RuntimeError('Loading continuation lacks consistent native scene/isolation evidence')
-                    try:observer(cfg,env,'continue-loading',token,('Z:'+str(lab/'Bin/Sam2.exe'),),timeout=remaining(deadline),deadline=deadline)
+                    receipt=run_dir/'loading-post.json'
+                    try:observer(cfg,env,'continue-loading',token,('Z:'+str(lab/'Bin/Sam2.exe'),'Z:'+str(receipt)),timeout=remaining(deadline),deadline=deadline)
                     except ObserverError as error:
                         if error.code==8:continue # Rejected before any input was posted.
                         raise
                     loading_continue_sent=True
                     manifest['loading_continue_messages_posted']=True
+                    loading_receipt=json.loads(receipt.read_text())
+                    manifest['loading_post_receipt']=loading_receipt
+                if (loading_receipt and state.get('native_state_repeated') and
+                    state.get('native_simulation')==loading_receipt['native_simulation'] and
+                    state.get('native_world_start_blocked')==0 and state.get('native_current_menu')==0):
+                    manifest['loading_native_transition_observed']=True
                 if state['renderer'] and state['gameplay'] and not state['menu'] and state['focused'] and state['head_valid']:
                     (run_dir/'ready.json').write_text(json.dumps(state,indent=2));break
             if launch.poll() is not None and not games:raise RuntimeError('Game exited before world readiness')
@@ -527,11 +688,32 @@ def run(cfg):
                 if count<30:raise TimeoutError('Neutral pose lacks 30 distinct complete native/UI/projection requests')
             (run_dir/(step['name']+'-input.json')).write_text(json.dumps(state,indent=2))
             desktop=run_dir/(step['name']+'-desktop.png')
-            subprocess.run([sys.executable,str(Path(__file__)),
-                '--focus-owned',str(owned_game['pid']),'--start',owned_game['start'],
-                '--lab',str(lab),'--capture-owned',str(desktop),'--private-root',str(private)],
-                capture_output=True,text=True,check=True,timeout=remaining(deadline,5))
             observer(cfg,env,'capture',token,(run_dir/step['name'],state['input_sequence'],*expected,*q),timeout=remaining(deadline),deadline=deadline)
+            if cfg.get('capture_desktop',True):
+                captured=subprocess.run([sys.executable,str(Path(__file__)),
+                    '--focus-owned',str(owned_game['pid']),'--start',owned_game['start'],
+                    '--lab',str(lab),'--capture-owned',str(desktop),'--private-root',str(private)],
+                    capture_output=True,text=True,timeout=remaining(deadline,5))
+                if captured.returncode:
+                    manifest.setdefault('desktop_capture_errors',[]).append({'pose':step['name'],
+                        'returncode':captured.returncode,'stderr':captured.stderr[-4096:]})
+        if cfg.get('native_dual_probe')=='zap-initial-inventory':
+            # Retain the same normal window activation policy for actual input
+            # probes; native eye capture does not establish exclusive input.
+            if not state.get('native_host_foreground') or not state.get('native_input_exclusive'):
+                incarnation=observer(cfg,env,'stock-status',stock_token,timeout=remaining(deadline,3),deadline=deadline)
+                receipt=run_dir/'dual-activation.json'
+                try:observer(cfg,env,'stock-focus',stock_token,(incarnation['process_creation'],'Z:'+str(receipt)),timeout=remaining(deadline,3),deadline=deadline)
+                except ObserverError as error:
+                    if error.code!=8:raise
+                stop=min(deadline,time.monotonic()+3)
+                while time.monotonic()<stop:
+                    state=observer(cfg,env,'status',token,timeout=remaining(stop,2),deadline=stop)
+                    if state.get('native_host_foreground') and state.get('native_input_exclusive'):break
+                    time.sleep(.05)
+                else:raise RuntimeError('Native dual fixture did not regain normal exclusive input')
+                if receipt.exists():manifest['dual_activation_request']=json.loads(receipt.read_text())
+            manifest['native_dual_probe']=native_dual_probe(cfg,env,token,deadline,run_dir,state)
         manifest['result']='world_images_captured_unreviewed'
     except Exception as error:
         manifest['error']=str(error)

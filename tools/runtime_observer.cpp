@@ -24,6 +24,11 @@ static BOOL CALLBACK closeWindow(HWND window,LPARAM pid) {
 }
 struct OwnedLoading {
     HWND window=nullptr; DWORD pid=0,thread=0; uint32_t module=0,menu=0,table=0,ready=0,stage=0,error=0;
+    uint32_t simulation=0,blocked=0,exclusive=0,dispatcher=0,inputEnabled=0;
+    uint32_t instance=0,running=0,simulationPresent=0,inputBlock=0,coreForeground=0;
+    uint32_t hostWindow=0,hostHwnd=0,canvasWindow=0,workbenchWindow=0,keyboardWindow=0;
+    bool activationRepeated=false,hostForeground=false,hostVisible=false,hostIconic=false;
+    bool nativeState=false;
 };
 static bool loadingOwner(DWORD pid,const wchar_t *path,OwnedLoading &out) {
     HANDLE process=OpenProcess(PROCESS_VM_READ|PROCESS_QUERY_LIMITED_INFORMATION,FALSE,pid);
@@ -38,16 +43,64 @@ static bool loadingOwner(DWORD pid,const wchar_t *path,OwnedLoading &out) {
     out.stage=ok?2:1;
     HANDLE modules=ok?CreateToolhelp32Snapshot(TH32CS_SNAPMODULE|TH32CS_SNAPMODULE32,pid):INVALID_HANDLE_VALUE;
     if(modules==INVALID_HANDLE_VALUE)out.error=GetLastError();
-    uint32_t base=0;MODULEENTRY32W module{sizeof(module)};
+    uint32_t base=0,engine=0,core=0,exe=0;MODULEENTRY32W module{sizeof(module)};
     if(modules!=INVALID_HANDLE_VALUE) {
         if(Module32FirstW(modules,&module))do {
             if(!_wcsicmp(module.szModule,L"Sam2Game.dll"))base=static_cast<uint32_t>(reinterpret_cast<uintptr_t>(module.modBaseAddr));
+            if(!_wcsicmp(module.szModule,L"Engine.dll"))engine=static_cast<uint32_t>(reinterpret_cast<uintptr_t>(module.modBaseAddr));
+            if(!_wcsicmp(module.szModule,L"Core.dll"))core=static_cast<uint32_t>(reinterpret_cast<uintptr_t>(module.modBaseAddr));
+            if(!_wcsicmp(module.szModule,L"Sam2.exe"))exe=static_cast<uint32_t>(reinterpret_cast<uintptr_t>(module.modBaseAddr));
         }while(Module32NextW(modules,&module));
         CloseHandle(modules);
     }
     auto read=[&](uint32_t address,uint32_t &value) {
         SIZE_T got=0;return ReadProcessMemory(process,reinterpret_cast<void *>(uintptr_t(address)),&value,4,&got)&&got==4;
     };
+    uint32_t simulation=0,blocked=0,exclusive=0,dispatcher=0,enabled=0,inputEnabled=0,againSimulation=0,againBlocked=0;
+    uint32_t againProject=0,againEnabled=0,againInputEnabled=0,againExclusive=0;
+    out.nativeState=base&&engine&&read(engine+0x2f1a70,simulation)&&simulation&&simulation<=UINT32_MAX-0x48&&
+        read(simulation+0x48,blocked)&&read(engine+0x2e9fd4,exclusive)&&
+        read(base+0x403350,dispatcher)&&dispatcher&&dispatcher<=UINT32_MAX-0x24&&read(dispatcher+0x24,enabled)&&
+        read(dispatcher+0x10,inputEnabled)&&read(base+0x403350,againProject)&&againProject==dispatcher&&
+        read(dispatcher+0x24,againEnabled)&&againEnabled==enabled&&read(dispatcher+0x10,againInputEnabled)&&againInputEnabled==inputEnabled&&
+        read(engine+0x2e9fd4,againExclusive)&&againExclusive==exclusive&&
+        read(engine+0x2f1a70,againSimulation)&&againSimulation==simulation&&read(simulation+0x48,againBlocked)&&againBlocked==blocked;
+    out.simulation=simulation;out.blocked=blocked;out.exclusive=exclusive;out.dispatcher=enabled;out.inputEnabled=inputEnabled;
+    auto field=[&](uint32_t pointer,uint32_t offset,uint32_t &value) {
+        return pointer&&pointer<=UINT32_MAX-offset&&read(pointer+offset,value);
+    };
+    uint32_t instance=0,exeInstance=0,tableInstance=0,blockOwner=0,hostWindow=0,hwndPointer=0,canvas=0;
+    uint32_t againInstance=0,againExeInstance=0,againSamInstance=0,againHostWindow=0,againHwndPointer=0;
+    uint32_t againHwnd=0,againBlockOwner=0,againBlock=0,againForeground=0,againCanvas=0;
+    uint32_t againRunning=0,againPresent=0,activationInput=0,activationDispatch=0,activationExclusive=0;
+    // Three native aliases distinguish a registered current instance from the
+    // Sam alias written during construction. Repeated reads are not life pins.
+    out.activationRepeated=ok&&base&&engine&&core&&exe&&
+        read(engine+0x2f19b0,instance)&&instance==dispatcher&&read(exe+0x849c,exeInstance)&&exeInstance==instance&&
+        field(instance,0,tableInstance)&&tableInstance==base+0x29cf10&&
+        field(instance,0x0c,out.running)&&field(instance,0x08,out.simulationPresent)&&
+        field(instance,0x30,blockOwner)&&field(blockOwner,0xfc,out.inputBlock)&&
+        read(core+0xb56f0,out.coreForeground)&&read(exe+0x8494,hostWindow)&&
+        field(hostWindow,0x40,hwndPointer)&&field(hwndPointer,0,out.hostHwnd)&&
+        read(core+0xc109c,out.workbenchWindow)&&read(core+0xc10d4,out.keyboardWindow)&&
+        read(exe+0x8498,canvas)&&field(canvas,0x14,out.canvasWindow)&&
+        read(engine+0x2f19b0,againInstance)&&againInstance==instance&&
+        read(exe+0x849c,againExeInstance)&&againExeInstance==instance&&read(base+0x403350,againSamInstance)&&againSamInstance==instance&&
+        read(exe+0x8494,againHostWindow)&&againHostWindow==hostWindow&&field(hostWindow,0x40,againHwndPointer)&&againHwndPointer==hwndPointer&&
+        field(hwndPointer,0,againHwnd)&&againHwnd==out.hostHwnd&&field(instance,0x30,againBlockOwner)&&againBlockOwner==blockOwner&&
+        field(blockOwner,0xfc,againBlock)&&againBlock==out.inputBlock&&read(core+0xb56f0,againForeground)&&againForeground==out.coreForeground&&
+        read(exe+0x8498,againCanvas)&&againCanvas==canvas&&
+        field(instance,0x0c,againRunning)&&againRunning==out.running&&field(instance,0x08,againPresent)&&againPresent==out.simulationPresent&&
+        field(instance,0x10,activationInput)&&activationInput==inputEnabled&&field(instance,0x24,activationDispatch)&&activationDispatch==enabled&&
+        read(engine+0x2e9fd4,activationExclusive)&&activationExclusive==exclusive;
+    out.instance=instance;out.hostWindow=hostWindow;
+    if(out.activationRepeated) {
+        const HWND native=reinterpret_cast<HWND>(uintptr_t(out.hostHwnd));DWORD nativeOwner=0;
+        GetWindowThreadProcessId(native,&nativeOwner);
+        out.hostForeground=nativeOwner==pid&&GetForegroundWindow()==native;
+        out.hostVisible=nativeOwner==pid&&IsWindowVisible(native);
+        out.hostIconic=nativeOwner==pid&&IsIconic(native);
+    }
     uint32_t menu=0,table=0,ready=0,again=0,tableAgain=0,readyAgain=0;
     ok=ok&&base&&read(base+0x40a270,menu)&&menu&&menu<=UINT32_MAX-0x6c&&
         read(menu,table)&&table==base+0x29f148&&read(menu+0x6c,ready)&&ready==1;
@@ -56,7 +109,7 @@ static bool loadingOwner(DWORD pid,const wchar_t *path,OwnedLoading &out) {
     const HWND window=GetForegroundWindow();DWORD owner=0;
     const DWORD thread=window?GetWindowThreadProcessId(window,&owner):0;
     wchar_t title[64]{};if(window)GetWindowTextW(window,title,64);
-    ok=ok&&owner==pid&&thread&&wcscmp(title,L"Serious Sam 2")==0&&
+    ok=ok&&out.nativeState&&blocked==1&&exclusive&&enabled&&owner==pid&&thread&&wcscmp(title,L"Serious Sam 2")==0&&
         read(base+0x40a270,again)&&again==menu&&read(menu,tableAgain)&&tableAgain==table&&
         read(menu+0x6c,readyAgain)&&readyAgain==1;
     CloseHandle(process);
@@ -146,7 +199,7 @@ static StockCameraRead stockCameraRead(const OwnedStockProcess &process) {
     return out;
 }
 static int stockCommand(int argc,wchar_t **argv) {
-    if(argc!=4)return 2;
+    if(argc!=4&&!(argc==5&&!wcscmp(argv[1],L"stock-focus")))return 2;
     OwnedStockProcess process;if(!stockProcess(argv[2],process))return 4;
     if(!wcscmp(argv[1],L"stock-status")) {
         auto *file=_wfopen(argv[3],L"wbx");if(!file)return 6;
@@ -164,6 +217,26 @@ static int stockCommand(int argc,wchar_t **argv) {
     wchar_t *end=nullptr;const auto expected=std::wcstoull(argv[3],&end,10);
     if(!expected||!end||*end||expected!=process.creation)return 8;
     // Retain the original process handle through posting to prevent PID reuse.
+    if(!wcscmp(argv[1],L"stock-focus")) {
+        OwnedLoading native{};loadingOwner(process.pid,argv[2],native);
+        if(!native.activationRepeated)return 8;
+        const HWND window=reinterpret_cast<HWND>(uintptr_t(native.hostHwnd));DWORD owner=0;
+        GetWindowThreadProcessId(window,&owner);wchar_t title[64]{};GetWindowTextW(window,title,64);
+        if(owner!=process.pid||wcscmp(title,L"Serious Sam 2")||GetAncestor(window,GA_ROOT)!=window)return 8;
+        FILE *receipt=argc==5?_wfopen(argv[4],L"wbx"):nullptr;
+        if(argc==5&&!receipt)return 6;
+        const bool visible=IsWindowVisible(window),iconic=IsIconic(window);
+        bool showRequested=false;
+        if(iconic)showRequested=ShowWindowAsync(window,SW_RESTORE);
+        const bool foregroundRequested=SetForegroundWindow(window);
+        const bool foreground=GetForegroundWindow()==window;
+        if(receipt) {
+            std::fprintf(receipt,"{\"native_host_hwnd\":%u,\"visible_before\":%u,\"iconic_before\":%u,\"show_requested\":%u,\"foreground_requested\":%u,\"foreground_observed\":%u}\n",
+                native.hostHwnd,visible,iconic,showRequested,foregroundRequested,foreground);
+            if(std::fclose(receipt)!=0)return 7;
+        }
+        return foreground?0:8;
+    }
     if(!wcscmp(argv[1],L"stock-close")) {
         EnumWindows(closeWindow,static_cast<LPARAM>(process.pid));return 0;
     }
@@ -198,17 +271,29 @@ int wmain(int argc,wchar_t **argv) {
             ui.fireSequence[0],ui.fireSequence[1],ui.wheel[0].open,ui.wheel[1].open);
         OwnedLoading loading{};
         const bool ready=argc==5&&loadingOwner(s.gamePid,argv[4],loading);
+        std::fprintf(output,",\"native_state_repeated\":%u,\"native_simulation\":%u,\"native_world_start_blocked\":%u,\"native_input_exclusive\":%u,\"native_input_enabled\":%u,\"native_ok_dispatch_enabled\":%u,\"native_current_menu\":%u",
+            loading.nativeState,loading.simulation,loading.blocked,loading.exclusive,loading.inputEnabled,loading.dispatcher,loading.menu);
+        std::fprintf(output,",\"native_activation_repeated\":%u,\"native_instance\":%u,\"native_running\":%u,\"native_simulation_present\":%u,\"native_exclusive_block\":%u,\"native_core_foreground\":%u,\"native_host_window\":%u,\"native_host_hwnd\":%u,\"native_canvas_window\":%u,\"native_workbench_window\":%u,\"native_keyboard_window\":%u,\"native_host_foreground\":%u,\"native_host_visible\":%u,\"native_host_iconic\":%u",
+            loading.activationRepeated,loading.instance,loading.running,loading.simulationPresent,loading.inputBlock,loading.coreForeground,
+            loading.hostWindow,loading.hostHwnd,loading.canvasWindow,loading.workbenchWindow,loading.keyboardWindow,loading.hostForeground,loading.hostVisible,loading.hostIconic);
         std::fprintf(output,",\"slots\":[%u,%u],\"loading_ready\":%u,\"loading_stage\":%u,\"loading_error\":%u,\"loading_table_rva\":%u,\"loading_native_ready\":%u}\n",static_cast<unsigned>(s.slot[0].state),static_cast<unsigned>(s.slot[1].state),ready,loading.stage,loading.error,loading.module&&loading.table?loading.table-loading.module:0,loading.ready);
 
         return output==stdout ? (std::fflush(output)==0?0:7) : (std::fclose(output)==0?0:7);
     }
     if(wcscmp(argv[1],L"continue-loading")==0) {
-        if(argc!=4)return 2;
+        if(argc!=4&&argc!=5)return 2;
         DWORD pid=0;{Lock lock(channel,100);if(!lock)return 4;pid=channel.shared->gamePid;}
         OwnedLoading loading{};if(!loadingOwner(pid,argv[3],loading))return 8;
+        FILE *receipt=argc==5?_wfopen(argv[4],L"wbx"):nullptr;
+        if(argc==5&&!receipt)return 6;
         const bool down=PostMessageW(loading.window,WM_KEYDOWN,VK_RETURN,0x001c0001);
         // Always attempt release; do not retain a key or retry this action.
         const bool up=PostMessageW(loading.window,WM_KEYUP,VK_RETURN,static_cast<LPARAM>(0xc01c0001u));
+        if(receipt) {
+            std::fprintf(receipt,"{\"game_pid\":%u,\"native_simulation\":%u,\"native_world_start_blocked\":%u,\"native_input_exclusive\":%u,\"native_ok_dispatch_enabled\":%u,\"native_current_menu\":%u,\"down_posted\":%u,\"up_posted\":%u}\n",
+                pid,loading.simulation,loading.blocked,loading.exclusive,loading.dispatcher,loading.menu,down,up);
+            if(std::fclose(receipt)!=0)return 7;
+        }
         return down&&up?0:9;
     }
     if(wcscmp(argv[1],L"close")==0) {
@@ -276,7 +361,10 @@ int wmain(int argc,wchar_t **argv) {
         static_cast<unsigned long long>(request.sequence),static_cast<unsigned long long>(request.input.sequence),
         static_cast<unsigned long long>(request.input.tickMs),request.width,request.height,presentation,request.session,request.reference,request.trackingGeneration,request.uiRequested);
     pose(f,request.input.head);std::fprintf(f,",\"eyes\":[");pose(f,request.eye[0]);std::fprintf(f,",");pose(f,request.eye[1]);
-    std::fprintf(f,"],\"fov\":[");for(unsigned h=0;h<2;++h) {
+    std::fprintf(f,"],\"trigger\":[%.9g,%.9g],\"hand_valid\":[%u,%u],\"primary_active_mask\":%u,\"primary_generations\":[%u,%u],\"fov\":[",
+        request.input.trigger[0],request.input.trigger[1],request.input.handValid[0],request.input.handValid[1],
+        request.input.primaryActiveMask,request.input.primaryInputGeneration[0],request.input.primaryInputGeneration[1]);
+    for(unsigned h=0;h<2;++h) {
         if(h)std::fprintf(f,",");const auto &v=request.fov[h];
         std::fprintf(f,"[%.9g,%.9g,%.9g,%.9g]",v.left,v.right,v.up,v.down);
     }

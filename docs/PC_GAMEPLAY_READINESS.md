@@ -7,6 +7,22 @@ A menu quad, duplicated desktop gameplay, a synthetic image or successful xrEndF
 alone does not meet that requirement. Teleport remains excluded; multiplayer remains
 required. Preserve native D3D9 CPU readback into the separate D3D11 OpenXR host.
 
+## Current post-repair native result
+
+Run190429 on compiled source725425de9c8dd4315399e65bf7c28c353bc1390e176747935b4477a4f2d0eb48
+captured all seven actual native pose pairs and500 neutral complete native requests.
+Both-eye cameras, complete world/UI and successful projection are correlated to
+those exact image requests. Translation measures0.1m in each axis; yaw/pitch/roll
+measure0.15rad. Static foreground rock/middle road/distant arch patches show
+horizontal eye displacements22/7/1pixels under the matching symmetric eye FOVs,
+consistent with depth-dependent parallax. Actual images were inspected; the
+corrected right-eye terrain/waterfall occlusion remains coherent. Native shutdown
+was observed, with no cleanup errors. Desktop captures failed and remain unaccepted.
+This simulated Proton/fsync result is proper native world stereo/6DoF evidence;
+body/origin collision, physical hand/model alignment, full features, real devices,
+Windows and multiplayer acceptance remain open. Historical records below retain
+the failures that led to this result.
+
 ## Observed source issue and incremental fix
 
 The admitted native additional swapchain replaces the unsuitable implicit16x16

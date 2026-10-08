@@ -8,12 +8,12 @@ public; proprietary scenes/saves/settings/images stay in the private lab.
 
 | Requirement | Source/preparation | Actual runtime status |
 | --- | --- | --- |
-| Direct known-scene launch without menu clicking | Verified native +level and guarded loading confirmation, isolated scene receipts | Run154502 passed; intermittent focus/startup robustness remains open |
-| Terrain occlusion in modded desktop and both VR eyes | User reports trees/waterfall visible through terrain in desktop; exact scene/view pending. Stock-versus-mod comparison, depth/state restoration and per-eye opaque/alpha ordering required; preserve effects | Open |
-| Native distinct per-eye world geometry, correct FOV/parallax | Native depth partition and builtin UI declaration corrected; exact request-correlated projection receipts | Sustained native world/UI eye images and all seven pose pairs observed in simulated run154502; geometry/occlusion quality comparison remains open |
-| Head translation in three axes and yaw/pitch/roll native camera response | Native camera hooks and exact simulated pose driver | Run154502 measured0.1m translations and0.15rad rotations with matching native camera/image/submission requests; real devices remain open |
+| Direct known-scene launch without menu clicking | Verified native +level and guarded loading confirmation, isolated scene receipts; native minimized-window restore | Run190429 captured all seven poses and normal shutdown; finite185155 proved normal minimized-window restore→exclusive input. Broader startup recovery remains open |
+| Terrain occlusion in modded desktop and both VR eyes | Corrected current native depth-range preservation across eye/scope/desktop target changes; effects retained | Right-eye Jungle defect reproduced/fixed/control reproduced; fixed172303 eye images and state traces plus user confirmation. Desktop draw ranges agree; matched desktop image and wider scene/pass coverage remain open |
+| Native distinct per-eye world geometry, correct FOV/parallax | Native depth partition and builtin UI declaration corrected; exact request-correlated projection receipts | Run190429 has exact-request seven-pose eye/world/UI/projection evidence,64mm IPD and near/mid/far static disparity22/7/1pixels; right-eye occlusion inspected coherent. Wider scene/pass coverage remains open |
+| Head translation in three axes and yaw/pitch/roll native camera response | Native camera hooks and exact simulated pose driver | Runs154502/190429 measured0.1m translations and0.15rad rotations with matching native camera/image/submission requests; real devices remain open |
 | Coherent hands/origin/body collision | Tracked weapons and default-off single-player body/head gates; multiplayer settlement open | Open |
-| Native built-in dual-wield eligibility and supported combinations | Native evidence must establish combinations; separate from two-hand grip | Open |
+| Native built-in dual-wield eligibility and supported combinations | Native initial ID1 Zap eligibility/charge/release/projectile/reload routes verified with Astra; live original combo/dual checks retained; separate from two-hand grip | Open |
 | Correct per-hand weapon identity, controller pose and aim | Existing tracked native weapons, lasers and hand selectors | Open |
 | Independent press/release, no stuck triggers, simultaneous firing | Existing native input/consumption mechanics; physical melee incomplete | Open |
 | Switching, equip and unequip with both native hands | Existing per-hand wheels and durable squeeze-loss cancellation | Open |

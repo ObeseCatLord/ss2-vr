@@ -2,6 +2,31 @@
 
 ## Active PC implementation
 
+Run190429 completes the seven-pose native gameplay follow-up on compiled source
+725425de9c8dd4315399e65bf7c28c353bc1390e176747935b4477a4f2d0eb48.
+All seven images match actual native cameras, complete world/UI and successful
+projection requests;500 distinct neutral complete pairs were observed. Native
+translation deltas are approximately0.1m; rotations approximately0.15rad. Static
+image patches shift22pixels at the foreground rock,7 at the middle road and1 at
+the distant stone arch between eyes, consistent with depth-dependent parallax.
+The bounded root-depth regression passes and fixed right-eye occlusion was
+visually inspected again. Normal native shutdown and no cleanup errors were recorded.
+
+The run used process-local PROTON_NO_NTSYNC=1, selecting fsync in the actual log.
+A previous run exited before scene/host readiness with a Wine assertion; no
+mod-hook cause is established. Seven desktop captures failed, recorded separately;
+they do not certify desktop image occlusion. Independent native activation probes
+identified a minimized game window and verified ordinary restore→foreground/exclusive
+reacquisition. See DIRECT_GAMEPLAY_LAB.md. Native dual observations find two ID1
+Zap guns; the earlier Colt-only fixture was incorrect. Astra verified native Zap
+charge/release/projectile and separate reload-counter paths. The adapted exploratory
+probe remains unverified. No model alignment, impact, hardware or network pass is
+inferred. All61 Debug groups and compiled artifact/IPC10/wire6/native boundary
+checks passed this product. The adapted receipt source88717c8e229682cd15f3f814df612221dbff5cf6b402556690b98791c32eded3
+has now rebuilt all products and passed the same61 groups, with16 evidence
+negative controls and refreshed native/compiled checks. This source has conditional
+Astra GO for the bounded Zap probe; it has not yet run to firing acceptance.
+
 The right-eye Jungle terrain/vegetation/waterfall leak is corrected in the local
 source. Actual draw ranges exposed a native-cache/device mismatch introduced by
 raw target viewport resets. Astra/max verified the native early-return and geometry
@@ -9,7 +34,7 @@ reference; the adapter preserves current depth endpoints across eye/scope/deskto
 target changes. Fixed actual eye captures and draw traces agree, with independent
 user confirmation. An old-build counterexample reproduced the defect; the fixed
 product is restored. See [STOCK_RENDERER_COMPARISON.md](STOCK_RENDERER_COMPARISON.md).
-Current product fingerprintf945770801a867e9ec9713066ab9b4e200e1b578cbf307851b4055520b8b391f.
+The earlier fixed product fingerprintf945770801a867e9ec9713066ab9b4e200e1b578cbf307851b4055520b8b391f.
 All61 Debug groups, compiled product contracts/native-artifact/layout checks pass.
 
 The automated bounded root-partition regression rejects both old-build probes and
