@@ -7,6 +7,23 @@ The user explicitly approved publishing SS2 VR source and sanitized reverse-engi
 This historical hold blocked public publication pending renewed confirmation. It superseded earlier authority at that time; the explicit delivered approval above now supersedes it. During that hold, local development/tests continued and pushes, public PRs/releases and external publication were prohibited. Local commits may be preserved with strictly empty author/committer emails; Actions remains disabled and workflows absent. Explicit renewed user confirmation has now lifted the hold for source and sanitized notes only. Private game assets/captures, original checkout/WIP, installation and user saves/settings remain protected.
 
 ## Current PC continuation — start here
+
+### Consumed one-capture exception — user-approved private display
+The user explicitly allowed ONE agent-operated reviewed idle capture, provided it
+uses a private test window and does not interfere with their PC activity. This
+supersedes the collector no-launch restriction below for that single bounded
+capture only. Use a separate authenticated offscreen X display and isolated
+prefix/lab; no desktop focus/input, firing/movement, vehicle or headset probes.
+Preserve reviewed products/settings, logs and exact-owned cleanup. The single
+attempt was executed and crashed before scene load in the private display. Its
+logs and cleanup reconciliation remain private. The exception is consumed;
+do not launch a replacement game/Proton/host capture automatically. Prepare and
+review the corrected private-display/readiness path as source work first, then
+obtain a renewed bounded capture authorization. Non-game display/tool preparation
+may continue without changing the user's desktop or global settings. Earlier collector instructions
+remain historical evidence and apply outside this exception. Comprehensive VR,
+firing, vehicle and multiplayer acceptance remain user-operated.
+
 The idle diagnostic collector is source work. Its event/pose stage is connected
 and reviewed for collection only; consumed draw/channel snapshots and an offline
 exact candidate matcher, offline position replay and indexed reference measurement

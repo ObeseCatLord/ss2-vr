@@ -1,5 +1,20 @@
 # Cloud continuation — 2026-10-05
 
+## Latest private idle capture follow-up
+
+One approved noninterfering private-display capture failed before scene load in
+a DXVK zero-refresh raster-status query. No geometry/host/eye-world result was
+obtained. Its single-attempt authority is consumed; do not retry automatically.
+Exact-owned cleanup reconciliation and original-data preservation are private.
+A separate Weston/Xwayland display-only preflight has a positive refresh; actual
+Windows D3D9/game readiness there is still unknown. The new source timing probe,
+optional existing-run prerequisite and private display wrapper are compiled/
+offline checked only. A fresh independent muted lab passes offline preflights;
+Astra/xhigh gave scoped source/offline GO for the corrected preparation; local
+routing metadata verified, independent backend attestation unavailable. See PRIVATE_DISPLAY_COLLECTION.md. Do not use
+historical no-launch/blocked notes as current evidence or claim grasp/steering
+completed. Comprehensive HMD/firing/vehicle/MP acceptance remains user-operated.
+
 Current PC checkpoint: MP controlling-local settlement and immutable raw per-hand
 capture have bounded Astra Source GO. Default-off unique-saw gesture/native
 consumption now includes local, authoritative and remote-observer roles with

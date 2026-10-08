@@ -1,5 +1,34 @@
 # Implementation status — 2026-10-08
 
+## Private idle capture follow-up — implementation prerequisite
+
+One explicitly approved private-display neutral capture was attempted. The game
+crashed before scene load, yielding no idle geometry, host gameplay or eye images.
+Astra traced the owned DXVK failure to a zero-current-refresh raster-status
+query. This does not establish a mod rendering defect. The failed attempt is
+consumed; its private logs and cleanup reconciliation are preserved. No second
+game/Proton/host attempt has run. Original installation/user data remain intact.
+
+A separate headless Weston/Xwayland display-only check reports a nonzero refresh.
+The new `tools/display_timing_probe.cpp` builds as x86 with warnings treated as
+errors, but has not executed. The optional prerequisite in `tools/runtime_lab.py`
+runs inside the existing validated private run, before Monado/game, and declines
+invalid modes or failed raster queries. `tools/private_display_lab.py` reuses the
+neutral collector on a separate display, tracks exact process incarnations and
+requires an explicit collector completion receipt, rather than accepting a
+normal compositor exit as success. Default/`--check` never starts a process.
+
+A fresh private lab uses the current b1b0086367de products below, independent
+known private profile/prefix copies, five muted audio settings and exact tool/
+file/link receipts. Both offline preflights pass. Eight new source-only mocked
+prerequisite/ownership checks pass normally and with optimized Python; these are
+not native startup or cleanup proof. Astra/xhigh gave scoped source/offline GO after the late-interruption
+classification correction; local routing metadata was verified, while independent
+backend attestation remains unavailable. A replacement
+capture needs renewed bounded authority after review. See
+[private collection procedure](PRIVATE_DISPLAY_COLLECTION.md). Full grasp,
+physical steering and user-operated acceptance remain incomplete.
+
 ## Full-project closure disposition
 
 Rig initialization and recenter now reuse the existing projected horizontal
@@ -16,22 +45,23 @@ current products: game `14dea3bdeb5afd51ff338f8075c6eb0ac15b8620df839a04b48581ae
 server `8e61e1f4f04885249576b3b4ca63aa41bddc262bfc2232874ce9c958691b5906`,
 host `535436a8f240593997ae9e3862af98ba3cdeff703537211fdc131c0e54d7c5c8`,
 loader `bb011caa82528c541a73967ce6408f82198ff4fd0358b38b54884719d863bd1d`.
-The user-operated neutral collector remains on its separately reviewed immutable
-425fe8a5 product/lab; its exact standalone evaluator still passes preflight.
+The earlier neutral collector used separately reviewed immutable425fe8a5
+products; its failed private attempt remains preserved. The fresh replacement
+preparation uses current b1b0086367de products, without executing them.
 No installed game, old checkout/WIP, old lab/prefix or original user data changed.
 
 
 The [ID1 collector](IDLE_EVENT_COLLECTOR.md) now includes bounded offline shader
 replay, exact channel/hash/index-bound surface reference measurement, uncalibrated
-world grip/aim capture, and a separate neutral user-operated lab mode. Source GO
-covers these boundaries, with backend routing unattested. No actual native capture
+world grip/aim capture, and a separate neutral user-operated lab mode. At that source checkpoint, GO
+covered these boundaries, with backend routing unattested. No actual native capture
 was replayed and no physical-grasp/controller correction is accepted. A separate exact private lab/configuration now passes preflight; Astra gave
 scoped source/handoff GO for one user-operated neutral collection. Preparation
 seals settings/profile bytes, exact user aliases and harness/reader identities,
 and cannot be switched into firing/movement by disabling the neutral selector.
-22 runtime-evidence groups pass normally and with optimized Python. No native
-observation, gameplay/debugger/headset/firing/vehicle launch or installed-game
-deployment occurred.
+22 runtime-evidence groups pass normally and with optimized Python. At that
+checkpoint no native observation or installed-game deployment occurred. The
+subsequent failed private attempt is recorded above.
 Collector product source fingerprint `425fe8a5ada7aac7fa8f02bc0d301f2fab43a0b2d14c79dbadb47e475b59177a`;
 65 Debug + 65 Release groups, 28 normal/optimized compiled/native gates and five
 private compiled-byte controls pass. No native exception/COM reentry was executed.

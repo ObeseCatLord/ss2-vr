@@ -64,6 +64,68 @@ def checked_file(path, expected):
         raise ValueError('Configured file fingerprint differs: ' + path.name)
     return path
 
+def validate_display_probe(cfg, private):
+    selected=cfg.get('display_timing_probe')
+    if selected is None:return
+    if not isinstance(selected,dict) or set(selected)!={'path','sha256'}:
+        raise ValueError('Display prerequisite requires its exact executable identity')
+    path=checked_file(selected['path'],selected['sha256'])
+    if not path.is_relative_to(private):raise ValueError('Display prerequisite must stay private')
+    # Admit only a compiled x86 PE; never treat a source file as a runnable probe.
+    import struct
+    with path.open('rb') as stream:
+        header=stream.read(64)
+        if len(header)!=64 or header[:2]!=b'MZ':raise ValueError('Display prerequisite is not a PE')
+        stream.seek(struct.unpack_from('<I',header,60)[0]);pe=stream.read(6)
+    if pe!=b'PE\0\0L\x01':raise ValueError('Display prerequisite must use the game x86 architecture')
+
+def require_display_timing(report):
+    if not isinstance(report,dict) or type(report.get('schema')) is not int or report['schema']!=1 or report.get('stage')!='swapchain-query' or \
+       report.get('raster_called') is not True or type(report.get('hresult')) is not int or report['hresult']!=0:
+        raise RuntimeError('Private D3D9 display prerequisite did not complete its raster query')
+    for key in ('desktop_hz','adapter_hz','swapchain_hz','width','height'):
+        value=report.get(key)
+        if type(value) is not int or not 1<value<=16384:
+            raise RuntimeError('Private D3D9 display prerequisite returned an invalid current mode')
+
+def display_timing_probe(cfg,env,deadline,run_dir):
+    selected=cfg.get('display_timing_probe')
+    if selected is None:return None
+    if env.get('SS2VR_LAB_PRIVATE_DISPLAY')!='1' or not env.get('DISPLAY') or env.get('WAYLAND_DISPLAY'):
+        raise RuntimeError('Display prerequisite requires the separately owned X11 display')
+    path=checked_file(selected['path'],selected['sha256'])
+    # The outer private-display owner also tracks Wine descendants. This function
+    # retires the exact probe executable and Popen launcher on every exit.
+    if private_processes(path):raise RuntimeError('Display prerequisite is already running')
+    process=None;output=run_dir/'display-timing-probe.log'
+    try:
+        with output.open('xb') as log:
+            process=subprocess.Popen([cfg['proton'],'run',str(path)],env=env,stdout=log,stderr=subprocess.STDOUT)
+            code=process.wait(timeout=remaining(deadline,30))
+        # Wine/bootstrap diagnostics may surround the one JSON result.
+        rows=[json.loads(line) for line in output.read_text(errors='replace').splitlines() if line.startswith('{')]
+        if code!=0 or len(rows)!=1:raise RuntimeError('Private D3D9 display prerequisite failed; game was not launched')
+        require_display_timing(rows[0])
+        (run_dir/'display-timing.json').write_text(json.dumps(rows[0],indent=2)+'\n')
+        return rows[0]
+    finally:
+        cleanup_deadline=time.monotonic()+8;errors=[];requests=[]
+        def deferred(signum,frame):requests.append(signum)
+        handlers={sig:signal.signal(sig,deferred) for sig in (signal.SIGTERM,signal.SIGINT)}
+        def safe(action):
+            try:action()
+            except Exception as error:errors.append(str(error))
+        try:
+            if process and process.poll() is None:
+                safe(process.terminate)
+                try:process.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    safe(process.kill);safe(lambda:process.wait(timeout=2))
+            for item in private_processes(path):safe(lambda item=item:stop_exact(item,cleanup_deadline))
+        finally:
+            for sig,handler in handlers.items():signal.signal(sig,handler)
+        if errors or requests:raise RuntimeError('Display prerequisite cleanup interrupted or failed')
+
 def identity(pid):
     p = Path('/proc') / str(pid)
     try:
@@ -251,7 +313,8 @@ def validate_idle_probe(cfg):
         raise ValueError('Idle collection requires only the stationary baseline pose')
 
 IDLE_TOOLS=('runtime_lab.py','assess_idle_weapon.py','replay_idle_geometry.py',
-            'measure_idle_reference.py','match_idle_geometry.py')
+            'measure_idle_reference.py','match_idle_geometry.py',
+            'private_display_lab.py','display_timing_probe.cpp')
 IDLE_INVENTORIES=('game/Content/SeriousSam2/Config','game/Content/PlayerProfiles',
                   'prefix/pfx/drive_c/users')
 IDLE_FIXED_FILES=('game/Content/SeriousSam2/Sam2.ini','game/Bin/SS2VR/SS2VR.ini',
@@ -320,6 +383,7 @@ def validate(cfg):
     for p in (lab,prefix):
         if not p.is_relative_to(private): raise ValueError('Lab and prefix must be private owned paths')
     validate_idle_preparation(cfg,private,lab,prefix)
+    validate_display_probe(cfg,private)
     mode=cfg.get('renderer_mode','vr')
     if mode not in ('vr','stock'):raise ValueError('Unknown renderer comparison mode')
     from build_contract import read_contract
@@ -711,6 +775,9 @@ def run(cfg):
         (openvr/'openvrpaths.vrpath').write_text(json.dumps({
             'version':1,'jsonid':'vrpathreg','runtime':[cfg['xrizer']],
             'config':[str(openvr)],'log':[str(run_dir)]}))
+        # One validated run extent: prefix bootstrap may mutate this private
+        # prefix, so do not run a probe externally and reseal settings afterward.
+        manifest['display_timing']=display_timing_probe(cfg,env,deadline,run_dir)
         config=(config_dir/'monado');config.mkdir()
         (config/'config_v0.json').write_text(json.dumps(cfg['monado_config']))
         if not stock:

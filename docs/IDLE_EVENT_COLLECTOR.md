@@ -1,8 +1,11 @@
 # Event-time ID1 collection — source implemented
 
 This is a connected, default-off diagnostic collector, not accepted grasp
-alignment or a request for user testing. No game, debugger, host, headset, firing
-or vehicle run occurred. The user remains the primary gameplay tester.
+alignment. At the original source checkpoint no runtime run occurred. A later
+user-approved private-display neutral attempt crashed before scene load and
+produced no geometry; its correction remains source/offline work. See
+[private display procedure](PRIVATE_DISPLAY_COLLECTION.md). The user remains the
+primary gameplay tester.
 
 `SS2VR_LAB_IDLE_WEAPON=1` enables the bounded original-animation-End observer and
 up to 32 ordinary selected-ID1 idle draw traces. Originals execute once. Scope13
