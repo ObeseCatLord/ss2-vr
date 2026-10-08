@@ -1,11 +1,15 @@
 """Offline negative controls for request correlation; never runtime VR proof."""
 import sys
 import unittest
+import hashlib
+import json
+import tempfile
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 from assess_runtime import (complete_pairs_for_pose,first_person_depth_probe,dual_topologies,
     DualPhaseEvidence,require_dual_capture,dual_weapon_events,successful_dual_fire)
-from runtime_lab import native_grip_resource_receipts,validate_idle_probe
+from runtime_lab import (native_grip_resource_receipts,validate_idle_probe,validate_idle_preparation,
+                         idle_configuration_digest,IDLE_FIXED_FILES,IDLE_TOOLS)
 
 HEAD={'p':[0,0,0],'q':[0,0,0,1]}
 
@@ -21,6 +25,71 @@ class IdleProbeSelectionChecks(unittest.TestCase):
                           ('pose_steps',cfg['pose_steps']+[{'name':'turned','head':[0,1.6,0,1,0,0]}])]:
             with self.subTest(key=key),self.assertRaises(ValueError):validate_idle_probe({**cfg,key:value})
         validate_idle_probe({})
+
+class IdlePreparationChecks(unittest.TestCase):
+    def prepared(self,root):
+        game=root/'game';prefix=root/'prefix'
+        for relative in IDLE_FIXED_FILES:
+            p=root/relative;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(b'private-fixture')
+        users=prefix/'pfx/drive_c/users/steamuser';users.mkdir(parents=True)
+        (users/'Documents').mkdir();(users/'My Documents').symlink_to('Documents')
+        mappings=prefix/'pfx/dosdevices';mappings.mkdir()
+        (mappings/'c:').symlink_to('../drive_c');(mappings/'z:').symlink_to('/')
+        cfg={'idle_weapon_probe':True,'expected_product_source':'a'*64,'game_lab':str(game),'prefix':str(prefix)}
+        record={'schema':1,'game_lab':str(game),'prefix':str(prefix),'source_fingerprint':'a'*64,
+                'configuration_sha256':idle_configuration_digest(cfg),
+                'user_links':{'prefix/pfx/drive_c/users/steamuser/My Documents':'Documents'},
+                'files':{p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in IDLE_FIXED_FILES},
+                'source_tools':{name:hashlib.sha256((Path(__file__).resolve().parents[1]/'tools'/name).read_bytes()).hexdigest() for name in IDLE_TOOLS}}
+        path=root/'preparation.json'
+        def seal():
+            path.write_text(json.dumps(record));cfg['idle_preparation']={'path':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
+        seal()
+        return cfg,record,seal,game,prefix
+
+    def test_prepared_fixture_and_configuration_tampering(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);cfg,record,seal,game,prefix=self.prepared(root)
+            validate_idle_preparation(cfg,root,game,prefix)
+            validate_idle_preparation({**cfg,'compiled_product_contract':{},'verified_scene_providers':[]},root,game,prefix)
+            for bad in ({**cfg,'timeout':180},{**cfg,'idle_weapon_probe':False},
+                        {k:v for k,v in cfg.items() if k!='idle_weapon_probe'},
+                        {**cfg,'idle_weapon_probe':False,'native_dual_probe':'zap-initial-inventory'},
+                        {**cfg,'idle_preparation':{}},
+                        {**cfg,'idle_preparation':{**cfg['idle_preparation'],'sha256':'0'*64}}):
+                with self.assertRaises(ValueError):validate_idle_preparation(bad,root,game,prefix)
+            record['source_tools']['assess_idle_weapon.py']='0'*64;seal()
+            with self.assertRaises(ValueError):validate_idle_preparation(cfg,root,game,prefix)
+
+    def test_settings_inventory_and_profile_changes(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);cfg,record,seal,game,prefix=self.prepared(root)
+            p=game/'Content/SeriousSam2/Config/new.cfg';p.parent.mkdir(parents=True);p.write_text('changed')
+            with self.assertRaises(ValueError):validate_idle_preparation(cfg,root,game,prefix)
+            p.unlink();p=game/'Content/PlayerProfiles/profile.dat';p.parent.mkdir();p.write_bytes(b'profile')
+            with self.assertRaises(ValueError):validate_idle_preparation(cfg,root,game,prefix)
+            p.unlink();(game/'Bin/SS2VR/SS2VR.ini').write_bytes(b'changed')
+            with self.assertRaises(ValueError):validate_idle_preparation(cfg,root,game,prefix)
+
+    def test_external_user_redirection_and_device_mapping(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);cfg,record,seal,game,prefix=self.prepared(root)
+            redirect=prefix/'pfx/drive_c/users/steamuser/My Documents'
+            redirect.unlink();redirect.symlink_to(root)
+            with self.assertRaises(ValueError):validate_idle_preparation(cfg,root,game,prefix)
+            redirect.unlink();redirect.symlink_to('./Documents')
+            with self.assertRaises(ValueError):validate_idle_preparation(cfg,root,game,prefix)
+            redirect.unlink()
+            with self.assertRaises(ValueError):validate_idle_preparation(cfg,root,game,prefix)
+            redirect.symlink_to('Documents')
+            extra=redirect.parent/'Another Alias';extra.symlink_to('Documents')
+            with self.assertRaises(ValueError):validate_idle_preparation(cfg,root,game,prefix)
+            extra.unlink()
+            mapping=prefix/'pfx/dosdevices/e:';mapping.symlink_to(root)
+            with self.assertRaises(ValueError):validate_idle_preparation(cfg,root,game,prefix)
+            mapping.unlink();record['files']['../escape']='a'*64;seal()
+            with self.assertRaises(ValueError):validate_idle_preparation(cfg,root,game,prefix)
+
 
 class ResourceReceiptChecks(unittest.TestCase):
     @staticmethod

@@ -165,11 +165,43 @@ and neutral projection/eye-image checks, it writes schema3 evidence and returns
 before control probes. Existing exact-owned-process cleanup remains in place.
 This is a lab-only single-player data collector, not a production multiplayer rule.
 
-No game, debugger, headset, firing or vehicle observation was launched or deployed
-for this increment. A fresh private exact-build lab/configuration and final bounded
-handoff review are still required before requesting the user observation. Do not
-send the user to an older package. The remaining source/runtime questions are actual
-copied-program agreement, winning Idle/cache interpretation and physical grip
-correspondence. Surface reference measurement alone does not close them. Idle
-collection also cannot certify first-use/copy melee release; preserve that separate
-native behavior and user acceptance. Assets, indexes, poses and captures stay private.
+A separate private game/prefix copy now exists for the current immutable product
+package. It independently copies the known private lab profile, preserving the
+existing active-profile selector; original files are unchanged. A sealed receipt
+pins the configuration, 17 settings/profile/prefix files, exact user-alias paths
+and literal targets, and current harness/reader hashes. Validation occurs before
+any runtime process starts. Carrying a receipt requires the neutral selector to
+remain explicitly true, so disabling it cannot switch this prepared collection
+into a firing or movement mode.
+
+The private user wrapper validates the same selected receipt, checks the offline
+evaluator and annotation/index identities, and preserves the existing SIGTERM
+unwind behavior when calling the shared run function. It processes copied logs only
+after owned cleanup. A data-ready summary means complete offline position coverage
+and reference measurements in both eyes; it always leaves grasp/alignment/native
+release verification false. Exact commands, settings, duration (180 seconds plus
+up to 20 seconds cleanup), output schemas and failure criteria are in the private
+collection guide. All assets, profile identifiers, geometry and captures stay local.
+
+| Final preparation finding | Disposition |
+| --- | --- |
+| Disabling the neutral selector skipped receipt validation | Any receipt requires an explicitly true neutral selector; disabled/missing/firing-bait regressions |
+| Internal user aliases could change unnoticed | Exact path and literal readlink-target inventory, including added/removed aliases |
+| Blank profile lacked verified bootstrap | Independent copy of the known private fixture profile; exact hashes and distinct files |
+| Direct run call bypassed CLI SIGTERM handler | Private wrapper installs the identical exception handler before run |
+| Postprocessing could select a different receipt | Read the receipt already selected and validated by configuration |
+| Documented cleanup budget differed | Use the actual 20-second shared cleanup budget |
+
+22 runtime-evidence groups pass normally and with optimized Python, including
+hostile preparation/configuration/inventory cases. Real prepared-file preflight
+passes without launching any game, service, Wine, debugger, host or headset.
+Astra/xhigh returned scoped source GO and handoff GO for one user-operated neutral
+collection after the adopted corrections above. Current-turn reviewer metadata
+reported Astra/xhigh; independent backend routing introspection remains unavailable.
+These are offline/source checks, not actual native collection or full-mod acceptance.
+
+The remaining source/runtime questions are actual copied-program agreement,
+winning Idle/cache interpretation and physical grip correspondence. Surface
+reference measurement alone does not close them. Idle collection cannot certify
+first-use/copy melee release; preserve that separate native behavior and user
+acceptance. Assets, indexes, poses and captures stay private.

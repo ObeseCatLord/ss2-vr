@@ -250,6 +250,66 @@ def validate_idle_probe(cfg):
     if cfg.get('pose_steps')!=[{'name':'baseline','head':cfg.get('baseline_head')}]:
         raise ValueError('Idle collection requires only the stationary baseline pose')
 
+IDLE_TOOLS=('runtime_lab.py','assess_idle_weapon.py','replay_idle_geometry.py',
+            'measure_idle_reference.py','match_idle_geometry.py')
+IDLE_INVENTORIES=('game/Content/SeriousSam2/Config','game/Content/PlayerProfiles',
+                  'prefix/pfx/drive_c/users')
+IDLE_FIXED_FILES=('game/Content/SeriousSam2/Sam2.ini','game/Bin/SS2VR/SS2VR.ini',
+                  'prefix/pfx/system.reg','prefix/pfx/user.reg','prefix/pfx/userdef.reg',
+                  'prefix/config_info','prefix/version','prefix/tracked_files')
+
+def idle_configuration_digest(cfg):
+    # validate() adds two derived records. Neither may alter the launch selection.
+    data={k:v for k,v in cfg.items() if k not in
+          ('idle_preparation','compiled_product_contract','verified_scene_providers')}
+    return hashlib.sha256(json.dumps(data,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest()
+
+def validate_idle_preparation(cfg,private,lab,prefix):
+    """Check one prepared private collection before any runtime process starts."""
+    if not cfg.get('idle_weapon_probe') and 'idle_preparation' not in cfg:return
+    if cfg.get('idle_weapon_probe') is not True:
+        raise ValueError('Prepared idle collection cannot disable its neutral selector')
+    selected=cfg.get('idle_preparation')
+    if not isinstance(selected,dict) or set(selected)!={'path','sha256'}:
+        raise ValueError('Idle collection requires its exact private preparation receipt')
+    receipt=checked_file(selected['path'],selected['sha256'])
+    root=receipt.parent
+    if not root.is_relative_to(private) or lab!=root/'game' or prefix!=root/'prefix' or receipt.stat().st_size>1024*1024:
+        raise ValueError('Idle preparation must own separate game/prefix trees')
+    record=json.loads(receipt.read_text())
+    if record.get('schema')!=1 or record.get('game_lab')!=str(lab) or record.get('prefix')!=str(prefix) or \
+       record.get('source_fingerprint')!=cfg['expected_product_source'] or \
+       record.get('configuration_sha256')!=idle_configuration_digest(cfg):
+        raise ValueError('Idle preparation/configuration identity changed')
+    files=record.get('files')
+    if not isinstance(files,dict) or not 1<=len(files)<=4096:raise ValueError('Invalid idle preparation file inventory')
+    required=set(IDLE_FIXED_FILES);links={}
+    for relative in IDLE_INVENTORIES:
+        base=root/relative
+        if base.is_symlink():raise ValueError('Idle settings/profile root is redirected')
+        if not base.exists():continue
+        for path in base.rglob('*'):
+            if path.is_symlink():
+                if relative!='prefix/pfx/drive_c/users' or not path.resolve(strict=True).is_relative_to(base):
+                    raise ValueError('Idle user-folder redirection escapes private prefix')
+                links[str(path.relative_to(root))]=os.readlink(path)
+            elif path.is_file():required.add(str(path.relative_to(root)))
+    if len(links)>4096 or record.get('user_links')!=links:
+        raise ValueError('Idle user-folder link inventory changed')
+    if set(files)!=required:raise ValueError('Idle settings/profile inventory changed')
+    for relative,expected in files.items():
+        path=root/relative
+        if path.is_symlink() or not path.resolve(strict=True).is_relative_to(root):
+            raise ValueError('Idle preparation file escapes its private tree')
+        checked_file(path,expected)
+    mappings=prefix/'pfx/dosdevices'
+    if mappings.is_symlink() or {p.name for p in mappings.iterdir()}!={'c:','z:'} or \
+       not (mappings/'c:').is_symlink() or (mappings/'c:').resolve()!=prefix/'pfx/drive_c' or \
+       not (mappings/'z:').is_symlink() or (mappings/'z:').resolve()!=Path('/'):
+        raise ValueError('Idle private DOS mappings changed')
+    if set(record.get('source_tools',{}))!=set(IDLE_TOOLS):raise ValueError('Idle tool inventory differs')
+    for name,expected in record['source_tools'].items():checked_file(ROOT/'tools'/name,expected)
+
 def validate(cfg):
     validate_idle_probe(cfg)
     private=Path(cfg['private_root']).resolve(strict=True)
@@ -259,6 +319,7 @@ def validate(cfg):
     prefix=Path(cfg['prefix']).resolve(strict=True)
     for p in (lab,prefix):
         if not p.is_relative_to(private): raise ValueError('Lab and prefix must be private owned paths')
+    validate_idle_preparation(cfg,private,lab,prefix)
     mode=cfg.get('renderer_mode','vr')
     if mode not in ('vr','stock'):raise ValueError('Unknown renderer comparison mode')
     from build_contract import read_contract

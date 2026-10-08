@@ -6,9 +6,13 @@ The [ID1 collector](IDLE_EVENT_COLLECTOR.md) now includes bounded offline shader
 replay, exact channel/hash/index-bound surface reference measurement, uncalibrated
 world grip/aim capture, and a separate neutral user-operated lab mode. Source GO
 covers these boundaries, with backend routing unattested. No actual native capture
-was replayed and no physical-grasp/controller correction is accepted. A fresh exact
-private lab/configuration and final collection handoff review remain before user
-operation. No gameplay/debugger/headset/firing/vehicle run or deployment occurred.
+was replayed and no physical-grasp/controller correction is accepted. A separate exact private lab/configuration now passes preflight; Astra gave
+scoped source/handoff GO for one user-operated neutral collection. Preparation
+seals settings/profile bytes, exact user aliases and harness/reader identities,
+and cannot be switched into firing/movement by disabling the neutral selector.
+22 runtime-evidence groups pass normally and with optimized Python. No native
+observation, gameplay/debugger/headset/firing/vehicle launch or installed-game
+deployment occurred.
 Current source fingerprint `425fe8a5ada7aac7fa8f02bc0d301f2fab43a0b2d14c79dbadb47e475b59177a`;
 65 Debug + 65 Release groups, 28 normal/optimized compiled/native gates and five
 private compiled-byte controls pass. No native exception/COM reentry was executed.

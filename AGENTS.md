@@ -11,8 +11,10 @@ The idle diagnostic collector is source work. Its event/pose stage is connected
 and reviewed for collection only; consumed draw/channel snapshots and an offline
 exact candidate matcher, offline position replay and indexed reference measurement
 are implemented. Actual native captured-program agreement and positive physical
-grasp/controller correspondence remain incomplete. A fresh private exact-build lab
-and final handoff review are required before any user-operated collection request. Do not launch gameplay, debugger, headset, firing or
+grasp/controller correspondence remain incomplete. A separate exact-build private lab and sealed configuration now pass offline
+preflight; Astra gave scoped source/handoff GO for one user-operated neutral
+collection. The private USER_COLLECTION.md pins the exact command and criteria.
+Actual native capture, grasp and release acceptance remain open. Do not launch gameplay, debugger, headset, firing or
 vehicle probes for this work, ask the user to operate an unprepared collector,
 or assume they accepted feature omissions. Use the current source and exact
 offline/compiled gates; see docs/IDLE_EVENT_COLLECTOR.md. No current user action
