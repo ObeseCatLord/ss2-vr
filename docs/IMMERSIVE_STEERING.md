@@ -166,3 +166,30 @@ translation nor Seat translation is steering geometry. No offset/grab adapter is
 installed. The remaining finite edge is an actual visible driver control tied to
 a native vehicle/seat. The user has been asked for that vehicle/level identity;
 other implementation continues meanwhile. Meshes/previews stay private.
+
+## Second bounded geometry inspection: Car11
+
+Astra/xhigh inspected the exact stock
+`Sirius_Car_11/transport_vehicle_open.mdl`, SHA-256
+`8231808e24329220f510f2c508df28fe094f04020b724beb1b50d775d3d2fc42`.
+Its14 serialized objects/87,871 body bytes roundtrip exactly; all immediate
+geometry is embedded in this one resource. One mesh/LOD/section contains1,592
+vertices and1,603 triangles across MainBody_01 and Engine_01. Complete finite
+position/normal/UV and index buffers reproduce the declared bounds; all nine
+connected components and complete/isolate-surface previews were inspected.
+Main independently verified member size/CRC/hash, null skeleton, empty child
+container and render-object reference, and viewed both complete/component images.
+
+No driver control was positively identified. The ring-like components belong to
+the engine surface; they are not a driver-wheel certificate. This resource has
+no skeleton, child/Seat attachment, animation or mechanism container. Zero
+external mesh/model/skeleton dependencies remain unopened in this immediate
+chain. Materials, shaders, textures, collision interpretation, parent/world
+composition, loaded precedence and actual seat/gameplay semantics remain
+uninspected. Other candidate models also retain their previous coverage limits.
+This finite result does not prove every SS2 scene lacks a steering wheel.
+
+No pivot/axis/radius/seat association or physical grab control is justified by
+these bytes. A positive actual wheel/vehicle identity remains necessary. Private
+resource data, previews and reports stay local; no game/input/vehicle test ran.
+Local Astra/xhigh turn tags were verified, with backend routing unattested.
