@@ -145,3 +145,24 @@ investigation now examines that mesh and its immediate model/seat chain. Runtime
 resource precedence, a visible driver's control and its pivot/axis/rim remain
 unproved. Physical steering remains unimplemented until positive geometry is
 established. Vehicle gameplay testing belongs to the user.
+
+
+## Pinned car mesh inspection — 2026-10-08
+
+The exact referenced `Sirius_Car_05/Meshes/Car.bmf` was subsequently decoded and
+privately inspected in shaded and unobscured wire views. Its one LOD contains
+415 vertices and374 triangles across three surfaces. Index/attribute buffers
+have complete nonoverlapping coverage, valid indices and finite attributes;
+calculated bounds match the authored bounds. Every vertex binds solely to the
+body bone. No identifiable driver-wheel rim/column or defensible control pivot
+was found in this mesh. Main independently verified its pinned bytes/hash and
+inspected the preview. This is a bounded geometry result, not absence across all
+vehicles/content or proof of active runtime resource precedence.
+
+The immediate rideable-car chain remains aircraft parameters. Its mod Seat child
+is an authored attachment marker with null model configuration; it contributes
+no control mesh. The stock model has no such Seat child. Neither body bind
+translation nor Seat translation is steering geometry. No offset/grab adapter is
+installed. The remaining finite edge is an actual visible driver control tied to
+a native vehicle/seat. The user has been asked for that vehicle/level identity;
+other implementation continues meanwhile. Meshes/previews stay private.

@@ -12,7 +12,7 @@ public; proprietary scenes/saves/settings/images stay in the private lab.
 | Terrain occlusion in modded desktop and both VR eyes | Corrected current native depth-range preservation across eye/scope/desktop target changes; effects retained | Right-eye Jungle defect reproduced/fixed/control reproduced; fixed172303 eye images and state traces plus user confirmation. Desktop draw ranges agree; matched desktop image and wider scene/pass coverage remain open |
 | Native distinct per-eye world geometry, correct FOV/parallax | Native depth partition and builtin UI declaration corrected; exact request-correlated projection receipts | Run190429 has exact-request seven-pose eye/world/UI/projection evidence,64mm IPD and near/mid/far static disparity22/7/1pixels; right-eye occlusion inspected coherent. Wider scene/pass coverage remains open |
 | Head translation in three axes and yaw/pitch/roll native camera response | Native camera hooks and exact simulated pose driver | Runs154502/190429 measured0.1m translations and0.15rad rotations with matching native camera/image/submission requests; real devices remain open |
-| Coherent hands/origin/body collision | Tracked weapons and default-off single-player body/head gates; multiplayer settlement open | Open |
+| Coherent hands/origin/body collision | Tracked weapons, default-off controlling-local SP/MP body settlement and head gates; native correction retained | Open |
 | Native background joystick prerequisite, no fire | Default-off private-lab adapter at existing inactive producer; no device polling/physics replacement | Run204618 has2.216559m physics-body movement then zero demand and0.005253m final250ms drift, stable mechanism/root/origin and zero firing. General background actions/admission-loss/MP remain open |
 | Native built-in dual-wield eligibility and supported combinations | Native initial ID1 Zap eligibility/charge/release/projectile/reload routes verified with Astra; live original combo/dual checks retained; separate from two-hand grip | Open |
 | Correct per-hand weapon identity, controller pose and aim | Existing tracked native weapons, lasers and hand selectors | Open |
@@ -21,11 +21,11 @@ public; proprietary scenes/saves/settings/images stay in the private lab.
 | Native ammo, cooldown and reload where the weapon supports it | Preserve native gameplay; do not add a universal reload model | Open |
 | Per-hand scope zoom/capture ownership during dual wield | Existing native magnified scope source path | Open |
 | Interruption, death and respawn with held/released controls | Existing lifecycle gates; additional connected native paths remain under investigation | Open |
-| Relevant multiplayer dual-wield weapon/pose/action replication | Existing replication/presentation; origin and melee observer settlement incomplete | Open |
-| Physical melee native consumption and observer delivery | Canonical native completion report read; bounded probes required | Open |
+| Relevant multiplayer dual-wield weapon/pose/action replication | Reviewed local-owner origin/retained capture plus existing replication/presentation; MP melee observer incomplete | Open |
+| Physical melee native consumption and observer delivery | Reviewed default-off unique-saw SP native adapter; real release/quiet required; MP gesture/observer integration open | Open |
 | Actual vehicle controls and one-/two-hand grab steering | Geometry and native proportional-input evidence incomplete | Open |
 | Complete native overlays and comfortable threshold-follow panels | Source overlays and anchor comfort policy | Menu transport and ordinary complete native gameplay/UI observed; comfort/variant coverage open |
-| Remote head worker/model lifetime and enablement | Incomplete native integration | Open |
+| Remote head worker/model lifetime and enablement | Frozen-VR-pair head palette adapter enabled by default; reviewed resource/lifetime extent | User-operated MP appearance/lifecycle open |
 
 Required platform/device cells remain separate: Linux/Proton and native Windows;
 SteamVR/Steam Frame and Envision/Monado/Bigscreen Beyond. Simulated Monado is a
