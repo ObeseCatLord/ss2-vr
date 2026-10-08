@@ -275,6 +275,63 @@ int main() {
     stream.generation = UINT32_MAX;
     stream.invalidate();
     check(!stream.generation && !stream.sample(true), "Action generation exhaustion fails closed without wrap");
+    {
+        const float invalidValues[]{-.01f, 1.01f, -std::numeric_limits<float>::max(),
+            std::numeric_limits<float>::max(), std::numeric_limits<float>::quiet_NaN(),
+            std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()};
+        for (float invalid : invalidValues) {
+            ActionStream primary[2];
+            const auto released = primaryActionSample(primary[0], true, 0.f);
+            const auto other = primaryActionSample(primary[1], true, .8f);
+            TriggerGate gate;
+            bool physicalDown = false;
+            uint32_t releasedSerial = 0;
+            check(released.active && released.value == 0.f && released.generation == 1 &&
+                  !gate.update(released.value, released.active), "Actual zero remains an eligible release");
+            const auto held = primaryActionSample(primary[0], true, 1.f);
+            check(held.active && held.value == 1.f && gate.update(held.value, held.active),
+                  "Actual one remains an eligible press");
+            samplePrimaryNeutral(held.value, held.active, true, physicalDown, releasedSerial);
+            const auto lost = primaryActionSample(primary[0], true, invalid);
+            check(!lost.active && lost.value == 0.f && lost.generation == 2 &&
+                  !samplePrimaryNeutral(lost.value, lost.active, true, physicalDown, releasedSerial) &&
+                  physicalDown && releasedSerial == 0 && !gate.update(lost.value, lost.active) && !gate.armed,
+                  "Malformed primary is unavailable, never a neutral witness or press");
+            const auto stillLost = primaryActionSample(primary[0], true, invalid);
+            check(!stillLost.active && stillLost.generation == lost.generation,
+                  "Repeated malformed samples preserve one action-loss boundary");
+            const auto recovered = primaryActionSample(primary[0], true, .8f);
+            check(recovered.active && recovered.generation == lost.generation &&
+                  !gate.update(recovered.value, recovered.active),
+                  "Recovery while held cannot rearm after malformed input");
+            Input previous{}, current{};
+            previous.primaryActiveMask = current.primaryActiveMask = 3;
+            previous.primaryInputGeneration[0] = held.generation;
+            current.primaryInputGeneration[0] = recovered.generation;
+            previous.primaryInputGeneration[1] = current.primaryInputGeneration[1] = other.generation;
+            check(!primaryCommandHistoryCompatible(previous, current, 0, 1, 1, false) &&
+                  primaryCommandHistoryCompatible(previous, current, 1, 1, 1, false) && primary[1].active,
+                  "Skipped invalid publication still retires only the affected hand's command history");
+            const auto neutral = primaryActionSample(primary[0], true, .1f);
+            check(samplePrimaryNeutral(neutral.value, neutral.active, true, physicalDown, releasedSerial) &&
+                  !physicalDown && releasedSerial == 1 && !gate.update(neutral.value, neutral.active) &&
+                  gate.update(recovered.value, recovered.active),
+                  "Only a real post-loss release restores physical trigger admission");
+        }
+        ActionStream initiallyInvalid;
+        check(!primaryActionSample(initiallyInvalid, true, -1.f).active && initiallyInvalid.generation == 1 &&
+              !primaryActionSample(initiallyInvalid, false, 0.f).active,
+              "Invalid or inactive first samples do not establish an active stream");
+        for (float valid : {0.f, .1f, .2f, .65f, .8f, 1.f}) {
+            const auto sample = primaryActionSample(initiallyInvalid, true, valid);
+            check(sample.active && sample.value == valid && sample.generation == 1,
+                  "Valid analog values retain exact hysteresis and stream identity");
+        }
+        initiallyInvalid.generation = UINT32_MAX;
+        check(!primaryActionSample(initiallyInvalid, true, -1.f).active && !initiallyInvalid.generation &&
+              !primaryActionSample(initiallyInvalid, true, 0.f).active,
+              "Malformed loss at exhausted generation cannot wrap or recover");
+    }
     IntentInputBoundary inputBoundary, otherBoundary;
     check(inputBoundary.install(1, 10, 100), "Validated ACK establishes the initial input boundary");
     check(!inputBoundary.echo(11, 99, 101) && !inputBoundary.echo(10, 101, 101) &&

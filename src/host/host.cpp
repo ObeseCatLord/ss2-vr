@@ -654,11 +654,12 @@ struct Actions {
             auto triggerInfo = get(trigger, h);
             XrActionStateFloat triggerState{XR_TYPE_ACTION_STATE_FLOAT};
             api.check(api.GetActionStateFloat(session, &triggerInfo, &triggerState), "xrGetActionStateFloat trigger");
-            const bool primaryActive = primaryStream[h].sample(triggerState.isActive && std::isfinite(triggerState.currentState));
-            input.primaryInputGeneration[h] = primaryStream[h].generation;
-            if (primaryActive) {
+            const auto primary = primaryActionSample(primaryStream[h], triggerState.isActive != XR_FALSE,
+                                                     triggerState.currentState);
+            input.primaryInputGeneration[h] = primary.generation;
+            if (primary.active) {
                 input.primaryActiveMask |= 1u << h;
-                input.trigger[h] = std::clamp(triggerState.currentState, 0.f, 1.f);
+                input.trigger[h] = primary.value;
             }
             auto axisInfo = get(stick, h);
             XrActionStateVector2f axis{XR_TYPE_ACTION_STATE_VECTOR2F};

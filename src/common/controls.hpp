@@ -17,6 +17,18 @@ struct ActionStream {
         return active;
     }
 };
+struct PrimaryActionSample {
+    uint32_t generation = 0;
+    bool active = false;
+    float value = 0;
+};
+// An out-of-domain runtime value is action loss, never a clamped physical
+// release or press. Preserve the stream boundary even if publication skips
+// the invalid sample and the consumer next sees a recovered held trigger.
+inline PrimaryActionSample primaryActionSample(ActionStream &stream, bool available, float value) {
+    const bool active = stream.sample(available && std::isfinite(value) && value >= 0.f && value <= 1.f);
+    return {stream.generation, active, active ? value : 0.f};
+}
 // One producer owns squeeze release admission. The epoch makes cancellation
 // survive latest-value publication/coalescing; consumers only compare identity.
 struct SqueezeSample {
