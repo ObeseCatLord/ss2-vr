@@ -5,8 +5,33 @@ from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 from assess_runtime import (complete_pairs_for_pose,first_person_depth_probe,dual_topologies,
     DualPhaseEvidence,require_dual_capture,dual_weapon_events,successful_dual_fire)
+from runtime_lab import native_grip_resource_receipts
 
 HEAD={'p':[0,0,0],'q':[0,0,0,1]}
+
+class ResourceReceiptChecks(unittest.TestCase):
+    @staticmethod
+    def receipts():
+        return '\n'.join(f'Lab native grip resource key={key} bytes=100 positionRestored=0 sha256={key:064x}' for key in range(1,6))
+
+    def test_complete_opens_and_repeated_identical_version(self):
+        log=self.receipts()
+        values=native_grip_resource_receipts(log+'\n'+log.splitlines()[0])
+        self.assertEqual(len(values),5)
+        self.assertEqual(values[0]['open_count'],2)
+        self.assertEqual(values[-1]['resource'],'R_Hand.bmf')
+
+    def test_partial_conflicting_saturated_or_invalid_receipts_fail(self):
+        log=self.receipts()
+        conflicts=log+'\n'+log.splitlines()[0].replace('bytes=100','bytes=101')
+        for bad in ('',log.splitlines()[0],conflicts,
+                    log+'\nLab native grip resource saturated key=1',
+                    log+'\n'+log.splitlines()[0]+'\n'+log.splitlines()[0],
+                    log.replace('positionRestored=0','positionRestored=101',1),
+                    log.replace('bytes=100','bytes=33554433',1),
+                    log.replace('key=5','key=6',1)):
+            with self.subTest(bad=bad),self.assertRaises(ValueError):
+                native_grip_resource_receipts(bad)
 
 def fixture(count=30,camera_sequence_offset=0,camera_tracking=7,presentation=1,eyes=(0,1)):
     game=[];host=[]

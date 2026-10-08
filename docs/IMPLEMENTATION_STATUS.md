@@ -2,6 +2,33 @@
 
 ## Active PC implementation
 
+Tracked native weapon charge/recoil translation now survives model placement and
+the shared muzzle/laser conversion. The adapter captures the existing getter
+invocation, preserves native scale/reflection and performs no guessed gripping
+calibration. Explicit native-finally cleanup also fixes stranded muzzle recursion
+state. Astra source GO follows four cache/forwarding fixes; all products rebuilt,
+61 Debug groups, compiled callback/cleanup negative controls and artifact/layout
+gates pass on sourceff8a2d050e3f81ba18c6f1c4d6df4b7e2955edbf0c903e2206ef8bb71c70d628. No game or firing probe
+ran for this change. See NATIVE_WEAPON_DISPLACEMENT.md. Full implementation remains
+open in the native melee, MP roomscale, driver-control and remote-head gates.
+
+
+The latest user instruction reserves primary in-VR gameplay testing, including
+shooting and vehicles, for the user. Finish remaining implementation and Astra
+source reviews, with builds/offline checks; do not resume routine individual
+weapon-firing probes. Historical probe plans below are not current instructions.
+
+Run213458 completed a bounded non-firing native resource-identity observation on
+compiled sourceb8e77f540f92633b65a9df8f00b83f35b834369030acd5bd867e46ecee8b9882.
+All five exact gun/hand resource opens were hashed with their native stream
+positions restored. Jungle scene identity,303 neutral complete native pairs and
+normal shutdown with no cleanup errors were recorded. See HAND_MODEL_ALIGNMENT.md
+for exact resource hashes and the unresolved rendered-instance/grip association.
+All products rebuilt;61 Debug groups and compiled fingerprint/IPC10/wire6
+artifact checks passed. This does not complete physical hand alignment or the
+remaining melee, multiplayer origin, vehicle or remote-head integrations.
+
+
 Run190429 completes the seven-pose native gameplay follow-up on compiled source
 725425de9c8dd4315399e65bf7c28c353bc1390e176747935b4477a4f2d0eb48.
 All seven images match actual native cameras, complete world/UI and successful

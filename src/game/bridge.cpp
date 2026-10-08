@@ -132,17 +132,29 @@ static int(__cdecl *labIsLoadingThread)() = nullptr;
 static void(__thiscall *labStreamSeek)(void *,int32_t) = nullptr;
 static void(__thiscall *labStreamRead)(void *,void *,int32_t) = nullptr;
 static char labSceneName[1024]{};
+static bool labGripResourceProbe=false;
 static thread_local bool labSceneReading = false;
-static bool labSceneNameMatches(const char *name) noexcept {
+static bool labNameMatches(const char *name,const char *expected) noexcept {
     if (!name) return false;
     for (unsigned i=0;i<sizeof(labSceneName);++i) {
-        char a=name[i],b=labSceneName[i];
+        char a=name[i],b=expected[i];
         if (a=='\\') a='/';if (b=='\\') b='/';
         if (a>='A'&&a<='Z') a+=32;if (b>='A'&&b<='Z') b+=32;
         if (a!=b) return false;
         if (!a) return true;
     }
     return false;
+}
+static unsigned labGripResourceKey(const char *name) noexcept {
+    if(!labGripResourceProbe)return 0;
+    constexpr const char *names[]={
+        "Content/SeriousSam2/Databases/EntityParams/ZapGunWeapon.ep",
+        "Content/SeriousSam2/Models/Weapons/ZapGun/ZapGun_FP.mdl",
+        "Content/SeriousSam2/Models/Weapons/ZapGun/Sources/Meshes/Zapgun.bmf",
+        "Content/SeriousSam2/Models/Weapons/ZapGun/Sources/Zapgun.skl",
+        "Content/SeriousSam2/Models/Weapons/ZapGun/Sources/Meshes/R_Hand.bmf"};
+    for(unsigned i=0;i<5;++i)if(labNameMatches(name,names[i]))return i+1;
+    return 0;
 }
 [[noreturn]] static void abortLab(const char *reason) {
     log("Lab isolation abort: %s",reason);
@@ -151,7 +163,7 @@ static bool labSceneNameMatches(const char *name) noexcept {
     TerminateProcess(GetCurrentProcess(),0x53533201);
     std::abort();
 }
-static void hashLabScene(void *stream) {
+static void hashLabScene(void *stream,unsigned resource=0) {
     const int32_t size=labStreamSize(stream),position=labStreamPosition(stream);
     if (size<=0 || size>32*1024*1024 || position<0 || position>size)
         abortLab("native scene stream size/position outside probe contract");
@@ -191,20 +203,29 @@ static void hashLabScene(void *stream) {
     });
     if (!complete) abortLab("native scene stream hash did not complete");
     char hex[65]{};for (unsigned i=0;i<32;++i) std::snprintf(hex+i*2,3,"%02x",digest[i]);
-    log("Lab native scene stream bytes=%ld positionRestored=%ld sha256=%s",static_cast<long>(size),static_cast<long>(position),hex);
+    if(resource)log("Lab native grip resource key=%u bytes=%ld positionRestored=%ld sha256=%s",
+        resource,static_cast<long>(size),static_cast<long>(position),hex);
+    else log("Lab native scene stream bytes=%ld positionRestored=%ld sha256=%s",static_cast<long>(size),static_cast<long>(position),hex);
 }
 static __attribute__((force_align_arg_pointer)) void __fastcall labOpenScene(void *stream,void *,const char *filename,const char *mode) {
-    const bool candidate=mode&&mode[0]=='r'&&mode[1]==0&&labSceneNameMatches(filename);
+    const bool readMode=mode&&mode[0]=='r'&&mode[1]==0;
+    const bool candidate=readMode&&labNameMatches(filename,labSceneName);
+    const unsigned resource=readMode?labGripResourceKey(filename):0;
     bool owns=false;
     withNativeFinally([&] {
         labOriginalOpen(stream,filename,mode); // Exactly once, including unrelated opens.
-        if (!candidate) return;
+        if (!candidate && !resource) return;
+        if(resource) {
+            static std::atomic<unsigned> counts[5]{};
+            const unsigned count=counts[resource-1].fetch_add(1);
+            if(count>=2){if(count==2)log("Lab native grip resource saturated key=%u",resource);return;}
+        }
         if(!matches(GetModuleHandleW(L"Sam2Game.dll"),"5628b4ed30a966f10c8e8ea46bf0789257a35ea80127bacacebe28b1ce5303df"))
             abortLab("loaded scene game-module fingerprint mismatch");
         if (labSceneReading || (GetCurrentThreadId()!=labStartupThread && !labIsLoadingThread()))
             abortLab("nested/foreign native scene open");
         labSceneReading=true;owns=true;
-        hashLabScene(stream); // Borrowed synchronously; never close or retain it.
+        hashLabScene(stream,resource); // Borrowed synchronously; never close or retain it.
     },[&](bool) noexcept { if (owns) labSceneReading=false; });
 }
 static __attribute__((noinline)) void __cdecl suppressLabOnlineInitialization() {
@@ -273,6 +294,8 @@ void installLabOnlineIsolation() {
     if (MH_EnableHook(uninitialize)!=MH_OK) abortLab("online shutdown observation hook enable failed");
     const DWORD sceneBytes=GetEnvironmentVariableA("SS2VR_LAB_SCENE",labSceneName,sizeof(labSceneName));
     if (!sceneBytes || sceneBytes>=sizeof(labSceneName)) abortLab("native scene probe path missing/too long");
+    wchar_t gripProbe[2]{};
+    labGripResourceProbe=GetEnvironmentVariableW(L"SS2VR_LAB_GRIP_RESOURCES",gripProbe,2)==1 && gripProbe[0]==L'1';
     const auto core=GetModuleHandleW(L"Core.dll");
     auto *open=reinterpret_cast<void *>(GetProcAddress(core,"?OpenFile_t@CStream@SeriousEngine@@QAEXPBD0@Z"));
     labStreamSize=loadLabProc<decltype(labStreamSize)>(core,"?GetSize@CStream@SeriousEngine@@QAEJXZ");

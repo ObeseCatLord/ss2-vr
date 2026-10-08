@@ -1372,3 +1372,24 @@ menu pass only; no headset/gameplay/network pass. Test ended at exact lab PID.
 Astra/Max examines actual presentation owner before any startup adapter. Full
 private melee/MP reports read; effective-review limitations preserved. No source
 integration inferred from counters, inactive helpers or hypothesis alone.
+
+## Native weapon displacement and user-primary acceptance
+
+Latest user steering reserves primary in-VR shooting/vehicle/gameplay tests for
+the user. Stop individual firing probes; continue implementation and Astra reviews.
+Bounded run213458 identified five exact native gun/hand resource opens with stream
+positions restored,303 neutral complete pairs and normal cleanup. Physical grasp
+calibration remains unset. Vehicle metadata inspection retains exact unopened
+coverage; no driver wheel is inferred from road joints or seat transforms.
+
+Added native charge-displacement capture at the existing base getter normal-return
+inside original model placement. Shared model/muzzle/laser accounting preserves
+native charge translation, scale/reflection and animation without new native
+getter evaluation. Explicit native-finally restores muzzle and placement TLS.
+Astra caught unmanaged forwarding and stale/superseded cache errors; fixed original
+return preservation, managed flat-reference rejection, shared100ms cache admission
+and invalidation before nonfinite-output rejection. Final Astra source GO; full
+products/61 Debug groups/native-finally/artifact contracts and five compiled
+negative controls pass. Source fingerprintff8a2d050e3f81ba18c6f1c4d6df4b7e2955edbf0c903e2206ef8bb71c70d628.
+No game, firing, Windows hardware or MP session ran for this code. Native melee,
+MP origin, actual driver controls and full remote-head enablement remain open.

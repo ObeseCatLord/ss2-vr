@@ -56,6 +56,7 @@ using Toggle = void(__thiscall *)(void *, int);
 using InventoryInt = int(__thiscall *)(void *, int);
 using Frustum = Matrix44 *(__cdecl *)(Matrix44 *, float, float, float, float);
 using WeaponAbs = int(__thiscall *)(void *, const Matrix34 &, Matrix34 &);
+using WeaponCharge = Matrix34 *(__thiscall *)(void *, Matrix34 *);
 using RenderWeapon = void(__thiscall *)(void *, Matrix34);
 using NativeFire = int(__thiscall *)(void *, float);
 static NativeFire originalNativeFire = nullptr;
@@ -175,6 +176,60 @@ bool nativePresentationThreadCurrent() noexcept {
 }
 static uintptr_t playerAlternativePressReturn = 0;
 static WeaponAbs originalWeaponAbs = nullptr;
+static WeaponCharge originalWeaponCharge = nullptr;
+static uintptr_t weaponChargeReturn = 0;
+struct NativePlacementCharge {
+    void *weapon = nullptr;
+    Vec3 translation;
+    unsigned calls = 0;
+    bool valid = false, invalidated = false;
+};
+static thread_local NativePlacementCharge *placementCharge = nullptr;
+static Matrix34 *__fastcall weaponCharge(void *weapon, void *, Matrix34 *out) {
+    const auto caller = reinterpret_cast<uintptr_t>(__builtin_return_address(0));
+    Matrix34 *result = originalWeaponCharge(weapon, out);
+    auto *observation = placementCharge;
+    if (!observation || observation->weapon != weapon || caller != weaponChargeReturn)
+        return result;
+    if (observation->calls != UINT_MAX) ++observation->calls;
+    // The audited base displacement is translation-only. Other native getter
+    // implementations are not inferred from a finite-looking matrix.
+    const bool valid = out && result == out && finiteMatrix(*out) &&
+        out->m[0] == 1 && out->m[1] == 0 && out->m[2] == 0 &&
+        out->m[4] == 0 && out->m[5] == 1 && out->m[6] == 0 &&
+        out->m[8] == 0 && out->m[9] == 0 && out->m[10] == 1;
+    if (observation->calls == 1 && !observation->invalidated && valid) {
+        observation->translation = {out->m[3], out->m[7], out->m[11]};
+        observation->valid = true;
+    } else {
+        observation->invalidated = true;
+        observation->valid = false;
+    }
+    return result;
+}
+static int nativePlacementWithCharge(void *weapon, const Matrix34 &view, Matrix34 &out,
+                                     Vec3 &translation, bool &invalid) {
+    translation = {};
+    auto *previous = placementCharge;
+    if (previous) previous->invalidated = true;
+    NativePlacementCharge observation{weapon, {}, 0, false, previous != nullptr};
+    placementCharge = &observation;
+    int result = 0;
+    withNativeFinally([&] { result = originalWeaponAbs(weapon, view, out); },
+                      [&](bool aborted) noexcept {
+        placementCharge = previous;
+        if (aborted) {
+            observation.invalidated = true;
+            if (previous) previous->invalidated = true;
+            nativeInputFailed();
+        }
+    });
+    invalid = observation.invalidated || (observation.calls && !observation.valid);
+    if (observation.valid && !invalid) translation = observation.translation;
+    // A different virtual getter not reaching the audited base hook retains
+    // the prior placement policy; no residual is invented for it.
+    return result;
+}
 static RenderWeapon originalWeaponRender = nullptr, originalSniperRender = nullptr;
 static Frustum originalFrustum = nullptr;
 using MatrixInverse = Matrix34 *(__cdecl *)(Matrix34 *, const Matrix34 &);
@@ -219,6 +274,7 @@ struct Calibration {
     uint32_t handle = 0;
     Pose nativeModelLocal;
     uint64_t tickMs = 0;
+    Vec3 nativeDisplacement;
 };
 static RigRevision rigPublication;
 static thread_local unsigned snapshotNativeReadDepth=0;
@@ -311,6 +367,15 @@ static Snapshot copySnapshot() {
     auto s = current;
     ReleaseSRWLockShared(&snapshotLock);
     return s;
+}
+static void invalidateMatchingCalibration(const Snapshot &snapshot, unsigned hand) noexcept {
+    if (hand >= 2) return;
+    AcquireSRWLockExclusive(&snapshotLock);
+    if (current.playerHandle == snapshot.playerHandle && current.generation == snapshot.generation &&
+        current.handle[hand] == snapshot.handle[hand] &&
+        calibration[hand].handle == snapshot.handle[hand])
+        calibration[hand].valid = false;
+    ReleaseSRWLockExclusive(&snapshotLock);
 }
 static bool primaryLocalRecognized(const Snapshot &snapshot, void *subject, uint32_t handle) noexcept {
     return nativePrimaryLocalRecognized(subject, handle, snapshot.player, snapshot.playerHandle,
@@ -461,7 +526,8 @@ static void saveAuthority(const Authority &value) {
 static bool bodyAnchor(void *player, Pose &pose) {
     return nativeTrackingAnchor(player, pose);
 }
-static bool nativeWeaponReference(void *player, void *weapon, Pose &body, Pose &camera, Pose &modelPose) {
+static bool nativeWeaponReference(void *player, void *weapon, Pose &body, Pose &camera, Pose &modelPose,
+                                  Vec3 *displacement = nullptr) {
     RiderIdentity rider;
     if (!readNativeRider(player, rider) || !rider.handheld())
         return false;
@@ -472,9 +538,12 @@ static bool nativeWeaponReference(void *player, void *weapon, Pose &body, Pose &
         return false;
     auto cameraMatrix = matrix(camera);
     Matrix34 model;
-    if (!originalWeaponAbs(weapon, cameraMatrix, model))
+    Vec3 charge;
+    bool invalidCharge = false;
+    if (!nativePlacementWithCharge(weapon, cameraMatrix, model, charge, invalidCharge) || invalidCharge)
         return false;
     matrixPose(&modelPose, model);
+    if (displacement) *displacement = rotate(compose(inverse(camera), modelPose).q, charge);
     return nativeRiderCurrent(player, rider) && finite(modelPose);
 }
 static void suppressHandheld(network::PosePacket &pose) {
@@ -2452,72 +2521,90 @@ static MuzzleContext muzzleContext(void *weapon, const Snapshot &s, bool explici
 }
 static Pose *shooting(void *w, Pose *out, PoseGet original, const Snapshot *snapshot = nullptr,
                       bool *calibrated = nullptr) {
-    const bool nested = nativeShotDepth++ != 0;
-    const auto s = nested ? Snapshot{} : (snapshot ? *snapshot : copySnapshot());
-    const auto context = nested ? MuzzleContext{} : muzzleContext(w, s, snapshot != nullptr);
-    // Zoomed native sniper placement (Sam+172A70) is the owner's view
-    // origin, not its gun attachment. Keep native zoom/damage, but obtain
-    // the base weapon's attachment once for positively identified VR aim.
-    // This shared boundary also serves collision lasers and server shots.
-    invokeNativeMuzzle(
-        original == originalSniperShot, context.accepted, nested,
-        [&] { original(w, out); --nativeShotDepth; },
-        [&] { originalShot(w, out); --nativeShotDepth; },
-        [&] {
-            if (!finite(*out) || resolve(context.handle) != w || resolve(context.owner) != context.player)
-                return;
-            if (!context.rider.handheld() || !nativeRiderCurrent(context.player, context.rider))
-                return;
-            uint32_t owner = 0;
-            memcpy(&owner, static_cast<uint8_t *>(w) + 0x28, sizeof(owner));
-            if (owner != context.owner || nativeHandle(context.player, int(context.hand)) != context.handle)
-                return;
-            if (context.authoritative) {
-                // Retain the same validated hand/sample. Only lifecycle is
-                // rechecked; never select a weaker or newer placement context.
-                const auto peer = multiplayer::authority(context.player);
-                if (!currentWeaponSample(context.sample, peer, context.hand) || !isAlive(context.player))
+    const unsigned previousDepth = nativeShotDepth;
+    const bool nested = previousDepth != 0;
+    if (calibrated) *calibrated = false;
+    if (previousDepth != UINT_MAX) ++nativeShotDepth;
+    // Context acquisition and native retarget getters share this extent. A
+    // foreign unwind must not strand TLS; reentry during adaptation stays native.
+    withNativeFinally([&] {
+        const auto s = nested ? Snapshot{} : (snapshot ? *snapshot : copySnapshot());
+        const auto context = nested ? MuzzleContext{} : muzzleContext(w, s, snapshot != nullptr);
+        // Zoomed native sniper placement (Sam+172A70) is the owner's view
+        // origin, not its gun attachment. Keep native zoom/damage, but obtain
+        // the base weapon's attachment once for positively identified VR aim.
+        // This shared boundary also serves collision lasers and server shots.
+        invokeNativeMuzzle(
+            original == originalSniperShot, context.accepted, nested,
+            [&] { original(w, out); },
+            [&] { originalShot(w, out); },
+            [&] {
+                if (!finite(*out) || resolve(context.handle) != w || resolve(context.owner) != context.player)
                     return;
-                Pose body, camera, modelPose;
-                if (!nativeWeaponReference(context.player, w, body, camera, modelPose))
+                if (!context.rider.handheld() || !nativeRiderCurrent(context.player, context.rider))
                     return;
-                if (resolve(context.owner) != context.player || resolve(context.handle) != w ||
-                    nativeHandle(context.player, int(context.hand)) != context.handle ||
-                    !isAlive(context.player) || !nativeRiderCurrent(context.player, context.rider))
-                    return;
+                uint32_t owner = 0;
                 memcpy(&owner, static_cast<uint8_t *>(w) + 0x28, sizeof(owner));
-                if (owner != context.owner ||
-                    !currentWeaponSample(context.sample, multiplayer::authority(context.player), context.hand))
+                if (owner != context.owner || nativeHandle(context.player, int(context.hand)) != context.handle)
                     return;
-                Pose grip = compose(body, context.sample.pose.grip[context.hand]);
-                *out = retargetShot(camera, *out, compose(inverse(camera), modelPose).p, grip);
-                return;
-            }
-            Pose body, nativeCamera;
-            if (!vrSession(s) || !fresh(s.input) || !trackingAnchor(s.player, body))
-                return;
-            originalCamera(s.player, &nativeCamera);
-            if (!finite(nativeCamera) || !localWeaponCurrent(w, s, context.hand))
-                return;
-            Pose hand = worldHandTracking(
-                body, s.origin, s.turn, s.input.head,
-                calibratedGrip(s.input, context.hand,
-                               *reinterpret_cast<int *>(static_cast<uint8_t *>(w) + 0xb4), settings));
-            AcquireSRWLockShared(&snapshotLock);
-            auto c = calibration[context.hand];
-            ReleaseSRWLockShared(&snapshotLock);
-            Pose target;
-            if (c.valid && c.handle == context.handle)
-                target = retargetShot(nativeCamera, *out, c.nativeModelLocal.p, hand);
-            else
-                target = {normalize(multiply(hand.q, multiply(inverse(nativeCamera.q), out->q))), hand.p};
-            if (!finite(target) || !localWeaponCurrent(w, s, context.hand))
-                return;
-            if (calibrated)
-                *calibrated = c.valid && c.handle == context.handle && GetTickCount64() >= c.tickMs &&
-                              GetTickCount64() - c.tickMs <= 100;
-            *out = target;
-        }, calibrated);
+                if (context.authoritative) {
+                    // Retain the same validated hand/sample. Only lifecycle is
+                    // rechecked; never select a weaker or newer placement context.
+                    const auto peer = multiplayer::authority(context.player);
+                    if (!currentWeaponSample(context.sample, peer, context.hand) || !isAlive(context.player))
+                        return;
+                    Pose body, camera, modelPose;
+                    Vec3 displacement;
+                    if (!nativeWeaponReference(context.player, w, body, camera, modelPose, &displacement))
+                        return;
+                    if (resolve(context.owner) != context.player || resolve(context.handle) != w ||
+                        nativeHandle(context.player, int(context.hand)) != context.handle ||
+                        !isAlive(context.player) || !nativeRiderCurrent(context.player, context.rider))
+                        return;
+                    memcpy(&owner, static_cast<uint8_t *>(w) + 0x28, sizeof(owner));
+                    if (owner != context.owner ||
+                        !currentWeaponSample(context.sample, multiplayer::authority(context.player), context.hand))
+                        return;
+                    Pose grip = compose(body, context.sample.pose.grip[context.hand]);
+                    *out = retargetShot(camera, *out, compose(inverse(camera), modelPose).p, grip,
+                                        .5f, displacement);
+                    return;
+                }
+                Pose body, nativeCamera;
+                if (!vrSession(s) || !fresh(s.input) || !trackingAnchor(s.player, body))
+                    return;
+                originalCamera(s.player, &nativeCamera);
+                if (!finite(nativeCamera) || !localWeaponCurrent(w, s, context.hand))
+                    return;
+                Pose hand = worldHandTracking(
+                    body, s.origin, s.turn, s.input.head,
+                    calibratedGrip(s.input, context.hand,
+                                   *reinterpret_cast<int *>(static_cast<uint8_t *>(w) + 0xb4), settings));
+                AcquireSRWLockShared(&snapshotLock);
+                auto c = calibration[context.hand];
+                ReleaseSRWLockShared(&snapshotLock);
+                const uint64_t now = GetTickCount64();
+                const bool calibrationAdmitted = c.valid && c.handle == context.handle &&
+                    now >= c.tickMs && now - c.tickMs <= 100;
+                Pose target;
+                if (calibrationAdmitted)
+                    target = retargetShot(nativeCamera, *out, c.nativeModelLocal.p, hand,
+                                         .5f, c.nativeDisplacement);
+                else
+                    target = {normalize(multiply(hand.q, multiply(inverse(nativeCamera.q), out->q))), hand.p};
+                if (!finite(target) || !localWeaponCurrent(w, s, context.hand))
+                    return;
+                if (calibrated)
+                    *calibrated = calibrationAdmitted;
+                *out = target;
+            }, calibrated);
+    }, [&](bool aborted) noexcept {
+        nativeShotDepth = previousDepth;
+        if (aborted) {
+            if (calibrated) *calibrated = false;
+            nativeInputFailed();
+        }
+    });
     return out;
 }
 static Pose *__fastcall shot(void *w, void *, Pose *out) {
@@ -3169,7 +3256,9 @@ static int __fastcall weaponAbs(void *w, void *, const Matrix34 &view, Matrix34 
 #endif
     const bool physical = physicalWeapon && physicalWeapon->weapon == w &&
                           caller == weaponPlacementReturn;
-    const int result = originalWeaponAbs(w, view, out);
+    Vec3 charge;
+    bool invalidCharge = false;
+    const int result = nativePlacementWithCharge(w, view, out, charge, invalidCharge);
     auto reject = [&]() {
         if (physical) {
             physicalWeapon->pass.placed(false);
@@ -3178,13 +3267,21 @@ static int __fastcall weaponAbs(void *w, void *, const Matrix34 &view, Matrix34 
         }
         return result;
     };
-    if (!result)
+    if (!result) {
+        if (physical && physicalWeapon && physicalWeapon->hand >= 0)
+            invalidateMatchingCalibration(eyeSnapshot, unsigned(physicalWeapon->hand));
         return reject();
+    }
     const auto s = eyeIndex >= 0 ? eyeSnapshot : copySnapshot();
     const int h = handOf(w, s);
     const Input &tracking = eyeIndex >= 0 ? eyeRequest.input : s.input;
-    if (h < 0 || !trackedWeaponSession(s) || (!physical && !fresh(s.input)) || !tracking.handValid[h] ||
-        !finite(weaponTracking(tracking, unsigned(h))) || !finiteMatrix(out) ||
+    if (h < 0 || !trackedWeaponSession(s)) return reject();
+    if (invalidCharge || !finiteMatrix(out)) {
+        invalidateMatchingCalibration(s, unsigned(h));
+        return reject(); // Unmanaged native callers retain result/out above.
+    }
+    if ((!physical && !fresh(s.input)) || !tracking.handValid[h] ||
+        !finite(weaponTracking(tracking, unsigned(h))) ||
         (physical && (physicalWeapon->hand != h || physicalWeapon->pass.stage != 3)))
         return reject();
     Pose native, suppliedCamera;
@@ -3208,18 +3305,26 @@ static int __fastcall weaponAbs(void *w, void *, const Matrix34 &view, Matrix34 
         body, s.origin, s.turn, tracking.head,
         calibratedGrip(tracking, h, *reinterpret_cast<int *>(static_cast<uint8_t *>(w) + 0xb4), settings));
     const Quat offset = multiply(inverse(suppliedCamera.q), native.q);
-    const Pose target{normalize(multiply(hand.q, offset)), hand.p};
+    const Vec3 displacement = rotate(offset, charge);
+    const Pose target{normalize(multiply(hand.q, offset)), hand.p + rotate(hand.q, displacement)};
     if (!finite(target))
         return reject();
     const Matrix34 staged = matrix(target);
     Matrix34 flatModel;
     const auto flatCamera = matrix(nativeCamera);
     Pose flatPose;
-    const bool calibrated = originalWeaponAbs(w, flatCamera, flatModel) != 0;
+    Vec3 flatCharge;
+    bool invalidFlatCharge = false;
+    const bool calibrated = nativePlacementWithCharge(w, flatCamera, flatModel, flatCharge,
+                                                      invalidFlatCharge) != 0;
     if (!localWeaponCurrent(w, s, unsigned(h)))
         return reject();
     if (calibrated)
         matrixPose(&flatPose, flatModel);
+    if (!calibrated || invalidFlatCharge || !finite(flatPose)) {
+        invalidateMatchingCalibration(s, unsigned(h));
+        return reject();
+    }
     if (!localWeaponCurrent(w, s, unsigned(h)))
         return reject();
     AcquireSRWLockExclusive(&snapshotLock);
@@ -3229,8 +3334,9 @@ static int __fastcall weaponAbs(void *w, void *, const Matrix34 &view, Matrix34 
         channel.shared && trackingEpoch(*channel.shared) == s.generation;
     const bool placed = compatible && (!physical || physicalWeapon->pass.placed(finiteMatrix(staged)));
     if (placed) {
-        calibration[h] = {calibrated && finite(flatPose), s.handle[h],
-                          calibrated ? compose(inverse(nativeCamera), flatPose) : Pose{}, GetTickCount64()};
+        const auto relative = calibrated ? compose(inverse(nativeCamera), flatPose) : Pose{};
+        calibration[h] = {calibrated && finite(flatPose), s.handle[h], relative,
+                          GetTickCount64(), calibrated ? rotate(relative.q, flatCharge) : Vec3{}};
         out = staged;
     }
     ReleaseSRWLockExclusive(&snapshotLock);
@@ -4455,6 +4561,7 @@ bool attach(bool headless) {
     weaponInverseReturn = reinterpret_cast<uintptr_t>(g) + 0x4c915;
     weaponDepthReturn = reinterpret_cast<uintptr_t>(g) + 0x4c9a6;
     weaponPlacementReturn = reinterpret_cast<uintptr_t>(g) + 0x4c9bb;
+    weaponChargeReturn = reinterpret_cast<uintptr_t>(g) + 0x4c058;
     ordinaryWeaponRenderReturn = reinterpret_cast<uintptr_t>(g) + 0x4bf3a;
     weaponRestoreReturn = reinterpret_cast<uintptr_t>(g) + 0x4ca93;
     rootDepthReturn = reinterpret_cast<uintptr_t>(e) + 0x155dd1;
@@ -4638,6 +4745,8 @@ bool attach(bool headless) {
     H(g, "?ExecuteOperatorFiring@CPuppetEntity@SeriousEngine@@UAEXXZ", operatorFiring, originalOperatorFiring);
     H(g, "?IsFireButtonPressed@CPuppetEntity@SeriousEngine@@UAEHJ@Z", fireButtonPressed, originalFireButtonPressed);
     H(g, "?GetShootingPlacement@CBaseWeaponEntity@SeriousEngine@@UAE?AVQuatVect@2@XZ", shot, originalShot);
+    H(g, "?GetWeaponChargeDisplaceMatrix@CBaseWeaponEntity@SeriousEngine@@UAE?AVMatrix34f@2@XZ",
+      weaponCharge, originalWeaponCharge);
     H(g, "?GetShootingPlacement@CSniperWeaponEntity@SeriousEngine@@UAE?AVQuatVect@2@XZ", sniperShot,
       originalSniperShot);
     if (!headless) {

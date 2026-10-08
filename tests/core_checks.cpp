@@ -420,6 +420,19 @@ int main() {
     auto longShot = retargetShot({}, Pose{{}, {0, 0, -4}}, {}, grip);
     auto muzzle = longShot.p - grip.p;
     check(near(std::sqrt(dot(muzzle, muzzle)), .5f), "Native muzzle displacement remains bounded");
+    const Vec3 charge{.13f, -.07f, .8f};
+    auto chargedShot = retargetShot(a, compose(a, shotLocal), cachedModel.p + charge, grip, .5f, charge);
+    const Vec3 expectedCharge = rotate(grip.q, charge);
+    check(near(chargedShot.p.x - firstShot.p.x, expectedCharge.x) &&
+          near(chargedShot.p.y - firstShot.p.y, expectedCharge.y) &&
+          near(chargedShot.p.z - firstShot.p.z, expectedCharge.z),
+          "Native charge is retained exactly once outside the attachment bound");
+    auto movedChargedShot = retargetShot(movedBody, compose(movedBody, shotLocal),
+                                        cachedModel.p + charge, grip, .5f, charge);
+    check(near(movedChargedShot.p.x, chargedShot.p.x) &&
+          near(movedChargedShot.p.y, chargedShot.p.y) &&
+          near(movedChargedShot.p.z, chargedShot.p.z),
+          "Charge residual remains camera-relative across player movement");
     Fov f{-.9f, .7f, .8f, -.6f};
     auto p = projection(f, .1f, 1000);
     auto projectX = [&](float x) { return (p.m[0] * x - p.m[2]); };

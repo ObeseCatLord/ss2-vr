@@ -151,12 +151,15 @@ inline bool applyNativeViewHeight(Pose &base, uint32_t heightBits) {
 // Model calibration is relative to the native camera, never an old world position.
 // A moved/turned player must not contribute motion to the grip-to-muzzle offset.
 inline Pose retargetShot(Pose anchor, Pose nativeShot, Vec3 nativeModelLocal, Pose hand,
-                         float muzzleBound = .5f) {
+                         float muzzleBound = .5f, Vec3 nativeDisplacement = {}) {
     Pose shotLocal = compose(inverse(anchor), nativeShot);
-    Vec3 muzzle = shotLocal.p - nativeModelLocal;
+    // Native model placement includes charge displacement, while the native
+    // attachment getter does not. Remove it from the reference root, then add
+    // it outside the attachment bound so it is neither cancelled nor clamped.
+    Vec3 muzzle = shotLocal.p - (nativeModelLocal - nativeDisplacement);
     float n = std::sqrt(dot(muzzle, muzzle));
     if (n > muzzleBound)
         muzzle = muzzle * (muzzleBound / n);
-    return {normalize(multiply(hand.q, shotLocal.q)), hand.p + rotate(hand.q, muzzle)};
+    return {normalize(multiply(hand.q, shotLocal.q)), hand.p + rotate(hand.q, muzzle + nativeDisplacement)};
 }
 } // namespace ss2vr

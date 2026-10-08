@@ -25,6 +25,35 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 
+def native_grip_resource_receipts(log):
+    """Successful native opens only; never a rendered-instance/grip certificate."""
+    names = ('ZapGunWeapon.ep', 'ZapGun_FP.mdl', 'Zapgun.bmf', 'Zapgun.skl', 'R_Hand.bmf')
+    receipts = {}
+    pattern = r'Lab native grip resource key=(\d+) bytes=(\d+) positionRestored=(\d+) sha256=([a-f0-9]{64})'
+    for line in log.splitlines():
+        if 'Lab native grip resource ' not in line:
+            continue
+        match = re.fullmatch(pattern, line.strip())
+        if not match:
+            raise ValueError('Incomplete, saturated or malformed native grip-resource observation')
+        key, size, position = map(int, match.group(1, 2, 3))
+        if key not in range(1, 6) or not 0 < size <= 32*1024*1024 or not 0 <= position <= size:
+            raise ValueError('Native grip-resource receipt outside the observer contract')
+        value = {'resource': names[key-1], 'bytes': size, 'restored_positions': [position],
+                 'sha256': match.group(4), 'open_count': 1}
+        if key in receipts:
+            previous = receipts[key]
+            if (previous['bytes'], previous['sha256']) != (size, value['sha256']):
+                raise ValueError('Conflicting native opens do not identify one resource version')
+            value['open_count'] = previous['open_count'] + 1
+            value['restored_positions'] = previous['restored_positions'] + [position]
+            if value['open_count'] > 2:
+                raise ValueError('Native grip-resource observation exceeded its attempt limit')
+        receipts[key] = value
+    if set(receipts) != set(range(1, 6)):
+        raise ValueError('All five exact native grip-resource opens were not observed')
+    return [dict(key=key, **receipts[key]) for key in sorted(receipts)]
+
 def digest(path):
     with Path(path).open('rb') as f:
         return hashlib.file_digest(f, 'sha256').hexdigest()
@@ -291,6 +320,8 @@ def validate(cfg):
         raise ValueError('Background controls diagnostic requires a separate non-firing VR run')
     if type(cfg.get('capture_desktop',True)) is not bool:
         raise ValueError('Desktop capture selection must be explicit boolean')
+    if type(cfg.get('grip_resource_probe',False)) is not bool:
+        raise ValueError('Grip resource probe selection must be explicit boolean')
     if not cfg['pose_steps'] or cfg['pose_steps'][0]['name']!='baseline' or cfg['pose_steps'][0]['head']!=cfg['baseline_head']:
         raise ValueError('First held-pose case must certify the commanded baseline')
     for head in [cfg['baseline_head'],*[step['head'] for step in cfg['pose_steps']]]:
@@ -592,6 +623,8 @@ def run(cfg):
     env.pop('SS2VR_LAB_STOCK_RENDER',None)
     env.pop('SS2VR_LAB_BACKGROUND_MOVE',None)
     if cfg.get('background_controls_probe')=='joystick-native-movement':env['SS2VR_LAB_BACKGROUND_MOVE']='1'
+    env.pop('SS2VR_LAB_GRIP_RESOURCES',None)
+    if cfg.get('grip_resource_probe'):env['SS2VR_LAB_GRIP_RESOURCES']='1'
     if stock:env['SS2VR_LAB_STOCK_RENDER']='1'
     files=[]; cleanup_errors=[]
     deadline=time.monotonic()+cfg.get('timeout',60)
@@ -788,6 +821,9 @@ def run(cfg):
             manifest['native_scene_receipts']=receipts
             raise RuntimeError('Actual native scene differs from the configured exact scene')
         manifest['native_scene_receipts']=receipts
+        if cfg.get('grip_resource_probe'):
+            manifest['native_grip_resource_receipts']=native_grip_resource_receipts(isolation_log)
+            manifest['rendered_grip_alignment_verified']=False
         if 'Steam initialize (AppID' in scene_log or 'from Steam cloud:' in scene_log:
             raise RuntimeError('Native Steam interface unexpectedly initialized')
         if stock:

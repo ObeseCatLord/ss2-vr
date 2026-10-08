@@ -1,6 +1,14 @@
 # Cloud continuation — 2026-10-05
 
 Latest PC direct-scene work is in PC_GAMEPLAY_READINESS.md and DIRECT_GAMEPLAY_LAB.md.
+Current source charge/muzzle follow-up is NATIVE_WEAPON_DISPLACEMENT.md: native
+charge translation captured without extra getter calls, common model/muzzle
+accounting and explicit native-unwind TLS cleanup. Astra source GO and all-product
+build/61 Debug groups/compiled/artifact checks pass on ff8a2d050e3f81ba18c6f1c4d6df4b7e2955edbf0c903e2206ef8bb71c70d628.
+No runtime/firing probe for this source change. Full implementation still open.
+Latest user steering: testing is primarily user-operated. Finish implementation
+and source reviews with local builds/offline checks; vehicles, shooting and broad
+in-VR acceptance belong to the user. Avoid routine additional game launches.
 The user will perform individual weapon-firing tests in VR. Codex stops those
 probes and continues remaining implementation/non-firing tests. A comprehensive
 in-VR procedure is required when the remaining implementation is ready.
