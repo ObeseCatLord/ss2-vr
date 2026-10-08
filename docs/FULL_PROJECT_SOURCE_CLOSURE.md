@@ -40,6 +40,13 @@ history, actual stop/release completion and later quiet are deliberately preserv
 Neither constructor fields, copied activity, an idle state nor a synthetic
 initializing release may be relabeled a native low witness.
 
+The bounded follow-up did not establish an automatic same-saw release during
+equip/BringUp/copy recovery or deferred tool application. No additional callback
+census or synthetic release was adopted. The proposed user-operated idle
+observation also remains gated; see [its exact blocker](IDLE_OBSERVATION_GATE.md).
+The private plan records candidate/settings/scene identities and conditional
+collection criteria, rather than a runnable-looking incomplete diagnostic.
+
 Physical driver-grab steering remains unimplemented. Positive actual control rim,
 axis and driver-seat ownership are still needed. Existing seated tracking/aim,
 joystick fallback and exact turret laser are implemented capabilities; they do

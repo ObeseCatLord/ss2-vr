@@ -142,3 +142,20 @@ Source review and exact final artifact identities are recorded in
 IMPLEMENTATION_STATUS.md. Hardware feel, native dual melee where actually
 eligible, contact/miss behavior, interruptions and multiplayer remain separate
 acceptance rows; disabled/incomplete rows must not be marked passed.
+
+## Bounded first-use lifecycle audit
+
+Astra/xhigh inspected equip, BringUp, copied-owner recovery and the exact deferred
+DrawTool application. Selected handles are installed before BringUp, but the
+inspected native BringUp/idle bodies do not call the qualifying saw release.
+Deferred records carry a character tool, null associated entity and an immediate
+flag; they do not retain the selected saw. Their native attachment/draw completion
+is not the audited48FF0 release return165498.
+
+Remaining exits are runtime-registered ToolDrawn macros and resource-dependent
+ToolPicked/AI actions. No connecting same-owner/hand selected-saw release was
+established. This is bounded negative evidence, not universal absence. No further
+callback census or synthetic initial release is justified. Automatic first/copy
+admission remains open; the experimental real-trigger-release then quiet procedure
+is retained. No native runtime or individual firing probe ran. Fresh local
+Astra/xhigh settings were verified; backend routing remains unattested.
