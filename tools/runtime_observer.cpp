@@ -199,6 +199,37 @@ static StockCameraRead stockCameraRead(const OwnedStockProcess &process) {
     // another pass, or stale storage. These remain capture-comparison candidates.
     return out;
 }
+struct PrivateForegroundIdentity {
+    bool enabled=false,imageQueried=false,titleQueried=false;
+    unsigned role=0;uint64_t creation=0,queryTick=0;wchar_t title[64]{};
+};
+static PrivateForegroundIdentity privateForegroundIdentity(const lab::WindowObservation &window) {
+    PrivateForegroundIdentity out{};wchar_t selected[2]{};
+    out.enabled=GetEnvironmentVariableW(L"SS2VR_LAB_PRIVATE_DISPLAY",selected,2)==1&&selected[0]==L'1';
+    if(!out.enabled||!window.window)return out;
+    out.queryTick=GetTickCount64();
+    out.titleQueried=GetWindowTextW(window.window,out.title,64)>0;
+    HANDLE process=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,FALSE,window.owner);
+    if(!process)return out;
+    wchar_t path[2048]{};DWORD count=2048;FILETIME created{},exited{},kernel{},user{};
+    out.imageQueried=QueryFullProcessImageNameW(process,0,path,&count)!=FALSE;
+    if(count>=2048)out.imageQueried=false;
+    if(out.imageQueried)path[count]=0;
+    if(GetProcessTimes(process,&created,&exited,&kernel,&user))out.creation=(uint64_t(created.dwHighDateTime)<<32)|created.dwLowDateTime;
+    if(out.imageQueried) {
+        const wchar_t *name=path;
+        for(const wchar_t *p=path;*p;++p)if(*p==L'\\'||*p==L'/')name=p+1;
+        const wchar_t *roles[]={L"explorer.exe",L"steam.exe",L"conhost.exe",L"Sam2.exe",L"ss2vr_host.exe",L"wineconsole.exe"};
+        for(unsigned i=0;i<6;++i)if(!_wcsicmp(name,roles[i]))out.role=i+1;
+    }
+    CloseHandle(process);return out;
+}
+static void privateIdentity(FILE *file,const char *label,const PrivateForegroundIdentity &value) {
+    std::fprintf(file,",\"%s_identity\":{\"private_enabled\":%u,\"query_after_request\":true,\"query_tick_ms\":%llu,\"image_queried\":%u,\"image_role\":%u,\"process_creation\":%llu,\"title_queried\":%u,\"title\":\"",
+        label,value.enabled,static_cast<unsigned long long>(value.queryTick),value.imageQueried,value.role,static_cast<unsigned long long>(value.creation),value.titleQueried);
+    for(const wchar_t *p=value.title;*p;++p)std::fprintf(file,"\\u%04x",static_cast<unsigned>(*p));
+    std::fputs("\"}",file);
+}
 static int stockFocus(int argc,wchar_t **argv) {
     // Open the optional exclusive receipt before ownership guards so rejected
     // attempts remain distinguishable. It never authorizes a window operation.
@@ -218,15 +249,21 @@ static int stockFocus(int argc,wchar_t **argv) {
             "\"target_title_matches\":%u,\"target_root_matches\":%u,\"visible_before\":%u,\"iconic_before\":%u,"
             "\"foreground_called\":%u,\"foreground_before_hwnd\":%llu,\"foreground_before_owner\":%u,\"foreground_before_thread\":%u,"
             "\"show_called\":%u,\"show_requested\":%u,\"foreground_requested\":%u,\"foreground_observed\":%u,"
-            "\"foreground_after_hwnd\":%llu,\"foreground_after_owner\":%u,\"foreground_after_thread\":%u,\"foreground_after_title_matches\":%u}\n",
+            "\"foreground_after_hwnd\":%llu,\"foreground_after_owner\":%u,\"foreground_after_thread\":%u,\"foreground_after_title_matches\":%u",
             stage,code,identityVerified,static_cast<unsigned>(process.pid),static_cast<unsigned long long>(process.creation),creationVerified,
             native.activationRepeated,targetChecked,lab::windowValue(target.window),static_cast<unsigned>(target.owner),static_cast<unsigned>(target.thread),
             target.titleMatches,target.rootMatches,target.visible,target.iconic,called,
             lab::windowValue(focus.before.window),static_cast<unsigned>(focus.before.owner),static_cast<unsigned>(focus.before.thread),
             focus.showCalled,focus.showRequested,focus.foregroundRequested,focus.foregroundObserved,
             lab::windowValue(focus.after.window),static_cast<unsigned>(focus.after.owner),static_cast<unsigned>(focus.after.thread),focus.after.titleMatches);
+        if(called) {
+            privateIdentity(receipt,"foreground_before",privateForegroundIdentity(focus.before));
+            privateIdentity(receipt,"foreground_after",privateForegroundIdentity(focus.after));
+        }
+        std::fputs("}\n",receipt);
+        const bool failed=written<0||std::ferror(receipt);
         const int closed=std::fclose(receipt);receipt=nullptr;
-        return written<0||closed!=0?7:code;
+        return failed||closed!=0?7:code;
     };
     if(!stockProcess(argv[2],process))return finish("process-identity",4);
     identityVerified=true;

@@ -69,6 +69,20 @@ def validate_display_probe(cfg, private):
     mode=cfg.get('display_prerequisite_only',False)
     if type(mode) is not bool:raise ValueError('Display prerequisite-only selection must be boolean')
     if mode and selected is None:raise ValueError('Prerequisite-only mode requires its pinned native probe')
+    eager=cfg.get('monado_environment',{}).get('XRT_COMPOSITOR_DISABLE_DEFERRED')
+    order=cfg.get('monado_window_order_probe',False)
+    if type(order) is not bool:raise ValueError('Monado window-order selector must be boolean')
+    helper=cfg.get('private_x11_windows')
+    if eager is not None:
+        if eager!='1' or cfg.get('renderer_mode','vr')!='vr' or not isinstance(helper,dict) or set(helper)!={'path','sha256'}:
+            raise ValueError('Eager graphical Monado requires its sealed read-only window helper')
+        path=checked_file(helper['path'],helper['sha256'])
+        if not path.is_relative_to(private) or path.read_bytes()[:4]!=b'\x7fELF':
+            raise ValueError('Private X11 receipt helper must be a private native executable')
+    elif helper is not None or order:
+        raise ValueError('Window receipts/order diagnostic require eager graphical Monado')
+    if order and (not mode or cfg.get('display_focus_comparison') is not None):
+        raise ValueError('Window ordering is a separate nongame prerequisite extent')
     variants=cfg.get('display_focus_comparison')
     if variants is not None:
         if not mode or not isinstance(variants,list) or len(variants)!=2:
@@ -95,7 +109,7 @@ def validate_display_probe(cfg, private):
         if len(header)!=64 or header[:2]!=b'MZ':raise ValueError('Display prerequisite is not a PE')
         stream.seek(struct.unpack_from('<I',header,60)[0]);pe=stream.read(6)
     if pe!=b'PE\0\0L\x01':raise ValueError('Display prerequisite must use the game x86 architecture')
-    if variants is not None:
+    if variants is not None or order:
         data=path.read_bytes();offset=int.from_bytes(data[60:64],'little')
         if data[offset+24:offset+26]!=b'\x0b\x01' or int.from_bytes(data[offset+92:offset+94],'little')!=2:
             raise ValueError('Foreground comparison requires a GUI owner probe')
@@ -140,7 +154,33 @@ def foreground_interval(rows, entry, observed):
                  all(0<=b['tick_ms']-a['tick_ms']<=100 for a,b in zip(sequence,sequence[1:])))
     return before,during,after,covered
 
-def display_timing_probe(cfg,env,deadline,run_dir):
+def private_window_snapshot(cfg,env,deadline,record):
+    helper=cfg['private_x11_windows'];checked_file(helper['path'],helper['sha256'])
+    result=subprocess.run([helper['path']],env=env,capture_output=True,timeout=remaining(deadline,2))
+    if result.returncode or len(result.stdout)>131072:raise RuntimeError('Private X11 window query failed')
+    value=json.loads(result.stdout)
+    if not isinstance(value,dict) or type(value.get('schema')) is not int or value['schema']!=1 or value.get('complete') is not True or \
+       type(value.get('active_xid')) is not int or not 0<=value['active_xid']<=0xffffffff or \
+       not isinstance(value.get('windows'),list) or len(value['windows'])>4096:
+        raise RuntimeError('Private X11 window receipt differs')
+    for row in value['windows']:
+        if not isinstance(row,dict) or type(row.get('xid')) is not int or not 0<row['xid']<=0xffffffff or \
+           type(row.get('pid')) is not int or not -1<=row['pid']<=0x7fffffff or \
+           type(row.get('role')) is not int or row['role'] not in (1,2) or type(row.get('viewable')) is not bool or \
+           type(row.get('input_output')) is not bool or any(type(row.get(k)) is not int or not 0<=row[k]<=65535 for k in ('width','height')):
+            raise RuntimeError('Private X11 window identity differs')
+    record.write_text(json.dumps(value,indent=2)+'\n')
+    return value
+
+def require_owned_monado_window(snapshot,owner,xid=None):
+    if not still_owned(owner):raise RuntimeError('Private Monado incarnation changed')
+    matches=[row for row in snapshot['windows'] if row['role']==1 and row['pid']==owner['pid'] and row['viewable'] and
+             row['input_output'] and row['width']>0 and row['height']>0]
+    if len(matches)!=1 or (xid is not None and matches[0]['xid']!=xid):
+        raise RuntimeError('Exact private Monado mapped window is absent or ambiguous')
+    return matches[0]['xid']
+
+def display_timing_probe(cfg,env,deadline,run_dir,window_observation=None):
     selected=cfg.get('display_timing_probe')
     if selected is None:return None
     if env.get('SS2VR_LAB_PRIVATE_DISPLAY')!='1' or not env.get('DISPLAY') or env.get('WAYLAND_DISPLAY'):
@@ -159,14 +199,14 @@ def display_timing_probe(cfg,env,deadline,run_dir):
     if receipt.exists() or receipt.is_symlink():raise RuntimeError('Native display receipt already exists')
     probe_env['SS2VR_DISPLAY_TIMING_OUTPUT']='Z:'+str(receipt)
     comparisons=cfg.get('display_focus_comparison')
-    if comparisons:probe_env['SS2VR_LAB_FOCUS_COMPARE']='1'
+    if comparisons or window_observation:probe_env['SS2VR_LAB_FOCUS_COMPARE']='1'
     try:
         with output.open('xb') as log:
             # Use the existing observer/tool route. Proton "run" starts through
             # steam.exe; runinprefix directly invokes the diagnostic executable.
             process=subprocess.Popen([cfg['proton'],'runinprefix',str(path)],env=probe_env,stdout=log,stderr=subprocess.STDOUT)
             observations=[]
-            if comparisons:
+            if comparisons or window_observation:
                 ready=Path(str(receipt)+'.window-ready.json');ready_deadline=min(deadline,time.monotonic()+10)
                 target=None
                 while time.monotonic()<ready_deadline:
@@ -184,7 +224,8 @@ def display_timing_probe(cfg,env,deadline,run_dir):
                    any(type(target.get(k)) is not int or not 0<target[k]<=0xffffffff for k in ('probe_pid','target_hwnd','target_thread')):
                     raise RuntimeError('Foreground probe has no valid ready receipt')
                 owner_samples=Path(str(receipt)+'.owner-foreground.jsonl')
-                for variant in comparisons:
+                if window_observation:window_observation(target,owner_foreground_samples(owner_samples))
+                for variant in comparisons or []:
                     observed=run_dir/('foreground-'+variant['name']+'.json')
                     if process.poll() is not None:raise RuntimeError('Foreground probe retired before observer execution')
                     checked_file(variant['path'],variant['sha256'])
@@ -459,7 +500,7 @@ def validate_idle_probe(cfg):
 
 IDLE_TOOLS=('runtime_lab.py','assess_idle_weapon.py','replay_idle_geometry.py',
             'measure_idle_reference.py','match_idle_geometry.py',
-            'private_display_lab.py','display_timing_probe.cpp','lab_window_focus.hpp')
+            'private_display_lab.py','display_timing_probe.cpp','lab_window_focus.hpp','private_x11_windows.cpp')
 IDLE_INVENTORIES=('game/Content/SeriousSam2/Config','game/Content/PlayerProfiles',
                   'prefix/pfx/drive_c/users')
 IDLE_FIXED_FILES=('game/Content/SeriousSam2/Sam2.ini','game/Bin/SS2VR/SS2VR.ini',
@@ -584,7 +625,8 @@ def validate(cfg):
     if not 1 <= cfg['remote_port'] <= 65535 or cfg['monado_config'] != {'active':'remote','remote':{'version':0,'port':cfg['remote_port'],'view_count':2}}:
         raise ValueError('Exact private remote configuration required')
     allowed_environment={'P_OVERRIDE_ACTIVE_CONFIG','SDL_VIDEODRIVER','XRT_COMPOSITOR_FORCE_XCB',
-        'XRT_COMPOSITOR_COMPUTE','U_PACING_APP_USE_MIN_FRAME_PERIOD','XRT_DEBUG_GUI','XRT_CURATED_GUI'}
+        'XRT_COMPOSITOR_COMPUTE','U_PACING_APP_USE_MIN_FRAME_PERIOD','XRT_DEBUG_GUI','XRT_CURATED_GUI',
+        'XRT_COMPOSITOR_DISABLE_DEFERRED'}
     if set(cfg['monado_environment'])-allowed_environment or cfg['monado_environment'].get('P_OVERRIDE_ACTIVE_CONFIG')!='remote':
         raise ValueError('Only process-local simulation settings are admitted')
     if not 0<cfg.get('timeout',60)<=180: raise ValueError('Runtime budget must be between zero and 180 seconds')
@@ -889,7 +931,8 @@ def run(cfg):
               'validated_config':cfg,
               'harness_sources':{name:digest(ROOT/'tools'/name) for name in
                   ('runtime_lab.py','runtime_observer.cpp','monado_pose_driver.cpp','assess_runtime.py')},
-              'simulation':not stock,'renderer_mode':'stock' if stock else 'vr','hardware_acceptance':False,'result':'incomplete'}
+              'simulation':not stock,'renderer_mode':'stock' if stock else 'vr','hardware_acceptance':False,
+              'game_launch_requested':False,'monado_launch_requested':False,'result':'incomplete'}
     last_focus=0.0;last_state=None;loading_continue_sent=False;stock_creation=None
     loading_receipt=None;last_native_focus=0;native_focus_requests=0
     stock_token='Z:'+str(lab/'Bin/Sam2.exe')
@@ -923,7 +966,7 @@ def run(cfg):
         # One validated run extent: prefix bootstrap may mutate this private
         # prefix, so do not run a probe externally and reseal settings afterward.
         manifest['display_timing']=display_timing_probe(cfg,env,deadline,run_dir)
-        if cfg.get('display_prerequisite_only') is True:
+        if cfg.get('display_prerequisite_only') is True and not cfg.get('monado_window_order_probe'):
             # A sealed diagnostic extent ends here even on successful readiness.
             # Existing finally still owns retirement and result preservation.
             manifest.update(result='display_prerequisite_only',simulation=False,
@@ -933,6 +976,7 @@ def run(cfg):
         (config/'config_v0.json').write_text(json.dumps(cfg['monado_config']))
         if not stock:
             f=(run_dir/'monado.log').open('xb');files.append(f)
+            manifest['monado_launch_requested']=True
             service=subprocess.Popen([cfg['monado_service']],stdin=slave,stdout=f,stderr=subprocess.STDOUT,env=env,start_new_session=True)
             os.close(slave);slave=-1
             while not (runtime/'monado_comp_ipc').exists():
@@ -959,12 +1003,56 @@ def run(cfg):
                 time.sleep(.1)
             else:raise TimeoutError('Private exact-pose listener not ready')
             subprocess.run([cfg['pose_driver'],str(cfg['remote_port']),*map(str,cfg['baseline_head'])],check=True,timeout=remaining(deadline,5))
+            if cfg['monado_environment'].get('XRT_COMPOSITOR_DISABLE_DEFERRED')=='1':
+                service_owner=identity(service.pid)
+                if not service_owner:raise RuntimeError('Private Monado ownership unavailable')
+                manifest['monado_owner']={key:service_owner[key] for key in ('pid','start')}
+                window_deadline=min(deadline,time.monotonic()+15)
+                while True:
+                    if not still_owned(service_owner):raise RuntimeError('Private Monado incarnation changed before query')
+                    snapshot=private_window_snapshot(cfg,env,window_deadline,run_dir/'monado-before-game.json')
+                    try:monado_xid=require_owned_monado_window(snapshot,service_owner)
+                    except RuntimeError:
+                        if service.poll() is not None or time.monotonic()>=window_deadline:raise
+                        time.sleep(.05)
+                    else:break
+                manifest['monado_graphical_window_ready']=True
+                if cfg.get('monado_window_order_probe'):
+                    manifest.update(game_launch_requested=False,monado_launch_requested=True)
+                    if snapshot['active_xid']!=monado_xid:raise RuntimeError('Window-order diagnostic lacks initial Monado foreground')
+                    order_dir=run_dir/'window-order';order_dir.mkdir()
+                    def observe_order(target,rows):
+                        if not still_owned(service_owner):raise RuntimeError('Private Monado incarnation changed before query')
+                        owners=private_processes(Path(cfg['display_timing_probe']['path']))
+                        snapshot=private_window_snapshot(cfg,env,deadline,order_dir/'during-probe.json')
+                        require_owned_monado_window(snapshot,service_owner,monado_xid)
+                        # Proton's launcher may also carry the exact executable
+                        # argv. Select only the actual resource-owning process;
+                        # do not equate its Linux PID with the native Windows PID.
+                        candidates=[row for row in snapshot['windows'] if row['role']==2 and row['pid'] in {owner['pid'] for owner in owners} and row['viewable'] and
+                                    row['input_output'] and row['width']>0 and row['height']>0]
+                        if len(candidates)!=1:raise RuntimeError('Ambiguous native display-probe window owner')
+                        owner=next(owner for owner in owners if owner['pid']==candidates[0]['pid'])
+                        if not still_owned(owner):raise RuntimeError('Native display-probe incarnation changed during query')
+                        if len(candidates)!=1 or snapshot['active_xid']!=candidates[0]['xid'] or \
+                           not target['baseline_foreground'] or not rows[-1]['probe_title_matches'] or \
+                           rows[-1]['foreground_hwnd']!=target['target_hwnd'] or rows[-1]['foreground_owner']!=target['probe_pid']:
+                            raise RuntimeError('Later native probe did not acquire private foreground')
+                        manifest['monado_window_order']={'monado_xid':monado_xid,'probe_xid':candidates[0]['xid'],
+                            'probe_owner':{key:owner[key] for key in ('pid','start')},'native_target':target}
+                    manifest['ordered_display_timing']=display_timing_probe(cfg,env,deadline,order_dir,observe_order)
+                    if not still_owned(service_owner):raise RuntimeError('Private Monado incarnation changed before query')
+                    after=private_window_snapshot(cfg,env,deadline,order_dir/'after-probe.json')
+                    require_owned_monado_window(after,service_owner,monado_xid)
+                    manifest.update(result='monado_window_order_prerequisite_only',simulation=True)
+                    return run_dir
         # Existing runtime logs are preserved before each new process opens them.
         for path in (lab/'Bin/SS2VR.log',lab/'Bin/SS2VR/ss2vr_host.log',lab/'Sam2.log'):
             if path.exists():
                 # Reversible move gives the fresh launch a new log boundary.
                 path.rename(run_dir/('previous-'+path.name))
         f=(run_dir/'launch.log').open('xb');files.append(f)
+        manifest['game_launch_requested']=True
         launch=subprocess.Popen([cfg['proton'],'run',str(lab/'Bin/Sam2.exe'),*cfg['startup']['arguments']],
             cwd=lab,env=env,stdout=f,stderr=subprocess.STDOUT)
         while time.monotonic()<deadline:
@@ -972,6 +1060,7 @@ def run(cfg):
             if len(games)>1:raise RuntimeError('Ambiguous game process ownership')
             if games:
                 owned_game=games[0]
+                manifest['owned_game']={key:owned_game[key] for key in ('pid','start')}
                 if not cfg.get('native_input_probe') and (owned_window is None or ((not token or (last_state and last_state.get('menu',stock))) and time.monotonic()-last_focus>1)):
                     # X11 calls can block; keep them in a deadline-bounded child.
                     focus=subprocess.run([sys.executable,str(Path(__file__)),

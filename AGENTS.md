@@ -8,6 +8,20 @@ This historical hold blocked public publication pending renewed confirmation. It
 
 ## Current PC continuation — start here
 
+### Current repeated neutral SS2 capture authority
+The user explicitly answered "Allow necessary private neutral captures" to the
+reviewed startup/idle-geometry collector question. This supersedes the exhausted
+one-capture limits below for needed captures in that bounded scope. Each capture
+uses a fresh sealed private fixture, up to six minutes, no desktop input,
+gameplay movement/firing, switching or vehicle/headset/network probes. Startup
+may focus/restore only the owned private SS2 window and post one guarded Enter
+key-down/key-up pair to pass the verified loading screen. Preserve exact products,
+settings/profiles/saves, source/tool seals, records and owned cleanup. Do not ask
+again for this same scope or treat an earlier consumed one-run limit as current.
+Actual physical release/grasp/HMD/MP/vehicle acceptance remain separate, primarily
+user-operated. Use native evidence to fix this blocker, not repeated exhausted
+audits or guessed alignment/Low/release priming.
+
 ### Current repeated private display-check authority
 The user explicitly answered "Run as many private display checks as needed" to
 approve the reviewed prerequisite-only check. This supersedes the exhausted
@@ -24,16 +38,15 @@ that a failed prerequisite consumed it was an agent interpretation, not a user
 revocation. The one replacement has since ACTUALLY launched SS2 and is now
 consumed, as recorded below. Do not automatically retry game collection.
 
-### Current replacement SS2 outcome
+### Historical replacement SS2 outcome — repeated authority supersedes its limit
 The one approved replacement neutral SS2 collection has now actually launched
 and completed one failed attempt. Its private D3D9 prerequisite passed; the
 expected Jungle scene hash was loaded and the host started, but native loading
 remained blocked after four existing owned activation requests. No gameplay/ID1
 geometry was collected. Native isolation shutdown was observed, wrapper cleanup
 had no owned survivors/errors and 12 protected files remained unchanged. This
-consumes the one replacement SS2 capture authorization. Do not retry SS2
-collection automatically; continue source/offline work and the separately
-authorized nongame private display checks. Preserve all attempts and old guides.
+consumes the one replacement SS2 capture authorization. That one-run limit is historical; the repeated neutral authority above now
+permits fresh sealed captures within its exact scope. Preserve all attempts and old guides.
 
 ### Current bounded diagnosis and next prepared path
 The valid nongame console/GUI observer comparison found both seeing the exact
@@ -42,8 +55,8 @@ No subsystem defect was demonstrated; stop that hypothesis and do not add native
 activation policy from it. Startup requests now preserve native guard-stage/
 returncode/target/foreground receipts, with original ownership gates and the
 four-request cap. A fresh neutral collection is prepared as source work; it is
-not authorized to launch yet. Its private current guide requires final scoped
-Astra handoff review and explicit renewed capture authority. Do not send the user
+reviewed and now authorized under the repeated neutral capture authority above.
+The private guide pins the prepared identities and startup actions. Do not send the user
 to an older attempted package or treat idle geometry as first/copy melee release.
 
 ### Historical failed replacement prerequisite — superseded above
@@ -146,3 +159,14 @@ in the isolated publication checkout for every outgoing ref. It checks complete
 raw ancestry with replacement objects disabled, not just the tip; it rejects
 shallow histories and annotated tags. Inspect source contents and messages
 separately. Never bypass a failure by limiting the gate to a revision range.
+
+## Latest bounded window-order evidence
+Private kiosk/desktop captures both remained loading-blocked after admitted native
+activation requests. The console/GUI hypothesis was negative; stop that branch.
+Astra-reviewed eager Monado option plus exact read-only XRes owner/title/mapping/
+class/dimension barrier is now implemented in the existing private harness. The
+nongame ordering check passed: later exact probe gained private active XID/native
+foreground and retired normally; same Monado XID remained viewable. Sequential
+observations do not prove sustained focus, pure map-order cause, frames or SS2
+repair. Fresh neutral capture under active repeated authority is prepared, final
+handoff review pending. No native loading/input gate or production product changed.

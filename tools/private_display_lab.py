@@ -17,9 +17,15 @@ import sys
 import time
 from runtime_lab import identity, still_owned, stop_exact, validate, checked_file, run
 
+def selected_shell(cfg):
+    shell=cfg.get('private_display_shell','kiosk')
+    if shell not in ('kiosk','desktop'):raise ValueError('Private display shell must be kiosk or desktop')
+    return shell
+
 def prepared_configuration(path):
     if path.name!='config.json':raise ValueError('Collector must use its sealed config.json')
     cfg=json.loads(path.read_text());validate(cfg)
+    selected_shell(cfg)
     if cfg.get('idle_weapon_probe') is not True or not cfg.get('display_timing_probe'):
         raise ValueError('Prepared private display requires the neutral collector and timing probe')
     receipt=json.loads(Path(cfg['idle_preparation']['path']).read_text())
@@ -97,15 +103,16 @@ def inside(cfg_path, output, display_only=False, prerequisite_only=False):
         try:
             directory=run(cfg)
             result=json.loads((directory/'result.json').read_text())
-            if result.get('result')!='display_prerequisite_only' or result.get('cleanup_errors') or \
-               result.get('game_launch_requested') is not False or result.get('monado_launch_requested') is not False:
+            ordered=cfg.get('monado_window_order_probe',False)
+            if result.get('result')!=('monado_window_order_prerequisite_only' if ordered else 'display_prerequisite_only') or result.get('cleanup_errors') or \
+               result.get('game_launch_requested') is not False or result.get('monado_launch_requested') is not ordered:
                 raise RuntimeError('Private prerequisite did not complete its owned extent')
         except BaseException as error:
             (output/'collection-outcome.json').write_text(json.dumps({'completed':False,'error':str(error)}))
             raise
         (output/'collection-outcome.json').write_text(json.dumps({'completed':True,'prerequisite_only':True,
             'private_run':str(directory),'collector_launched':False,'game_launched':False,
-            'monado_launched':False,'data_ready_for_review':False}))
+            'monado_launched':ordered,'data_ready_for_review':False}))
         return
     # Reuse the reviewed collector and run() cleanup. No second validation after
     # a standalone Wine invocation, no rewritten collection state machine.
@@ -132,6 +139,7 @@ def inside(cfg_path, output, display_only=False, prerequisite_only=False):
 def launch(cfg_path, cfg, display_only=False, prerequisite_only=False):
     if not cfg.get('display_timing_probe'):raise RuntimeError('Private capture needs its D3D9 readiness prerequisite')
     if display_only and prerequisite_only:raise ValueError('Choose exactly one diagnostic extent')
+    shell=selected_shell(cfg)
     base=cfg_path.parent;out=base/('display-check' if display_only else 'prerequisite-check' if prerequisite_only else 'private-display')
     out.mkdir(mode=0o700,exist_ok=False)
     token=secrets.token_hex(16)
@@ -148,7 +156,7 @@ def launch(cfg_path, cfg, display_only=False, prerequisite_only=False):
         json.dump({'schema':1,'time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),
                    'source_products':cfg['expected_product_source'],'desktop_input':False,
                    'display_only':display_only,'prerequisite_only':prerequisite_only},file,indent=2)
-    cmd=['weston','--backend=headless','--renderer=pixman','--shell=kiosk','--fake-seat',
+    cmd=['weston','--backend=headless','--renderer=pixman','--shell='+shell,'--fake-seat',
          '--refresh-rate=60000','--width=1280','--height=720','--xwayland','--no-config',
          '--idle-time=0','--socket=ss2-vr-private','--log='+str(out/'weston.log'),
          '--',sys.executable,str(Path(__file__).resolve()),'--config',str(cfg_path),'--inside',str(out)]
@@ -175,7 +183,7 @@ def launch(cfg_path, cfg, display_only=False, prerequisite_only=False):
             if server.poll() is not None:raise RuntimeError('Private compositor failed before exec certification')
             time.sleep(.01)
         else:raise RuntimeError('Private compositor exec certification timed out')
-        end=time.monotonic()+(75 if prerequisite_only else 285)
+        end=time.monotonic()+((cfg.get('timeout',60)+45 if cfg.get('monado_window_order_probe') else 75) if prerequisite_only else 285)
         while server.poll() is None:
             gather(owned,token,str(runtime),{os.getpid(),server.pid})
             if time.monotonic()>=end:raise TimeoutError('Private collection budget expired')

@@ -1,5 +1,37 @@
 # Cloud continuation — 2026-10-05
 
+## Latest continuation — repeated neutral capture authority
+
+The user explicitly permits necessary private neutral SS2 captures for the
+startup/idle-geometry blocker, up to six minutes each. This supersedes the
+consumed one-capture limits in historical entries below. Only the owned private
+window may be restored/focused and receive one guarded loading Enter pair;
+no desktop input, movement, firing or switching. Each attempt uses a fresh
+sealed isolated game/prefix and preserves prior evidence and original data.
+
+Two later neutral attempts reached the expected scene stream but remained at
+loading. Activation receipts passed process/incarnation/target guards, then
+reported SetForegroundWindow failure. Changing the private display from kiosk
+to desktop shell did not resolve it. The nongame console/GUI comparison was
+negative; do not change observer subsystem policy based on that hypothesis.
+
+A private-only eager graphical Monado option and read-only XRes window receipt
+are now implemented for a controlled window-order check. Exact service ownership,
+WM_NAME, mapping, InputOutput class and dimensions are required before SS2.
+The optional nongame extent reuses the existing D3D9 probe and cleanup, then
+ends before SS2. This is a diagnostic setup change, not native gameplay or
+OpenXR frame acceptance. Production products remain unchanged at b1b0086367de.
+Astra/xhigh gave scoped source GO. The actual nongame ordering passed: the
+later exact probe owned the active XID and native foreground, D3D9 reported
+60 Hz/raster success and native retirement, and the same Monado XID remained
+viewable afterward. Owned cleanup was clean and protected files unchanged.
+These are sequential observations, not sustained agreement, pure map-order
+causality, submitted VR frames or repaired SS2 readiness. A fresh neutral
+capture is prepared with unchanged native guards; source/handoff review is
+pending before its run. Grasp alignment,
+evidenced driver steering and physical/network/device acceptance remain open.
+
+
 ## Latest private display and collection status
 
 The corrected prerequisite-only private graphics check passed: actual x86 D3D9

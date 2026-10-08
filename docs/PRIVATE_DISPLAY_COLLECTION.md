@@ -148,3 +148,44 @@ observer subsystem is not justified by this result. The remaining discriminating
 observation is actual SS2 with the new per-guard receipts, under separately
 renewed bounded authority. No native geometry or physical-release acceptance
 follows from this nongame diagnostic.
+
+## Eager Monado window-order diagnostic
+
+The default prerequisite-only extent still stops before Monado and SS2.
+A separately sealed `monado_window_order_probe: true` extent may start the same
+private graphical Monado service, but always ends before SS2. It requires the
+installed `XRT_COMPOSITOR_DISABLE_DEFERRED=1` option and a pinned native read-only
+X11/XRes helper. Compile that helper with:
+
+```sh
+c++ -std=c++20 -Wall -Wextra -Werror tools/private_x11_windows.cpp -lXRes -lX11 -o /private/path/private_x11_windows
+```
+
+The service's live PID/start incarnation must match the XRes resource owner of
+one exact `WM_NAME=Monado` client window, with InputOutput class, positive size
+and IsViewable mapping. The title follows eager window/swapchain/renderer
+initialization in the audited runtime. A socket or guessed `_NET_WM_PID` does
+not satisfy this barrier. It does not prove submitted frames.
+
+The diagnostic first requires Monado's XID to be active, then runs the same
+GUI D3D9 probe on the private display. Native foreground receipts and independent
+XRes owner/active-window evidence must agree for the later probe. Its normal
+resource/window retirement must complete; the same Monado XID must remain
+viewable afterward. All records remain private. The existing process owner,
+PTY, prefix bootstrap and cleanup paths are reused. Unknown identities or an
+unproved transition fail the diagnostic; they never justify changing native
+loading guards. Ordered runs allow the sealed runtime budget plus 45 seconds
+for existing cleanup and wrapper shutdown; normal prerequisite budgets remain.
+
+The user now permits necessary private neutral SS2 captures within the explicit
+startup/idle-geometry scope. Consumed one-run limits above are historical.
+A negative ordering observation must produce a new evidence-based diagnosis,
+not an identical capture retry or an assumed alignment/release state.
+
+The actual Astra-reviewed ordered nongame run passed all those receipts and
+owned cleanup, with protected files unchanged. SS2 and its collector were not
+launched. Native and X11 observations are sequential; no sustained agreement,
+pure map-order causality or SS2 repair is inferred. A subsequent fresh neutral
+SS2 capture must independently establish gameplay readiness and geometry.
+24 private-display regressions and22 runtime-evidence groups pass normal/
+optimized Python; native helper/probe/observer builds use warnings as errors.

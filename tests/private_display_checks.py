@@ -8,6 +8,36 @@ import private_display_lab as display
 GOOD={'schema':1,'stage':'swapchain-query','operation':'get-raster-status','desktop_hz':60,'adapter_hz':60,'swapchain_hz':60,
       'width':1280,'height':720,'raster_called':True,'cleanup_completed':True,'hresult':0,'scanline':0,'in_vblank':True}
 class Checks(unittest.TestCase):
+    def test_eager_window_admission_requires_exact_helper_and_nongame_gui_extent(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);helper=root/'query';helper.write_bytes(b'\x7fELFfixture')
+            pe=root/'probe.exe';data=bytearray(192);data[:2]=b'MZ';data[60:64]=(64).to_bytes(4,'little')
+            data[64:70]=b'PE\0\0L\x01';data[88:90]=b'\x0b\x01';data[156:158]=(2).to_bytes(2,'little');pe.write_bytes(data)
+            cfg={'display_prerequisite_only':True,'monado_window_order_probe':True,
+                 'monado_environment':{'XRT_COMPOSITOR_DISABLE_DEFERRED':'1'},
+                 'private_x11_windows':{'path':str(helper),'sha256':lab.digest(helper)},
+                 'display_timing_probe':{'path':str(pe),'sha256':lab.digest(pe)}}
+            lab.validate_display_probe(cfg,root)
+            for change in ({'private_x11_windows':None},{'display_prerequisite_only':False},
+                           {'monado_window_order_probe':1},{'monado_environment':{}},
+                           {'monado_environment':{'XRT_COMPOSITOR_DISABLE_DEFERRED':'0'}},
+                           {'renderer_mode':'stock'},{'display_focus_comparison':[]}):
+                with self.subTest(change=change),self.assertRaises(ValueError):lab.validate_display_probe(cfg|change,root)
+    def test_graphical_barrier_needs_exact_live_monado_pid_viewability_and_retained_xid(self):
+        owner={'pid':123,'start':'fixed'};row={'xid':42,'pid':123,'role':1,'viewable':True,'input_output':True,'width':960,'height':540}
+        with patch.object(lab,'still_owned',return_value=True):
+            self.assertEqual(lab.require_owned_monado_window({'windows':[row]},owner),42)
+            for rows,xid in [([],None),([row,row],None),([row|{'pid':124}],None),
+                             ([row|{'viewable':False}],None),([row|{'role':2}],None),([row|{'width':0}],None),([row|{'input_output':False}],None),([row],43)]:
+                with self.subTest(rows=rows,xid=xid),self.assertRaises(RuntimeError):
+                    lab.require_owned_monado_window({'windows':rows},owner,xid)
+        with patch.object(lab,'still_owned',return_value=False),self.assertRaises(RuntimeError):
+            lab.require_owned_monado_window({'windows':[row]},owner)
+    def test_private_shell_choice_is_explicit_and_preserves_default_without_arbitrary_modules(self):
+        self.assertEqual(display.selected_shell({}),'kiosk')
+        self.assertEqual(display.selected_shell({'private_display_shell':'desktop'}),'desktop')
+        for value in ('desktop-shell.so','../../custom',None,True,[],{}):
+            with self.subTest(value=value),self.assertRaises(ValueError):display.selected_shell({'private_display_shell':value})
     def test_child_interval_needs_fresh_owner_coverage_not_post_observation_samples(self):
         def rows(ticks):return [{'tick_ms':tick} for tick in ticks]
         before,during,after,covered=lab.foreground_interval(rows(range(90,371,20)),100,350)
