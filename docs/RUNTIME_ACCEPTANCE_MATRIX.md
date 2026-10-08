@@ -16,13 +16,13 @@ public; proprietary scenes/saves/settings/images stay in the private lab.
 | Native background joystick prerequisite, no fire | Default-off private-lab adapter at existing inactive producer; no device polling/physics replacement | Run204618 has2.216559m physics-body movement then zero demand and0.005253m final250ms drift, stable mechanism/root/origin and zero firing. General background actions/admission-loss/MP remain open |
 | Native built-in dual-wield eligibility and supported combinations | Native initial ID1 Zap eligibility/charge/release/projectile/reload routes verified with Astra; live original combo/dual checks retained; separate from two-hand grip | Open |
 | Correct per-hand weapon identity, controller pose and aim | Existing tracked native weapons, lasers and hand selectors | Open |
-| Independent press/release, no stuck triggers, simultaneous firing | Existing native input/consumption mechanics; default-off unique-saw physical melee connected, priming required | Open |
+| Independent press/release, no stuck triggers, simultaneous firing | Existing native input/consumption mechanics; default-off unique-saw physical melee connected; first eligible swing issues a real native press | Open |
 | Switching, equip and unequip with both native hands | Existing per-hand wheels and durable squeeze-loss cancellation | Open |
 | Native ammo, cooldown and reload where the weapon supports it | Preserve native gameplay; do not add a universal reload model | Open |
 | Per-hand scope zoom/capture ownership during dual wield | Existing native magnified scope source path | Open |
 | Interruption, death and respawn with held/released controls | Existing lifecycle gates; additional connected native paths remain under investigation | Open |
 | Relevant multiplayer dual-wield weapon/pose/action replication | Reviewed local-owner origin/retained capture plus existing replication/presentation; default-off MP melee observer connected | Open |
-| Physical melee native consumption and observer delivery | Reviewed default-off unique-saw local/authority/observer adapter and wire7 retention; actual release/later quiet required | Open |
+| Physical melee native consumption and observer delivery | Reviewed default-off unique-saw local/authority/observer adapter and wire7 retention; receiver-fenced quiet and real native press/release accounting | Open |
 | Actual vehicle controls and one-/two-hand grab steering | Geometry and native proportional-input evidence incomplete | Open |
 | Complete native overlays and comfortable threshold-follow panels | Source overlays and anchor comfort policy | Menu transport and ordinary complete native gameplay/UI observed; comfort/variant coverage open |
 | Remote head worker/model lifetime and enablement | Frozen-VR-pair head palette adapter enabled by default; reviewed resource/lifetime extent | User-operated MP appearance/lifecycle open |

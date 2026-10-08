@@ -5,11 +5,29 @@
 The [final Astra source pass](FULL_PROJECT_SOURCE_CLOSURE.md) found connected
 major feature paths, but full implementation is still open. Resolve one ID1
 rendered-instance/resource/idle/stretch/grasp association before any measured
-alignment correction, and narrowly inspect actual equip/copy-to-idle low receipts
-for first-use melee. Driver-grab steering still lacks positive wheel/seat geometry.
+alignment correction. First-use melee source now admits an actual first gesture
+press after receiver-fenced quiet, without a trigger-prime cycle or guessed Low. Driver-grab steering still lacks positive wheel/seat geometry.
 User-operated testing is separate; no more routine game/firing probes are planned.
 
-## Reviewed MP physical melee source — 2026-10-08
+## First-use melee source update — 2026-10-08
+
+Astra/xhigh reviewed the incremental first-gesture-high change, caught a post-getter
+stop/rearm race, and accepted the corrected engine SHA
+`6e87aded8fc9c8c2d4cfab1c2f4f56239214d3c40753985222737d65bc70c0fe`.
+Backend execution remains unattested. Unknown/low remains inert; an admitted first
+G high invokes the real canonical press. Actual stop completion still resets the
+quiet fence. Exact in-flight dispatch identity prevents synthetic redispatch.
+All products use source fingerprint
+`160c20557788e8059d91a11bcf048daedfd72630a4d24d463d5f8edf261afb03`.
+61 Debug + 61 Release groups, 22 normal/optimized gates and 19 compiled-byte
+negative controls pass. No native runtime, input, contact or MP role test ran.
+Current products: game `98e6ee76bb29ee9bd3d422ed1589941c58f680233772841a5abedf86265f34d9`,
+server `a1cd40f7cc885fb7dada3de86ceff7e260a6cfe599bedc65730675966a219d83`,
+host `76de8e8b4b2e64c68ff8987a09f3fd2226a3c886b69408b622c7e38ee17c678d`,
+loader `bb011caa82528c541a73967ce6408f82198ff4fd0358b38b54884719d863bd1d`.
+The previous package below remains immutable, not deployed, and has older behavior.
+
+## Earlier reviewed MP physical melee source — 2026-10-08
 
 The default-off unique-saw adapter now connects the local physical sampler,
 server-authoritative native weapons and remote-observer native consumers.
@@ -48,10 +66,10 @@ agree on IPC10/wire7, Input272/Request440/Ui352/Slot33554928/Shared83887840.
 No game, host, Wine/OpenXR, native server or input/firing probe ran for these
 changes. Nothing was deployed into the original installation or private game
 lab. Vehicle, shooting and primary VR/MP acceptance belong to the user. The
-comprehensive [test procedure](USER_VR_TEST.md) now includes physical saw priming,
-short-pulse/observer tests and matching-product requirements. First/copy state
-still requires a real native release and later quiet; no automatic state guess
-or synthetic initializing release was added. Positive driver-wheel geometry and
+comprehensive [test procedure](USER_VR_TEST.md) includes first-use without trigger
+priming, short-pulse/observer tests and matching-product requirements. The older
+build in this section required a real release first; the current first-gesture
+update above supersedes that restriction without guessing initial Low. Positive driver-wheel geometry and
 broader vehicle control coverage remain open. Full goal is not claimed complete.
 Earlier SP/source entries below remain historical evidence for their own builds.
 

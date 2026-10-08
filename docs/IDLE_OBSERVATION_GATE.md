@@ -37,11 +37,11 @@ diagnostic schema, normal detach/quit and isolation evidence must accompany the
 actual collector. Until then there is no ready collection command.
 
 A visual idle assessment can identify visible misalignment, but cannot certify a
-numerical offset or native resource provenance. Neither accepting that limited
-assessment nor deferring certified grasp has been decided for the user.
+numerical offset or native resource provenance. Collector preparation is source work; no current user action can unblock the
+unimplemented collector. Do not ask for deferral or an unprepared debugger run.
 
-First-use/copy physical-melee admission is a separate open feature. An idle model
-capture cannot prove the original saw release or replace the required later quiet
-witness. Physical driver-grab steering also remains open. See
+First-use/copy physical-melee accounting is separate. The current source allows
+an actual first G press after receiver-fenced quiet without guessing initial Low.
+An idle model capture cannot prove any native press/release or replace stop fencing. Physical driver-grab steering also remains open. See
 [source closure](FULL_PROJECT_SOURCE_CLOSURE.md) and
 [user test preparation](USER_VR_TEST.md) for implemented versus incomplete scope.

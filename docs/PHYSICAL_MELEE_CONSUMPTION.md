@@ -3,8 +3,8 @@
 The default-off source adapter now connects local, server-authoritative and
 remote-observer native consumers for a uniquely mapped circular saw. Physical
 motion remains separate from trigger/history input. Matching wire7 products are
-required for multiplayer. Automatic first/copy usability remains limited:
-unknown state requires a real native release followed by later quiet motion.
+required for multiplayer. First-use/copy admission now permits a real gesture press after fresh receiver-fenced
+quiet motion; initial native history remains unknown until actual completion.
 Individual firing/contact and multiplayer gameplay acceptance belong to the user;
 no such runtime probe ran for this change.
 
@@ -31,11 +31,12 @@ saw hit queries; this is not a swept-blade collision replacement.
 
 ## Completion and cancellation
 
-Unknown initial, replaced or copied state is never inferred low. A real normal
-native release must complete before subsequent fresh quiet motion can arm a
-swing. There is no synthetic initializing release. For this development slice,
-use the trigger normally through a press/release cycle after selecting the saw;
-then hold still before physical motion. Tracking recovery itself never rearms.
+Unknown initial, replaced or copied state is never inferred low. A fresh eligible
+physical swing may invoke a real original canonical press after the receiver has
+observed later quiet beyond its generation fence. Only normal native completion
+establishes High; Unknown/low and Unknown/manual-only create no gesture callback.
+There is no initializing release or required trigger-prime cycle. After an actual
+stop, subsequent fresh quiet is required; tracking recovery itself never rearms.
 
 | Native boundary | Adapter observation |
 | --- | --- |
@@ -93,10 +94,35 @@ any ancestor's held gesture, with native-finally restoring the prior TLS frame.
 
 Every G high needs its own quiet witness after that consumer's actual native
 stop/reset fence. A delayed old pulse cannot borrow later arming. Observation
-sequence stays monotonic within its generation. Each consumer needs actual
-native low and subsequent quiet; sender quiet alone is not its native receipt.
+sequence stays monotonic within its generation. Each consumer independently fences first-use and actual stops; sender quiet alone
+cannot override its receiver fence or establish a native completion.
 
-## Integrated Astra disposition — 2026-10-08
+## First-gesture-high source review — 2026-10-08
+
+Astra/xhigh Source GO covers engine SHA
+`6e87aded8fc9c8c2d4cfab1c2f4f56239214d3c40753985222737d65bc70c0fe`.
+Backend execution remains unattested. The change reuses the same original press
+and normal-completion receipt as manual input; it does not infer initial Low.
+First-use native sound/contact/copy behavior remains user-operated acceptance.
+
+| Review finding | Main disposition |
+| --- | --- |
+| Unknown can also mean failed owner admission | First G press selected only inside matching unblocked, non-teardown owner admission |
+| Missing ticket could forward an unowned gesture callback | Gesture reconciliation returns; genuine manual passthrough is retained |
+| First press remains Unknown until original returns, permitting synthetic reentry | Existing dispatch stack suppresses matching key/epoch/role/slot reconciliation |
+| A post-validation getter can complete a stop after early G admission | Final locked fence rechecks armed/reset, generation and the capture's own quiet; recompute manual OR G afterward |
+| Later quiet must not lend permission to an older pulse | Existing stop/generation fence and per-capture quiet witness retained |
+
+All products rebuilt on source fingerprint
+`160c20557788e8059d91a11bcf048daedfd72630a4d24d463d5f8edf261afb03`.
+61 Debug and 61 Release groups, 22 normal/optimized compiled/native gates and
+19 compiled-byte negative controls pass. Added checks exercise production decision,
+fence and dispatch-identity helpers plus actual receipt storage with controlled
+returns. They do not execute native getter reentry or multiplayer role wiring.
+No game/debugger/runtime/input/firing probe ran. The previous real-release-first
+policy below is historical; it is superseded by actual-first-press admission.
+
+## Earlier integrated MP Astra disposition — 2026-10-08
 
 Bounded Source GO covers engine SHA
 `271aba3f0c3173a2350111a13a0cec53dd7ef2135d2453774620422ca80f9591`.
@@ -118,8 +144,8 @@ receipts, three no-relay intervals after consumption, stop/quiet ordering and
 nested manual isolation. All61 Debug and Release groups pass; both x86 products'
 normal/optimized compiled gates and19 private negative controls pass. The new
 manual-query cleanup has two compiled TLS restore paths, both inspected; removing
-either is rejected. No game/runtime/firing probe ran. First/copy priming and
-actual multiplayer/contact/feel remain explicit user-operated acceptance gates.
+either is rejected. No game/runtime/firing probe ran. Actual first/copy behavior and
+multiplayer/contact/feel remain explicit user-operated acceptance gates.
 
 ## Earlier SP review disposition and evidence
 
@@ -143,7 +169,7 @@ IMPLEMENTATION_STATUS.md. Hardware feel, native dual melee where actually
 eligible, contact/miss behavior, interruptions and multiplayer remain separate
 acceptance rows; disabled/incomplete rows must not be marked passed.
 
-## Bounded first-use lifecycle audit
+## Historical bounded first-use lifecycle audit
 
 Astra/xhigh inspected equip, BringUp, copied-owner recovery and the exact deferred
 DrawTool application. Selected handles are installed before BringUp, but the
@@ -159,3 +185,7 @@ callback census or synthetic initial release is justified. Automatic first/copy
 admission remains open; the experimental real-trigger-release then quiet procedure
 is retained. No native runtime or individual firing probe ran. Fresh local
 Astra/xhigh settings were verified; backend routing remains unattested.
+
+The subsequent first-gesture-high design above resolves source admission without
+finding or synthesizing an equip-time release. These finite negative native facts
+remain valid; they no longer impose trigger priming on the new source path.

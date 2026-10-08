@@ -71,15 +71,16 @@ Beyond's controller model determines its bindings. Use the current package's
 8. The unique-saw physical adapter is a default-off development option. For a
    separate test pass enable `[Melee]Enabled=1` in the private test copy; use
    matching wire7 clients/server and the same setting on participating native
-   consumers. After selecting or replacing a saw, perform a normal trigger
-   press/release and hold still before testing motion. Unknown/copy state is
-   never guessed low. Test both hands where native eligibility permits, with
+   consumers. After selecting or replacing a saw, hold still before testing motion. The
+   first physical swing must work without a trigger-prime cycle. Unknown/copy
+   state is never guessed low; the first gesture issues a real native press. Test both hands where native eligibility permits, with
    ordinary and flipped button mapping; coupled/alternative targets stay native.
 9. Check saw contacts/misses, native cadence, manual firing coexistence, short
    moving→still transitions, held-query cooldown skips, switching and carried
    objects. Try source loss/recovery, death/respawn and re-equipping after a swing.
    No carried object may be thrown by physical motion. Verify each receiving MP
-   role has actually observed the native release before expecting gesture arming.
+   role independently admits first use after fresh quiet and rearms after actual
+   stops. Include copied-active state and compare behavior with a native manual press.
 
 ## Wheels, menus and comfort
 

@@ -14,7 +14,7 @@ load-bearing claims and retained final integration/completion responsibility.
 | --- | --- |
 | Model root is placed at the calibrated hand plus native charge; no certified grasp transform | Adopted. README no longer claims established grip alignment. Resolve one rendered ID1 instance → exact resources/idle animation/effective stretch → physical grasp reference before any measured correction |
 | Configurable zero-default offsets do not certify correct gripping | Adopted. Preserve controller calibration and native animation/reflection; do not use shared gripOffset for an unproved FP-only fix |
-| First/copy saw priming is an admission restriction, not a proved unavoidable native constraint | Adopted. Experimental default-off trigger/release+quiet procedure remains; narrowly inspect whether equip/copy-to-idle supplies real receiver-local48FF0 completion at165498 after binding exists |
+| First/copy saw priming is an admission restriction, not a proved unavoidable native constraint | Adopted. Resolved in the later first-gesture-high source review below, without inventing initial Low or an equip-time release |
 | Car05/Car11 do not establish an actual driver wheel or universal absence | Adopted. Preserve finite coverage and pending actual vehicle/seat identity; no guessed controls, broad discovery campaign or unrelated car wheel |
 | Scopes, flat UI, roomscale/head-volume, mounted aim and remote heads have actual production callers | Confirmed in source. Preserve documented geometry/output/lifetime/class subsets; their user-operated runtime rows stay open |
 | Private package can be mistaken for finished/deployed mod | Adopted. Identify it as not deployed, experimental/incomplete; supply exact source/product/layout/package identities and effective defaults |
@@ -35,10 +35,16 @@ model, muzzle/laser and scope placement must remain consistent without moving th
 shared network pose to hide an FP-only error. Native authored hands/arms remain;
 full-body/finger IK is not promised.
 
-Automatic first/copy melee admission remains incomplete. Existing unknown native
-history, actual stop/release completion and later quiet are deliberately preserved.
-Neither constructor fields, copied activity, an idle state nor a synthetic
-initializing release may be relabeled a native low witness.
+Automatic first/copy gesture admission is now implemented in the bounded native
+adapter: fresh receiver-fenced quiet permits a real first canonical press while
+initial history remains Unknown. Only normal native completion records High;
+Unknown/low invokes nothing. Actual stops reset the quiet fence. Astra caught a
+post-getter stop race; the corrected final locked admission rechecks that fence
+and preserves manual OR gesture reconciliation. Source GO covers engine SHA
+`6e87aded8fc9c8c2d4cfab1c2f4f56239214d3c40753985222737d65bc70c0fe`.
+Native copied-active contact/sound and actual role behavior remain user acceptance;
+no individual firing or other runtime probe ran. See
+[melee disposition](PHYSICAL_MELEE_CONSUMPTION.md).
 
 The bounded follow-up did not establish an automatic same-saw release during
 equip/BringUp/copy recovery or deferred tool application. No additional callback

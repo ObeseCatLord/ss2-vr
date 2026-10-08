@@ -9,6 +9,21 @@ constexpr bool nativeGestureQuietWitness(uint64_t after, uint64_t sequence, uint
                                         uint64_t quietSequence, uint64_t quietTick) noexcept {
     return quietSequence > after && quietSequence <= sequence && quietTick && quietTick <= tick;
 }
+// Unknown is not Low. A separately admitted fresh gesture may request a real
+// native press, whose normal completion establishes High. Unknown/manual-only
+// awaits the real operator callback; denied and in-flight requests do nothing.
+constexpr NativeConsumptionRecord::Edge nativeGestureReconcileEdge(
+    NativeConsumptionRecord::Edge edge, bool admitted, bool physical, bool inFlight) noexcept {
+    using Edge = NativeConsumptionRecord::Edge;
+    if (!admitted || inFlight) return Edge::None;
+    if (edge == Edge::Unknown) return physical ? Edge::Press : Edge::None;
+    return edge;
+}
+constexpr bool nativeGestureFenceCurrent(bool armed, bool reset, bool sameGeneration,
+    uint64_t after, uint64_t sequence, uint64_t tick, uint64_t quietSequence, uint64_t quietTick) noexcept {
+    return armed && !reset && sameGeneration &&
+        nativeGestureQuietWitness(after, sequence, tick, quietSequence, quietTick);
+}
 // One subrecord attached to an existing native-hand owner, never another entity
 // lookup table. Input/pose snapshots may be copied without copying this owner.
 // Used by the default-off unique-saw native adapter; ownership and exact native
@@ -19,6 +34,12 @@ struct NativeConsumptionBindingKey {
     bool operator==(const NativeConsumptionBindingKey&) const = default;
     bool valid() const noexcept {return player&&weapon&&hand<2;}
 };
+constexpr bool nativeConsumptionDispatchMatches(
+    NativeConsumptionBindingKey active, uint64_t activeEpoch, bool activeAuthority, unsigned activeSlot,
+    NativeConsumptionBindingKey current, uint64_t currentEpoch, bool currentAuthority, unsigned currentSlot) noexcept {
+    return active == current && activeEpoch == currentEpoch &&
+        activeAuthority == currentAuthority && activeSlot == currentSlot;
+}
 class NativeConsumptionBinding {
 public:
     using Edge=NativeConsumptionRecord::Edge;

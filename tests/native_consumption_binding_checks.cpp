@@ -9,6 +9,77 @@ using namespace ss2vr;
 static_assert(!std::is_copy_constructible_v<NativeConsumptionBinding>);
 static_assert(!std::is_move_constructible_v<NativeConsumptionBinding>);
 int main() {
+    using Edge=NativeConsumptionBinding::Edge;
+    const NativeConsumptionBindingKey dispatchKey{11,22,1};
+    assert(nativeConsumptionDispatchMatches(dispatchKey,1,true,3,dispatchKey,1,true,3));
+    assert(!nativeConsumptionDispatchMatches({11,33,1},1,true,3,dispatchKey,1,true,3));
+    assert(!nativeConsumptionDispatchMatches(dispatchKey,2,true,3,dispatchKey,1,true,3));
+    assert(!nativeConsumptionDispatchMatches(dispatchKey,1,false,3,dispatchKey,1,true,3));
+    assert(!nativeConsumptionDispatchMatches(dispatchKey,1,true,4,dispatchKey,1,true,3));
+    // A getter after early admission completes a real stop with unchanged
+    // topology. Final production fence must withdraw G without withdrawing
+    // manual demand or suppressing a release of a known High.
+    assert(nativeGestureFenceCurrent(true,false,true,10,12,12,12,12));
+    const bool stalePhysical = true;
+    const bool finalPhysical = stalePhysical && nativeGestureFenceCurrent(false,true,true,12,13,13,12,12);
+    assert(!finalPhysical);
+    NativeConsumptionBinding stopped;
+    assert(stopped.activate(dispatchKey,1));
+    assert(stopped.complete(dispatchKey,stopped.prepare(dispatchKey),false));
+    assert(nativeGestureReconcileEdge(stopped.edge(dispatchKey,finalPhysical),true,finalPhysical,false)==Edge::None);
+    assert(nativeGestureReconcileEdge(stopped.edge(dispatchKey,true),true,finalPhysical,false)==Edge::Press);
+    assert(!nativeGestureFenceCurrent(true,false,true,12,13,13,12,12));
+    assert(nativeGestureFenceCurrent(true,false,true,12,14,14,14,14));
+    assert(!nativeGestureFenceCurrent(true,false,false,12,14,14,14,14));
+    // Production decision + real receipt storage, controlled callback returns.
+    // This exercises first-use accounting, not native contact/sound behavior.
+    for (unsigned role = 0; role < 3; ++role) {
+        const NativeConsumptionBindingKey key{11,22,role % 2};
+        NativeConsumptionBinding fresh;
+        assert(fresh.activate(key,1));
+        unsigned presses=0,releases=0;
+        bool inFlight=false;
+        const auto decide = [&](bool manual,bool physical,bool admitted=true) {
+            return nativeGestureReconcileEdge(fresh.edge(key,manual||physical),admitted,physical,inFlight);
+        };
+        assert(decide(false,false)==Edge::None); // Unknown never becomes Low.
+        assert(decide(true,false)==Edge::None); // Await actual manual callback.
+        assert(decide(false,true,false)==Edge::None); // Failed owner admission.
+        assert(!nativeGestureQuietWitness(10,11,11,10,10));
+        assert(nativeGestureQuietWitness(10,12,12,12,12));
+        assert(decide(false,true)==Edge::Press);
+        const auto press=fresh.prepare(key);
+        inFlight=true;
+        ++presses; // Enter controlled original press, not yet completed.
+        assert(decide(false,true)==Edge::None); // Reentry cannot redispatch.
+        assert(fresh.edge(key,false)==Edge::Unknown); // No speculative High/Low.
+        assert(fresh.complete(key,press,true));
+        inFlight=false;
+        assert(decide(false,true)==Edge::None);
+        assert(decide(true,true)==Edge::None);
+        assert(decide(true,false)==Edge::None); // Manual keeps shared High.
+        assert(decide(false,true)==Edge::None); // Gesture keeps shared High.
+        assert(decide(false,false)==Edge::Release);
+        ++releases;
+        assert(fresh.complete(key,fresh.prepare(key),false));
+        assert(decide(false,false)==Edge::None);
+        assert(presses==1 && releases==1);
+        // Native stop fences through its sample. A later quiet cannot lend
+        // permission to a delayed pulse stamped with the old quiet.
+        assert(!nativeGestureQuietWitness(20,21,21,12,12));
+        assert(nativeGestureQuietWitness(20,22,22,22,22));
+        assert(!nativeGestureQuietWitness(20,19,19,12,12));
+        const auto stale=fresh.prepare(key);
+        fresh.retire();assert(fresh.activate(key,2));
+        assert(fresh.edge(key,false)==Edge::Unknown);
+        assert(!fresh.complete(key,stale,true));
+        // Actual nested completion supersedes outer first-press receipt.
+        const auto outer=fresh.prepare(key),inner=fresh.prepare(key);
+        assert(fresh.complete(key,inner,false));
+        assert(!fresh.complete(key,outer,true));
+        assert(!fresh.retire(key,outer));
+        assert(fresh.edge(key,false)==Edge::None);
+    }
     // Same-generation native high20 -> stop50 -> reset-fenced quiet60 ->
     // quiet70 arms. A delayed pulse40/quiet30 may not borrow that later arming.
     assert(nativeGestureQuietWitness(60, 70, 70, 70, 70));
@@ -21,7 +92,6 @@ int main() {
     assert(!nativeGestureQuietWitness(100, 102, 102, 103, 102));
     assert(!nativeGestureQuietWitness(100, 102, 102, 102, 103));
     assert(!nativeGestureQuietWitness(100, 102, 102, 102, 0));
-    using Edge=NativeConsumptionBinding::Edge;
     const NativeConsumptionBindingKey right{11,22,1},left{11,33,0};
     NativeConsumptionBinding owner;
     assert(!owner.activate({},1));assert(!owner.activate(right,0));
