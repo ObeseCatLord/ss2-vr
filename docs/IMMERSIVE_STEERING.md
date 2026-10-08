@@ -123,3 +123,25 @@ counts include duplicate logical paths. Runtime resource precedence, the actual
 seated instance and baked unnamed control geometry remain unresolved. A positively
 identified control mesh/bone and its physical pivot/axis relative to the seat are
 still required. No steering geometry or offset has been guessed or installed.
+
+
+## Completed nested metadata follow-up — 2026-10-08
+
+The subsequent collector searched all2,997 selected nested metadata entries:
+2,186 models,594 puppets,46 mechanisms,127 controllers and44 skeletons. It read
+177,186,181 bytes through CRC-checked archive reads and retained40,172 names and
+167,017 type declaration headers. This supersedes the earlier unopened *metadata*
+counts; it does not establish geometry or exhaustive serialized type coverage.
+The collector excludes pointer/template and external type declarations and does
+not resolve numeric object/member transforms. No driver control was positively
+identified. Numeric geometry in160 BMFs and36 worlds remains uninspected; three
+of those worlds previously received only dictionary/type/reference inspection.
+Counts include duplicate paths;12 noncontributing nested archives were not
+independently manifested in the collected JSON.
+
+Astra's bounded review identified one concrete next content gate: the rideable
+Sirius car model's referenced `Sirius_Car_05/Meshes/Car.bmf`. A dedicated read-only
+investigation now examines that mesh and its immediate model/seat chain. Runtime
+resource precedence, a visible driver's control and its pivot/axis/rim remain
+unproved. Physical steering remains unimplemented until positive geometry is
+established. Vehicle gameplay testing belongs to the user.

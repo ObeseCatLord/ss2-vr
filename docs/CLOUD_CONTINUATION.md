@@ -1,5 +1,17 @@
 # Cloud continuation — 2026-10-05
 
+Current PC checkpoint: MP controlling-local settlement and immutable raw per-hand
+capture have bounded Astra Source GO. Default-off SP unique-saw gesture/native
+consumption is connected and reviewed, with source-loss cancellation, independent
+hand retirement and receipt ordering corrected. All products/61 Debug+Release
+checks, both x86 linked/cleanup/MP/roomscale gates and artifacts pass. Exact source
+and product identities are in IMPLEMENTATION_STATUS.md. No new runtime/firing
+probe. MP physical melee/observer delivery and actual driver controls remain open;
+first/copy saw requires a real native release before fresh quiet can arm. Primary
+VR/firing/vehicle testing belongs to the user. See MP_LOCAL_ORIGIN_CAPTURE.md and
+PHYSICAL_MELEE_CONSUMPTION.md. Historical entries retain their original scope.
+
+
 Latest PC direct-scene work is in PC_GAMEPLAY_READINESS.md and DIRECT_GAMEPLAY_LAB.md.
 Current remote-head follow-up restricts writes to frozen VR stereo pairs and
 enables that bounded option. Ordinary desktop heads remain native. Typed resource

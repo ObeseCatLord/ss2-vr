@@ -17,7 +17,10 @@ ROOT = Path(__file__).resolve().parents[1]
 ENTRIES = [("primaryDownPredicate", 0, 0), ("primaryPressPredicate", 24, 1),
            ("primaryReleasePredicate", 24, 2), ("primaryHistoryPredicate", 24, 3),
            ("primaryHeldPredicate", 28, 4)]
-CALLBACKS = {"operatorFiring": 0, "fireButtonPressed": 4}
+CALLBACKS = {"operatorFiring": 0, "fireButtonPressed": 4,
+             "weaponFiringPressed": 4, "primaryPressed": 4, "primaryReleased": 4,
+             "sawCopied": 4, "sawAssigned": 4, "sawPutDown": 4,
+             "sawDeleted": 0, "sawWeaponPutDown": 0}
 
 
 def inspect(path):

@@ -11,6 +11,7 @@ struct VrSettings {
     float scopeEyeRelief = .1f; // Optical presentation parameter, not native zoom timing.
     bool immersiveSwimming = false;
     bool roomscale = false; // Development gate until controller/replication completion.
+    bool physicalMelee = false; // Unique-saw single-player integration gate.
     bool headFade = false;
     bool remoteHeadTracking = true;
     float headRadius = .12f, headClearanceMargin = .05f;

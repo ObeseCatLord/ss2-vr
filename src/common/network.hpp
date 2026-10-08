@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -133,6 +134,20 @@ inline bool normalizeWirePose(Pose &p, float maximumTranslation) {
     p.q.w /= length;
     return true;
 }
+// Shared by the wire validator and local raw-capture composition. This does not
+// validate transport identity or grant input; it only checks the existing volume.
+inline bool validatePoseCoordinates(PosePacket &p) {
+    if (!normalizeWirePose(p.head, MaximumHeadTranslation + TrackingBoundsSlack) ||
+        !normalizeWirePose(p.grip[0], MaximumHandTranslation + TrackingBoundsSlack) ||
+        !normalizeWirePose(p.grip[1], MaximumHandTranslation + TrackingBoundsSlack) ||
+        !headTranslationValid(p.head.p))
+        return false;
+    for (unsigned hand = 0; hand != 2; ++hand)
+        if ((p.validMask & (2u << hand)) ? !handTranslationInVolume(p.grip[hand].p)
+                                       : !handTranslationValid(p.head.p, p.grip[hand].p))
+            return false;
+    return true;
+}
 inline bool validatePose(PosePacket &p) {
     if (!p.clientNonce || !p.serverNonce || !p.sequence || !p.trackingGeneration ||
         (p.validMask & ~PoseValidMask) || (p.physicalDownMask & ~HandMask) || (p.fireMask & ~HandMask) ||
@@ -153,18 +168,10 @@ inline bool validatePose(PosePacket &p) {
         (p.zoomMask & p.wheelOrEquipBlockedMask) ||
         (p.zoomMask & ~(p.zoomPhysicalDownMask & p.zoomSampleEligibleMask)))
         return false;
-    if (!normalizeWirePose(p.head, MaximumHeadTranslation + TrackingBoundsSlack) ||
-        !normalizeWirePose(p.grip[0], MaximumHandTranslation + TrackingBoundsSlack) ||
-        !normalizeWirePose(p.grip[1], MaximumHandTranslation + TrackingBoundsSlack) ||
-        !headTranslationValid(p.head.p))
+    if (!validatePoseCoordinates(p))
         return false;
     for (unsigned hand = 0; hand != 2; ++hand) {
-        // Active/relay snapshots retain historical taps after pulseMask clears.
-        const bool positionValid = (p.validMask & (2u << hand))
-                                       ? handTranslationInVolume(p.grip[hand].p)
-                                       : handTranslationValid(p.head.p, p.grip[hand].p);
-        if (!positionValid || !validWeaponId(p.requestedWeapon[hand]) ||
-            !validWeaponId(p.nativeWeaponId[hand]))
+        if (!validWeaponId(p.requestedWeapon[hand]) || !validWeaponId(p.nativeWeaponId[hand]))
             return false;
         if (((p.zoomMask | p.pulseZoomMask) & (1u << hand)) &&
             (p.nativeWeaponId[hand] != 13 || p.requestedWeapon[hand] >= 0))
@@ -180,6 +187,98 @@ inline uint32_t outboundTargetHandle(bool client, uint32_t localHandle, uint32_t
 }
 inline bool outboundHandlesValid(bool localSourceResolved, uint32_t wireHandle) {
     return localSourceResolved && wireHandle != 0;
+}
+
+// Local-only provenance. Never serialized or treated as a movement receipt.
+// origin/turn are the CURRENT source rig when submitted; head/grips below are
+// raw calibrated tracking-space poses, before any tracking-volume clamp.
+struct LocalCaptureFrame {
+    Pose origin{};
+    float turn = 0;
+    uint32_t avatar = 0, producer = 0, session = 0, reference = 0;
+    uint32_t trackingEpoch = 0, trackingGeneration = 0;
+    uint64_t sequence = 0, tickMs = 0;
+};
+struct LocalPoseCapture {
+    LocalCaptureFrame frame;
+    Pose head{}, grip[2]{};
+};
+inline bool sameCaptureOwner(const LocalCaptureFrame &a, const LocalCaptureFrame &b) {
+    return a.avatar == b.avatar && a.producer == b.producer && a.session == b.session &&
+           a.reference == b.reference && a.trackingEpoch == b.trackingEpoch &&
+           a.trackingGeneration == b.trackingGeneration;
+}
+inline bool captureNotOlder(const LocalCaptureFrame &current, const LocalCaptureFrame &previous) {
+    return current.sequence >= previous.sequence && current.tickMs >= previous.tickMs &&
+           (current.sequence != previous.sequence || current.tickMs == previous.tickMs);
+}
+inline bool validRawCapturePose(const Pose &pose) {
+    if (!finitePose(pose)) return false;
+    const auto q = pose.q;
+    const double norm = double(q.x)*q.x + double(q.y)*q.y + double(q.z)*q.z + double(q.w)*q.w;
+    return std::abs(norm - 1.0) <= 32 * std::numeric_limits<float>::epsilon();
+}
+inline bool validLocalCapture(const LocalPoseCapture &capture, uint32_t trackingGeneration, uint64_t now,
+                              uint8_t activeHands) {
+    const auto &f = capture.frame;
+    if (!(f.avatar && f.producer && f.session && f.reference && f.trackingEpoch &&
+           f.trackingGeneration && f.trackingGeneration == trackingGeneration && f.sequence &&
+           f.tickMs && now >= f.tickMs && now - f.tickMs < MaxPoseAgeMs &&
+           std::isfinite(f.turn) && validRawCapturePose(f.origin) &&
+           validRawCapturePose(capture.head)) || (activeHands & ~HandMask)) return false;
+    for (unsigned hand = 0; hand < 2; ++hand)
+        if ((activeHands & (1u << hand)) && !validRawCapturePose(capture.grip[hand])) return false;
+    return true;
+}
+inline bool relativeCapturedHead(const LocalCaptureFrame &current, const Pose &rawHead, Pose &head) {
+    head = relativeTracking(current.origin, rawHead);
+    return finitePose(head) &&
+        std::isfinite(dot(Vec3{head.p.x, 0, head.p.z}, Vec3{head.p.x, 0, head.p.z}));
+}
+inline bool composeCapturedHand(const LocalCaptureFrame &current, const Pose &rawHead,
+                                const Pose &rawGrip, Pose &result) {
+    // Reject overflowing intermediates before the clamps could hide them.
+    Pose head;
+    if (!relativeCapturedHead(current, rawHead, head)) return false;
+    const auto grip = relativeTracking(current.origin, rawGrip);
+    const auto reach = grip.p - head.p;
+    if (!finitePose(grip) ||
+        !std::isfinite(dot(reach, reach)))
+        return false;
+    result = bodyHandTracking(current.origin, current.turn, rawHead, rawGrip);
+    return finitePose(result);
+}
+inline bool composeLocalPose(PosePacket &pose, const LocalPoseCapture &capture, uint64_t now) {
+    if (!validLocalCapture(capture, pose.trackingGeneration, now, uint8_t(pose.validMask >> 1))) return false;
+    Pose head;
+    if (!relativeCapturedHead(capture.frame, capture.head, head)) return false;
+    auto composed = pose;
+    composed.head = bodyHeadTracking(capture.frame.origin, capture.frame.turn, capture.head);
+    for (unsigned hand = 0; hand != 2; ++hand) {
+        // Inactive hands retain the existing canonical current-head position.
+        if (!(pose.validMask & (2u << hand))) composed.grip[hand] = Pose{{}, composed.head.p};
+        else if (!composeCapturedHand(capture.frame, capture.head, capture.grip[hand], composed.grip[hand]))
+            return false;
+    }
+    if (!validatePoseCoordinates(composed)) return false;
+    pose = composed;
+    return true;
+}
+// Coordinate rejection does not reject the connection. An inactive snapshot
+// still carries native capability/retirement metadata, never an invented release.
+inline bool prepareLocalPose(PosePacket &pose, const LocalPoseCapture &capture,
+                             const LocalCaptureFrame &previous, uint32_t avatar, uint64_t now) {
+    if ((pose.validMask & 1) && capture.frame.avatar == avatar &&
+        (!previous.avatar || !sameCaptureOwner(capture.frame, previous) ||
+         captureNotOlder(capture.frame, previous)) && composeLocalPose(pose, capture, now))
+        return true;
+    pose.validMask = 0;
+    pose.head = pose.grip[0] = pose.grip[1] = {};
+    invalidateWeaponIntents(pose, HandMask);
+    cancelWeaponRequests(pose, HandMask);
+    pose.wheelOrEquipBlockedMask |= HandMask;
+    pose.primarySampleEligibleMask = pose.primaryNeutralSampleMask = pose.zoomSampleEligibleMask = 0;
+    return false;
 }
 
 // A physical press survives a full reliable-send window only as a per-hand
@@ -246,9 +345,27 @@ class PendingIntents {
                 neutralRequired_ &= uint8_t(~bit);
         }
     }
-    bool retain(const PosePacket &pose, uint8_t pressedHands, uint64_t now) {
-        expire(now);
+    bool observeCapture(const PosePacket &pose, const LocalPoseCapture &capture, uint64_t now) {
+        if (!validLocalCapture(capture, pose.trackingGeneration, now, uint8_t(pose.validMask >> 1))) {
+            requireNeutral();
+            return false;
+        }
+        for (unsigned hand = 0; hand != 2; ++hand)
+            if (expiresAt_[hand]) {
+                if (!sameCaptureOwner(capture.frame, capture_[hand].frame))
+                    requireNeutral(uint8_t(1u << hand));
+                else if (!captureNotOlder(capture.frame, capture_[hand].frame)) {
+                    requireNeutral();
+                    return false;
+                }
+            }
         observeSnapshot(pose);
+        return true;
+    }
+    bool retain(const PosePacket &pose, uint8_t pressedHands, uint64_t now,
+                const LocalPoseCapture &capture) {
+        expire(now);
+        if (!observeCapture(pose, capture, now)) return false;
         bool retained = false;
         for (unsigned hand = 0; hand != 2; ++hand) {
             const uint8_t bit = uint8_t(1u << hand);
@@ -261,7 +378,7 @@ class PendingIntents {
                  (!(pose.zoomSampleEligibleMask & bit) || !pose.zoomInputGeneration[hand])))
                 continue;
             expiresAt_[hand] = now + ExpiryMs;
-            grip_[hand] = pose.grip[hand];
+            capture_[hand] = {capture.frame, capture.head, capture.grip[hand]};
             nativeWeaponId_[hand] = pose.nativeWeaponId[hand];
             zoomed_[hand] = (pose.zoomMask & bit) != 0;
             generation_[hand] = pose.trackingGeneration;
@@ -273,21 +390,34 @@ class PendingIntents {
         return retained;
     }
     // Compose without consuming: a failed native send must retain the same tap.
-    uint8_t apply(PosePacket &pose, uint64_t now) {
-        observeSnapshot(pose);
+    uint8_t apply(PosePacket &pose, uint64_t now, const LocalPoseCapture &current) {
+        if (!observeCapture(pose, current, now)) {
+            invalidateWeaponIntents(pose, HandMask);
+            return 0;
+        }
         const uint8_t pulses = mask(now);
         pose.pulseMask = pulses;
         pose.pulseZoomMask = 0;
         for (unsigned hand = 0; hand != 2; ++hand)
             if (pulses & (1u << hand)) {
-                pose.grip[hand] = grip_[hand];
+                Pose grip;
+                const auto &captured = capture_[hand];
+                if (!composeCapturedHand(current.frame, captured.head, captured.grip, grip) ||
+                    !normalizeWirePose(grip, MaximumHandTranslation + TrackingBoundsSlack) ||
+                    !handTranslationInVolume(grip.p)) {
+                    requireNeutral(uint8_t(1u << hand));
+                    invalidateWeaponIntents(pose, uint8_t(1u << hand));
+                    continue;
+                }
+                pose.grip[hand] = grip;
                 pose.nativeWeaponId[hand] = nativeWeaponId_[hand];
                 if (zoomed_[hand])
                     pose.pulseZoomMask |= uint8_t(1u << hand);
                 // observeSnapshot canceled any generation mismatch above.
                 pose.trackingGeneration = generation_[hand];
             }
-        return pulses;
+        filterPrimaryIntents(pose);
+        return pose.pulseMask;
     }
     uint8_t mask(uint64_t now) {
         expire(now);
@@ -319,7 +449,8 @@ class PendingIntents {
                 expires = 0;
     }
     uint64_t expiresAt_[2]{};
-    Pose grip_[2]{};
+    struct HandCapture { LocalCaptureFrame frame; Pose head{}, grip{}; };
+    HandCapture capture_[2]{};
     int16_t nativeWeaponId_[2]{-1, -1};
     uint32_t generation_[2]{};
     uint32_t intentEpoch_[2]{};

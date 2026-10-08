@@ -1,5 +1,48 @@
 # Implementation status — 2026-10-07
 
+## Reviewed MP origin and SP saw source — 2026-10-08
+
+The controlling-local-XR roomscale route now supports negotiated multiplayer
+roles while preserving original native server movement/correction. Retained
+per-hand input captures keep raw calibrated poses and recompose against the
+current origin; inactive hand independence, head-only overflow rejection and
+capability bootstrap are covered. Astra/xhigh bounded Source GO is recorded in
+[MP_LOCAL_ORIGIN_CAPTURE.md](MP_LOCAL_ORIGIN_CAPTURE.md). No MP runtime pass.
+
+The default-off single-player uniquely mapped circular-saw adapter now consumes
+physical gesture through exact native canonical/held boundaries, without writing
+native160/348. Astra caught and main corrected cross-hand retirement, lost-source
+cancellation, nested same-level receipt ordering and non-player receiver access.
+Final bounded Source GO is on engine SHA
+`81d95cad32bbdde4fbfc6cf4c63e18ab031c2f848605dee19505975aba1e8204`.
+See [PHYSICAL_MELEE_CONSUMPTION.md](PHYSICAL_MELEE_CONSUMPTION.md). Initial/copy
+history remains unknown until a real native release; MP gesture/observer delivery
+remains unimplemented. This slice is not full physical-melee completion.
+
+All products rebuilt on source fingerprint `3acc2744e4cba2ea291ae4c62e22bc3e26ce696ddd88c3765af03d2935b794e6`.
+All61 groups pass in Debug and Release with active assertions. Both x86 products
+pass linked10-callback ABI, native-finally, multiplayer dispatch, muzzle cleanup,
+roomscale integration and11 melee cleanup extents/12 transitive scalar bodies,
+normally and with Python optimization.13 private melee byte controls reject
+unsafe cleanup or missing TLS restoration. Positive native local-player admission
+is inspected at roomscale entry and callback revalidation; four branch inversion
+controls were rejected on the preceding worked source. Artifact contracts agree
+on IPC10/wire6, Input272/Request440/Ui352/Slot33554928/Shared83887840.
+Local Astra/xhigh tags were verified; backend routing introspection unavailable.
+
+| Product | SHA-256 |
+| --- | --- |
+| `d3d9.dll` | `ef239347b54a8d7c54f62d795784d0e8c04f3e1a8f86a253885a857b7624d002` |
+| `ss2vr_host.exe` | `6e52b652b59ca564323f99752a3c24df709c94cec27c1801a3e538ae663a0e92` |
+| `libopenxr_loader.dll` | `bb011caa82528c541a73967ce6408f82198ff4fd0358b38b54884719d863bd1d` |
+| `SS2VRServer.dll` | `be8aba2855abbe40ed5ec9f1fb5b234c443de146bce83ce7d5c0ab5865db3569` |
+
+No game, host, Wine/OpenXR process or individual firing probe ran for these
+changes. User-operated hardware/gameplay acceptance is separate. Driver grab
+geometry/controls, MP physical melee/observer delivery and first/copy usability
+remain active implementation work. Earlier entries below are historical evidence
+for their own source snapshots and do not override this current disposition.
+
 ## Active PC implementation
 
 Remote head palettes now require an admitted frozen VR stereo pair; ordinary

@@ -5,7 +5,8 @@
 namespace ss2vr {
 // One subrecord attached to an existing native-hand owner, never another entity
 // lookup table. Input/pose snapshots may be copied without copying this owner.
-// Not yet used by native hooks; ownership and completion admission remain separate.
+// Used by the default-off unique-saw native adapter; ownership and exact native
+// completion admission remain separate from this metadata helper.
 struct NativeConsumptionBindingKey {
     uint32_t player=0,weapon=0;
     unsigned hand=2;

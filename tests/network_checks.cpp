@@ -48,7 +48,296 @@ static std::string encodePose(const PosePacket &p) {
     check(encode(m, wire), "valid pose encodes");
     return wire;
 }
+// Legacy intent/credit fixtures already describe poses in an identity tracking
+// frame. Only tests synthesize that frame; production has no capture-free API.
+static LocalPoseCapture fixtureCapture(const PosePacket &p, uint64_t now) {
+    LocalPoseCapture c;
+    c.frame.avatar = 99;
+    c.frame.producer = 7;
+    c.frame.session = c.frame.reference = 1;
+    c.frame.trackingEpoch = c.frame.trackingGeneration = p.trackingGeneration;
+    c.frame.sequence = c.frame.tickMs = now;
+    c.head = p.head;
+    c.grip[0] = p.grip[0];
+    c.grip[1] = p.grip[1];
+    return c;
+}
+class FixturePendingIntents : public PendingIntents {
+  public:
+    bool retain(const PosePacket &p, uint8_t hands, uint64_t now) {
+        return PendingIntents::retain(p, hands, now, fixtureCapture(p, now));
+    }
+    uint8_t apply(PosePacket &p, uint64_t now) {
+        return PendingIntents::apply(p, now, fixtureCapture(p, now));
+    }
+};
+static bool nearPose(const Pose &a, const Pose &b) {
+    const auto d = a.p - b.p;
+    return dot(d, d) < 1e-10f && std::abs(a.q.x-b.q.x) < 1e-5f &&
+           std::abs(a.q.y-b.q.y) < 1e-5f && std::abs(a.q.z-b.q.z) < 1e-5f &&
+           std::abs(a.q.w-b.q.w) < 1e-5f;
+}
+static void rawCaptureChecks() {
+    static_assert(WireVersion == 6);
+    for (unsigned active = 0; active < 2; ++active) {
+        auto packet = validPose();
+        packet.validMask = uint8_t(1u | (2u << active));
+        packet.physicalDownMask = packet.fireMask = uint8_t(1u << active);
+        packet.primaryNeutralSampleMask = 0;
+        packet.nativeWeaponId[active] = 2;
+        auto capture = fixtureCapture(packet, 1000);
+        capture.grip[1-active].p.x = std::numeric_limits<float>::quiet_NaN();
+        capture.grip[1-active].q = {0, 0, 0, 0};
+        check(composeLocalPose(packet, capture, 1000) && validatePose(packet),
+              "an unavailable invalid offhand cannot reject the valid hand or tracked head");
+        check(nearPose(packet.grip[1-active], Pose{{}, packet.head.p}),
+              "unavailable hand geometry is canonical without reading its invalid raw pose");
+        PendingIntents isolated;
+        check(isolated.retain(packet, uint8_t(1u << active), 1000, capture) &&
+                  isolated.apply(packet, 1000, capture) == (1u << active),
+              "valid-hand retention and handoff remain independent of invalid inactive offhand");
+    }
+    {
+        auto headOnly = validPose();
+        headOnly.validMask = 1;
+        auto capture = fixtureCapture(headOnly, 1000);
+        capture.grip[0].p.z = std::numeric_limits<float>::infinity();
+        capture.grip[1].q.w = std::numeric_limits<float>::quiet_NaN();
+        check(composeLocalPose(headOnly, capture, 1000) && validatePose(headOnly),
+              "head articulation survives loss of both hand poses without inventing active hands");
+        check(headOnly.validMask == 1 && !headOnly.fireMask && !headOnly.pulseMask,
+              "head-only capture grants no firing or retained pulse");
+        const auto original = encodePose(headOnly);
+        capture.head.p.x = 1e20f;
+        check(!composeLocalPose(headOnly, capture, 1000) && encodePose(headOnly) == original,
+              "head-only finite overflow cannot hide behind the head clamp or mutate the packet");
+    }
+    auto first = validPose();
+    first.nativeWeaponId[1] = 2;
+    first.physicalDownMask = first.fireMask = 1;
+    first.primaryNeutralSampleMask = 2;
+    auto left = fixtureCapture(first, 1000);
+    left.head = pose(1.2f, -2.2f, 0);
+    left.grip[0] = pose(3, -2.2f, 0);
+    left.grip[1] = pose(1.2f, -2.2f, 0);
+    check(composeLocalPose(first, left, 1000), "raw clamp fixture composes through current rig");
+    check(nearPose(first.head, pose(.75f, -1.8f, 0)) &&
+              nearPose(first.grip[0], pose(2.05f, -1.8f, 0)),
+          "raw head and reach clamps use the existing production limits");
+    const auto originalLeftPacket = encodePose(first);
+    PendingIntents taps;
+    check(taps.retain(first, 1, 1000, left), "raw left capture retained before origin settlement");
+
+    auto second = validPose(2);
+    second.nativeWeaponId[1] = 2;
+    second.physicalDownMask = second.fireMask = 2;
+    second.primaryNeutralSampleMask = 1;
+    auto right = fixtureCapture(second, 1010);
+    right.frame.origin.p = {.4f, 0, 0};
+    right.head = pose(.8f, -.3f, .1f);
+    right.grip[0] = pose(1, -.5f, -.3f);
+    right.grip[1] = pose(-.4f, -.5f, -.3f);
+    check(composeLocalPose(second, right, 1010) && taps.retain(second, 2, 1010, right),
+          "right capture keeps its own raw head after a distinct origin settlement");
+
+    auto current = right;
+    current.frame.origin.p = {.5f, -.1f, .1f};
+    current.frame.turn = .7f;
+    current.frame.sequence = current.frame.tickMs = 1020;
+    auto outgoing = validPose(3);
+    outgoing.nativeWeaponId[1] = 2;
+    check(composeLocalPose(outgoing, current, 1020) && taps.apply(outgoing, 1020, current) == 3,
+          "both retained hands compose against the current origin and turn");
+    const auto expectedLeft = bodyHandTracking(current.frame.origin, current.frame.turn, left.head, left.grip[0]);
+    const auto expectedRight = bodyHandTracking(current.frame.origin, current.frame.turn, right.head, right.grip[1]);
+    check(nearPose(outgoing.grip[0], expectedLeft) && nearPose(outgoing.grip[1], expectedRight) &&
+              !nearPose(outgoing.grip[0], bodyHandTracking(current.frame.origin, current.frame.turn,
+                                                         current.head, left.grip[0])),
+          "each retained grip uses its captured raw head, not the newer packet head");
+    const auto affineOld = rotate(yaw(current.frame.turn), first.grip[0].p - current.frame.origin.p);
+    check(dot(outgoing.grip[0].p-affineOld, outgoing.grip[0].p-affineOld) > .01f,
+          "recomposition recovers clamped raw motion rather than shifting an old clamped grip");
+    auto valid = outgoing;
+    check(validatePose(valid), "rebased composite still passes every existing wire bound");
+    const auto handed = outgoing;
+    const auto handedBytes = encodePose(handed);
+    check(encodePose(first) == originalLeftPacket, "retention never mutates the original capture packet");
+
+    auto retry = validPose(4);
+    retry.nativeWeaponId[1] = 2;
+    current.frame.origin.p.x += .2f;
+    current.frame.sequence = current.frame.tickMs = 1030;
+    check(composeLocalPose(retry, current, 1030) && taps.apply(retry, 1030, current) == 3 &&
+              nearPose(retry.grip[0], bodyHandTracking(current.frame.origin, current.frame.turn,
+                                                    left.head, left.grip[0])) &&
+              encodePose(handed) == handedBytes,
+          "another unsent composition uses immutable raw captures without rewriting handed-off packets");
+    const auto beforeCorrection = retry;
+    // Native body correction changes the observer anchor, not the local origin.
+    current.frame.sequence = current.frame.tickMs = 1040;
+    auto afterCorrection = validPose(5);
+    afterCorrection.nativeWeaponId[1] = 2;
+    check(composeLocalPose(afterCorrection, current, 1040) &&
+              taps.apply(afterCorrection, 1040, current) == 3 &&
+              nearPose(afterCorrection.grip[0], beforeCorrection.grip[0]) &&
+              nearPose(afterCorrection.grip[1], beforeCorrection.grip[1]),
+          "native correction with no origin settlement adds no coordinate payment");
+    const auto correctedWorld = compose(pose(-.2f, 0, 0), afterCorrection.grip[0]);
+    check(std::abs(correctedWorld.p.x - (beforeCorrection.grip[0].p.x-.2f)) < 1e-5f,
+          "native correction remains visible through the actual observer body anchor");
+    current.frame.sequence = current.frame.tickMs = 1200;
+    auto expired = validPose(6);
+    expired.nativeWeaponId[1] = 2;
+    check(composeLocalPose(expired, current, 1200) && taps.apply(expired, 1200, current) == 2,
+          "rebasing never renews either hand's independent original 200ms TTL");
+    taps.consume(2);
+    check(!taps.apply(expired, 1200, current), "successful handoff consumes the original pending owner once");
+
+    for (unsigned field = 0; field != 6; ++field) {
+        PendingIntents retired;
+        check(retired.retain(first, 1, 1000, left), "identity case retains original raw capture");
+        auto replacement = left;
+        replacement.frame.sequence = replacement.frame.tickMs = 1010;
+        switch (field) {
+        case 0: ++replacement.frame.avatar; break;
+        case 1: ++replacement.frame.producer; break;
+        case 2: ++replacement.frame.session; break;
+        case 3: ++replacement.frame.reference; break;
+        case 4: ++replacement.frame.trackingEpoch; replacement.frame.origin.p.x = .3f; break;
+        case 5: ++replacement.frame.trackingGeneration; break;
+        }
+        auto held = first;
+        held.trackingGeneration = replacement.frame.trackingGeneration;
+        check(!retired.apply(held, 1010, replacement) && !held.fireMask && !retired.primaryAllowed(0),
+              "owner/producer/session/reference/recenter/tracking changes retire old capture and require neutral");
+        held.fireMask = held.physicalDownMask = 0;
+        held.primaryNeutralSampleMask = 3;
+        check(retired.observeCapture(held, replacement, 1010) && retired.primaryAllowed(0),
+              "only an eligible current neutral rearms the retired hand");
+    }
+    for (unsigned invalid = 0; invalid != 15; ++invalid) {
+        PendingIntents guarded;
+        check(guarded.retain(first, 1, 1000, left), "invalid-capture case starts with a retained press");
+        auto bad = left;
+        bad.frame.sequence = bad.frame.tickMs = 1010;
+        const auto nan = std::numeric_limits<float>::quiet_NaN();
+        const auto inf = std::numeric_limits<float>::infinity();
+        switch (invalid) {
+        case 0: bad.head.p.x = nan; break;
+        case 1: bad.grip[0].p.z = inf; break;
+        case 2: bad.grip[1].q.w = nan; break;
+        case 3: bad.frame.origin.p.y = inf; break;
+        case 4: bad.frame.turn = nan; break;
+        case 5: bad.frame.origin.q = {0,0,0,0}; break;
+        case 6: bad.frame.avatar = 0; break;
+        case 7: bad.frame.producer = 0; break;
+        case 8: bad.frame.session = 0; break;
+        case 9: bad.frame.reference = 0; break;
+        case 10: bad.frame.trackingEpoch = 0; break;
+        case 11: bad.frame.sequence = 0; break;
+        case 12: bad.frame.tickMs = 1011; break;
+        case 13: bad.frame.tickMs = 810; break;
+        case 14: ++bad.frame.trackingGeneration; break;
+        }
+        auto packet = first;
+        const auto untouched = encodePose(packet);
+        check(!composeLocalPose(packet, bad, 1010) && encodePose(packet) == untouched,
+              "invalid/nonfinite/stale frame cannot partially replace outgoing coordinates");
+        check(!guarded.apply(packet, 1010, bad) && !packet.fireMask && !packet.pulseMask &&
+                  !guarded.primaryAllowed(0) && !guarded.retain(first, 1, 1010, bad),
+              "unusable current provenance cancels intent and cannot synthesize neutral");
+    }
+    PendingIntents stale;
+    check(stale.retain(first, 1, 1000, left), "stale-sequence case retains capture");
+    auto older = left;
+    older.frame.sequence = 999;
+    auto oldPacket = first;
+    oldPacket.fireMask = oldPacket.physicalDownMask = 0;
+    oldPacket.primaryNeutralSampleMask = 3;
+    check(!stale.apply(oldPacket, 1010, older) && !stale.primaryAllowed(0),
+          "an older source sequence cannot rearm a pending hand even if it claims neutral");
+    older = left;
+    ++older.frame.tickMs;
+    check(!captureNotOlder(older.frame, left.frame), "one input sequence cannot acquire a different source tick");
+    auto huge = left;
+    huge.head.p.x = std::numeric_limits<float>::max();
+    auto hugePacket = first;
+    check(!composeLocalPose(hugePacket, huge, 1000), "finite raw overflow cannot be hidden by a clamp");
+}
+static void captureBootstrapChecks() {
+    for (unsigned unavailable = 0; unavailable != 5; ++unavailable) {
+        auto inactive = validPose();
+        inactive.physicalDownMask = inactive.fireMask = 1;
+        inactive.primaryNeutralSampleMask = 2;
+        inactive.requestedWeapon[0] = 2;
+        auto capture = fixtureCapture(inactive, 1000);
+        capture.head = pose(2, 1.5f, -.5f); // Tracking can precede the first origin initialization.
+        switch (unavailable) {
+        case 0: capture = {}; break; // No HMD/unknown input owner.
+        case 1: inactive.validMask = 0; break; // Positive input, but not enabled before Hello.
+        case 2: capture.head.p.x = std::numeric_limits<float>::quiet_NaN(); break;
+        case 3: ++capture.frame.avatar; break;
+        case 4: ++capture.frame.trackingGeneration; break;
+        }
+        const auto rawHeld = inactive.physicalDownMask;
+        const auto release = inactive.releasedSerial[0];
+        PendingIntents pending;
+        const bool coordinatesReady = prepareLocalPose(inactive, capture, {}, 99, 1000);
+        if (!coordinatesReady) pending.requireNeutral();
+        check(!coordinatesReady && !pending.primaryAllowed(0) && !inactive.validMask &&
+                  !inactive.fireMask && !inactive.zoomMask && !inactive.pulseMask &&
+                  !inactive.primaryNeutralSampleMask && !inactive.primarySampleEligibleMask &&
+                  !inactive.zoomSampleEligibleMask && inactive.requestedWeapon[0] == -1 &&
+                  inactive.physicalDownMask == rawHeld && inactive.releasedSerial[0] == release &&
+                  nearPose(inactive.head, Pose{}),
+              "unknown/inactive/mismatched capture excludes all intent without fabricating raw release");
+        ConsumptionCredits credits;
+        Message hello, decoded;
+        hello.kind = Kind::Hello;
+        hello.hello.nonce = 11;
+        std::string bytes;
+        check(credits.grant({11,0,0}) && encode(hello, bytes) && parse(bytes, decoded) == ParseResult::Valid &&
+                  decoded.kind == Kind::Hello && !credits.grant({11,0,0}),
+              "Hello negotiates independently of coordinate admission and keeps one outstanding credit");
+        OrderedPosePolicy peer;
+        check(peer.validation.bindCapability(11,22) && credits.acknowledge({11,22,0,{1,1}},11,0),
+              "Hello acknowledgement establishes capability without a tracked pose");
+        IntentInputBoundary boundary;
+        check(boundary.install(1, 1000, 1001) && !boundary.echo(1000,1000,1001),
+              "bootstrap ACK cannot admit the pre-ACK cached source sample");
+        Ack ack;
+        PosePacket observed;
+        const auto inactiveBytes = encodePose(inactive);
+        check(credits.grant({11,22,1}) && peer.receive(inactive,1002,ack) &&
+                  peer.freeze(1002,observed) && !observed.validMask && !observed.fireMask &&
+                  !peer.validation.physicalFireAllowed(0) && !peer.validation.zoomAllowed(0) &&
+                  peer.finishInterval(ack) && credits.acknowledge(ack,11,22) && !credits.count(),
+              "inactive pose still completes the existing consumption/ACK lifecycle without arming input");
+        auto active = validPose(2);
+        active.physicalDownMask = active.fireMask = 1;
+        active.primaryNeutralSampleMask = 2;
+        auto fresh = fixtureCapture(active, 1003);
+        check(boundary.echo(1003,1003,1003) == 1 && prepareLocalPose(active,fresh,{},99,1003) &&
+                  pending.observeCapture(active,fresh,1003),
+              "post-ACK enabled tracking can enter the same local capture path");
+        pending.filterPrimaryIntents(active);
+        check(!active.fireMask && !pending.primaryAllowed(0) &&
+                  credits.grant({11,22,2}) && peer.receive(active,1003,ack) &&
+                  peer.freeze(1003,observed) && !observed.fireMask &&
+                  peer.finishInterval(ack) && credits.acknowledge(ack,11,22),
+              "held input across bootstrap remains blocked until a real current neutral");
+        active = validPose(3);
+        active.releasedSerial[0] = 2;
+        fresh = fixtureCapture(active,1004);
+        check(prepareLocalPose(active,fresh,{},99,1004) && pending.observeCapture(active,fresh,1004) &&
+                  pending.primaryAllowed(0) && peer.receive(active,1004,ack) &&
+                  peer.validation.physicalFireAllowed(0) && encodePose(inactive) == inactiveBytes,
+              "eligible post-bootstrap neutral rearms normally without mutating the inactive handed packet");
+    }
+}
 int main() {
+    rawCaptureChecks();
+    captureBootstrapChecks();
     Message hello{};
     hello.kind = Kind::Hello;
     hello.hello.nonce = 0x1122334455667788ull;
@@ -387,7 +676,7 @@ int main() {
           "only the exact completed pose token returns credit");
     check(!credits.retire({13, 23, 1}) && credits.count() == 3,
           "an ACK from another capability cannot free reliable credit");
-    PendingIntents pending;
+    FixturePendingIntents pending;
     auto leftTap = validPose();
     leftTap.physicalDownMask = leftTap.fireMask = 1;
     leftTap.primaryNeutralSampleMask = uint8_t(HandMask & ~leftTap.physicalDownMask & leftTap.primarySampleEligibleMask);
@@ -423,7 +712,7 @@ int main() {
           "first neutral snapshot occupies the native consumption slot");
     check(!stream.finishInterval(ack) && window.hasOutstandingCapability(11, 22),
           "arrival alone cannot return consumption credit");
-    PendingIntents taps;
+    FixturePendingIntents taps;
     taps.observeSnapshot(latest);
     auto press = latest;
     press.physicalDownMask = press.fireMask = 1;
@@ -485,7 +774,7 @@ int main() {
     // The two presses deliberately come from different physical head positions.
     OrderedPosePolicy movingRig;
     ConsumptionCredits movingCredit;
-    PendingIntents movingTaps;
+    FixturePendingIntents movingTaps;
     auto neutralRig = validPose(1);
     neutralRig.head = neutralRig.grip[0] = neutralRig.grip[1] = pose(0, 0, 0);
     neutralRig.nativeWeaponId[1] = 2;
@@ -638,7 +927,7 @@ int main() {
               stream.validation.physicalFireAllowed(0) && stream.finishInterval(ack),
           "new-generation real neutral arms only after processing");
 
-    PendingIntents cancellation;
+    FixturePendingIntents cancellation;
     check(cancellation.retain(press, 1, 1300) && cancellation.retain(otherPress, 2, 1301),
           "cancellation scenario retains original taps for both hands");
     auto changed = validPose();
@@ -733,7 +1022,7 @@ int main() {
             auto initial = validPose(1);
             check(causal.receive(initial, 3000, ack) && causal.freeze(3001, sample) && causal.finishInterval(ack),
                   "Both raw primary streams begin admitted from actual neutral");
-            PendingIntents retained;
+            FixturePendingIntents retained;
             retained.observeSnapshot(initial);
             TriggerGate nativeGate;
             bool physical = false;
@@ -817,7 +1106,7 @@ int main() {
                   "Current neutral witness remains independently attributed to the opposite hand");
         }
     }
-    PendingIntents cachedNeutral;
+    FixturePendingIntents cachedNeutral;
     cachedNeutral.requireNeutral(1);
     auto cachedZero = validPose();
     cachedZero.intentEpoch[0] = 0;
@@ -886,7 +1175,7 @@ int main() {
               retiredStream.observedPrimaryInputGeneration[0] == 2 && retiredStream.observedReleasedSerial[0] == 2 &&
               retiredStream.observedZoomInputGeneration[0] == 2 && retiredStream.observedZoomReleasedSerial[0] == 2,
           "A retired stream with a newer carrier sequence cannot revive itself or poison current release baselines");
-    PendingIntents aggregateTap;
+    FixturePendingIntents aggregateTap;
     ConsumptionCredits debt;
     check(debt.grant({41, 42, 1}) && debt.grant({43, 44, 1}) && debt.grant({45, 46, 1}) &&
               debt.grant({47, 48, 1}) && debt.full() && aggregateTap.retain(press, 1, 2300),
@@ -1036,7 +1325,7 @@ int main() {
     for (unsigned hand = 0; hand < 2; ++hand) {
         const uint8_t bit = uint8_t(1u << hand), other = uint8_t(3u ^ bit);
         for (bool historicallyZoomed : {false, true}) {
-            PendingIntents retainedZoom;
+            FixturePendingIntents retainedZoom;
             auto shot = validPose();
             shot.nativeWeaponId[0] = shot.nativeWeaponId[1] = 13;
             shot.physicalDownMask = shot.fireMask = bit;
@@ -1115,7 +1404,7 @@ int main() {
                   "rejected shot is acknowledged once and its zoom context never replays");
         }
     }
-    PendingIntents oppositeHistories;
+    FixturePendingIntents oppositeHistories;
     auto twoShots = validPose();
     twoShots.nativeWeaponId[0] = twoShots.nativeWeaponId[1] = 13;
     twoShots.fireMask = twoShots.physicalDownMask = 3;
@@ -1135,7 +1424,7 @@ int main() {
     check(oppositeHistories.apply(twoNewest, 4002) == 2 && !twoNewest.pulseZoomMask &&
               twoNewest.zoomMask == 2 && intervalZoomMask(twoNewest) == 0,
           "left cancellation preserves the right unzoomed shot's historical override");
-    PendingIntents streamHistories;
+    FixturePendingIntents streamHistories;
     auto streamShots = twoShots;
     streamShots.zoomMask = streamShots.zoomPhysicalDownMask = 2;
     check(streamHistories.retain(streamShots, 3, 4050),
@@ -1161,7 +1450,7 @@ int main() {
     oppositeHistories.requireNeutral(); // Existing capability reset's retention boundary.
     check(!oppositeHistories.apply(twoNewest, 4401) && !twoNewest.pulseZoomMask,
           "capability retirement makes prior shot zoom context inaccessible");
-    PendingIntents expiringZoom;
+    FixturePendingIntents expiringZoom;
     auto zoomReleased = twoShots;
     zoomReleased.fireMask = zoomReleased.physicalDownMask = zoomReleased.zoomMask = 0;
     zoomReleased.primaryNeutralSampleMask = uint8_t(HandMask & ~zoomReleased.physicalDownMask & zoomReleased.primarySampleEligibleMask);

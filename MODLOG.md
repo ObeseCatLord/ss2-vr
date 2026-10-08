@@ -1422,3 +1422,28 @@ conditional aborts. Full products/61 Debug groups and artifact contracts pass on
 source03e67658a13b1e9bcab50e3165afdb1822f6ee8c4598eecbf78ab938541a1994.
 Helpers remain inactive; native saw connection and observer delivery are open.
 No runtime or individual firing probe; user-primary testing remains in effect.
+
+
+## Local-owner MP movement and connected SP saw consumption
+
+Implemented reviewed controlling-local-XR native roomscale settlement with native
+ClientAction/discrepancy/correction propagation. Immutable raw per-hand captures
+recompose at future handoff with current origin/turn. Fixed bootstrap without
+tracking, inactive-hand independence and pre-clamp head-only overflow.
+
+Connected default-off unique-saw physical gesture to original canonical press,
+exact base-stop completion before sound, scoped original held predicate and
+normal known-level base-step observation. Stationary existing-owner receipts
+survive copied snapshots and source loss; native160/348 remain manual-only.
+Astra review found four defects and main fixed all: target-specific retirement,
+cancellation after Snapshot loss, nested same-level revision and pre-getter
+player receiver admission. Bounded final SP/MP Source GO; backend routing
+introspection unavailable despite locally verified Astra/xhigh tags.
+
+All products rebuilt;61 Debug+Release groups, both x86 linked/native-finally/
+melee/muzzle/MPdispatch/roomscale/artifact gates pass normal/-O.13 melee cleanup
+byte controls rejected; positive-local predicate branch controls rejected in the
+preceding worked source. Exact source/products in IMPLEMENTATION_STATUS.md.
+No runtime or individual firing test; the user performs primary gameplay tests.
+Full MP gesture/observer delivery, first/copy usability and actual driver grab
+controls remain unfinished. Source checkpoint is development-only.

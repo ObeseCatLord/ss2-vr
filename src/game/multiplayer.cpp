@@ -112,11 +112,26 @@ struct Local {
     network::PendingIntents pending;
     network::ConsumptionCredits credits;
     network::PosePacket latest;
+    network::LocalPoseCapture capture;
     bool hasLatest = false;
     uint64_t inputSequence = 0;
     IntentInputBoundary intentBoundary[2];
 };
 static Local local;
+// Existing Local/Pending owners only. Preserve all native consumption tokens;
+// unusable coordinates revoke intent, never manufacture a release or an ACK.
+static void rejectLocalCapture() {
+    local.pending.requireNeutral();
+    local.hasLatest = false;
+    local.lastFireMask = 0;
+    network::invalidateWeaponIntents(local.latest, network::HandMask);
+    for (auto &peer : peers)
+        if (peer.avatar == local.avatar && peer.brain == local.brain && local.net == activeServer) {
+            peer.validation.invalidateTracking();
+            peer.frozen.valid = false;
+            // Retire eligibility, not the already handed-off packet or token.
+        }
+}
 // Caller holds the existing MP lock. No IPC lock is acquired on the ACK path.
 static void installIntentEpochs(const uint32_t (&epochs)[2], uint64_t now) {
     for (unsigned hand = 0; hand != 2; ++hand)
@@ -560,8 +575,9 @@ struct ClientHandoff {
     bool granted = false;
 };
 static bool submitInput(void *player, network::PosePacket &admitted, bool reliableEdge,
-            uint64_t inputSequence, uint64_t inputTickMs, ClientHandoff &handoff) {
-    const auto incoming = admitted;
+            const network::LocalPoseCapture &capture, ClientHandoff &handoff) {
+    auto incoming = admitted;
+    const auto inputSequence = capture.frame.sequence, inputTickMs = capture.frame.tickMs;
     network::invalidateWeaponIntents(admitted, network::HandMask);
     admitted.intentEpoch[0] = admitted.intentEpoch[1] = 0;
     if (!hooksReady.load(std::memory_order_acquire) || !player || !currentNet())
@@ -584,6 +600,14 @@ static bool submitInput(void *player, network::PosePacket &admitted, bool reliab
             local.avatar = avatar;
             local.clientNonce = nonce();
         }
+        const bool coordinatesReady = network::prepareLocalPose(incoming, capture, local.capture.frame, avatar, now);
+        if (!coordinatesReady || (local.capture.frame.avatar &&
+                                 !network::sameCaptureOwner(capture.frame, local.capture.frame)))
+            rejectLocalCapture();
+        if (coordinatesReady)
+            local.capture = capture;
+        // Hello and capability expiry must run even without usable tracking.
+        // The first enabled remote-client source itself depends on that Hello.
         if (inputSequence > local.inputSequence)
             local.inputSequence = inputSequence;
         if (isServer()) {
@@ -606,6 +630,11 @@ static bool submitInput(void *player, network::PosePacket &admitted, bool reliab
                 packet.serverNonce = peer.validation.serverNonce;
                 packet.sequence = ++local.sequence;
                 stampInputEpochs(packet, inputSequence, inputTickMs, now);
+                if (coordinatesReady)
+                    local.pending.observeCapture(packet, capture, now);
+                local.pending.filterPrimaryIntents(packet);
+                local.latest = packet;
+                local.hasLatest = true;
                 network::Ack discarded{};
                 accepted = receivePeer(peer, packet, now, discarded);
                 peer.validation.filterWeaponIntents(packet);
@@ -631,14 +660,15 @@ static bool submitInput(void *player, network::PosePacket &admitted, bool reliab
             packet.clientNonce = local.clientNonce;
             packet.serverNonce = local.serverNonce;
             stampInputEpochs(packet, inputSequence, inputTickMs, now);
-            local.pending.observeSnapshot(packet);
+            if (coordinatesReady)
+                local.pending.observeCapture(packet, capture, now);
             local.pending.filterPrimaryIntents(packet);
             local.latest = packet;
             local.hasLatest = true;
             admitted = packet;
             const uint8_t pressed = packet.fireMask & ~local.lastFireMask;
             local.lastFireMask = packet.fireMask;
-            retained = reliableEdge && local.pending.retain(packet, pressed, now);
+            retained = coordinatesReady && reliableEdge && local.pending.retain(packet, pressed, now, capture);
             retained = local.hasLatest || retained;
             if (!local.serverNonce && local.clientNonce && !local.credits.full() &&
                 !local.credits.hasOutstandingCapability(local.clientNonce, 0)) {
@@ -656,7 +686,15 @@ static bool submitInput(void *player, network::PosePacket &admitted, bool reliab
                 outgoing.pose = local.latest;
                 outgoing.pose.serverNonce = local.serverNonce;
                 outgoing.pose.sequence = ++local.sequence;
-                sentPulseMask = local.pending.apply(outgoing.pose, now);
+                if (coordinatesReady)
+                    sentPulseMask = local.pending.apply(outgoing.pose, now, local.capture);
+                if (!network::validatePose(outgoing.pose)) {
+                    rejectLocalCapture();
+                    network::invalidateWeaponIntents(admitted, network::HandMask);
+                    admitted.intentEpoch[0] = admitted.intentEpoch[1] = 0;
+                    retained = false;
+                    return;
+                }
                 token = {local.clientNonce, local.serverNonce, outgoing.pose.sequence};
                 ready = handoff.granted = local.credits.grant(token);
                 if (ready)
@@ -682,12 +720,12 @@ static bool submitInput(void *player, network::PosePacket &admitted, bool reliab
     return accepted || retained;
 }
 bool submit(void *player, network::PosePacket &admitted, bool reliableEdge,
-            uint64_t inputSequence, uint64_t inputTickMs) {
+            const network::LocalPoseCapture &capture) {
     bool result = false;
     ClientHandoff handoff; // Explicit token/phase ownership ABOVE finally.
     withNativeFinally([&] {
         if (nativeInputHealthy())
-            result = submitInput(player, admitted, reliableEdge, inputSequence, inputTickMs, handoff);
+            result = submitInput(player, admitted, reliableEdge, capture, handoff);
     }, [&](bool aborted) noexcept {
         if (handoff.granted && handoff.phase == network::TransportPhase::BeforeCall) {
             AcquireSRWLockExclusive(&lock);

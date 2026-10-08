@@ -44,3 +44,13 @@ sequence and cannot be inferred from reliable ACK order.
 The helper is now used by the development-gated single-player controller in
 engine.cpp; see ROOMSCALE_LOCAL_CONTROLLER.md. The default remains disabled,
 and no game, Wine, OpenXR, headset or multiplayer process was run.
+
+
+## Controlling-local multiplayer source follow-up
+
+The same helper now serves the controlling local XR actor in supported multiplayer
+roles. This supersedes the single-player source gate above; it does not replace
+native server movement/correction or establish a general authority receipt. Each
+actual local settlement publishes its origin once. Retained raw hand captures
+recompose against the current origin. See MP_LOCAL_ORIGIN_CAPTURE.md for the
+reviewed ownership design and user-operated runtime limits.

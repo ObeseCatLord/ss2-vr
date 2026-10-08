@@ -1,10 +1,11 @@
 # Development-gated local roomscale controller
 
-The single-player controller is connected in source. `[Roomscale] Enabled=0`
-remains the packaged/default setting. Leave it disabled during this continuation;
-this is not the final device-test build. Multiplayer movement is explicitly
-excluded until authoritative body/origin settlement is paired. No native game,
-Windows/Wine, OpenXR, headset or multiplayer session was run.
+The controlling-local-XR controller is connected for single-player and negotiated
+multiplayer roles. `[Roomscale] Enabled=0` remains the development default. Source
+review accepts one local native settlement owner with original multiplayer
+propagation, not a second server payment adapter. This supersedes the historical
+single-player exclusion. See [MP_LOCAL_ORIGIN_CAPTURE.md](MP_LOCAL_ORIGIN_CAPTURE.md).
+Gameplay/collision/convergence acceptance remains user-operated.
 
 ## Native extent and actor admission
 
@@ -90,6 +91,6 @@ rejected. Existing query-observer and swimming argument checks remain valid.
 New publication and readability helpers have production-code regression tests;
 these do not execute or emulate the native physics engine.
 
-Default enablement, authoritative multiplayer pairing and the rest of the full
+Default enablement, actual multiplayer convergence and the rest of the full
 VR implementation remain unfinished. These checks are not runtime verification
 or a claim that the final mod is ready.

@@ -7,7 +7,8 @@ namespace ss2vr {
 // Metadata for a completed native input consumption, NOT a combat state
 // machine. The native binding owner must provide stable storage and a unique,
 // nonzero lifetime epoch. Never embed this in a copied sample row.
-// No native hook uses this helper yet; callback/lifetime admission is separate.
+// The default-off unique-saw adapter supplies native callback/lifetime admission;
+// this helper alone neither proves nor invokes a native consumption.
 constexpr uint64_t nextConsumptionRevision(uint64_t revision) noexcept {
     return revision == std::numeric_limits<uint64_t>::max() ? 0 : revision + 1;
 }

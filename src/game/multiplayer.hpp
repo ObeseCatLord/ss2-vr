@@ -14,9 +14,15 @@ bool negotiatedLocal();
 bool knownVrAvatar(uint32_t avatar) noexcept;
 // True when the latest pose or a bounded physical pulse was retained locally,
 // or a reliable Pose entered native transport. The in/out pose also returns
-// current admission independently of transport credit or send success.
+// current admission independently of transport credit or send success. Capture
+// is mandatory, local-only, and owns the exact raw calibrated poses plus CURRENT
+// origin/turn. frame.avatar is the native local player handle; trackingEpoch is
+// the rig epoch and trackingGeneration matches pose.trackingGeneration. Producer,
+// session/reference and sequence/tickMs come from that same admitted input.
+// Missing/inactive coordinates require neutral and carry only an inactive Pose;
+// they do not block the Hello/capability lifecycle that enables initial tracking.
 bool submit(void *player, network::PosePacket &pose, bool reliableEdge,
-            uint64_t inputSequence, uint64_t inputTickMs);
+            const network::LocalPoseCapture &capture);
 // Recheck a captured native-client firing intent against current ACK/input
 // admission. This borrows existing Local/Pending state, not another scheduler.
 bool localPrimaryAllowed(void *player, unsigned hand, uint32_t intentEpoch,

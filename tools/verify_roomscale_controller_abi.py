@@ -82,10 +82,31 @@ def verify(game,obj,root):
                   'c.reads.seal()', 'c.reads.clear()', 'roomscaleResourceGatesUsable()',
                   'armRoomscalePlacementAfterEnable()', 'roomscaleCollisionKernelsUsable()']:
         require(guard in source,'Missing explicit integration guard: '+guard)
-    require('||!singlePlayer())return;' in source,'Multiplayer must remain gated until settlement is paired')
+    role_guard = '(!singlePlayer()&&!multiplayer::server()&&!multiplayer::negotiatedLocal())'
+    require('!local(c.snapshot.player)||\n       ' + role_guard in source and
+            '!local(live.player)||' + role_guard in source,
+            'Only the controlling local XR actor may perform roomscale settlement')
+    local_cell = re.findall(r'0x([0-9a-f]+) ss2vr::game::isLocal$', symbols, re.M)
+    require(len(local_cell) == 1, 'Missing native local-player predicate cell')
+    for fragment in ['runPostSimulationRoomscale(', 'roomscaleOwnerCurrent(']:
+        extent = select(fragment)
+        instructions = [i.split(' <', 1)[0] for i in code(extent)]
+        loads = [i for i, instruction in enumerate(instructions)
+                 if instruction == 'mov eax,ds:' + hex(int(local_cell[0], 16))]
+        require(len(loads) == 1, 'Missing/ambiguous compiled native local-player admission')
+        window = instructions[loads[0]:loads[0]+6]
+        require(len(window) == 6 and window[1] == 'test eax,eax' and
+                window[2].startswith('je ') and window[3] == 'call eax' and
+                window[4] == 'test eax,eax' and window[5] == window[2],
+                'Unavailable/false native local predicate must both reject movement')
+        require('multiplayer::server()' in extent and 'multiplayer::negotiatedLocal()' in extent,
+                'Compiled local movement must preserve negotiated/native-role guards')
     return {'object_sha256':hashlib.sha256(obj.read_bytes()).hexdigest(),
             'native_owner_evidence':owner,'cleanup_fp_free':True,'post_simulation_wiring':True,
-            'development_default_enabled':False,'multiplayer_roomscale_enabled':False,
+            'development_default_enabled':False,'multiplayer_roomscale_source_connected':True,
+            'movement_owner':'controlling-local-XR-only',
+            'server_propagation':'original-native-ClientAction-discrepancy-correction',
+            'multiplayer_runtime_verified':False,
             'runtime_executed':False}
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
