@@ -28,6 +28,7 @@ int main() {
     auto outer=owner.prepare(right),inner=owner.prepare(right);
     assert(owner.complete(right,inner,false));
     assert(!owner.complete(right,outer,true));
+    assert(!owner.retire(right,outer));
     assert(owner.edge(right,false)==Edge::None); // Completed inner observation survives.
     auto stale=owner.prepare(right);owner.retire();owner.retire();
     assert(!owner.matches(right)&&!owner.complete(right,stale,true));
@@ -35,8 +36,14 @@ int main() {
     assert(owner.activate(right,2));
     assert(owner.edge(right,false)==Edge::Unknown);
     assert(!owner.complete(right,stale,true)); // Same address/key, newer lifetime.
+    assert(!owner.retire(right,stale));
     NativeConsumptionBinding other;assert(other.activate(right,2));
     assert(!other.complete(right,owner.prepare(right),true));
+    assert(!other.retire(right,owner.prepare(right)));
+    auto aborted=owner.prepare(right);
+    assert(!owner.retire(left,aborted));
+    assert(owner.retire(right,aborted));
+    assert(!owner.retire(right,aborted)&&!owner.matches(right));
     owner.retire();assert(owner.activate(left,3));
     assert(!owner.complete(right,owner.prepare(left),true));
     owner.retire();assert(owner.activate(left,std::numeric_limits<uint64_t>::max()));

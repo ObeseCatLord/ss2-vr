@@ -36,6 +36,7 @@ int main() {
         auto inner = unknown.prepare();
         check(unknown.complete(inner, innerHigh), "Inner completed consumption commits");
         check(!unknown.complete(outer, !innerHigh), "Older outer completion cannot overwrite inner");
+        check(!unknown.retire(outer), "Older outer unwind cannot retire completed inner consumption");
         check(unknown.edge(innerHigh) == Edge::None, "Inner level survives outer unwind/return");
     }
     // Preparing, then abandoning before entering native code, changes nothing.
@@ -58,8 +59,14 @@ int main() {
     std::destroy_at(old);
     auto *replacement = std::construct_at(reinterpret_cast<NativeConsumptionRecord *>(storage), 11);
     check(!replacement->complete(oldReceipt, true), "Reused address does not revive an old binding epoch");
+    check(!replacement->retire(oldReceipt), "Old unwind cannot retire a replacement at the same address");
     check(replacement->edge(true) == Edge::Unknown, "Replacement starts unknown even after active old saw");
     check(replacement->complete(replacement->prepare(), false), "Fresh proven replacement completion works");
+    check(!replacement->retire(first), "Another owner's unwind cannot retire this replacement");
+    auto aborted = replacement->prepare();
+    check(replacement->retire(aborted) && replacement->edge(false) == Edge::Unknown,
+          "Current ambiguous operation retires its own history");
+    check(!replacement->retire(aborted), "Aborted receipt cannot be replayed");
     std::destroy_at(replacement);
 
     // Compare randomized interleavings against an event-log model. A token
@@ -75,7 +82,7 @@ int main() {
     uint64_t nextEpoch = 102, event = 1, random = 0x9e3779b97f4a7c15ull;
     for (unsigned step = 0; step < 20000; ++step) {
         random ^= random << 13; random ^= random >> 7; random ^= random << 17;
-        const unsigned owner = unsigned(random & 1), action = unsigned((random >> 1) % 8);
+        const unsigned owner = unsigned(random & 1), action = unsigned((random >> 1) % 9);
         auto &record = *records[owner]; auto &model = models[owner];
         if (action < 3 || pending.empty()) {
             pending.push_back({record.prepare(), owner, model.epoch, model.lastCompletion, model.live});
@@ -87,6 +94,12 @@ int main() {
             check(record.complete(token.receipt, high) == expected, "Receipt disagrees with event-log admission");
             if (expected) { model.lastCompletion = event++; model.known = true; model.high = high; }
         } else if (action == 6) {
+            const auto &token = pending[(random >> 8) % pending.size()];
+            const bool expected = model.live && token.live && token.owner == owner &&
+                token.epoch == model.epoch && token.observed == model.lastCompletion;
+            check(record.retire(token.receipt) == expected, "Unwind retirement disagrees with event-log admission");
+            if (expected) { model.live = false; model.known = false; }
+        } else if (action == 7) {
             record.retire(); model.live = false; model.known = false;
         } else {
             record.retire();

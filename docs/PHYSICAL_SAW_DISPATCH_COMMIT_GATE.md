@@ -1,5 +1,22 @@
 # Native saw dispatch and receipt boundary — Astra disposition
 
+Current continuation: the completed task-2 investigation supports a bounded,
+uniquely mapped saw adapter on stable binding/normal-allocation-success routes;
+no demonstrated fatal reentry justifies another broad shutdown census. Native
+integration, initial/copy admission and observer delivery remain open. Earlier
+proof decisions follow as historical evidence.
+
+Receipt cleanup now has a conditional retirement operation. An ambiguous callback
+can retire only its captured owner, lifetime epoch and observation revision;
+an older outer abort cannot erase a completed inner observation or a replacement
+at the same address. Actual lifetime teardown retains unconditional retirement.
+Portable tests cover these cases and20,000 event-log interleavings, including
+stale/cross-owner conditional retirement. Full products/61 Debug groups and
+artifact contracts pass on source
+`03e67658a13b1e9bcab50e3165afdb1822f6ee8c4598eecbf78ab938541a1994`.
+These helpers remain inactive: this is not physical-melee or native callback
+acceptance. Individual firing tests belong to the user in VR.
+
 Fresh gpt-6-astra/xhigh; current routing and Sam/Engine/Core pins verified.
 Static read-only proof. **UNPROVEN final ordering**, with a useful completed
 base-stop boundary at165498. No native hook is enabled.

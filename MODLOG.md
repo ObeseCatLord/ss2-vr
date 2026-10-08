@@ -1411,3 +1411,14 @@ IPC10/wire6/native-finally checks pass on source
 6993876190e0beb3fc10e966a1edab6280eb5bcc8617e912bda686d4e589ac56.
 No runtime launch or firing probe. Primary vehicle/shooting/gameplay tests belong
 to the user. Full melee, MP body/origin and actual driver controls remain active.
+
+## Receipt-owned ambiguous retirement
+
+Added conditional retirement using an existing receipt's exact owner/epoch/revision.
+A superseded outer unwind cannot retire a completed inner native observation or a
+new binding at reused storage; actual owner teardown remains unconditional.
+Focused ownership/reuse checks and20,000 event-log interleavings pass, including
+conditional aborts. Full products/61 Debug groups and artifact contracts pass on
+source03e67658a13b1e9bcab50e3165afdb1822f6ee8c4598eecbf78ab938541a1994.
+Helpers remain inactive; native saw connection and observer delivery are open.
+No runtime or individual firing probe; user-primary testing remains in effect.

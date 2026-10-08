@@ -47,8 +47,7 @@ public:
     // ambiguous partial native effects require the owner to retire the record.
     // A later nested completion wins even if it records the same logical level.
     bool complete(const Receipt &receipt, bool consumedHigh) noexcept {
-        if (!live_ || receipt.owner_ != this || receipt.epoch_ != epoch_ ||
-            receipt.revision_ != revision_) return false;
+        if (!current(receipt)) return false;
         revision_ = nextConsumptionRevision(revision_);
         if (!revision_) { retire(); return false; }
         high_ = consumedHigh;
@@ -58,8 +57,20 @@ public:
     // Retirement is terminal. Reusing the storage requires a new lifetime
     // epoch; neither tracking recovery nor a stale sample may resurrect it.
     void retire() noexcept { live_ = false; known_ = false; }
+    // Ambiguous callback cleanup may retire only the observation it entered
+    // with. A completed inner callback supersedes an older outer unwind.
+    // Actual lifetime teardown still uses unconditional owner retirement above.
+    bool retire(const Receipt &receipt) noexcept {
+        if (!current(receipt)) return false;
+        retire();
+        return true;
+    }
 
 private:
+    bool current(const Receipt &receipt) const noexcept {
+        return live_ && receipt.owner_ == this && receipt.epoch_ == epoch_ &&
+               receipt.revision_ == revision_;
+    }
     const uint64_t epoch_;
     uint64_t revision_ = 1;
     bool live_ = false, known_ = false, high_ = false;

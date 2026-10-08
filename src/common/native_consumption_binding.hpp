@@ -49,6 +49,13 @@ public:
         if(record_)record_->retire();
         active_=false;
     }
+    // Reacquire by identity before an aborted native operation. Do not retire
+    // a newer completed nested observation or a replacement at the same slot.
+    bool retire(NativeConsumptionBindingKey key,const Receipt& receipt) noexcept {
+        if(!matches(key)||!record_->retire(receipt))return false;
+        active_=false;
+        return true;
+    }
 private:
     std::optional<NativeConsumptionRecord> record_;
     NativeConsumptionBindingKey key_{};
