@@ -1,5 +1,25 @@
 # User-operated idle observation gate
 
+## Current reviewed collection path — 2026-10-08
+
+The borrowed-original event/draw collector, offline position replay, indexed
+reference measurement and neutral launcher are implemented. A separate private
+lab on product fingerprint425fe8a5ada7 passes preflight. Astra gave scoped source
+and handoff GO for one user-operated neutral collection; see
+[the current collector](IDLE_EVENT_COLLECTOR.md). Exact private build/settings,
+commands, timeout/cleanup and schemas are in its USER_COLLECTION.md.
+
+Actual native program/geometry agreement, cache interpretation and physical grasp
+remain open. This collection does not certify first-use/copy melee release or
+complete the full mod. Codex must not launch the observation. The prepared lab
+stays on its reviewed immutable products while independent source development
+continues; its standalone offline evaluator is pinned by unchanged bytes.
+
+## Historical rejected stopped-snapshot proposal
+
+The statements below describe the earlier unimplemented collector and older
+candidate; they do not override the current reviewed collection path above.
+
 The [event-time collector](IDLE_EVENT_COLLECTOR.md) is now implemented and source
 reviewed for bounded copied event/pose evidence. The historical stopped-snapshot
 proposal below remains rejected. Consumed-geometry association and positive grasp

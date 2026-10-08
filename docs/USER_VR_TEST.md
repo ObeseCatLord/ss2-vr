@@ -84,6 +84,13 @@ Beyond's controller model determines its bindings. Use the current package's
 
 ## Wheels, menus and comfort
 
+During the later hardware pass, recenter while looking up/down and with a tilted
+head. Keep the same horizontal facing direction: head pitch/roll must remain
+tracked without introducing a sideways camera or hand offset. Also recenter while
+looking vertically, then return to the horizon; the previous horizontal reference
+must remain stable. Repeat on foot and in supported seats, separately from firing.
+
+
 1. Open each hand's wheel, select an owned weapon and release to equip. Center
    the stick before release to cancel. Open both wheels; labels, ammo and hover
    feedback must be readable and independently actionable.

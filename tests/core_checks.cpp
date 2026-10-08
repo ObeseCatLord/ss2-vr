@@ -1,5 +1,6 @@
 #include "common/color.hpp"
 #include "common/controls.hpp"
+#include "common/ui.hpp"
 #include "common/intent_boundary.hpp"
 #include "common/rider.hpp"
 #include <cstdlib>
@@ -16,6 +17,39 @@ static bool near(float a, float b) {
     return std::abs(a - b) < 1e-4f;
 }
 int main() {
+    {
+        // Rig recentering uses the same projected -Z heading as the UI, not
+        // Euler yaw: looking up/down or rolling cannot change a known heading.
+        for (float heading : {-179.f, -40.f, 40.f, 179.f})
+            for (float pitchDegrees : {-50.f, 50.f})
+                for (float rollDegrees : {-20.f, 20.f}) {
+                    const float angle=heading*Pi/180, tilt=pitchDegrees*Pi/180, bank=rollDegrees*Pi/180;
+                    const Quat pitch{std::sin(tilt/2),0,0,std::cos(tilt/2)};
+                    const Quat roll{0,0,std::sin(bank/2),std::cos(bank/2)};
+                    const Pose head{multiply(multiply(yaw(angle),pitch),roll),{.1f,1.6f,-.2f}};
+                    const Pose origin{yaw(horizontalHeading(head.q)),head.p};
+                    check(near(signedAngle(horizontalHeading(origin.q)-angle),0),
+                          "Rig reference retains known yaw with simultaneous head pitch and roll");
+                    const Pose relative=bodyHeadTracking(origin,0,head);
+                    const Vec3 forward=rotate(relative.q,{0,0,-1});
+                    check(near(forward.x,0) && near(forward.y,std::sin(tilt)) && near(forward.z,-std::cos(tilt)),
+                          "Recenter removes horizontal heading and retains native pitch response");
+                    const auto expected=multiply(pitch,roll);
+                    check(std::abs(relative.q.x*expected.x+relative.q.y*expected.y+
+                                   relative.q.z*expected.z+relative.q.w*expected.w)>.99999f,
+                          "Recenter preserves the full relative head rotation, including roll");
+                    const Vec3 reach{.25f,-.3f,-.5f};
+                    const Pose hand{head.q,head.p+rotate(head.q,reach)};
+                    const Pose trackedHand=bodyHandTracking(origin,0,head,hand);
+                    const Vec3 expectedReach=rotate(expected,reach);
+                    check(near(trackedHand.p.x,expectedReach.x) && near(trackedHand.p.y,expectedReach.y) &&
+                          near(trackedHand.p.z,expectedReach.z),
+                          "The same recentered reference preserves controller-to-head geometry");
+                }
+        const Quat vertical{std::sin(Pi/4),0,0,std::cos(Pi/4)};
+        check(near(horizontalHeading(vertical),0) && near(horizontalHeading(vertical,.7f),.7f),
+              "Undefined vertical heading uses initial zero or the previous recenter reference");
+    }
     {
         Input input; input.axis[0][0]=.25f; input.axis[0][1]=.5f;
         const auto zero=[](Vec3 v){return v.x==0 && v.y==0 && v.z==0;};

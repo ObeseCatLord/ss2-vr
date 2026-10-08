@@ -2,6 +2,25 @@
 
 ## Full-project closure disposition
 
+Rig initialization and recenter now reuse the existing projected horizontal
+heading rather than Euler yaw extraction. A 40-degree heading combined with
+50-degree pitch/20-degree roll formerly became approximately24.9456degrees.
+The corrected reference preserves full relative head rotation, hand geometry and
+existing recenter/control/generation policy, with zero/prior-heading fallback for
+vertical gaze. Astra/xhigh gave scoped source GO; the16-case mixed-tilt regression
+and all65 Debug/Release groups pass. All products rebuilt and28 normal/optimized
+compiled/native gates pass. No game/headset/network observation ran.
+
+Current source fingerprint `b1b0086367defd9d4c5f51e5bfb639a1f2e17a8a6d012003409f094022dd653c`;
+current products: game `14dea3bdeb5afd51ff338f8075c6eb0ac15b8620df839a04b48581ae10a2b783`,
+server `8e61e1f4f04885249576b3b4ca63aa41bddc262bfc2232874ce9c958691b5906`,
+host `535436a8f240593997ae9e3862af98ba3cdeff703537211fdc131c0e54d7c5c8`,
+loader `bb011caa82528c541a73967ce6408f82198ff4fd0358b38b54884719d863bd1d`.
+The user-operated neutral collector remains on its separately reviewed immutable
+425fe8a5 product/lab; its exact standalone evaluator still passes preflight.
+No installed game, old checkout/WIP, old lab/prefix or original user data changed.
+
+
 The [ID1 collector](IDLE_EVENT_COLLECTOR.md) now includes bounded offline shader
 replay, exact channel/hash/index-bound surface reference measurement, uncalibrated
 world grip/aim capture, and a separate neutral user-operated lab mode. Source GO
@@ -13,10 +32,10 @@ and cannot be switched into firing/movement by disabling the neutral selector.
 22 runtime-evidence groups pass normally and with optimized Python. No native
 observation, gameplay/debugger/headset/firing/vehicle launch or installed-game
 deployment occurred.
-Current source fingerprint `425fe8a5ada7aac7fa8f02bc0d301f2fab43a0b2d14c79dbadb47e475b59177a`;
+Collector product source fingerprint `425fe8a5ada7aac7fa8f02bc0d301f2fab43a0b2d14c79dbadb47e475b59177a`;
 65 Debug + 65 Release groups, 28 normal/optimized compiled/native gates and five
 private compiled-byte controls pass. No native exception/COM reentry was executed.
-Current products: game `156bfb4885ba748c648df1831d83a1c617ecc95b8d0b125f4cceab1ed839e65f`,
+Collector products: game `156bfb4885ba748c648df1831d83a1c617ecc95b8d0b125f4cceab1ed839e65f`,
 server `953789fe903a3fdf94dd462361e5583a9d3fb57b67e478c3a6e3a26d3810ee93`,
 host `73c174b4737c2a18a60402dcbd59c069fd61be91c98d8c49b34121792a8216cd`,
 loader `bb011caa82528c541a73967ce6408f82198ff4fd0358b38b54884719d863bd1d`.

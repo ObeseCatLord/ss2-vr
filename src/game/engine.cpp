@@ -1,4 +1,5 @@
 #include "common/controls.hpp"
+#include "common/ui.hpp"
 #include "common/build_contract.hpp"
 #include "common/rig_revision.hpp"
 #include "common/native_ray_cleanup.hpp"
@@ -931,14 +932,14 @@ static void update(void *p) {
         damageFeedback.fetch_add(1, std::memory_order_relaxed);
     if (enabled && !s.initialized) {
         recoverRigForNewOrigin(s);
-        s.origin = {yaw(yawAngle(input.head.q)), input.head.p};
+        s.origin = {yaw(horizontalHeading(input.head.q)), input.head.p};
         s.initialized = true;
     }
     bool resettingControls = enabled && recenterHeld(input);
     bool recenter = resettingControls && !((lastButtons[0] | lastButtons[1]) & Button::Recenter);
     if (recenter) {
         recoverRigForNewOrigin(s);
-        s.origin = {yaw(yawAngle(input.head.q)), input.head.p};
+        s.origin = {yaw(horizontalHeading(input.head.q, horizontalHeading(s.origin.q))), input.head.p};
         s.turn = 0;
         s.networkGeneration = networkGenerations.advance();
         pendingSelection[0] = pendingSelection[1] = -1;
