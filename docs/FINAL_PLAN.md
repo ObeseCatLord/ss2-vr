@@ -13,6 +13,8 @@ native release then quiet; positive driver-control geometry is not established.
 The user performs primary VR, vehicle, shooting and multiplayer gameplay tests.
 Build/offline/source acceptance does not certify those tests. See current status
 and the comprehensive USER_VR_TEST.md preparation procedure.
+FULL_PROJECT_SOURCE_CLOSURE.md records the final Astra gap disposition and two
+finite next evidence edges; this is not a finished-mod handoff.
 
 Historical initial target: installed Steam Serious Sam 2, fingerprints in installed-build.json. Create source and compiled development package for proper OpenXR stereo, six-DOF head and hand tracking, independent native dual weapons, per-hand wheels, smooth movement and snap turn. No actual game/headset testing or launch. No claim of tested playability.
 

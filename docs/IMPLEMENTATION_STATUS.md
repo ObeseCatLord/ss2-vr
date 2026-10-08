@@ -1,5 +1,14 @@
 # Implementation status — 2026-10-08
 
+## Full-project closure disposition
+
+The [final Astra source pass](FULL_PROJECT_SOURCE_CLOSURE.md) found connected
+major feature paths, but full implementation is still open. Resolve one ID1
+rendered-instance/resource/idle/stretch/grasp association before any measured
+alignment correction, and narrowly inspect actual equip/copy-to-idle low receipts
+for first-use melee. Driver-grab steering still lacks positive wheel/seat geometry.
+User-operated testing is separate; no more routine game/firing probes are planned.
+
 ## Reviewed MP physical melee source — 2026-10-08
 
 The default-off unique-saw adapter now connects the local physical sampler,
