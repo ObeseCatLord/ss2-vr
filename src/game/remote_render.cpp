@@ -12,6 +12,7 @@
 #include "multiplayer.hpp"
 #include "native_tracking.hpp"
 #include "scope_observer.hpp"
+#include "idle_observer.hpp"
 #include <array>
 #include <atomic>
 #include <cstring>
@@ -82,6 +83,8 @@ template <class T> bool symbol(HMODULE module, const char *name, T &out) {
 }
 
 static VoidCdecl originalModelPass = nullptr, originalPalettePass = nullptr;
+static void(__cdecl *originalAnimationEnd)(void *) = nullptr;
+static uint32_t idleAnimationName = 0;
 static uint32_t headName = 0;
 static uint32_t scopeName = 0, scopeBoneName = 0;
 static bool headTrackingEnabled = false;
@@ -698,6 +701,89 @@ static void observeLocalScope() {
         if(aborted)producerAbort();
     });
 }
+static bool idleConfig(void *instance,IdleConfigIdentity &out) {
+    out={};
+    if(!readableMemory(instance,0x2c))return false;
+    uint32_t configuration=0,vtable=0;
+    std::memcpy(&configuration,static_cast<const uint8_t*>(instance)+0x18,4);
+    if(!readableMemory(reinterpret_cast<void*>(configuration),0x14))return false;
+    std::memcpy(&vtable,reinterpret_cast<void*>(configuration),4);
+    if(vtable!=engineBase+0x2095b4)return false;
+    out.configuration=configuration;
+    std::memcpy(&out.file,reinterpret_cast<void*>(configuration+0xc),4);
+    std::memcpy(&out.resource,reinterpret_cast<void*>(configuration+0x10),4);
+    return true; // Numeric current CResource identity, not a historical byte join.
+}
+static void observeIdleQuery(void *queue,uintptr_t caller) {
+    ScopeDrawBinding binding;IdleDrawIdentity identity;IdleWeaponTrace *trace=nullptr;
+    if(!currentIdleDraw(binding,identity,trace))return;
+    uint32_t active=0,instance=0,entries=0;
+    int32_t count=0;IdleConfigIdentity config;
+    std::memcpy(&active,reinterpret_cast<void*>(engineBase+0x2d92a4),4);
+    if(!nativeIdleQueryBorrow(caller,engineBase+0xddded,active,reinterpret_cast<uintptr_t>(queue))) {
+        trace->reject();return;
+    }
+    if(!readableMemory(queue,0xc)) {trace->reject();return;}
+    std::memcpy(&instance,static_cast<const uint8_t*>(queue)+8,4);
+    if(instance!=reinterpret_cast<uintptr_t>(binding.modelInstance))return; // Unrelated child query stays native.
+    if(!idleConfig(binding.modelInstance,config)) {
+        trace->reject();return;
+    }
+    std::memcpy(&entries,reinterpret_cast<void*>(engineBase+0x2d92c4),4);
+    std::memcpy(&count,reinterpret_cast<void*>(engineBase+0x2d92c8),4);
+    if(!trace->event(identity,config,true,count))return;
+    if(!readableMemory(reinterpret_cast<void*>(entries),size_t(count)*0x20)) {trace->reject();return;}
+    for(unsigned i=0;i<trace->contributors;++i) {
+        IdleAnimationValue value;
+        std::memcpy(value.contribution.data(),reinterpret_cast<void*>(entries+i*0x20),0x20);
+        const auto animation=value.contribution[7];
+        if(!readableMemory(reinterpret_cast<void*>(animation),0x10)) {trace->reject();return;}
+        std::memcpy(value.header.data(),reinterpret_cast<void*>(animation),0x10);
+        if(value.header[0]!=idleAnimationName) {trace->reject();return;}
+        if(!trace->animation(i,value))return;
+    }
+    ScopeDrawBinding currentBinding;IdleDrawIdentity current;IdleWeaponTrace *same=nullptr;
+    if(!currentIdleDraw(currentBinding,current,same) || same!=trace || current!=identity)
+        trace->reject();
+}
+static void __cdecl animationEnd(void *queue) {
+    const auto caller=reinterpret_cast<uintptr_t>(__builtin_return_address(0));
+    IdleWeaponTrace *entered=nullptr;
+    withNativeFinally([&] {
+        ScopeDrawBinding binding;IdleDrawIdentity identity;
+        currentIdleDraw(binding,identity,entered);
+        observeIdleQuery(queue,caller);
+        originalAnimationEnd(queue);
+    },[&](bool aborted) noexcept {
+        if(aborted) {if(entered)entered->reject();producerAbort();}
+    });
+}
+static void observeIdlePalette() {
+    ScopeDrawBinding binding;IdleDrawIdentity identity;IdleWeaponTrace *trace=nullptr;
+    if(paletteInvalidated || !currentIdleDraw(binding,identity,trace))return;
+    std::span<NativeModelRecord> records;
+    if(!rendererArray(0x2eac20,MaxModelRecords,records)) {trace->reject();return;}
+    unsigned matches=0;const NativeModelRecord *selected=nullptr;
+    for(const auto &record:records)if(record.instance==binding.modelInstance) {++matches;selected=&record;}
+    IdleConfigIdentity config;
+    uint32_t evaluated=0,linked=0,owner=0,matrices=0;
+    int32_t count=0;
+    if(matches!=1 || !idleConfig(binding.modelInstance,config)) {trace->reject();return;}
+    std::memcpy(&evaluated,reinterpret_cast<void*>(engineBase+0x2eab68),4);
+    std::memcpy(&linked,static_cast<const uint8_t*>(binding.modelInstance)+0x28,4);
+    if(!readableMemory(reinterpret_cast<void*>(evaluated),0x28)) {trace->reject();return;}
+    std::memcpy(&owner,reinterpret_cast<void*>(evaluated+0x18),4);
+    std::memcpy(&matrices,reinterpret_cast<void*>(evaluated+0x20),4);
+    std::memcpy(&count,reinterpret_cast<void*>(evaluated+0x24),4);
+    if(!trace->palette(identity,config,evaluated==linked && owner==reinterpret_cast<uintptr_t>(binding.modelInstance),count))return;
+    if(!readableMemory(reinterpret_cast<void*>(matrices),size_t(count)*sizeof(Matrix34))) {trace->reject();return;}
+    Vec3 stretch;std::memcpy(&stretch,binding.modelInstance,sizeof(Vec3));
+    if(!trace->pose(selected->world,stretch,{reinterpret_cast<const Matrix34*>(matrices),size_t(count)}))return;
+    ScopeDrawBinding currentBinding;IdleDrawIdentity current;IdleWeaponTrace *same=nullptr;
+    IdleConfigIdentity currentConfig;
+    if(paletteInvalidated || !currentIdleDraw(currentBinding,current,same) || same!=trace || current!=identity ||
+       !idleConfig(currentBinding.modelInstance,currentConfig) || currentConfig!=config)trace->reject();
+}
 static void __cdecl palettePass() {
 #ifdef _MSC_VER
     const auto caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
@@ -705,7 +791,11 @@ static void __cdecl palettePass() {
     const auto caller = reinterpret_cast<uintptr_t>(__builtin_return_address(0));
 #endif
     const bool wasActive=paletteReentrant;
+    IdleWeaponTrace *entered=nullptr;
     withNativeFinally([&] {
+        ScopeDrawBinding binding;IdleDrawIdentity identity;
+        currentIdleDraw(binding,identity,entered);
+        if(wasActive && entered)entered->reject();
         withFreshNativePalette(caller == engineBase + 0xe2e06, paletteReentrant, paletteInvalidated,
                                [] { originalPalettePass(); }, [] {
                                    if (headTrackingEnabled) postPalette();
@@ -713,8 +803,10 @@ static void __cdecl palettePass() {
                                    // Unsupported observations stay native; an aborted extent
                                    // retires the pair through its native-finally cleanup.
                                    observeLocalScope();
+                                   observeIdlePalette();
                                }, [] { if (headTrackingEnabled) paletteFault(); });
     },[&](bool aborted) noexcept {
+        if(aborted && entered)entered->reject();
         retireNativePaletteInvocation(wasActive,aborted,paletteReentrant,paletteInvalidated);
         if(aborted)producerAbort();
     });
@@ -784,6 +876,13 @@ bool initialize(HMODULE engine, HMODULE core, HMODULE sam, HookInstallerRva inst
                  reinterpret_cast<void **>(&originalPalettePass)) || !originalPalettePass)
         return false;
     headTrackingEnabled = enableHeadTracking; // Writes require a frozen stereo pair.
+    wchar_t idleProbe[2]{};
+    if(GetEnvironmentVariableW(L"SS2VR_LAB_IDLE_WEAPON",idleProbe,2)==1 && idleProbe[0]==L'1') {
+        stringId(&idleAnimationName,"Idle");
+        if(idleAnimationName==*invalidId ||
+           !install(engine,0xbbf0,reinterpret_cast<void*>(animationEnd),
+                    reinterpret_cast<void**>(&originalAnimationEnd)) || !originalAnimationEnd)return false;
+    }
     ready.store(true, std::memory_order_release);
     return true;
 }

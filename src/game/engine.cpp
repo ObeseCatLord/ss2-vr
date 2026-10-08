@@ -1,4 +1,5 @@
 #include "common/controls.hpp"
+#include "common/build_contract.hpp"
 #include "common/rig_revision.hpp"
 #include "common/native_ray_cleanup.hpp"
 #include "common/roomscale_origin.hpp"
@@ -33,6 +34,7 @@
 #include "x86_predicate_entry.hpp"
 #include "remote_render.hpp"
 #include "scope_observer.hpp"
+#include "idle_observer.hpp"
 #include "scope_views.hpp"
 #include "common/scope_position_program.hpp"
 #include <MinHook.h>
@@ -43,6 +45,7 @@
 #ifdef _MSC_VER
 #include <intrin.h>
 #endif
+extern "C" const ss2vr::BuildContract ss2vrBuildContract;
 namespace ss2vr::game {
 std::atomic<bool> hooksReady = false;
 using VoidThis = void(__thiscall *)(void *);
@@ -2836,6 +2839,7 @@ struct PhysicalWeaponInvocation {
     bool scopePoseAmbiguous = false;
     bool scopeGeometryRejected = false;
     bool ordinaryCommand = false;
+    IdleWeaponTrace *idle = nullptr; // Borrowed from this original gun-call stack only.
 };
 thread_local PhysicalWeaponInvocation *physicalWeapon = nullptr;
 thread_local void *executingView = nullptr;
@@ -3967,7 +3971,7 @@ static bool trackedWeaponSession(const Snapshot &s) {
            validTrackingEpoch(s.generation) && channel.shared &&
            trackingEpoch(*channel.shared) == s.generation && eyeRequest.input.session;
 }
-bool currentScopeDraw(ScopeDrawBinding &out) {
+static bool currentWeaponDraw(ScopeDrawBinding &out,int wantedId) {
     out = {};
     if (!remote_render::ownsNativeThread() || weaponPairFault ||
         !physicalWeapon || physicalWeapon->pass.failed || physicalWeapon->pass.stage != 4 ||
@@ -3989,7 +3993,7 @@ bool currentScopeDraw(ScopeDrawBinding &out) {
     std::memcpy(&ownerHandle, static_cast<uint8_t *>(weapon) + 0x28, 4);
     std::memcpy(&modelHandle, static_cast<uint8_t *>(weapon) + 0x24, 4);
     std::memcpy(&nativeId, static_cast<uint8_t *>(weapon) + 0xb4, 4);
-    if (ownerHandle != eyeSnapshot.playerHandle || nativeId != 13)
+    if (ownerHandle != eyeSnapshot.playerHandle || nativeId != wantedId)
         return false;
     void *instance = modelHandle ? resolve(modelHandle) : nullptr;
     if (!instance)
@@ -3997,6 +4001,49 @@ bool currentScopeDraw(ScopeDrawBinding &out) {
     out = {instance, eyeRequest.sequence, eyeRequest.input.sequence,
            eyeSnapshot.playerHandle, handle, modelHandle, eyeSnapshot.generation, hand};
     return true;
+}
+bool currentScopeDraw(ScopeDrawBinding &out) {return currentWeaponDraw(out,13);}
+bool currentIdleDraw(ScopeDrawBinding &out,IdleDrawIdentity &identity,IdleWeaponTrace *&trace) {
+    out={};identity={};trace=nullptr;
+    if (!physicalWeapon || !physicalWeapon->idle || !physicalWeapon->ordinaryCommand ||
+        !currentWeaponDraw(out,1) || primaryField(physicalWeapon->weapon,0xb0)!=1)
+        return false;
+    identity={out.requestSequence,out.inputSequence,out.ownerHandle,out.weaponHandle,
+              out.modelHandle,out.generation,out.hand,unsigned(eyeIndex)};
+    trace=physicalWeapon->idle;
+    return true;
+}
+static bool idleWeaponDiagnosticsEnabled() {
+    static const bool enabled=[] {wchar_t value[2]{};
+        return GetEnvironmentVariableW(L"SS2VR_LAB_IDLE_WEAPON",value,2)==1 && value[0]==L'1';}();
+    return enabled;
+}
+static void emitIdleWeaponTrace(const IdleWeaponTrace &trace) {
+    const auto &b=trace.binding;
+    log("Lab idle draw source=%.*s ipc=%u wire=%u request=%llu input=%llu owner=%u weapon=%u model=%u generation=%u hand=%u eye=%u stage=%u cfg=%u file=%u resource=%d contributors=%u matrices=%u historicalBytes=0 grasp=0",
+        64,ss2vrBuildContract.sourceFingerprint.data(),ss2vrBuildContract.ipcAbi,ss2vrBuildContract.wireVersion,
+        b.request,b.input,b.owner,b.weapon,b.model,b.generation,b.hand,b.eye,unsigned(trace.stage),
+        trace.config.configuration,trace.config.file,trace.config.resource,trace.contributors,trace.matrixCount);
+    if(trace.stage!=IdleWeaponTrace::Stage::Complete)return;
+    for(unsigned i=0;i<trace.contributors;++i) {
+        const auto &a=trace.animations[i];
+        log("Lab idle animation request=%llu eye=%u hand=%u index=%u raw=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x header=%08x,%08x,%08x,%08x",
+            b.request,b.eye,b.hand,i,a.contribution[0],a.contribution[1],a.contribution[2],a.contribution[3],
+            a.contribution[4],a.contribution[5],a.contribution[6],a.contribution[7],
+            a.header[0],a.header[1],a.header[2],a.header[3]);
+    }
+    auto emitMatrix=[&](const char *kind,unsigned index,const Matrix34 &m) {
+        log("Lab idle matrix request=%llu eye=%u hand=%u kind=%s index=%u values=%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g",
+            b.request,b.eye,b.hand,kind,index,m.m[0],m.m[1],m.m[2],m.m[3],m.m[4],m.m[5],
+            m.m[6],m.m[7],m.m[8],m.m[9],m.m[10],m.m[11]);
+    };
+    emitMatrix("world",0,trace.world);
+    emitMatrix("nativePlacement",0,trace.nativePlacement);
+    emitMatrix("trackedPlacement",0,trace.trackedPlacement);
+    emitMatrix("controller",0,trace.controller);
+    for(unsigned i=0;i<trace.matrixCount;++i)emitMatrix("canonical",i,trace.matrices[i]);
+    log("Lab idle stretch request=%llu eye=%u hand=%u values=%.9g,%.9g,%.9g",b.request,b.eye,b.hand,
+        trace.stretch.x,trace.stretch.y,trace.stretch.z);
 }
 void recordScopeObservation(const ScopeDrawBinding &binding, const Matrix34 &affine,
                             const ScopeSurfaceLayout &layout) {
@@ -4298,6 +4345,11 @@ static int __fastcall weaponAbs(void *w, void *, const Matrix34 &view, Matrix34 
         const auto relative = calibrated ? compose(inverse(nativeCamera), flatPose) : Pose{};
         calibration[h] = {calibrated && finite(flatPose), s.handle[h], relative,
                           GetTickCount64(), calibrated ? rotate(relative.q, flatCharge) : Vec3{}};
+        if(physical && physicalWeapon->idle) {
+            auto &trace=*physicalWeapon->idle;
+            trace.placement({eyeRequest.sequence,eyeRequest.input.sequence,s.playerHandle,s.handle[h],
+                primaryField(w,0x24),s.generation,unsigned(h),unsigned(eyeIndex)},out,staged,matrix(hand));
+        }
         out = staged;
     }
     ReleaseSRWLockExclusive(&snapshotLock);
@@ -4308,9 +4360,11 @@ static int __fastcall weaponAbs(void *w, void *, const Matrix34 &view, Matrix34 
 static void renderTrackedWeapon(void *w, Matrix34 m, bool sniper, uintptr_t caller) {
     const auto generation = graphicsResourceGeneration();
     auto *previous = physicalWeapon;
-    if (previous) { previous->pass.failed = true; weaponPairFault = true; }
+    if (previous) { previous->pass.failed = true; weaponPairFault = true;
+        if(previous->idle)previous->idle->reject(); }
     physicalWeapon = nullptr;
     PhysicalWeaponInvocation invocation;
+    std::optional<IdleWeaponTrace> idleStorage;
     bool physical = false;
     withNativeFinally([&] {
     const auto s = eyeIndex >= 0 ? eyeSnapshot : copySnapshot();
@@ -4332,6 +4386,15 @@ static void renderTrackedWeapon(void *w, Matrix34 m, bool sniper, uintptr_t call
         invocation = {w, hand, {executedWeaponWorld}, *nativeCurrentProjection,
                       *nativeDepthNear, *nativeDepthFar, {}, false};
         invocation.ordinaryCommand=ordinaryWeaponRenderReturn && caller==ordinaryWeaponRenderReturn;
+        if(invocation.ordinaryCommand && idleWeaponDiagnosticsEnabled() &&
+           primaryField(w,0xb4)==1 && primaryField(w,0xb0)==1) {
+            static std::atomic<unsigned> attempts{0};
+            if(attempts.fetch_add(1,std::memory_order_relaxed)<32) {
+                idleStorage.emplace();invocation.idle=&*idleStorage;
+                idleStorage->admit({eyeRequest.sequence,eyeRequest.input.sequence,s.playerHandle,
+                    s.handle[hand],primaryField(w,0x24),s.generation,unsigned(hand),unsigned(eyeIndex)});
+            }
+        }
     }
     // Establish a suppression barrier even for unowned/nested/desktop calls.
     physicalWeapon = physical ? &invocation : nullptr;
@@ -4342,11 +4405,15 @@ static void renderTrackedWeapon(void *w, Matrix34 m, bool sniper, uintptr_t call
     if (physical && generation == graphicsResourceGeneration())
         eyeScopePoses.finishDraw(unsigned(hand), invocation.scopePose,
                                  invocation.pass.complete() && !invocation.scopePoseAmbiguous);
+    if(idleStorage) {
+        idleStorage->finish(invocation.pass.complete() && !weaponPairFault,generation==graphicsResourceGeneration());
+        emitIdleWeaponTrace(*idleStorage);
+    }
     }, [&](bool aborted) noexcept {
         if (!aborted && physical && generation == graphicsResourceGeneration())
             finishPhysicalWeapon(invocation, generation);
         physicalWeapon = !aborted && generation == graphicsResourceGeneration() ? previous : nullptr;
-        if (aborted) weaponPairFault = true;
+        if (aborted) {weaponPairFault = true;if(invocation.idle)invocation.idle->reject();}
     });
 }
 static void __fastcall weaponRender(void *w, void *, Matrix34 m) {

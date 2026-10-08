@@ -42,13 +42,13 @@ def verify(obj):
         require(len(found) == 1, 'Missing native state symbol: ' + name)
         return int(found[0], 16)
 
-    for name in ['palettePass()', 'modelPass()', 'freezePair()',
+    for name in ['palettePass()', 'modelPass()', 'animationEnd(void*)', 'freezePair()',
                  'commitPair(ss2vr::Slot&, ss2vr::Request const&, bool)']:
         entry = one('ss2vr::game::remote_render::', name)
         require(entry.count('DISP32\tss2vrNativeFinally') == 1,
                 'Entry must retain one native unwind extent: ' + name)
 
-    cleanup_names = ['palettePass()', 'modelPass()', 'freezePair()', 'commitPair(',
+    cleanup_names = ['palettePass()', 'modelPass()', 'animationEnd(void*)', 'freezePair()', 'commitPair(',
                      'postModelPass()', 'postPalette()', 'observeLocalScope()']
     fault = 'ss2vr::game::nativeUiFault(char const*)'
     # The diagnostic reason changed this ABI after the historical gate was
@@ -105,7 +105,10 @@ def verify(obj):
         instructions = code(body)
         restores = [i for i in instructions if re.fullmatch(
             r'mov BYTE PTR \[[a-z]{3}\+' + hex(offset(state)) + r'\],[abcd]l', i)]
-        require(len(restores) == 2 and 'movzx ebx,BYTE PTR [eax]' in instructions,
+        saved = [re.fullmatch(r'movzx e([abcd])x,BYTE PTR \[[a-z]{3}\]', i) for i in instructions]
+        saved = [match for match in saved if match]
+        require(len(saved) == 1 and len(restores) == 2 and
+                all(i.endswith(',' + saved[0][1] + 'l') for i in restores),
                 'Both normal and abnormal paths must restore saved outer TLS: ' + name)
     return {'object_sha256': hashlib.sha256(obj.read_bytes()).hexdigest(),
             'explicit_native_cleanup_boundaries': len(cleanup_names),

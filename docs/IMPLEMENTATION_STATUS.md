@@ -2,6 +2,19 @@
 
 ## Full-project closure disposition
 
+The [event-time ID1 collector](IDLE_EVENT_COLLECTOR.md) now has connected original
+query/palette/placement hooks and a bounded offline reader. Collection-only Astra
+GO and compiled checks do not certify geometry/grasp association or runtime.
+Current compiled source fingerprint is
+`17b58af2374f3b1fd3ca18e58ed3ed779c075ad5a5a1bfe90070ebacb40da75c`;
+63 Debug + 63 Release groups and 26 normal/optimized gates pass.
+Current products: game `8d6edcbe19e303960bc8c6fa0e78bc0009ef24b130bbea3b43fba1293b44a6f8`,
+server `5f7c7ea03adc1b5a17017d587b7d2e2ef19e359c51006ab24fad7b317e96ecaa`,
+host `2ffdc02dcafbee7f83d0470183413c5c8cf3ac79d81578a160a881d1e4fa83de`,
+loader `bb011caa82528c541a73967ce6408f82198ff4fd0358b38b54884719d863bd1d`.
+Previous first-gesture and MP source identities below remain historical. Nothing
+was deployed or launched for this collector increment.
+
 The [final Astra source pass](FULL_PROJECT_SOURCE_CLOSURE.md) found connected
 major feature paths, but full implementation is still open. Resolve one ID1
 rendered-instance/resource/idle/stretch/grasp association before any measured

@@ -7,6 +7,14 @@ The user explicitly approved publishing SS2 VR source and sanitized reverse-engi
 This historical hold blocked public publication pending renewed confirmation. It superseded earlier authority at that time; the explicit delivered approval above now supersedes it. During that hold, local development/tests continued and pushes, public PRs/releases and external publication were prohibited. Local commits may be preserved with strictly empty author/committer emails; Actions remains disabled and workflows absent. Explicit renewed user confirmation has now lifted the hold for source and sanitized notes only. Private game assets/captures, original checkout/WIP, installation and user saves/settings remain protected.
 
 ## Current PC continuation — start here
+The idle diagnostic collector is source work. Its event/pose stage is connected
+and reviewed for collection only; consumed-geometry association and positive
+grasp remain incomplete. Do not launch gameplay, debugger, headset, firing or
+vehicle probes for this work, ask the user to operate an unprepared collector,
+or assume they accepted feature omissions. Use the current source and exact
+offline/compiled gates; see docs/IDLE_EVENT_COLLECTOR.md. No current user action
+can replace implementing the remaining collection/interpretation route.
+
 The user reiterated that testing must primarily be performed by them. Prioritize
 finishing implementation and source reviews, using local builds/offline checks for
 verification. Reserve vehicle, shooting and broad in-VR gameplay acceptance for

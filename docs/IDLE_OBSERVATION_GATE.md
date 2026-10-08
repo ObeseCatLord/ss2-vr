@@ -1,5 +1,10 @@
 # User-operated idle observation gate
 
+The [event-time collector](IDLE_EVENT_COLLECTOR.md) is now implemented and source
+reviewed for bounded copied event/pose evidence. The historical stopped-snapshot
+proposal below remains rejected. Consumed-geometry association and positive grasp
+still prevent a final runnable alignment handoff; this remains source work.
+
 The user performs primary gameplay tests. Do not launch more idle fixtures merely
 to repeat file-open receipts, or ask for a final acceptance pass before the
 remaining implementation is ready.
