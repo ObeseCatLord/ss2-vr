@@ -1,22 +1,27 @@
 # Cloud continuation — 2026-10-05
 
-## Latest private idle capture follow-up
+## Latest private display and collection status
 
-The first private Xvfb capture crashed before scene in a DXVK zero-refresh raster
-query. A separately approved replacement had two display-only setup failures
-before native launch; socket length and lazy Xwayland ordering were corrected.
-Actual wrapper `--display-only` then passed parent/server ownership and cleanup.
-Astra/xhigh scoped source GO; private original/failed fixtures are preserved.
+The corrected prerequisite-only private graphics check passed: actual x86 D3D9
+reported 60 Hz desktop/adapter/swapchain at 1280 × 720, successful raster query,
+native cleanup and normal process exit. No SS2/Monado/collector launched; no owned
+survivors or cleanup errors. Earlier failed fixtures remain preserved. The native
+probe uses an exclusive Win32 receipt and static thread-runtime linkage; the
+existing diagnostic direct-prefix route is reused without changing game launch.
+Astra/xhigh scoped source GO; 16 display checks and 22 runtime-evidence groups pass
+normally and with optimized Python. See PRIVATE_DISPLAY_COLLECTION.md.
 
-The authorized native D3D9 prerequisite subsequently ran but returned no admitted
-JSON result, so SS2/Monado did not launch. No geometry/eye-world evidence was
-obtained. Cleanup reports no exact-owned survivors/errors, 12 protected files
-unchanged. Native attempt consumed: no automatic retry. The old collector guide
-is explicitly historical; do not ask the user to run its stale command. Current
-source fixes stdout redirection/exit reporting and silent window-error paths;
-compiled/offline checks only, actual failure operation remains unverified. See
-PRIVATE_DISPLAY_COLLECTION.md. No grasp, driver steering or full VR completion
-is claimed; comprehensive gameplay acceptance remains user-operated.
+The user permits repeated private display checks. The earlier one replacement
+neutral SS2 collection was still authorized because its failed prerequisites
+never launched SS2. It has now finished its one attempt in a fresh private fixture.
+The expected Jungle scene receipt and host startup were observed, but native
+loading remained blocked after four existing activation requests. No gameplay or
+geometry was collected. Native isolation shutdown was observed, owned cleanup
+was clean and 12 protected files remained unchanged. The SS2 replacement approval
+is now consumed; do not retry gameplay automatically. No desktop focus,
+firing or movement. This is not grasp, driver steering, physical melee or full
+VR acceptance; comprehensive gameplay testing remains primarily user-operated.
+Old attempted collector commands are historical and must not be reused.
 
 ## PC continuation authority — 2026-10-07
 

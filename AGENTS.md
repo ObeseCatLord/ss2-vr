@@ -8,7 +8,36 @@ This historical hold blocked public publication pending renewed confirmation. It
 
 ## Current PC continuation — start here
 
-### Consumed replacement native prerequisite — current source work
+### Current repeated private display-check authority
+The user explicitly answered "Run as many private display checks as needed" to
+approve the reviewed prerequisite-only check. This supersedes the exhausted
+single-native-attempt restriction below for private graphics/display prerequisite
+checks. Keep the separate view, no desktop focus/input, no firing/movement, and
+stop before Monado/SS2. Repeated checks are authorized; preserve exact identities,
+owned cleanup and prior failed records. Do not turn this scope into gameplay,
+headset/controller, vehicle or network tests. Full gameplay testing remains
+primarily user-operated. One-attempt markers apply to each sealed prepared fixture,
+not to renewed user permission; use preserved independent preparations as needed.
+The earlier explicit "Allow one replacement private capture" still authorizes
+one neutral SS2 idle collection: its previous setups/prerequisites never launched
+SS2. The below blanket statement that a failed native prerequisite consumed that
+SS2 capture was an agent interpretation, not a user revocation, and is superseded
+by this clarification. Complete that single approved collection on the corrected
+private display; no firing/movement, individual weapon/vehicle or broad gameplay
+tests. Mark it consumed on actual SS2 launch and preserve its result.
+
+### Current replacement SS2 outcome
+The one approved replacement neutral SS2 collection has now actually launched
+and completed one failed attempt. Its private D3D9 prerequisite passed; the
+expected Jungle scene hash was loaded and the host started, but native loading
+remained blocked after four existing owned activation requests. No gameplay/ID1
+geometry was collected. Native isolation shutdown was observed, wrapper cleanup
+had no owned survivors/errors and 12 protected files remained unchanged. This
+consumes the one replacement SS2 capture authorization. Do not retry SS2
+collection automatically; continue source/offline work and the separately
+authorized nongame private display checks. Preserve all attempts and old guides.
+
+### Historical failed replacement prerequisite — superseded above
 The user approved ONE replacement private capture. Two display-only setup
 failures occurred before any collector/Proton/game; logs were preserved and the
 actual corrected launcher display-only preflight then passed. The authorized
@@ -19,8 +48,13 @@ That native attempt is consumed. Do not automatically launch another Proton/game
 host capture or send the user to an old package. Continue source/offline fixes
 and reviews, then present a concrete corrected path if another observation is
 necessary. Historical old collector instructions are not current user actions.
+A fresh source-reviewed prerequisite-only path now exists. It ends before
+Monado/SS2 even on success, uses separate attempts and reports geometry false.
+Its private USER_PREREQUISITE.md pins current identities. Native observation
+remains unrun and requires user operation or renewed bounded agent authority;
+no old collector prompt is a substitute for that scope.
 
-### Consumed one-capture exception — user-approved private display
+### Historical original one-capture exception — superseded by replacement
 The user explicitly allowed ONE agent-operated reviewed idle capture, provided it
 uses a private test window and does not interfere with their PC activity. This
 supersedes the collector no-launch restriction below for that single bounded

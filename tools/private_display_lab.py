@@ -15,7 +15,7 @@ import signal
 import subprocess
 import sys
 import time
-from runtime_lab import identity, still_owned, stop_exact, validate, checked_file
+from runtime_lab import identity, still_owned, stop_exact, validate, checked_file, run
 
 def prepared_configuration(path):
     if path.name!='config.json':raise ValueError('Collector must use its sealed config.json')
@@ -52,7 +52,7 @@ def gather(owned, token, root, exclude):
         if tagged(raw,token,root):owned[(item['pid'],item['start'])]=item
 
 
-def inside(cfg_path, output, display_only=False):
+def inside(cfg_path, output, display_only=False, prerequisite_only=False):
     # Weston executes this child only after its private display is ready. Certify
     # the exact parent incarnation and actual executed argv, not Popen's fork.
     expected=json.loads((output/'owner.json').read_text())
@@ -88,6 +88,25 @@ def inside(cfg_path, output, display_only=False):
         (output/'collection-outcome.json').write_text(json.dumps({'completed':True,'display_only':True,
             'collector_launched':False,'game_launched':False,'data_ready_for_review':False}))
         return
+    if prerequisite_only:
+        cfg=prepared_configuration(cfg_path)
+        if cfg.get('display_prerequisite_only') is not True:
+            raise RuntimeError('Prerequisite-only operation is not sealed in this configuration')
+        def interrupted(signum,frame):raise RuntimeError('Private prerequisite interrupted')
+        signal.signal(signal.SIGTERM,interrupted)
+        try:
+            directory=run(cfg)
+            result=json.loads((directory/'result.json').read_text())
+            if result.get('result')!='display_prerequisite_only' or result.get('cleanup_errors') or \
+               result.get('game_launch_requested') is not False or result.get('monado_launch_requested') is not False:
+                raise RuntimeError('Private prerequisite did not complete its owned extent')
+        except BaseException as error:
+            (output/'collection-outcome.json').write_text(json.dumps({'completed':False,'error':str(error)}))
+            raise
+        (output/'collection-outcome.json').write_text(json.dumps({'completed':True,'prerequisite_only':True,
+            'private_run':str(directory),'collector_launched':False,'game_launched':False,
+            'monado_launched':False,'data_ready_for_review':False}))
+        return
     # Reuse the reviewed collector and run() cleanup. No second validation after
     # a standalone Wine invocation, no rewritten collection state machine.
     collector=cfg_path.parent/'collect.py'
@@ -110,9 +129,10 @@ def inside(cfg_path, output, display_only=False):
             'data_ready_for_review':True,'physical_grasp_verified':False,'native_release_verified':False}))
 
 
-def launch(cfg_path, cfg, display_only=False):
+def launch(cfg_path, cfg, display_only=False, prerequisite_only=False):
     if not cfg.get('display_timing_probe'):raise RuntimeError('Private capture needs its D3D9 readiness prerequisite')
-    base=cfg_path.parent;out=base/('display-check' if display_only else 'private-display')
+    if display_only and prerequisite_only:raise ValueError('Choose exactly one diagnostic extent')
+    base=cfg_path.parent;out=base/('display-check' if display_only else 'prerequisite-check' if prerequisite_only else 'private-display')
     out.mkdir(mode=0o700,exist_ok=False)
     token=secrets.token_hex(16)
     # Linux sockaddr_un is bounded by bytes, not characters. Nested fixture
@@ -124,15 +144,18 @@ def launch(cfg_path, cfg, display_only=False):
     runtime.mkdir(mode=0o700)
     env=private_environment(os.environ,runtime,token)
     # Exclusive reservation is consumed even on startup failure; never retry.
-    with (base/('display-check-attempt.json' if display_only else 'agent-capture-attempt.json')).open('x') as file:
+    with (base/('display-check-attempt.json' if display_only else 'prerequisite-attempt.json' if prerequisite_only else 'agent-capture-attempt.json')).open('x') as file:
         json.dump({'schema':1,'time_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                   'source_products':cfg['expected_product_source'],'desktop_input':False,'display_only':display_only},file,indent=2)
+                   'source_products':cfg['expected_product_source'],'desktop_input':False,
+                   'display_only':display_only,'prerequisite_only':prerequisite_only},file,indent=2)
     cmd=['weston','--backend=headless','--renderer=pixman','--shell=kiosk','--fake-seat',
          '--refresh-rate=60000','--width=1280','--height=720','--xwayland','--no-config',
          '--idle-time=0','--socket=ss2-vr-private','--log='+str(out/'weston.log'),
          '--',sys.executable,str(Path(__file__).resolve()),'--config',str(cfg_path),'--inside',str(out)]
     if display_only:cmd.append('--display-only')
-    owned={};server=None;files=[];report={'schema':1,'desktop_input':False,'hardware_acceptance':False,'display_only':display_only}
+    if prerequisite_only:cmd.append('--prerequisite-only')
+    owned={};server=None;files=[];report={'schema':1,'desktop_input':False,'hardware_acceptance':False,
+                                      'display_only':display_only,'prerequisite_only':prerequisite_only}
     def interrupted(signum,frame):raise RuntimeError('Private capture interrupted')
     previous={sig:signal.signal(sig,interrupted) for sig in (signal.SIGTERM,signal.SIGINT)}
     try:
@@ -152,7 +175,7 @@ def launch(cfg_path, cfg, display_only=False):
             if server.poll() is not None:raise RuntimeError('Private compositor failed before exec certification')
             time.sleep(.01)
         else:raise RuntimeError('Private compositor exec certification timed out')
-        end=time.monotonic()+285
+        end=time.monotonic()+(75 if prerequisite_only else 285)
         while server.poll() is None:
             gather(owned,token,str(runtime),{os.getpid(),server.pid})
             if time.monotonic()>=end:raise TimeoutError('Private collection budget expired')
@@ -163,7 +186,8 @@ def launch(cfg_path, cfg, display_only=False):
         outcome=json.loads((out/'collection-outcome.json').read_text())
         if outcome.get('completed') is not True or \
            (display_only and outcome.get('display_only') is not True) or \
-           (not display_only and outcome.get('data_ready_for_review') is not True):
+           (prerequisite_only and outcome.get('prerequisite_only') is not True) or \
+           (not display_only and not prerequisite_only and outcome.get('data_ready_for_review') is not True):
             raise RuntimeError('Collector did not complete; preserve logs, do not repeat')
     except BaseException as error:
         report['error']=str(error)
@@ -209,22 +233,27 @@ def launch(cfg_path, cfg, display_only=False):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config',type=Path,required=True)
-    parser.add_argument('--run',action='store_true')
-    parser.add_argument('--check',action='store_true')
+    modes=parser.add_mutually_exclusive_group()
+    modes.add_argument('--run',action='store_true')
+    modes.add_argument('--check',action='store_true')
     parser.add_argument('--inside',type=Path,help=argparse.SUPPRESS)
-    parser.add_argument('--display-only',action='store_true',help='Run private X11 ownership preflight only; no Wine/game')
+    modes.add_argument('--display-only',action='store_true',help='Run private X11 ownership preflight only; no Wine/game')
+    modes.add_argument('--prerequisite-only',action='store_true',help='Run pinned D3D9 prerequisite; stop before Monado/SS2')
     args=parser.parse_args();cfg_path=args.config.resolve(strict=True)
+    if args.inside and (args.run or args.check):parser.error('Internal display child cannot select public modes')
     if args.inside:
         end=time.monotonic()+5
         while not (args.inside/'owner.json').exists() and time.monotonic()<end:time.sleep(.01)
-        inside(cfg_path,args.inside,args.display_only);return
+        inside(cfg_path,args.inside,args.display_only,args.prerequisite_only);return
     cfg=prepared_configuration(cfg_path)
-    if args.check and (args.run or args.display_only):parser.error('Choose --check, --run or --display-only')
-    if args.display_only and args.run:parser.error('Display-only preflight cannot select game collection')
+    if args.prerequisite_only and cfg.get('display_prerequisite_only') is not True:
+        parser.error('Prerequisite-only operation must be sealed in this configuration')
+    if args.run and cfg.get('display_prerequisite_only') is True:
+        parser.error('A prerequisite-only configuration cannot select game collection')
     if not cfg.get('display_timing_probe'):parser.error('Prepared private display requires the timing probe')
-    if not args.run and not args.display_only:
+    if not args.run and not args.display_only and not args.prerequisite_only:
         print('Prepared private display configuration verified; no process launched.');return
     os.nice(10)
-    launch(cfg_path,cfg,args.display_only)
+    launch(cfg_path,cfg,args.display_only,args.prerequisite_only)
 
 if __name__=='__main__':main()

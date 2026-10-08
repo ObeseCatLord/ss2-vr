@@ -66,6 +66,9 @@ def checked_file(path, expected):
 
 def validate_display_probe(cfg, private):
     selected=cfg.get('display_timing_probe')
+    mode=cfg.get('display_prerequisite_only',False)
+    if type(mode) is not bool:raise ValueError('Display prerequisite-only selection must be boolean')
+    if mode and selected is None:raise ValueError('Prerequisite-only mode requires its pinned native probe')
     if selected is None:return
     if not isinstance(selected,dict) or set(selected)!={'path','sha256'}:
         raise ValueError('Display prerequisite requires its exact executable identity')
@@ -81,7 +84,8 @@ def validate_display_probe(cfg, private):
 
 def require_display_timing(report):
     if not isinstance(report,dict) or type(report.get('schema')) is not int or report['schema']!=1 or report.get('stage')!='swapchain-query' or \
-       report.get('operation')!='get-raster-status' or report.get('raster_called') is not True or type(report.get('hresult')) is not int or report['hresult']!=0:
+       report.get('operation')!='get-raster-status' or report.get('raster_called') is not True or \
+       report.get('cleanup_completed') is not True or type(report.get('hresult')) is not int or report['hresult']!=0:
         raise RuntimeError('Private D3D9 display prerequisite did not complete its raster query')
     for key in ('desktop_hz','adapter_hz','swapchain_hz','width','height'):
         value=report.get(key)
@@ -100,19 +104,26 @@ def display_timing_probe(cfg,env,deadline,run_dir):
     process=None;output=run_dir/'display-timing-probe.log';code=None
     probe_env=env.copy()
     # Installed Proton redirects child stdout/stderr to its own log when
-    # PROTON_LOG=1. Keep the tiny probe's result on its explicit output handle;
-    # retain normal Proton logging for the subsequent game/session.
+    # PROTON_LOG=1. Keep probe console diagnostics on their explicit handle;
+    # the native receipt is independent. Retain normal game/session logging.
     probe_env['PROTON_LOG']='0'
+    receipt=run_dir/'display-timing-native.json'
+    if receipt.exists() or receipt.is_symlink():raise RuntimeError('Native display receipt already exists')
+    probe_env['SS2VR_DISPLAY_TIMING_OUTPUT']='Z:'+str(receipt)
     try:
         with output.open('xb') as log:
-            process=subprocess.Popen([cfg['proton'],'run',str(path)],env=probe_env,stdout=log,stderr=subprocess.STDOUT)
+            # Use the existing observer/tool route. Proton "run" starts through
+            # steam.exe; runinprefix directly invokes the diagnostic executable.
+            process=subprocess.Popen([cfg['proton'],'runinprefix',str(path)],env=probe_env,stdout=log,stderr=subprocess.STDOUT)
             code=process.wait(timeout=remaining(deadline,30))
-        # Wine/bootstrap diagnostics may surround the one JSON result.
-        rows=[json.loads(line) for line in output.read_text(errors='replace').splitlines() if line.startswith('{')]
-        if code!=0 or len(rows)!=1:raise RuntimeError('Private D3D9 display prerequisite failed; game was not launched')
-        require_display_timing(rows[0])
-        (run_dir/'display-timing.json').write_text(json.dumps(rows[0],indent=2)+'\n')
-        return rows[0]
+        # Native file output is independent of Proton/Wine console routing.
+        # Launcher exit alone never certifies the native program's result.
+        if code!=0 or receipt.is_symlink() or not receipt.is_file() or not 1<=receipt.stat().st_size<=4096:
+            raise RuntimeError('Private D3D9 display prerequisite has no bounded native receipt; game was not launched')
+        report=json.loads(receipt.read_text())
+        require_display_timing(report)
+        (run_dir/'display-timing.json').write_text(json.dumps(report,indent=2)+'\n')
+        return report
     finally:
         cleanup_deadline=time.monotonic()+8;errors=[];requests=[]
         def deferred(signum,frame):requests.append(signum)
@@ -787,6 +798,12 @@ def run(cfg):
         # One validated run extent: prefix bootstrap may mutate this private
         # prefix, so do not run a probe externally and reseal settings afterward.
         manifest['display_timing']=display_timing_probe(cfg,env,deadline,run_dir)
+        if cfg.get('display_prerequisite_only') is True:
+            # A sealed diagnostic extent ends here even on successful readiness.
+            # Existing finally still owns retirement and result preservation.
+            manifest.update(result='display_prerequisite_only',simulation=False,
+                            game_launch_requested=False,monado_launch_requested=False)
+            return run_dir
         config=(config_dir/'monado');config.mkdir()
         (config/'config_v0.json').write_text(json.dumps(cfg['monado_config']))
         if not stock:

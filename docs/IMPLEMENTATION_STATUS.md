@@ -1,34 +1,34 @@
 # Implementation status — 2026-10-08
 
-## Private idle capture follow-up — implementation prerequisite
+## Private display prerequisite — native result
 
-One explicitly approved private-display neutral capture was attempted. The game
-crashed before scene load, yielding no idle geometry, host gameplay or eye images.
-Astra traced the owned DXVK failure to a zero-current-refresh raster-status
-query. This does not establish a mod rendering defect. The failed attempt is
-consumed; its private logs and cleanup reconciliation are preserved. No second
-game/Proton/host attempt has run. Original installation/user data remain intact.
+The corrected private display/D3D9 prerequisite passed with the actual x86
+probe: desktop, adapter and fullscreen swapchain all reported 60 Hz at
+1280 × 720; GetRasterStatus returned HRESULT 0 and the native receipt certified
+resource/window retirement. The launcher exited normally and the wrapper reported
+no owned survivors or cleanup errors. SS2, Monado and the idle collector were
+explicitly not launched in that prerequisite run. This proves graphics readiness,
+not VR gameplay, geometry, grasp, steering or hardware acceptance.
 
-A separate headless Weston/Xwayland display-only check reports a nonzero refresh.
-The launcher now places its runtime beneath the private root, rejects overlong
-socket paths, and starts lazy Xwayland with a read-only query before certifying
-its exact server. Its actual display-only preflight passed ownership and cleanup
-without starting a collector/Wine/game. Astra/xhigh gave scoped source GO.
+Earlier failed Xvfb/setup/native diagnostic attempts remain preserved privately.
+The diagnostic now writes a bounded exclusive Win32 receipt after native cleanup,
+uses the existing direct-prefix diagnostic route and statically links its thread
+runtime. Game launch still uses the existing Proton route. The prerequisite-only
+mode ends before SS2/Monado even on success. Astra/xhigh gave scoped source GO;
+16 display checks and 22 runtime-evidence checks pass normally and with optimized
+Python. No src/CMake edits occurred; current mod products below remain unchanged.
 
-The user-authorized native prerequisite then executed, loading the x86 probe and
-DXVK, but returned no admitted JSON result. SS2/Monado never launched. Exact-owned
-cleanup had no errors/survivors and all 12 protected files remain unchanged.
-The old collector guide is marked historical; do not run its command. The attempt
-is consumed, with no automatic retry. There is still no captured idle geometry.
-
-Source follow-up isolates the probe's stdout from Proton's log redirection,
-records process exit separately after cleanup, and emits diagnostics for native
-window registration/creation failures. The revised probe builds with `-Werror`;
-12 mocked groups and 22 runtime-evidence groups pass normally and with optimized
-Python. This follow-up is not runtime verified. No src/CMake edits occurred;
-current native products below stay unchanged. Full grasp/driver steering and
-user-operated HMD/MP/firing/vehicle acceptance remain open. See
-[private collection procedure](PRIVATE_DISPLAY_COLLECTION.md).
+The user permits repeated private display checks and previously authorized one
+replacement neutral SS2 idle collection. The corrected replacement has now
+completed one attempt in a fresh private fixture with current b1b0086367de products.
+The expected Jungle scene hash was observed and the host started, but native
+loading remained blocked: no gameplay, ID1 geometry or world-eye evidence was
+collected. Four existing owned activation requests did not clear readiness.
+Native isolation shutdown was observed; wrapper survivors/cleanup errors were
+empty and all 12 protected files remained unchanged. No desktop focus, movement
+or firing was sent. The replacement capture is consumed. Full grasp,
+driver steering and user-operated HMD/MP/firing/vehicle acceptance remain open.
+See [private collection procedure](PRIVATE_DISPLAY_COLLECTION.md).
 
 ## Full-project closure disposition
 
@@ -48,7 +48,8 @@ host `535436a8f240593997ae9e3862af98ba3cdeff703537211fdc131c0e54d7c5c8`,
 loader `bb011caa82528c541a73967ce6408f82198ff4fd0358b38b54884719d863bd1d`.
 The earlier neutral collector used separately reviewed immutable425fe8a5
 products; its failed private attempt remains preserved. The fresh replacement
-preparation uses current b1b0086367de products, without executing them.
+preparation uses current b1b0086367de products; its bounded neutral collection
+status is recorded above.
 No installed game, old checkout/WIP, old lab/prefix or original user data changed.
 
 

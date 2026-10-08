@@ -6,12 +6,12 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 import runtime_lab as lab
 import private_display_lab as display
 GOOD={'schema':1,'stage':'swapchain-query','operation':'get-raster-status','desktop_hz':60,'adapter_hz':60,'swapchain_hz':60,
-      'width':1280,'height':720,'raster_called':True,'hresult':0,'scanline':0,'in_vblank':True}
+      'width':1280,'height':720,'raster_called':True,'cleanup_completed':True,'hresult':0,'scanline':0,'in_vblank':True}
 class Checks(unittest.TestCase):
     def test_zero_current_mode_failure_or_forged_success_is_not_readiness(self):
         lab.require_display_timing(GOOD)
         for key,value in [('schema',True),('stage','invalid-current-mode'),('raster_called',1),
-                          ('operation','create-device'),('hresult',False),('hresult',2289436780),('swapchain_hz',0),
+                          ('operation','create-device'),('cleanup_completed',False),('hresult',False),('hresult',2289436780),('swapchain_hz',0),
                           ('adapter_hz',1),('desktop_hz',0),('width',False),('height',16385)]:
             with self.subTest(key=key),self.assertRaises(RuntimeError):lab.require_display_timing(GOOD|{key:value})
     def test_private_display_environment_removes_desktop_routes_and_ownership_is_exact(self):
@@ -49,14 +49,15 @@ class Checks(unittest.TestCase):
                     def kill(self):calls.append('kill');self.code=-9
                 process=Process()
                 def popen(args,**kw):
+                    self.assertEqual(args[1],'runinprefix')
                     self.assertEqual(kw['env']['PROTON_LOG'],'0')
                     report=GOOD|({'swapchain_hz':0} if fault=='zero-mode' else {})
                     text=json.dumps(report)+'\n'
                     if fault=='duplicate-json':text*=2
-                    kw['stdout'].write(text.encode());kw['stdout'].flush();return process
+                    Path(kw['env']['SS2VR_DISPLAY_TIMING_OUTPUT'][2:]).write_text(text);return process
                 discovers=[[],[{'pid':123}]]
                 with patch.object(lab.subprocess,'Popen',side_effect=popen),patch.object(lab,'private_processes',side_effect=discovers),patch.object(lab,'stop_exact',side_effect=lambda item,budget:calls.append(item['pid'])):
-                    with self.assertRaises((RuntimeError,subprocess.TimeoutExpired)):
+                    with self.assertRaises((RuntimeError,ValueError,subprocess.TimeoutExpired)):
                         lab.display_timing_probe(cfg,{'SS2VR_LAB_PRIVATE_DISPLAY':'1','DISPLAY':':2'},lab.time.monotonic()+40,root)
                 self.assertIn(123,calls);self.assertFalse((root/'display-timing.json').exists())
                 if fault=='timeout':self.assertIn('term',calls)
@@ -70,7 +71,7 @@ class Checks(unittest.TestCase):
                 def wait(self,timeout):return 0
             def popen(args,**kw):
                 self.assertEqual(kw['env']['PROTON_LOG'],'0')
-                kw['stdout'].write((json.dumps(GOOD)+'\n').encode());kw['stdout'].flush();return Process()
+                Path(kw['env']['SS2VR_DISPLAY_TIMING_OUTPUT'][2:]).write_text(json.dumps(GOOD));return Process()
             original=Path.write_text
             def write(path,*args,**kw):
                 if path.name=='display-timing-process.json':raise OSError('injected diagnostic write failure')
@@ -79,12 +80,32 @@ class Checks(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError,'cleanup'):
                     lab.display_timing_probe(cfg,env,lab.time.monotonic()+40,root)
             self.assertEqual(calls,[99]);self.assertEqual(env['PROTON_LOG'],'1')
+    def test_native_receipt_not_console_bait_certifies_readiness(self):
+        for bait in ('missing','symlink','oversize'):
+            with self.subTest(bait=bait),tempfile.TemporaryDirectory() as d:
+                root=Path(d);exe=root/'probe.exe';exe.write_bytes(b'pinned');cfg={'proton':'never-run','display_timing_probe':{'path':str(exe),'sha256':lab.digest(exe)}}
+                class Process:
+                    def poll(self):return 0
+                    def wait(self,timeout):return 0
+                def popen(args,**kw):
+                    kw['stdout'].write((json.dumps(GOOD)+'\n').encode());kw['stdout'].flush()
+                    target=Path(kw['env']['SS2VR_DISPLAY_TIMING_OUTPUT'][2:])
+                    if bait=='symlink':target.symlink_to(exe)
+                    if bait=='oversize':target.write_text('x'*4097)
+                    return Process()
+                with patch.object(lab.subprocess,'Popen',side_effect=popen),patch.object(lab,'private_processes',return_value=[]):
+                    with self.assertRaises(RuntimeError):lab.display_timing_probe(cfg,{'SS2VR_LAB_PRIVATE_DISPLAY':'1','DISPLAY':':2'},lab.time.monotonic()+40,root)
+                self.assertFalse((root/'display-timing.json').exists())
     def test_desktop_selector_or_wayland_never_reaches_proton(self):
         with patch.object(lab.subprocess,'Popen') as process:
             for env in ({'DISPLAY':':1'},{'SS2VR_LAB_PRIVATE_DISPLAY':'1','DISPLAY':':2','WAYLAND_DISPLAY':'wayland-0'}):
                 with self.assertRaises(RuntimeError):lab.display_timing_probe({'display_timing_probe':{}},env,0,Path('.'))
             process.assert_not_called()
     def test_lazy_xwayland_starts_before_ownership_and_display_only_never_imports_collector(self):
+        self.inner_mode(False)
+    def test_prerequisite_wrapper_never_imports_idle_collector_or_claims_geometry(self):
+        self.inner_mode(True)
+    def inner_mode(self, prerequisite):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d);out=root/'display-check';out.mkdir();runtime=root/'runtime';runtime.mkdir()
             cfg=root/'config.json';cfg.write_text(json.dumps({'private_root':str(root)}))
@@ -103,17 +124,53 @@ class Checks(unittest.TestCase):
             original=Path.iterdir
             def list_paths(path):return iter([Path('/proc/1')]) if str(path)=='/proc' else original(path)
             env=display.private_environment({},runtime,'token')|{'DISPLAY':':2','WAYLAND_DISPLAY':'ss2-vr-private'}
-            with patch.dict(display.os.environ,env,clear=True),patch.object(display.os,'getppid',return_value=456),patch.object(display,'identity',side_effect=identify),patch.object(Path,'iterdir',list_paths),patch.object(display.subprocess,'run',side_effect=query),patch.object(display.importlib.util,'spec_from_file_location') as load:
-                display.inside(cfg,out,True);load.assert_not_called()
+            directory=root/'runs/diagnostic';directory.mkdir(parents=True)
+            (directory/'result.json').write_text(json.dumps({'result':'display_prerequisite_only','cleanup_errors':[], 'game_launch_requested':False,'monado_launch_requested':False}))
+            with patch.object(display,'prepared_configuration',return_value={'display_prerequisite_only':True}),patch.object(display,'run',return_value=directory) as native,patch.object(display.signal,'signal'),patch.dict(display.os.environ,env,clear=True),patch.object(display.os,'getppid',return_value=456),patch.object(display,'identity',side_effect=identify),patch.object(Path,'iterdir',list_paths),patch.object(display.subprocess,'run',side_effect=query),patch.object(display.importlib.util,'spec_from_file_location') as load:
+                display.inside(cfg,out,not prerequisite,prerequisite);load.assert_not_called()
+                if prerequisite:native.assert_called_once()
+                else:native.assert_not_called()
             self.assertLess(events.index('x-client'),events.index('server-check'))
             outcome=json.loads((out/'collection-outcome.json').read_text())
-            self.assertTrue(outcome['display_only']);self.assertFalse(outcome['game_launched']);self.assertFalse(outcome['data_ready_for_review'])
+            self.assertTrue(outcome['prerequisite_only' if prerequisite else 'display_only']);self.assertFalse(outcome['game_launched']);self.assertFalse(outcome['data_ready_for_review'])
     def test_check_cannot_be_combined_with_display_launch(self):
         with tempfile.TemporaryDirectory() as d:
             cfg=Path(d)/'config.json';cfg.write_text('{}')
             with patch.object(display.sys,'argv',['tool','--config',str(cfg),'--check','--display-only']),patch.object(display,'prepared_configuration',return_value={'display_timing_probe':True}),patch.object(display,'launch') as launch:
                 with self.assertRaises(SystemExit) as error:display.main()
                 self.assertEqual(error.exception.code,2);launch.assert_not_called()
+    def test_prerequisite_mode_needs_pinned_probe_and_cannot_select_game(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);cfg=root/'config.json';cfg.write_text('{}')
+            with self.assertRaises(ValueError):lab.validate_display_probe({'display_prerequisite_only':True},root)
+            with self.assertRaises(ValueError):lab.validate_display_probe({'display_prerequisite_only':1},root)
+            for arguments,prepared in [(['--run'],{'display_prerequisite_only':True}),
+                                       (['--prerequisite-only'],{'display_prerequisite_only':False}),
+                                       (['--check','--inside',str(root)],{})]:
+                with patch.object(display.sys,'argv',['tool','--config',str(cfg),*arguments]),patch.object(display,'prepared_configuration',return_value=prepared),patch.object(display,'launch') as launch,patch.object(display,'inside') as inside:
+                    with self.assertRaises(SystemExit):display.main()
+                    launch.assert_not_called();inside.assert_not_called()
+    def test_prerequisite_actual_run_extent_stops_before_service_or_game_even_after_readiness(self):
+        for failure in (False,True):
+            with self.subTest(failure=failure),tempfile.TemporaryDirectory() as d:
+                root=Path(d);game=root/'game';prefix=root/'prefix';prefix.mkdir()
+                path=game/'Bin/SS2VR/install-receipt.json';path.parent.mkdir(parents=True);path.write_text('{}')
+                cfg={'display_prerequisite_only':True,'online_isolation':'native-init-barrier-verified',
+                     'observer':'unused-observer','fingerprints':{},'scene':{'entry':'private-fixture'},
+                     'startup':{},'steam':'unused-steam','native_manifest':'unused-manifest',
+                     'xrizer':'unused-xrizer','runtime_libraries':'unused-libraries','monado_environment':{}}
+                def checked(args,**kw):return 'a'*40 if kw.get('text') else b''
+                with patch.object(lab,'validate',return_value=(root,game,prefix)),patch.object(lab,'running',return_value=[]),patch.object(lab,'private_processes',return_value=[]),patch.object(lab.subprocess,'check_output',side_effect=checked),patch.object(lab.subprocess,'Popen') as actors,patch.object(lab,'display_timing_probe',side_effect=RuntimeError('native fixture failure') if failure else None,return_value=GOOD):
+                    if failure:
+                        with self.assertRaisesRegex(RuntimeError,'native fixture failure'):lab.run(cfg)
+                    else:directory=lab.run(cfg)
+                    actors.assert_not_called()
+                directory=next((root/'runs').iterdir());record=json.loads((directory/'result.json').read_text())
+                self.assertEqual(record['cleanup_errors'],[]);self.assertFalse(record['shutdown_observed'])
+                if not failure:
+                    self.assertEqual(record['result'],'display_prerequisite_only')
+                    self.assertFalse(record['game_launch_requested']);self.assertFalse(record['monado_launch_requested'])
+                self.assertFalse((directory/'config/monado').exists());self.assertFalse((directory/'launch.log').exists())
     def test_overlong_socket_path_refuses_before_any_process_or_attempt(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d)/('long-fixture-name-'*4);root.mkdir()
