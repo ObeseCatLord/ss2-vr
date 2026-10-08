@@ -1,0 +1,1397 @@
+{
+  "schema": 1,
+  "layouts": {
+    "667e6cb03f08ce3fe3ffd6fe21b8e62de44d5cdb89d8c94cc0233dc34d14ae28": {
+      "asset_bytes": 25008,
+      "object_table": 4424,
+      "objects_header": 4496,
+      "types": [
+        {
+          "name": "INDEX",
+          "offset": 682,
+          "version": 1,
+          "kind": 13,
+          "x": 2,
+          "id": 1,
+          "end": 711
+        },
+        {
+          "name": "SLONG",
+          "offset": 711,
+          "version": 1,
+          "kind": 0,
+          "x": 4,
+          "id": 2,
+          "end": 740
+        },
+        {
+          "name": "CResource",
+          "offset": 796,
+          "version": 4,
+          "kind": 5,
+          "x": 6,
+          "id": 4,
+          "fields": [
+            [
+              "1",
+              1
+            ],
+            [
+              "5",
+              1
+            ],
+            [
+              "3",
+              8
+            ],
+            [
+              "2",
+              9
+            ]
+          ],
+          "end": 873
+        },
+        {
+          "name": "CSmartObject",
+          "offset": 928,
+          "version": 1,
+          "kind": 5,
+          "x": 7,
+          "id": 6,
+          "fields": [],
+          "end": 972
+        },
+        {
+          "name": "CObject",
+          "offset": 972,
+          "version": 1,
+          "kind": 5,
+          "x": -1,
+          "id": 7,
+          "fields": [],
+          "end": 1011
+        },
+        {
+          "name": "IDENT",
+          "offset": 1011,
+          "version": 1,
+          "kind": 0,
+          "x": 4,
+          "id": 8,
+          "end": 1040
+        },
+        {
+          "name": "CRenderMesh",
+          "offset": 1118,
+          "version": 6,
+          "kind": 5,
+          "x": -1,
+          "id": 11,
+          "fields": [
+            [
+              "1",
+              14
+            ],
+            [
+              "2",
+              14
+            ],
+            [
+              "3",
+              15
+            ],
+            [
+              "4",
+              15
+            ],
+            [
+              "12",
+              17
+            ],
+            [
+              "13",
+              17
+            ],
+            [
+              "5",
+              20
+            ],
+            [
+              "6",
+              26
+            ],
+            [
+              "7",
+              23
+            ],
+            [
+              "8",
+              23
+            ],
+            [
+              "9",
+              23
+            ],
+            [
+              "11",
+              23
+            ]
+          ],
+          "end": 1272
+        },
+        {
+          "name": "ULONG",
+          "offset": 1311,
+          "version": 1,
+          "kind": 0,
+          "x": 4,
+          "id": 14,
+          "end": 1340
+        },
+        {
+          "name": "GFXHANDLE",
+          "offset": 1395,
+          "version": 2,
+          "kind": 5,
+          "x": 4,
+          "id": 16,
+          "fields": [
+            [
+              "1",
+              42
+            ],
+            [
+              "2",
+              43
+            ]
+          ],
+          "end": 1454
+        },
+        {
+          "name": "CStaticArray<VBufferHolder>",
+          "offset": 1454,
+          "version": 0,
+          "kind": 6,
+          "x": 18,
+          "id": 17,
+          "end": 1505
+        },
+        {
+          "name": "VBufferHolder",
+          "offset": 1505,
+          "version": 1,
+          "kind": 5,
+          "x": -1,
+          "id": 18,
+          "fields": [
+            [
+              "1",
+              19
+            ]
+          ],
+          "end": 1559
+        },
+        {
+          "name": "Ptr<CVertexBuffer>",
+          "offset": 1559,
+          "version": 0,
+          "kind": 11,
+          "x": 16,
+          "id": 19,
+          "end": 1601
+        },
+        {
+          "name": "CStaticArray<CRenderMeshLOD>",
+          "offset": 1601,
+          "version": 0,
+          "kind": 6,
+          "x": 21,
+          "id": 20,
+          "end": 1653
+        },
+        {
+          "name": "CRenderMeshLOD",
+          "offset": 1653,
+          "version": 4,
+          "kind": 5,
+          "x": -1,
+          "id": 21,
+          "fields": [
+            [
+              "1",
+              22
+            ],
+            [
+              "8",
+              8
+            ],
+            [
+              "6",
+              23
+            ],
+            [
+              "7",
+              24
+            ],
+            [
+              "3",
+              25
+            ],
+            [
+              "4",
+              26
+            ],
+            [
+              "5",
+              28
+            ]
+          ],
+          "end": 1762
+        },
+        {
+          "name": "CStaticArray<CRenderMeshSection>",
+          "offset": 2059,
+          "version": 0,
+          "kind": 6,
+          "x": 29,
+          "id": 28,
+          "end": 2115
+        },
+        {
+          "name": "CRenderMeshSection",
+          "offset": 2115,
+          "version": 1,
+          "kind": 5,
+          "x": -1,
+          "id": 29,
+          "fields": [
+            [
+              "1",
+              30
+            ]
+          ],
+          "end": 2174
+        },
+        {
+          "name": "CStaticArray<CRenderMeshSurface>",
+          "offset": 2174,
+          "version": 0,
+          "kind": 6,
+          "x": 31,
+          "id": 30,
+          "end": 2230
+        },
+        {
+          "name": "CRenderMeshSurface",
+          "offset": 2230,
+          "version": 6,
+          "kind": 5,
+          "x": -1,
+          "id": 31,
+          "fields": [
+            [
+              "23",
+              8
+            ],
+            [
+              "1",
+              32
+            ],
+            [
+              "2",
+              1
+            ],
+            [
+              "3",
+              1
+            ],
+            [
+              "4",
+              1
+            ],
+            [
+              "5",
+              1
+            ],
+            [
+              "6",
+              33
+            ],
+            [
+              "7",
+              33
+            ],
+            [
+              "8",
+              33
+            ],
+            [
+              "9",
+              33
+            ],
+            [
+              "10",
+              33
+            ],
+            [
+              "11",
+              33
+            ],
+            [
+              "12",
+              35
+            ],
+            [
+              "13",
+              35
+            ],
+            [
+              "14",
+              36
+            ],
+            [
+              "15",
+              36
+            ],
+            [
+              "18",
+              37
+            ],
+            [
+              "22",
+              38
+            ],
+            [
+              "20",
+              1
+            ],
+            [
+              "16",
+              40
+            ],
+            [
+              "17",
+              26
+            ]
+          ],
+          "end": 2481
+        },
+        {
+          "name": "CRenderMeshElementPath",
+          "offset": 2521,
+          "version": 1,
+          "kind": 5,
+          "x": -1,
+          "id": 33,
+          "fields": [
+            [
+              "1",
+              34
+            ],
+            [
+              "2",
+              34
+            ],
+            [
+              "3",
+              14
+            ]
+          ],
+          "end": 2602
+        },
+        {
+          "name": "UBYTE",
+          "offset": 2602,
+          "version": 1,
+          "kind": 0,
+          "x": 1,
+          "id": 34,
+          "end": 2631
+        },
+        {
+          "name": "CRenderMeshElementPath[8]",
+          "offset": 2679,
+          "version": 0,
+          "kind": 4,
+          "x": 33,
+          "id": 36,
+          "count": 8,
+          "end": 2740
+        },
+        {
+          "name": "CStaticStackArray<IDENT>",
+          "offset": 2740,
+          "version": 0,
+          "kind": 7,
+          "x": 8,
+          "id": 37,
+          "end": 2788
+        },
+        {
+          "name": "CStaticArray<UBYTE>",
+          "offset": 2993,
+          "version": 0,
+          "kind": 6,
+          "x": 34,
+          "id": 43,
+          "end": 3036
+        }
+      ],
+      "mesh": {
+        "object": 2,
+        "type": 11,
+        "header": 4576,
+        "span": [
+          4584,
+          4972
+        ],
+        "index_references": [
+          4608,
+          4620
+        ],
+        "vertex_references": [
+          4620,
+          4632
+        ],
+        "lods_span": [
+          4632,
+          4952
+        ],
+        "lods": [
+          {
+            "span": [
+              4640,
+              4952
+            ],
+            "sections_span": [
+              4684,
+              4952
+            ],
+            "sections": [
+              {
+                "span": [
+                  4692,
+                  4952
+                ],
+                "surfaces_span": [
+                  4692,
+                  4952
+                ],
+                "surfaces": [
+                  {
+                    "span": [
+                      4700,
+                      4952
+                    ],
+                    "triangles": 4708,
+                    "vertices": 4712,
+                    "channels": {
+                      "6": 4724,
+                      "7": 4730,
+                      "10": 4748,
+                      "11": 4754
+                    },
+                    "uv_span": [
+                      4824,
+                      4872
+                    ],
+                    "palette_span": [
+                      4920,
+                      4932
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "buffers": [
+        {
+          "object": 3,
+          "type": 16,
+          "header": 4972,
+          "span": [
+            4980,
+            7036
+          ],
+          "bytes_span": [
+            5000,
+            7036
+          ]
+        },
+        {
+          "object": 4,
+          "type": 16,
+          "header": 7036,
+          "span": [
+            7044,
+            24824
+          ],
+          "bytes_span": [
+            7064,
+            24824
+          ]
+        }
+      ]
+    },
+    "f50b9999379c66fbdc4c9128ad228a89e7f294b663afa47214e8b75fe6b7163c": {
+      "asset_bytes": 448875,
+      "object_table": 10315,
+      "objects_header": 11715,
+      "types": [
+        {
+          "name": "INDEX",
+          "offset": 1947,
+          "version": 1,
+          "kind": 13,
+          "x": 2,
+          "id": 1,
+          "end": 1976
+        },
+        {
+          "name": "SLONG",
+          "offset": 1976,
+          "version": 1,
+          "kind": 0,
+          "x": 4,
+          "id": 2,
+          "end": 2005
+        },
+        {
+          "name": "CResource",
+          "offset": 2061,
+          "version": 4,
+          "kind": 5,
+          "x": 6,
+          "id": 4,
+          "fields": [
+            [
+              "1",
+              1
+            ],
+            [
+              "5",
+              1
+            ],
+            [
+              "3",
+              8
+            ],
+            [
+              "2",
+              9
+            ],
+            [
+              "4",
+              10
+            ]
+          ],
+          "end": 2147
+        },
+        {
+          "name": "CSmartObject",
+          "offset": 2211,
+          "version": 1,
+          "kind": 5,
+          "x": 7,
+          "id": 6,
+          "fields": [],
+          "end": 2255
+        },
+        {
+          "name": "CObject",
+          "offset": 2255,
+          "version": 1,
+          "kind": 5,
+          "x": -1,
+          "id": 7,
+          "fields": [],
+          "end": 2294
+        },
+        {
+          "name": "IDENT",
+          "offset": 2294,
+          "version": 1,
+          "kind": 0,
+          "x": 4,
+          "id": 8,
+          "end": 2323
+        },
+        {
+          "name": "CRenderMesh",
+          "offset": 2496,
+          "version": 6,
+          "kind": 5,
+          "x": -1,
+          "id": 13,
+          "fields": [
+            [
+              "1",
+              18
+            ],
+            [
+              "2",
+              18
+            ],
+            [
+              "3",
+              19
+            ],
+            [
+              "4",
+              19
+            ],
+            [
+              "12",
+              21
+            ],
+            [
+              "13",
+              21
+            ],
+            [
+              "5",
+              24
+            ],
+            [
+              "6",
+              30
+            ],
+            [
+              "7",
+              27
+            ],
+            [
+              "8",
+              27
+            ],
+            [
+              "9",
+              27
+            ],
+            [
+              "11",
+              27
+            ]
+          ],
+          "end": 2650
+        },
+        {
+          "name": "ULONG",
+          "offset": 2858,
+          "version": 1,
+          "kind": 0,
+          "x": 4,
+          "id": 18,
+          "end": 2887
+        },
+        {
+          "name": "GFXHANDLE",
+          "offset": 2942,
+          "version": 2,
+          "kind": 5,
+          "x": 4,
+          "id": 20,
+          "fields": [
+            [
+              "1",
+              46
+            ],
+            [
+              "2",
+              47
+            ]
+          ],
+          "end": 3001
+        },
+        {
+          "name": "CStaticArray<VBufferHolder>",
+          "offset": 3001,
+          "version": 0,
+          "kind": 6,
+          "x": 22,
+          "id": 21,
+          "end": 3052
+        },
+        {
+          "name": "VBufferHolder",
+          "offset": 3052,
+          "version": 1,
+          "kind": 5,
+          "x": -1,
+          "id": 22,
+          "fields": [
+            [
+              "1",
+              23
+            ]
+          ],
+          "end": 3106
+        },
+        {
+          "name": "Ptr<CVertexBuffer>",
+          "offset": 3106,
+          "version": 0,
+          "kind": 11,
+          "x": 20,
+          "id": 23,
+          "end": 3148
+        },
+        {
+          "name": "CStaticArray<CRenderMeshLOD>",
+          "offset": 3148,
+          "version": 0,
+          "kind": 6,
+          "x": 25,
+          "id": 24,
+          "end": 3200
+        },
+        {
+          "name": "CRenderMeshLOD",
+          "offset": 3200,
+          "version": 4,
+          "kind": 5,
+          "x": -1,
+          "id": 25,
+          "fields": [
+            [
+              "1",
+              26
+            ],
+            [
+              "8",
+              8
+            ],
+            [
+              "6",
+              27
+            ],
+            [
+              "7",
+              28
+            ],
+            [
+              "3",
+              29
+            ],
+            [
+              "4",
+              30
+            ],
+            [
+              "5",
+              32
+            ]
+          ],
+          "end": 3309
+        },
+        {
+          "name": "CStaticArray<CRenderMeshSection>",
+          "offset": 3606,
+          "version": 0,
+          "kind": 6,
+          "x": 33,
+          "id": 32,
+          "end": 3662
+        },
+        {
+          "name": "CRenderMeshSection",
+          "offset": 3662,
+          "version": 1,
+          "kind": 5,
+          "x": -1,
+          "id": 33,
+          "fields": [
+            [
+              "1",
+              34
+            ]
+          ],
+          "end": 3721
+        },
+        {
+          "name": "CStaticArray<CRenderMeshSurface>",
+          "offset": 3721,
+          "version": 0,
+          "kind": 6,
+          "x": 35,
+          "id": 34,
+          "end": 3777
+        },
+        {
+          "name": "CRenderMeshSurface",
+          "offset": 3777,
+          "version": 6,
+          "kind": 5,
+          "x": -1,
+          "id": 35,
+          "fields": [
+            [
+              "23",
+              8
+            ],
+            [
+              "1",
+              36
+            ],
+            [
+              "2",
+              1
+            ],
+            [
+              "3",
+              1
+            ],
+            [
+              "4",
+              1
+            ],
+            [
+              "5",
+              1
+            ],
+            [
+              "6",
+              37
+            ],
+            [
+              "7",
+              37
+            ],
+            [
+              "8",
+              37
+            ],
+            [
+              "9",
+              37
+            ],
+            [
+              "10",
+              37
+            ],
+            [
+              "11",
+              37
+            ],
+            [
+              "12",
+              39
+            ],
+            [
+              "13",
+              39
+            ],
+            [
+              "14",
+              40
+            ],
+            [
+              "15",
+              40
+            ],
+            [
+              "18",
+              41
+            ],
+            [
+              "22",
+              42
+            ],
+            [
+              "20",
+              1
+            ],
+            [
+              "16",
+              44
+            ],
+            [
+              "17",
+              30
+            ]
+          ],
+          "end": 4028
+        },
+        {
+          "name": "CRenderMeshElementPath",
+          "offset": 4068,
+          "version": 1,
+          "kind": 5,
+          "x": -1,
+          "id": 37,
+          "fields": [
+            [
+              "1",
+              38
+            ],
+            [
+              "2",
+              38
+            ],
+            [
+              "3",
+              18
+            ]
+          ],
+          "end": 4149
+        },
+        {
+          "name": "UBYTE",
+          "offset": 4149,
+          "version": 1,
+          "kind": 0,
+          "x": 1,
+          "id": 38,
+          "end": 4178
+        },
+        {
+          "name": "CRenderMeshElementPath[8]",
+          "offset": 4226,
+          "version": 0,
+          "kind": 4,
+          "x": 37,
+          "id": 40,
+          "count": 8,
+          "end": 4287
+        },
+        {
+          "name": "CStaticStackArray<IDENT>",
+          "offset": 4287,
+          "version": 0,
+          "kind": 7,
+          "x": 8,
+          "id": 41,
+          "end": 4335
+        },
+        {
+          "name": "CStaticArray<UBYTE>",
+          "offset": 4540,
+          "version": 0,
+          "kind": 6,
+          "x": 38,
+          "id": 47,
+          "end": 4583
+        }
+      ],
+      "mesh": {
+        "object": 3,
+        "type": 13,
+        "header": 11803,
+        "span": [
+          11811,
+          14851
+        ],
+        "index_references": [
+          11835,
+          11855
+        ],
+        "vertex_references": [
+          11855,
+          11875
+        ],
+        "lods_span": [
+          11875,
+          14831
+        ],
+        "lods": [
+          {
+            "span": [
+              11883,
+              13203
+            ],
+            "sections_span": [
+              11927,
+              13203
+            ],
+            "sections": [
+              {
+                "span": [
+                  11935,
+                  13203
+                ],
+                "surfaces_span": [
+                  11935,
+                  13203
+                ],
+                "surfaces": [
+                  {
+                    "span": [
+                      11943,
+                      12195
+                    ],
+                    "triangles": 11951,
+                    "vertices": 11955,
+                    "channels": {
+                      "6": 11967,
+                      "7": 11973,
+                      "10": 11991,
+                      "11": 11997
+                    },
+                    "uv_span": [
+                      12067,
+                      12115
+                    ],
+                    "palette_span": [
+                      12163,
+                      12175
+                    ]
+                  },
+                  {
+                    "span": [
+                      12195,
+                      12447
+                    ],
+                    "triangles": 12203,
+                    "vertices": 12207,
+                    "channels": {
+                      "6": 12219,
+                      "7": 12225,
+                      "10": 12243,
+                      "11": 12249
+                    },
+                    "uv_span": [
+                      12319,
+                      12367
+                    ],
+                    "palette_span": [
+                      12415,
+                      12427
+                    ]
+                  },
+                  {
+                    "span": [
+                      12447,
+                      12699
+                    ],
+                    "triangles": 12455,
+                    "vertices": 12459,
+                    "channels": {
+                      "6": 12471,
+                      "7": 12477,
+                      "10": 12495,
+                      "11": 12501
+                    },
+                    "uv_span": [
+                      12571,
+                      12619
+                    ],
+                    "palette_span": [
+                      12667,
+                      12679
+                    ]
+                  },
+                  {
+                    "span": [
+                      12699,
+                      12951
+                    ],
+                    "triangles": 12707,
+                    "vertices": 12711,
+                    "channels": {
+                      "6": 12723,
+                      "7": 12729,
+                      "10": 12747,
+                      "11": 12753
+                    },
+                    "uv_span": [
+                      12823,
+                      12871
+                    ],
+                    "palette_span": [
+                      12919,
+                      12931
+                    ]
+                  },
+                  {
+                    "span": [
+                      12951,
+                      13203
+                    ],
+                    "triangles": 12959,
+                    "vertices": 12963,
+                    "channels": {
+                      "6": 12975,
+                      "7": 12981,
+                      "10": 12999,
+                      "11": 13005
+                    },
+                    "uv_span": [
+                      13075,
+                      13123
+                    ],
+                    "palette_span": [
+                      13171,
+                      13183
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "span": [
+              13203,
+              14523
+            ],
+            "sections_span": [
+              13247,
+              14523
+            ],
+            "sections": [
+              {
+                "span": [
+                  13255,
+                  14523
+                ],
+                "surfaces_span": [
+                  13255,
+                  14523
+                ],
+                "surfaces": [
+                  {
+                    "span": [
+                      13263,
+                      13515
+                    ],
+                    "triangles": 13271,
+                    "vertices": 13275,
+                    "channels": {
+                      "6": 13287,
+                      "7": 13293,
+                      "10": 13311,
+                      "11": 13317
+                    },
+                    "uv_span": [
+                      13387,
+                      13435
+                    ],
+                    "palette_span": [
+                      13483,
+                      13495
+                    ]
+                  },
+                  {
+                    "span": [
+                      13515,
+                      13767
+                    ],
+                    "triangles": 13523,
+                    "vertices": 13527,
+                    "channels": {
+                      "6": 13539,
+                      "7": 13545,
+                      "10": 13563,
+                      "11": 13569
+                    },
+                    "uv_span": [
+                      13639,
+                      13687
+                    ],
+                    "palette_span": [
+                      13735,
+                      13747
+                    ]
+                  },
+                  {
+                    "span": [
+                      13767,
+                      14019
+                    ],
+                    "triangles": 13775,
+                    "vertices": 13779,
+                    "channels": {
+                      "6": 13791,
+                      "7": 13797,
+                      "10": 13815,
+                      "11": 13821
+                    },
+                    "uv_span": [
+                      13891,
+                      13939
+                    ],
+                    "palette_span": [
+                      13987,
+                      13999
+                    ]
+                  },
+                  {
+                    "span": [
+                      14019,
+                      14271
+                    ],
+                    "triangles": 14027,
+                    "vertices": 14031,
+                    "channels": {
+                      "6": 14043,
+                      "7": 14049,
+                      "10": 14067,
+                      "11": 14073
+                    },
+                    "uv_span": [
+                      14143,
+                      14191
+                    ],
+                    "palette_span": [
+                      14239,
+                      14251
+                    ]
+                  },
+                  {
+                    "span": [
+                      14271,
+                      14523
+                    ],
+                    "triangles": 14279,
+                    "vertices": 14283,
+                    "channels": {
+                      "6": 14295,
+                      "7": 14301,
+                      "10": 14319,
+                      "11": 14325
+                    },
+                    "uv_span": [
+                      14395,
+                      14443
+                    ],
+                    "palette_span": [
+                      14491,
+                      14503
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "span": [
+              14523,
+              14831
+            ],
+            "sections_span": [
+              14567,
+              14831
+            ],
+            "sections": [
+              {
+                "span": [
+                  14575,
+                  14831
+                ],
+                "surfaces_span": [
+                  14575,
+                  14831
+                ],
+                "surfaces": [
+                  {
+                    "span": [
+                      14583,
+                      14831
+                    ],
+                    "triangles": 14591,
+                    "vertices": 14595,
+                    "channels": {
+                      "6": 14607,
+                      "7": 14613,
+                      "10": 14631,
+                      "11": 14637
+                    },
+                    "uv_span": [
+                      14707,
+                      14755
+                    ],
+                    "palette_span": [
+                      14803,
+                      14811
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "buffers": [
+        {
+          "object": 5,
+          "type": 20,
+          "header": 14851,
+          "span": [
+            14859,
+            25199
+          ],
+          "bytes_span": [
+            14883,
+            25199
+          ]
+        },
+        {
+          "object": 6,
+          "type": 20,
+          "header": 25199,
+          "span": [
+            25207,
+            35319
+          ],
+          "bytes_span": [
+            25231,
+            35319
+          ]
+        },
+        {
+          "object": 7,
+          "type": 20,
+          "header": 35319,
+          "span": [
+            35327,
+            37255
+          ],
+          "bytes_span": [
+            35351,
+            37255
+          ]
+        },
+        {
+          "object": 8,
+          "type": 20,
+          "header": 37255,
+          "span": [
+            37263,
+            107567
+          ],
+          "bytes_span": [
+            37287,
+            107567
+          ]
+        },
+        {
+          "object": 9,
+          "type": 20,
+          "header": 107567,
+          "span": [
+            107575,
+            182967
+          ],
+          "bytes_span": [
+            107599,
+            182967
+          ]
+        },
+        {
+          "object": 10,
+          "type": 20,
+          "header": 182967,
+          "span": [
+            182975,
+            191679
+          ],
+          "bytes_span": [
+            182999,
+            191679
+          ]
+        }
+      ]
+    }
+  }
+}
