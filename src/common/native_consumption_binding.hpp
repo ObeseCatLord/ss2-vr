@@ -3,6 +3,12 @@
 #include <optional>
 
 namespace ss2vr {
+// Every admitted high must carry its own quiet witness after the native stop
+// fence. Later arming cannot lend permission to an older delayed source pulse.
+constexpr bool nativeGestureQuietWitness(uint64_t after, uint64_t sequence, uint64_t tick,
+                                        uint64_t quietSequence, uint64_t quietTick) noexcept {
+    return quietSequence > after && quietSequence <= sequence && quietTick && quietTick <= tick;
+}
 // One subrecord attached to an existing native-hand owner, never another entity
 // lookup table. Input/pose snapshots may be copied without copying this owner.
 // Used by the default-off unique-saw native adapter; ownership and exact native

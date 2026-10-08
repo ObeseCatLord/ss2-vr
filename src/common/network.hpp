@@ -15,7 +15,7 @@ namespace ss2vr::network {
 
 constexpr std::string_view CarrierTag = "~SS2VR1~";
 constexpr size_t MaxCarrierAscii = 512;
-constexpr uint8_t WireVersion = 6;
+constexpr uint8_t WireVersion = 7;
 constexpr uint8_t HandMask = 0x03;
 constexpr uint8_t PoseValidMask = 0x07; // bit 0: head, bits 1/2: left/right grip.
 constexpr uint64_t MaxPoseAgeMs = 200;
@@ -65,6 +65,12 @@ struct PosePacket {
     // Canonical 0..16 weapon IDs only.  These are never native weapon handles.
     int16_t requestedWeapon[2]{-1, -1};
     int16_t nativeWeaponId[2]{-1, -1};
+    // Physical gesture observations are never manual trigger/history evidence.
+    // Quiet identifies a persistent witness in this stream, not a repeat bit.
+    uint8_t gestureEligibleMask = 0, gestureDownMask = 0, gestureQuietMask = 0, gesturePulseMask = 0;
+    uint32_t gestureGeneration[2]{};
+    uint64_t gestureSequence[2]{}, gestureTickMs[2]{};
+    uint64_t gestureQuietSequence[2]{}, gestureQuietTickMs[2]{};
 };
 inline uint8_t intervalZoomMask(const PosePacket &pose) {
     // An UNZOOMED historical shot must override a newer zoomed held level too.
@@ -79,12 +85,24 @@ inline bool currentIntentSample(const PosePacket &captured, const PosePacket &li
            captured.clientNonce == live.clientNonce && captured.serverNonce == live.serverNonce &&
            captured.sequence == live.sequence && captured.trackingGeneration == live.trackingGeneration;
 }
+inline void invalidateGestureIntents(PosePacket &pose, uint8_t hands) {
+    const auto keep = uint8_t(~(hands & HandMask));
+    pose.gestureEligibleMask &= keep; pose.gestureDownMask &= keep;
+    pose.gestureQuietMask &= keep; pose.gesturePulseMask &= keep;
+    for (unsigned hand = 0; hand < 2; ++hand)
+        if (hands & (1u << hand)) {
+            pose.gestureGeneration[hand] = 0;
+            pose.gestureSequence[hand] = pose.gestureTickMs[hand] = 0;
+            pose.gestureQuietSequence[hand] = pose.gestureQuietTickMs[hand] = 0;
+        }
+}
 inline void invalidateWeaponIntents(PosePacket &pose, uint8_t hands) {
     const auto keep = uint8_t(~(hands & HandMask));
     pose.fireMask &= keep;
     pose.pulseMask &= keep;
     pose.zoomMask &= keep;
     pose.pulseZoomMask &= keep;
+    invalidateGestureIntents(pose, hands);
     // Physical held/release witnesses stay native input, not synthetic releases.
 }
 inline void cancelWeaponRequests(PosePacket &pose, uint8_t hands) {
@@ -148,6 +166,25 @@ inline bool validatePoseCoordinates(PosePacket &p) {
             return false;
     return true;
 }
+inline bool validGestureHand(const PosePacket &p, unsigned hand) {
+    if (hand >= 2) return false;
+    const uint8_t bit = uint8_t(1u << hand);
+    const bool eligible = (p.gestureEligibleMask & bit) != 0, quiet = (p.gestureQuietMask & bit) != 0;
+    if (!eligible)
+        return !((p.gestureDownMask | p.gestureQuietMask | p.gesturePulseMask) & bit) &&
+            !p.gestureGeneration[hand] && !p.gestureSequence[hand] && !p.gestureTickMs[hand] &&
+            !p.gestureQuietSequence[hand] && !p.gestureQuietTickMs[hand];
+    if (!(p.validMask & 1) || !(p.validMask & (bit << 1)) || (p.wheelOrEquipBlockedMask & bit) ||
+        p.nativeWeaponId[hand] != 0 || p.requestedWeapon[hand] >= 0 ||
+        !p.gestureGeneration[hand] || !p.gestureSequence[hand] || !p.gestureTickMs[hand]) return false;
+    if (!quiet) return !p.gestureQuietSequence[hand] && !p.gestureQuietTickMs[hand];
+    return p.gestureQuietSequence[hand] && p.gestureQuietTickMs[hand] &&
+        p.gestureQuietSequence[hand] <= p.gestureSequence[hand] &&
+        p.gestureQuietTickMs[hand] <= p.gestureTickMs[hand] &&
+        ((p.gestureQuietSequence[hand] == p.gestureSequence[hand]) ==
+         (p.gestureQuietTickMs[hand] == p.gestureTickMs[hand])) &&
+        (!(p.gestureDownMask & bit) || p.gestureQuietSequence[hand] < p.gestureSequence[hand]);
+}
 inline bool validatePose(PosePacket &p) {
     if (!p.clientNonce || !p.serverNonce || !p.sequence || !p.trackingGeneration ||
         (p.validMask & ~PoseValidMask) || (p.physicalDownMask & ~HandMask) || (p.fireMask & ~HandMask) ||
@@ -156,7 +193,8 @@ inline bool validatePose(PosePacket &p) {
         (p.zoomPhysicalDownMask & ~HandMask) || (p.zoomSampleEligibleMask & ~HandMask) ||
         (p.primarySampleEligibleMask & ~HandMask) || (p.primaryNeutralSampleMask & ~HandMask) ||
         (p.primaryNeutralSampleMask & ~p.primarySampleEligibleMask) ||
-        (p.primaryNeutralSampleMask & p.physicalDownMask))
+        (p.primaryNeutralSampleMask & p.physicalDownMask) ||
+        ((p.gestureEligibleMask | p.gestureDownMask | p.gestureQuietMask | p.gesturePulseMask) & ~HandMask))
         return false;
     if ((p.fireMask && !(p.validMask & 1)) || (p.fireMask & ~(p.validMask >> 1)) ||
         (p.fireMask & ~p.physicalDownMask) || (p.fireMask & p.wheelOrEquipBlockedMask))
@@ -171,6 +209,7 @@ inline bool validatePose(PosePacket &p) {
     if (!validatePoseCoordinates(p))
         return false;
     for (unsigned hand = 0; hand != 2; ++hand) {
+        if (!validGestureHand(p, hand)) return false;
         if (!validWeaponId(p.requestedWeapon[hand]) || !validWeaponId(p.nativeWeaponId[hand]))
             return false;
         if (((p.zoomMask | p.pulseZoomMask) & (1u << hand)) &&
@@ -281,19 +320,87 @@ inline bool prepareLocalPose(PosePacket &pose, const LocalPoseCapture &capture,
     return false;
 }
 
+// Shared provenance admission inside the existing local/peer owners. This is
+// transport quiet/rearm only: it cannot establish native consumed-low.
+struct GestureAdmission {
+    // Monotonic stream generation within a capability, including producer and
+    // binding replacement. A new generation may restart its source sequence.
+    uint32_t generation = 0;
+    uint64_t sequence = 0, tickMs = 0, quietSequence = 0, quietTickMs = 0, receivedMs = 0;
+    uint64_t afterSequence = 0, afterTickMs = 0, lastPulseSequence = 0;
+    bool armed = false, down = false;
+    void requireQuiet() {
+        armed = false; afterSequence = sequence; afterTickMs = tickMs;
+    }
+    bool observe(const PosePacket &p, unsigned hand, uint64_t now) {
+        if (hand >= 2) return false;
+        const auto bit = uint8_t(1u << hand);
+        if (!(p.gestureEligibleMask & bit) || !validGestureHand(p, hand)) {
+            requireQuiet(); return false;
+        }
+        if (p.gestureGeneration[hand] < generation) return false;
+        if (p.gestureGeneration[hand] != generation) {
+            *this = {}; generation = p.gestureGeneration[hand];
+        }
+        if (p.gestureSequence[hand] < sequence || p.gestureTickMs[hand] < tickMs ||
+            ((p.gestureSequence[hand] == sequence) != (p.gestureTickMs[hand] == tickMs))) return false;
+        if (sequence && (now < receivedMs || now - receivedMs > MaxPoseAgeMs)) requireQuiet();
+        if (p.gestureSequence[hand] == sequence)
+            return quietSequence == p.gestureQuietSequence[hand] && quietTickMs == p.gestureQuietTickMs[hand] &&
+                down == bool(p.gestureDownMask & bit);
+        if (p.gestureQuietSequence[hand] < quietSequence || p.gestureQuietTickMs[hand] < quietTickMs ||
+            ((p.gestureQuietSequence[hand] == quietSequence) != (p.gestureQuietTickMs[hand] == quietTickMs)))
+            return false;
+        sequence = p.gestureSequence[hand]; tickMs = p.gestureTickMs[hand]; receivedMs = now;
+        quietSequence = p.gestureQuietSequence[hand]; quietTickMs = p.gestureQuietTickMs[hand];
+        down = (p.gestureDownMask & bit) != 0;
+        if ((p.gestureQuietMask & bit) && quietSequence > afterSequence && quietTickMs > afterTickMs)
+            armed = true;
+        return true;
+    }
+    bool current(const PosePacket &p, unsigned hand, uint64_t now = 0) const {
+        return hand < 2 && armed && (p.gestureEligibleMask & (1u << hand)) && validGestureHand(p, hand) &&
+            p.gestureGeneration[hand] == generation && p.gestureSequence[hand] == sequence &&
+            p.gestureTickMs[hand] == tickMs && p.gestureQuietSequence[hand] == quietSequence &&
+            p.gestureQuietTickMs[hand] == quietTickMs && down == bool(p.gestureDownMask & (1u << hand)) &&
+            (!now || (now >= receivedMs && now - receivedMs <= MaxPoseAgeMs));
+    }
+};
+
 // A physical press survives a full reliable-send window only as a per-hand
 // pulse. The next granted Pose carries it once, then normal level state takes
 // over; a released tap cannot become held while waiting for transport.
 class PendingIntents {
   public:
     static constexpr uint64_t ExpiryMs = MaxPoseAgeMs;
+    // Local value receipt for an ordinary native transport handoff, not an ACK
+    // or native weapon completion. The caller also rechecks its Local/send token.
+    struct HandoffReceipt {
+        struct Hand {
+            LocalCaptureFrame frame;
+            Pose head{}, grip{};
+            uint64_t expiresAt = 0;
+            uint32_t trackingGeneration = 0, intentEpoch = 0, primaryGeneration = 0, zoomGeneration = 0;
+            uint32_t gestureGeneration = 0;
+            uint64_t gestureSequence = 0, gestureTickMs = 0, quietSequence = 0, quietTickMs = 0;
+            int16_t nativeWeaponId = -1;
+            uint8_t kinds = 0;
+            bool zoomed = false;
+        } hand[2];
+        const PendingIntents *owner = nullptr;
+    };
 
     void requireNeutral(uint8_t handMask = HandMask) {
-        neutralRequired_ |= handMask & HandMask;
+        requirePrimaryNeutral(handMask);
+        for (unsigned hand = 0; hand < 2; ++hand)
+            if (handMask & (1u << hand)) gesture_[hand].requireQuiet();
         cancel(handMask);
     }
     bool primaryAllowed(unsigned hand) const {
         return hand < 2 && !(neutralRequired_ & (1u << hand));
+    }
+    bool gestureAllowed(unsigned hand) const {
+        return hand < 2 && gesture_[hand].armed;
     }
     bool currentPrimaryIntent(const PosePacket &latest, unsigned hand, uint32_t capturedEpoch,
                               uint32_t capturedPrimaryGeneration, bool requireFire = true) const {
@@ -303,6 +410,18 @@ class PendingIntents {
                (!requireFire || (latest.fireMask & (1u << hand)));
     }
     void filterPrimaryIntents(PosePacket &pose) const {
+        filterManualIntents(pose);
+        for (unsigned hand = 0; hand < 2; ++hand)
+            if (!gesture_[hand].current(pose, hand)) invalidateGestureIntents(pose, uint8_t(1u << hand));
+    }
+    bool currentGestureIntent(const PosePacket &pose, unsigned hand, uint32_t epoch,
+                              uint32_t generation, uint64_t sequence, bool requireDown = true) const {
+        return hand < 2 && matchesIntentEpoch(pose, hand, epoch) &&
+            gesture_[hand].current(pose, hand) && pose.gestureGeneration[hand] == generation &&
+            pose.gestureSequence[hand] == sequence && (!requireDown || (pose.gestureDownMask & (1u << hand)));
+    }
+  private:
+    void filterManualIntents(PosePacket &pose) const {
         for (unsigned hand = 0; hand < 2; ++hand)
             if (!primaryAllowed(hand)) {
                 const auto keep = uint8_t(~(1u << hand));
@@ -311,32 +430,50 @@ class PendingIntents {
                 pose.pulseZoomMask &= keep;
             }
     }
-    void observeSnapshot(const PosePacket &pose) {
+    void removeKind(unsigned hand, uint8_t kind) {
+        kinds_[hand] &= uint8_t(~kind);
+        if (!kinds_[hand]) expiresAt_[hand] = 0;
+    }
+    void requirePrimaryNeutral(uint8_t hands) {
+        neutralRequired_ |= hands & HandMask;
+        for (unsigned hand = 0; hand < 2; ++hand)
+            if (hands & (1u << hand)) removeKind(hand, Manual);
+    }
+  public:
+    void observeSnapshot(const PosePacket &pose, uint64_t now = 0) {
         if (trackingGeneration_ && pose.trackingGeneration != trackingGeneration_)
             requireNeutral();
         trackingGeneration_ = pose.trackingGeneration;
         for (unsigned hand = 0; hand != 2; ++hand) {
             const uint8_t bit = uint8_t(1u << hand);
-            if ((lastIntentEpoch_[hand] && lastIntentEpoch_[hand] != pose.intentEpoch[hand]) ||
-                (lastPrimaryInputGeneration_[hand] &&
-                 lastPrimaryInputGeneration_[hand] != pose.primaryInputGeneration[hand]))
+            if (lastIntentEpoch_[hand] && lastIntentEpoch_[hand] != pose.intentEpoch[hand])
                 requireNeutral(bit);
+            if (lastPrimaryInputGeneration_[hand] &&
+                lastPrimaryInputGeneration_[hand] != pose.primaryInputGeneration[hand])
+                requirePrimaryNeutral(bit);
             lastIntentEpoch_[hand] = pose.intentEpoch[hand];
             lastPrimaryInputGeneration_[hand] = pose.primaryInputGeneration[hand];
+            if (!pose.intentEpoch[hand]) gesture_[hand].requireQuiet();
+            else gesture_[hand].observe(pose, hand, now);
+            if ((kinds_[hand] & Gesture) && expiresAt_[hand] &&
+                (!gesture_[hand].current(pose, hand) || nativeWeaponId_[hand] != pose.nativeWeaponId[hand] ||
+                 intentEpoch_[hand] != pose.intentEpoch[hand] ||
+                 gestureGeneration_[hand] != pose.gestureGeneration[hand])) removeKind(hand, Gesture);
             if (expiresAt_[hand] &&
+                (kinds_[hand] & Manual) &&
                 (nativeWeaponId_[hand] != pose.nativeWeaponId[hand] || pose.requestedWeapon[hand] >= 0 ||
                  intentEpoch_[hand] != pose.intentEpoch[hand] || !pose.intentEpoch[hand] ||
                  primaryInputGeneration_[hand] != pose.primaryInputGeneration[hand] ||
                  !(pose.primarySampleEligibleMask & bit)))
-                requireNeutral(bit);
+                requirePrimaryNeutral(bit);
             if (expiresAt_[hand] && zoomed_[hand] &&
                 (zoomInputGeneration_[hand] != pose.zoomInputGeneration[hand] ||
                  !(pose.zoomSampleEligibleMask & bit)))
-                cancel(bit);
+                removeKind(hand, Manual);
             if (!(pose.validMask & 1) || !(pose.validMask & (bit << 1)) ||
                 (pose.wheelOrEquipBlockedMask & bit) || !(pose.primarySampleEligibleMask & bit) ||
                 !pose.primaryInputGeneration[hand] || !pose.intentEpoch[hand]) {
-                requireNeutral(bit);
+                requirePrimaryNeutral(bit);
                 continue;
             }
             if ((neutralRequired_ & bit) && (pose.validMask & 1) && (pose.validMask & (bit << 1)) &&
@@ -359,25 +496,54 @@ class PendingIntents {
                     return false;
                 }
             }
-        observeSnapshot(pose);
+        auto admitted = pose;
+        for (unsigned hand = 0; hand < 2; ++hand)
+            if ((pose.gestureEligibleMask & (1u << hand)) &&
+                (pose.gestureSequence[hand] > capture.frame.sequence || pose.gestureTickMs[hand] > capture.frame.tickMs ||
+                 now < pose.gestureTickMs[hand] || now - pose.gestureTickMs[hand] > MaxPoseAgeMs))
+                invalidateGestureIntents(admitted, uint8_t(1u << hand));
+        observeSnapshot(admitted, now);
         return true;
     }
     bool retain(const PosePacket &pose, uint8_t pressedHands, uint64_t now,
-                const LocalPoseCapture &capture) {
+                const LocalPoseCapture &capture, uint8_t gesturePressed = 0) {
         expire(now);
         if (!observeCapture(pose, capture, now)) return false;
         bool retained = false;
         for (unsigned hand = 0; hand != 2; ++hand) {
             const uint8_t bit = uint8_t(1u << hand);
-            if (!(pressedHands & bit) || (neutralRequired_ & bit) || expiresAt_[hand] ||
-                !(pose.validMask & 1) || !(pose.validMask & (bit << 1)) || !(pose.physicalDownMask & bit) ||
-                !(pose.fireMask & bit) || (pose.wheelOrEquipBlockedMask & bit) ||
-                pose.requestedWeapon[hand] >= 0 || !(pose.primarySampleEligibleMask & bit) ||
-                !pose.primaryInputGeneration[hand] || !pose.intentEpoch[hand] ||
-                ((pose.zoomMask & bit) &&
-                 (!(pose.zoomSampleEligibleMask & bit) || !pose.zoomInputGeneration[hand])))
-                continue;
-            expiresAt_[hand] = now + ExpiryMs;
+            const bool manual = (pressedHands & bit) && !(neutralRequired_ & bit) &&
+                (pose.validMask & 1) && (pose.validMask & (bit << 1)) && (pose.physicalDownMask & bit) &&
+                (pose.fireMask & bit) && !(pose.wheelOrEquipBlockedMask & bit) &&
+                pose.requestedWeapon[hand] < 0 && (pose.primarySampleEligibleMask & bit) &&
+                pose.primaryInputGeneration[hand] && pose.intentEpoch[hand] &&
+                (!(pose.zoomMask & bit) || ((pose.zoomSampleEligibleMask & bit) && pose.zoomInputGeneration[hand]));
+            const bool gesture = (gesturePressed & bit) && pose.intentEpoch[hand] &&
+                gesture_[hand].current(pose, hand) && (pose.gestureDownMask & bit) &&
+                pose.gestureSequence[hand] == capture.frame.sequence && pose.gestureTickMs[hand] == capture.frame.tickMs &&
+                (lastGestureGeneration_[hand] != pose.gestureGeneration[hand] ||
+                 pose.gestureSequence[hand] > lastGestureSequence_[hand]);
+            if (gesture) { // Capacity loss discards this edge; it cannot turn into later debt.
+                lastGestureGeneration_[hand] = pose.gestureGeneration[hand];
+                lastGestureSequence_[hand] = pose.gestureSequence[hand];
+            }
+            if (!manual && !gesture) continue;
+            const bool same = expiresAt_[hand] && sameCaptureOwner(capture.frame, capture_[hand].frame) &&
+                capture.frame.sequence == capture_[hand].frame.sequence &&
+                capture.frame.tickMs == capture_[hand].frame.tickMs &&
+                !std::memcmp(&capture.head, &capture_[hand].head, sizeof(Pose)) &&
+                !std::memcmp(&capture.grip[hand], &capture_[hand].grip, sizeof(Pose)) &&
+                nativeWeaponId_[hand] == pose.nativeWeaponId[hand] && intentEpoch_[hand] == pose.intentEpoch[hand];
+            if (expiresAt_[hand] && !same && ((kinds_[hand] & Manual) || !manual)) continue;
+            if (same && (!manual || (kinds_[hand] & Manual)) && (!gesture || (kinds_[hand] & Gesture))) continue;
+            if (!same) { expiresAt_[hand] = now + ExpiryMs; kinds_[hand] = 0; }
+            kinds_[hand] |= uint8_t((manual ? Manual : 0) | (gesture ? Gesture : 0));
+            if (gesture) {
+                gestureGeneration_[hand] = pose.gestureGeneration[hand];
+                gestureSequence_[hand] = pose.gestureSequence[hand]; gestureTickMs_[hand] = pose.gestureTickMs[hand];
+                gestureQuietSequence_[hand] = pose.gestureQuietSequence[hand];
+                gestureQuietTickMs_[hand] = pose.gestureQuietTickMs[hand];
+            }
             capture_[hand] = {capture.frame, capture.head, capture.grip[hand]};
             nativeWeaponId_[hand] = pose.nativeWeaponId[hand];
             zoomed_[hand] = (pose.zoomMask & bit) != 0;
@@ -390,13 +556,18 @@ class PendingIntents {
         return retained;
     }
     // Compose without consuming: a failed native send must retain the same tap.
+    // Return manual pulses for existing callers; gesturePulseMask is separate.
+    // Before unlocking for a send, receipt the union of BOTH transmitted masks;
+    // on successful handoff consume that union with the captured receipt.
     uint8_t apply(PosePacket &pose, uint64_t now, const LocalPoseCapture &current) {
         if (!observeCapture(pose, current, now)) {
             invalidateWeaponIntents(pose, HandMask);
             return 0;
         }
-        const uint8_t pulses = mask(now);
-        pose.pulseMask = pulses;
+        filterPrimaryIntents(pose);
+        const uint8_t pulses = uint8_t(mask(now) | gestureMask(now));
+        pose.pulseMask = mask(now);
+        pose.gesturePulseMask = gestureMask(now);
         pose.pulseZoomMask = 0;
         for (unsigned hand = 0; hand != 2; ++hand)
             if (pulses & (1u << hand)) {
@@ -411,31 +582,93 @@ class PendingIntents {
                 }
                 pose.grip[hand] = grip;
                 pose.nativeWeaponId[hand] = nativeWeaponId_[hand];
-                if (zoomed_[hand])
+                if ((kinds_[hand] & Manual) && zoomed_[hand])
                     pose.pulseZoomMask |= uint8_t(1u << hand);
+                if (kinds_[hand] & Gesture) {
+                    pose.gestureEligibleMask |= uint8_t(1u << hand);
+                    pose.gestureGeneration[hand] = gestureGeneration_[hand];
+                    pose.gestureSequence[hand] = gestureSequence_[hand]; pose.gestureTickMs[hand] = gestureTickMs_[hand];
+                    pose.gestureQuietSequence[hand] = gestureQuietSequence_[hand];
+                    pose.gestureQuietTickMs[hand] = gestureQuietTickMs_[hand];
+                    if (gestureQuietSequence_[hand]) pose.gestureQuietMask |= uint8_t(1u << hand);
+                    else pose.gestureQuietMask &= uint8_t(~(1u << hand));
+                }
                 // observeSnapshot canceled any generation mismatch above.
                 pose.trackingGeneration = generation_[hand];
             }
-        filterPrimaryIntents(pose);
+        filterManualIntents(pose);
         return pose.pulseMask;
     }
     uint8_t mask(uint64_t now) {
+        return kindMask(now, Manual);
+    }
+    uint8_t gestureMask(uint64_t now) {
+        return kindMask(now, Gesture);
+    }
+  private:
+    uint8_t kindMask(uint64_t now, uint8_t kind) {
         expire(now);
         uint8_t result = 0;
         for (unsigned hand = 0; hand != 2; ++hand)
-            if (expiresAt_[hand])
+            if (expiresAt_[hand] && (kinds_[hand] & kind))
                 result |= uint8_t(1u << hand);
         return result;
     }
+  public:
+    HandoffReceipt handoffReceipt(uint8_t handMask) const {
+        HandoffReceipt receipt;
+        receipt.owner = this;
+        for (unsigned hand = 0; hand < 2; ++hand)
+            if ((handMask & (1u << hand)) && expiresAt_[hand]) {
+                auto &out = receipt.hand[hand];
+                out.frame = capture_[hand].frame; out.head = capture_[hand].head; out.grip = capture_[hand].grip;
+                out.expiresAt = expiresAt_[hand]; out.kinds = kinds_[hand];
+                out.nativeWeaponId = nativeWeaponId_[hand]; out.trackingGeneration = generation_[hand];
+                out.intentEpoch = intentEpoch_[hand]; out.primaryGeneration = primaryInputGeneration_[hand];
+                out.zoomGeneration = zoomInputGeneration_[hand]; out.zoomed = zoomed_[hand];
+                out.gestureGeneration = gestureGeneration_[hand]; out.gestureSequence = gestureSequence_[hand];
+                out.gestureTickMs = gestureTickMs_[hand]; out.quietSequence = gestureQuietSequence_[hand];
+                out.quietTickMs = gestureQuietTickMs_[hand];
+            }
+        return receipt;
+    }
+    void consume(uint8_t handMask, const HandoffReceipt &receipt) {
+        if (receipt.owner != this) return;
+        static_assert(sizeof(Pose) == 28);
+        for (unsigned hand = 0; hand < 2; ++hand) {
+            const auto &sent = receipt.hand[hand];
+            const auto &capture = capture_[hand];
+            if (!(handMask & (1u << hand)) || !sent.kinds || !expiresAt_[hand] ||
+                expiresAt_[hand] != sent.expiresAt || !sameCaptureOwner(capture.frame, sent.frame) ||
+                capture.frame.sequence != sent.frame.sequence || capture.frame.tickMs != sent.frame.tickMs ||
+                std::memcmp(&capture.head, &sent.head, sizeof(Pose)) ||
+                std::memcmp(&capture.grip, &sent.grip, sizeof(Pose)) ||
+                nativeWeaponId_[hand] != sent.nativeWeaponId || generation_[hand] != sent.trackingGeneration ||
+                intentEpoch_[hand] != sent.intentEpoch) continue;
+            // Origin/turn are deliberately not identity: the same raw input may
+            // be recomposed after rig settlement. Match each submitted kind only.
+            uint8_t consumed = 0;
+            const uint8_t matchingKinds = uint8_t(sent.kinds & kinds_[hand]);
+            if ((matchingKinds & Manual) && primaryInputGeneration_[hand] == sent.primaryGeneration &&
+                zoomed_[hand] == sent.zoomed && zoomInputGeneration_[hand] == sent.zoomGeneration)
+                consumed |= Manual;
+            if ((matchingKinds & Gesture) && gestureGeneration_[hand] == sent.gestureGeneration &&
+                gestureSequence_[hand] == sent.gestureSequence && gestureTickMs_[hand] == sent.gestureTickMs &&
+                gestureQuietSequence_[hand] == sent.quietSequence && gestureQuietTickMs_[hand] == sent.quietTickMs)
+                consumed |= Gesture;
+            removeKind(hand, consumed);
+        }
+    }
+    // Unconditional retirement for existing explicit-discard/test callers only.
     void consume(uint8_t handMask) {
         for (unsigned hand = 0; hand != 2; ++hand)
             if (handMask & (1u << hand))
-                expiresAt_[hand] = 0;
+                expiresAt_[hand] = kinds_[hand] = 0;
     }
     void cancel(uint8_t handMask) {
         for (unsigned hand = 0; hand != 2; ++hand)
             if (handMask & (1u << hand))
-                expiresAt_[hand] = 0;
+                expiresAt_[hand] = kinds_[hand] = 0;
     }
     bool active(unsigned hand, uint64_t now) {
         expire(now);
@@ -443,12 +676,18 @@ class PendingIntents {
     }
 
   private:
+    static constexpr uint8_t Manual = 1, Gesture = 2;
     void expire(uint64_t now) {
         for (auto &expires : expiresAt_)
             if (expires && now >= expires)
                 expires = 0;
     }
     uint64_t expiresAt_[2]{};
+    uint8_t kinds_[2]{};
+    GestureAdmission gesture_[2];
+    uint32_t gestureGeneration_[2]{}, lastGestureGeneration_[2]{};
+    uint64_t gestureSequence_[2]{}, gestureTickMs_[2]{}, gestureQuietSequence_[2]{}, gestureQuietTickMs_[2]{};
+    uint64_t lastGestureSequence_[2]{};
     struct HandCapture { LocalCaptureFrame frame; Pose head{}, grip{}; };
     HandCapture capture_[2]{};
     int16_t nativeWeaponId_[2]{-1, -1};
@@ -631,7 +870,7 @@ class Reader {
     size_t position_ = 0;
 };
 inline bool readPosePacket(Reader &r, PosePacket &p) {
-    return r.u64(p.clientNonce) && r.u64(p.serverNonce) && r.u32(p.sequence) && r.u32(p.trackingGeneration) &&
+    if (!(r.u64(p.clientNonce) && r.u64(p.serverNonce) && r.u32(p.sequence) && r.u32(p.trackingGeneration) &&
            r.pose(p.head) && r.pose(p.grip[0]) && r.pose(p.grip[1]) && r.u8(p.validMask) &&
            r.u8(p.physicalDownMask) && r.u8(p.fireMask) && r.u8(p.pulseMask) &&
            r.u8(p.wheelOrEquipBlockedMask) && r.u8(p.zoomMask) && r.u8(p.pulseZoomMask) &&
@@ -642,7 +881,12 @@ inline bool readPosePacket(Reader &r, PosePacket &p) {
            r.u32(p.primaryInputGeneration[1]) && r.u32(p.zoomReleasedSerial[0]) &&
            r.u32(p.zoomReleasedSerial[1]) && r.u32(p.zoomInputGeneration[0]) && r.u32(p.zoomInputGeneration[1]) &&
            r.i16(p.requestedWeapon[0]) && r.i16(p.requestedWeapon[1]) && r.i16(p.nativeWeaponId[0]) &&
-           r.i16(p.nativeWeaponId[1]);
+           r.i16(p.nativeWeaponId[1]) && r.u8(p.gestureEligibleMask) && r.u8(p.gestureDownMask) &&
+           r.u8(p.gestureQuietMask) && r.u8(p.gesturePulseMask))) return false;
+    for (unsigned hand = 0; hand < 2; ++hand)
+        if (!(r.u32(p.gestureGeneration[hand]) && r.u64(p.gestureSequence[hand]) && r.u64(p.gestureTickMs[hand]) &&
+              r.u64(p.gestureQuietSequence[hand]) && r.u64(p.gestureQuietTickMs[hand]))) return false;
+    return true;
 }
 inline void writePosePacket(std::vector<uint8_t> &out, const PosePacket &p) {
     put64(out, p.clientNonce);
@@ -677,6 +921,13 @@ inline void writePosePacket(std::vector<uint8_t> &out, const PosePacket &p) {
     put16(out, static_cast<uint16_t>(p.requestedWeapon[1]));
     put16(out, static_cast<uint16_t>(p.nativeWeaponId[0]));
     put16(out, static_cast<uint16_t>(p.nativeWeaponId[1]));
+    put8(out, p.gestureEligibleMask); put8(out, p.gestureDownMask);
+    put8(out, p.gestureQuietMask); put8(out, p.gesturePulseMask);
+    for (unsigned hand = 0; hand < 2; ++hand) {
+        put32(out, p.gestureGeneration[hand]);
+        put64(out, p.gestureSequence[hand]); put64(out, p.gestureTickMs[hand]);
+        put64(out, p.gestureQuietSequence[hand]); put64(out, p.gestureQuietTickMs[hand]);
+    }
 }
 inline const char Base64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 inline int base64Value(char c) {
@@ -848,6 +1099,7 @@ struct PeerState {
     uint32_t intentEpoch[2]{};
     bool physicalReleaseObserved[2]{};
     bool zoomReleaseObserved[2]{};
+    GestureAdmission gesture[2];
     bool hasPose = false;
 
     void resetCapability() {
@@ -861,6 +1113,7 @@ struct PeerState {
         intentEpoch[0] = intentEpoch[1] = 0;
         physicalReleaseObserved[0] = physicalReleaseObserved[1] = false;
         zoomReleaseObserved[0] = zoomReleaseObserved[1] = false;
+        gesture[0] = gesture[1] = {};
         hasPose = false;
     }
     bool bindCapability(uint64_t client, uint64_t server) {
@@ -879,6 +1132,7 @@ struct PeerState {
         hasPose = false;
         physicalReleaseObserved[0] = physicalReleaseObserved[1] = false;
         zoomReleaseObserved[0] = zoomReleaseObserved[1] = false;
+        for (auto &hand : gesture) hand.requireQuiet();
     }
     void invalidateWeaponGeneration(uint32_t generation, uint8_t handMask = HandMask) {
         weaponGeneration = generation;
@@ -892,12 +1146,13 @@ struct PeerState {
                     ++intentEpoch[hand];
                 physicalReleaseObserved[hand] = false;
                 zoomReleaseObserved[hand] = false;
+                gesture[hand].requireQuiet();
             }
     }
     // Clears filtered weapon intent, preserving raw action state for the next
     // genuinely eligible neutral sample.  It is deliberately safe at receive,
     // freeze, and use boundaries.
-    void filterWeaponIntents(PosePacket &pose) const {
+    void filterWeaponIntents(PosePacket &pose, uint64_t now = 0) const {
         for (unsigned hand = 0; hand != 2; ++hand) {
             const uint8_t bit = uint8_t(1u << hand);
             if (!matchesIntentEpoch(pose, hand, intentEpoch[hand])) {
@@ -905,6 +1160,7 @@ struct PeerState {
                 cancelWeaponRequests(pose, bit);
                 continue;
             }
+            if (!gesture[hand].current(pose, hand, now)) invalidateGestureIntents(pose, bit);
             if (!physicalReleaseObserved[hand] ||
                 pose.primaryInputGeneration[hand] != observedPrimaryInputGeneration[hand]) {
                 pose.fireMask &= uint8_t(~bit);
@@ -945,6 +1201,13 @@ struct PeerState {
                 continue;
             updatePrimaryAdmission(pose, hand);
             updateZoomAdmission(pose, hand);
+            if (!gesture[hand].observe(pose, hand, localTick))
+                invalidateGestureIntents(pose, uint8_t(1u << hand));
+            if (pose.gesturePulseMask & (1u << hand)) {
+                if (pose.gestureSequence[hand] <= gesture[hand].lastPulseSequence)
+                    pose.gesturePulseMask &= uint8_t(~(1u << hand));
+                else gesture[hand].lastPulseSequence = pose.gestureSequence[hand];
+            }
         }
         filterWeaponIntents(pose);
         return true;
@@ -1033,12 +1296,13 @@ struct OrderedPosePolicy {
             hasActive = awaitingConsumption = true;
             hasPending = false;
         }
-        validation.filterWeaponIntents(active);
+        validation.filterWeaponIntents(active, now);
         const uint8_t ordinaryFire = active.fireMask;
         sample = active;
         sample.fireMask |= sample.pulseMask;
         active.pulseMask = 0;
         active.pulseZoomMask = 0;
+        active.gesturePulseMask = 0; // One interval; never expands manual fire or gesture held level.
         for (unsigned hand = 0; hand != 2; ++hand)
             if (!validation.physicalFireAllowed(hand)) {
                 sample.fireMask &= uint8_t(~(1u << hand));

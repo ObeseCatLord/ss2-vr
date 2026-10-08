@@ -313,15 +313,24 @@ struct Snapshot {
 };
 // Stationary input-consumption ownership lives beside the copied pose payload.
 // Snapshot publication/reset cannot copy or discard an accounted native level.
-struct LocalMeleeHand {
+struct MeleeHandRecord {
     NativeConsumptionBinding consumption;
-    PhysicalGestureInput gesture;
     NativeConsumptionBindingKey key;
     void *player = nullptr, *weapon = nullptr, *world = nullptr;
     RiderIdentity rider;
     uint64_t epoch = 0;
     unsigned teardownDepth = 0;
     bool releaseObserved = false, blocked = false, resetGesture = false;
+    bool gestureArmed = false;
+    uint32_t gestureGeneration = 0;
+    uint64_t gestureSequence = 0, quietAfter = 0;
+};
+struct LocalMeleeHand : MeleeHandRecord {
+    PhysicalGestureInput gesture; // Physical sampling remains local-only.
+    void *gesturePlayer = nullptr, *gestureWeapon = nullptr;
+    bool gestureInvalidated = false;
+    uint32_t quietGeneration = 0;
+    uint64_t quietSequence = 0, quietTickMs = 0;
 };
 struct LocalSnapshotOwner {
     Snapshot payload;
@@ -330,11 +339,16 @@ struct LocalSnapshotOwner {
 };
 static LocalSnapshotOwner localSnapshotOwner;
 static Snapshot &current = localSnapshotOwner.payload;
+static void retireAuthorityMelee(void *) noexcept;
+static bool authorityMeleeReleaseObligation(void *, uint32_t) noexcept;
 static void retireLocalMelee(void *entity) noexcept {
     // Native lifetime entry owns the incoming receiver. Only adapter metadata
     // is touched, before any resource/native callback can replace that receiver.
     AcquireSRWLockExclusive(&snapshotLock);
     for (auto &hand : localSnapshotOwner.melee)
+    {
+        if (entity && (hand.gesturePlayer == entity || hand.gestureWeapon == entity))
+            hand.gestureInvalidated = true; // Normal sampling resets motion, not native cleanup.
         if (entity && (hand.player == entity || hand.weapon == entity)) {
             hand.consumption.retire();
             hand.releaseObserved = false;
@@ -342,7 +356,9 @@ static void retireLocalMelee(void *entity) noexcept {
             hand.epoch = 0;
             hand.player = hand.weapon = hand.world = nullptr;
         }
+    }
     ReleaseSRWLockExclusive(&snapshotLock);
+    retireAuthorityMelee(entity);
 }
 static bool meleeReleaseObligation(void *subject, uint32_t player) noexcept {
     if (!meleeConfigured || !settings.physicalMelee || !subject || !player) return false;
@@ -355,7 +371,7 @@ static bool meleeReleaseObligation(void *subject, uint32_t player) noexcept {
             break;
         }
     ReleaseSRWLockShared(&snapshotLock);
-    return result;
+    return result || authorityMeleeReleaseObligation(subject, player);
 }
 static std::atomic<DWORD> simulationThread{0};
 static LaserAim laserAim[2];
@@ -540,16 +556,47 @@ struct Authority {
     uint32_t player = 0, hand[2]{}, weaponGeneration = 0;
     RiderIdentity rider;
     multiplayer::Sample sample;
+    bool observer = false; // Client replica storage; never server intent authority.
 };
-static std::array<Authority, 18> authorities;
+// Pose rows remain copyable. Native consumption belongs to the existing row's
+// stationary owner and must never disappear when a new pose is published.
+struct AuthorityOwner {
+    Authority payload;
+    std::array<MeleeHandRecord, 2> melee;
+    uint64_t nextMeleeEpoch = 1;
+};
+static std::array<AuthorityOwner, 18> authorities;
 static SRWLOCK authorityLock = SRWLOCK_INIT;
+static void retireAuthorityMelee(void *entity) noexcept {
+    if (!entity) return;
+    AcquireSRWLockExclusive(&authorityLock);
+    for (auto &owner : authorities)
+        for (auto &hand : owner.melee)
+            if (hand.player == entity || hand.weapon == entity) {
+                hand.consumption.retire();
+                hand.releaseObserved = false; hand.blocked = true; hand.epoch = 0;
+                hand.player = hand.weapon = hand.world = nullptr;
+            }
+    ReleaseSRWLockExclusive(&authorityLock);
+}
+static bool authorityMeleeReleaseObligation(void *subject, uint32_t player) noexcept {
+    bool result = false;
+    AcquireSRWLockShared(&authorityLock);
+    for (const auto &owner : authorities)
+        for (const auto &hand : owner.melee)
+            if (hand.player == subject && hand.key.player == player && hand.epoch &&
+                hand.consumption.edge(hand.key, false) == NativeConsumptionBinding::Edge::Release)
+                result = true;
+    ReleaseSRWLockShared(&authorityLock);
+    return result;
+}
 static Authority copyAuthority(void *player) {
     Authority result;
     const uint32_t handle = player ? pointerHandle(player) : 0;
     AcquireSRWLockShared(&authorityLock);
     for (const auto &entry : authorities)
-        if (handle && entry.player == handle) {
-            result = entry;
+        if (handle && entry.payload.player == handle) {
+            result = entry.payload;
             break;
         }
     ReleaseSRWLockShared(&authorityLock);
@@ -560,20 +607,31 @@ static void saveAuthority(const Authority &value) {
     withNativeFinally([&] {
         AcquireSRWLockExclusive(&authorityLock);
         held = true;
-        Authority *destination = nullptr;
+        AuthorityOwner *destination = nullptr;
         for (auto &entry : authorities)
-            if (entry.player == value.player) {
+            if (entry.payload.player == value.player) {
                 destination = &entry;
                 break;
             }
         if (!destination)
             for (auto &entry : authorities)
-                if (!entry.player || !resolve(entry.player)) {
+                if (!entry.payload.player || !resolve(entry.payload.player)) {
                     destination = &entry;
                     break;
                 }
-        if (destination)
-            *destination = value;
+        if (destination) {
+            // A replaced native actor or incarnation does not inherit receipts.
+            // Same-owner sampled pose replacement changes only the payload.
+            if (destination->payload.player != value.player ||
+                destination->payload.sample.incarnation != value.sample.incarnation ||
+                destination->payload.observer != value.observer)
+                for (auto &hand : destination->melee) {
+                    hand.consumption.retire();
+                    hand.releaseObserved = false; hand.blocked = true; hand.epoch = 0;
+                    hand.player = hand.weapon = hand.world = nullptr;
+                }
+            destination->payload = value;
+        }
     }, [&](bool aborted) noexcept {
         if (held) {
             held = false;
@@ -808,6 +866,8 @@ static void publishSnapshot(const Snapshot &s) {
         channel.shared->ui.damageSequence = damageFeedback.load(std::memory_order_relaxed);
     }
 }
+static void prepareLocalGestureSource(Snapshot &);
+static void appendLocalGesturePose(const Snapshot &, network::PosePacket &);
 static void update(void *p) {
     validateLabOnlineIsolation(false);
     if (rigMutationActive || !hooksReady.load(std::memory_order_acquire) || !channel.shared || !local(p))
@@ -956,6 +1016,7 @@ static void update(void *p) {
     if (!nativeRiderCurrent(p, rider))
         return;
     refreshOwnership(s, p);
+    prepareLocalGestureSource(s); // Current physical input, before the one native transport submission.
     for (unsigned h = 0; h < 2; ++h) {
         void *weapon = s.handle[h] ? resolve(s.handle[h]) : nullptr;
         const bool sniper = enabled && rider.handheld() && !aliased(s) && nativeSniper(weapon);
@@ -1034,10 +1095,14 @@ static void update(void *p) {
         }
         if (!rider.handheld())
             suppressHandheld(packet);
+        else
+            appendLocalGesturePose(s, packet);
         physicalSequence = input.sequence;
         bool edge = packet.physicalDownMask != lastNetworkPose.physicalDownMask ||
                     packet.fireMask != lastNetworkPose.fireMask ||
                     packet.zoomMask != lastNetworkPose.zoomMask ||
+                    packet.gestureDownMask != lastNetworkPose.gestureDownMask ||
+                    packet.gestureEligibleMask != lastNetworkPose.gestureEligibleMask ||
                     packet.trackingGeneration != lastNetworkPose.trackingGeneration ||
                     packet.requestedWeapon[0] != lastNetworkPose.requestedWeapon[0] ||
                     packet.requestedWeapon[1] != lastNetworkPose.requestedWeapon[1];
@@ -1074,8 +1139,15 @@ struct PreparedPlayer {
     struct MeleeHand {
         uint64_t epoch = 0;
         PhysicalGestureSample gesture;
+        uint64_t sequence = 0, tickMs = 0, quietSequence = 0, quietTickMs = 0;
         bool candidate = false;
     } melee[2];
+    unsigned meleeSlot = 18; // Existing stationary authority owner, never a pointer lease.
+    bool bindingCaptured = false, topologyCaptured = false;
+    bool gestureSourceCaptured = false;
+    bool observer = false;
+    bool observerCancellationOnly = false;
+    multiplayer::ObserverGestureSample observerSample;
 };
 struct SimulationInterval {
     void *simulation;
@@ -1184,6 +1256,12 @@ static bool primaryTopology(PreparedPlayer &entry, bool capture) {
 static uint8_t primarySourceHands(PreparedPlayer &entry, bool capture, bool *valid = nullptr) {
     if (valid) *valid = false;
     if (entry.revoked) return 0;
+    if (entry.observer) {
+        // Replica manual commands are already delivered by the native engine.
+        // No server liveIntentEpoch or projected manual high is fabricated.
+        if (valid) *valid = entry.observerSample.latest.valid;
+        return 0;
+    }
     uint8_t fire = 0;
     if (entry.authoritative) {
         if (singlePlayer() || !multiplayer::server() || entry.revoked) return 0;
@@ -1256,7 +1334,17 @@ struct MeleeTicket {
     NativeConsumptionBindingKey key;
     uint64_t epoch = 0;
     NativeConsumptionBinding::Receipt receipt;
+    bool authoritative = false;
+    unsigned slot = 18;
 };
+static SRWLOCK *meleeRecordLock(bool authoritative) noexcept {
+    return authoritative ? &authorityLock : &snapshotLock;
+}
+static MeleeHandRecord *meleeRecord(bool authoritative, unsigned slot, unsigned hand) noexcept {
+    if (hand >= 2) return nullptr;
+    if (!authoritative) return &localSnapshotOwner.melee[hand];
+    return slot < authorities.size() ? &authorities[slot].melee[hand] : nullptr;
+}
 struct MeleeDispatchFrame {
     MeleeTicket ticket;
     void *weapon = nullptr;
@@ -1283,13 +1371,17 @@ static thread_local MeleeDispatchFrame *meleeDispatch = nullptr;
 static thread_local MeleeStepFrame *meleeStep = nullptr;
 static thread_local MeleeHeldFrame *meleeHeld = nullptr;
 static bool meleePreparationAllowed(const PreparedPlayer &entry) {
-    return settings.physicalMelee && meleeConfigured && !entry.authoritative && singlePlayer() &&
+    return settings.physicalMelee && meleeConfigured &&
+        (entry.observer ? (multiplayer::remoteClient() &&
+            (entry.observerSample.latest.negotiated || entry.observerCancellationOnly)) :
+         entry.authoritative ? multiplayer::server() :
+            (local(entry.subject) && (singlePlayer() || multiplayer::negotiatedLocal()))) &&
         nativeInputHealthy() && nativeMainThread && nativeMainThread() &&
         simulationInterval && !simulationInterval->previous && zoomManagerFrame &&
-        zoomManagerFrame->current && entry.recognized && !entry.revoked && local(entry.subject);
+        zoomManagerFrame->current && entry.recognized && !entry.revoked;
 }
-static bool meleeTargetCurrent(PreparedPlayer &entry, unsigned hand) {
-    if (hand >= 2 || !meleePreparationAllowed(entry) || !primaryBindingsCurrent(entry) ||
+static bool meleeBindingTarget(PreparedPlayer &entry, unsigned hand) {
+    if (hand >= 2 || !primaryBindingsCurrent(entry) ||
         entry.button[hand] < 0 || entry.button[hand] > 1 || unsigned(entry.flip) > 1 ||
         !entry.weapon[hand] || primaryField(entry.weapon[hand], 0) != sawVtable ||
         primaryField(entry.weapon[hand], 0xb4) != 0) return false;
@@ -1297,10 +1389,13 @@ static bool meleeTargetCurrent(PreparedPlayer &entry, unsigned hand) {
     return nativePrimarySingleTarget(semantic, entry.weaponHandle[1], entry.weaponHandle[0],
                                     entry.combo && entry.dual, entry.weaponHandle[hand]);
 }
+static bool meleeTargetCurrent(PreparedPlayer &entry, unsigned hand) {
+    return meleePreparationAllowed(entry) && meleeBindingTarget(entry, hand);
+}
 static NativeConsumptionBindingKey meleeKey(const PreparedPlayer &entry, unsigned hand) noexcept {
     return {entry.handle, entry.weaponHandle[hand], hand};
 }
-static bool meleeOwnerMatches(const LocalMeleeHand &owner, const PreparedPlayer &entry,
+static bool meleeOwnerMatches(const MeleeHandRecord &owner, const PreparedPlayer &entry,
                              unsigned hand) noexcept {
     return hand < 2 && owner.epoch && owner.epoch == entry.melee[hand].epoch &&
         owner.player == entry.subject && owner.weapon == entry.weapon[hand] &&
@@ -1310,63 +1405,106 @@ static bool meleeOwnerMatches(const LocalMeleeHand &owner, const PreparedPlayer 
 static MeleeTicket meleeTicket(PreparedPlayer &entry, unsigned hand) noexcept {
     MeleeTicket result;
     if (hand >= 2 || !simulationInterval) return result;
-    AcquireSRWLockShared(&snapshotLock);
-    const auto &owner = localSnapshotOwner.melee[hand];
-    if (meleeOwnerMatches(owner, entry, hand))
-        result = {owner.key, owner.epoch, owner.consumption.prepare(owner.key)};
-    ReleaseSRWLockShared(&snapshotLock);
+    auto *lock = meleeRecordLock(entry.authoritative);
+    AcquireSRWLockShared(lock);
+    const auto *owner = meleeRecord(entry.authoritative, entry.meleeSlot, hand);
+    if (owner && meleeOwnerMatches(*owner, entry, hand))
+        result = {owner->key, owner->epoch, owner->consumption.prepare(owner->key),
+                  entry.authoritative, entry.meleeSlot};
+    ReleaseSRWLockShared(lock);
     return result;
 }
 static bool completeMeleeTicket(const MeleeTicket &ticket, bool high) noexcept {
     if (!ticket.epoch || ticket.key.hand >= 2) return false;
-    AcquireSRWLockExclusive(&snapshotLock);
-    auto &owner = localSnapshotOwner.melee[ticket.key.hand];
-    const bool completed = owner.epoch == ticket.epoch && owner.key == ticket.key &&
-        owner.consumption.complete(ticket.key, ticket.receipt, high);
+    auto *lock = meleeRecordLock(ticket.authoritative);
+    AcquireSRWLockExclusive(lock);
+    auto *record = meleeRecord(ticket.authoritative, ticket.slot, ticket.key.hand);
+    const bool completed = record && record->epoch == ticket.epoch && record->key == ticket.key &&
+        record->consumption.complete(ticket.key, ticket.receipt, high);
     if (completed && !high) {
+        auto &owner = *record;
         owner.releaseObserved = true;
         owner.resetGesture = true; // Old prepared swings cannot survive a real native stop.
+        owner.gestureArmed = false;
+        owner.quietAfter = owner.gestureSequence;
     }
-    ReleaseSRWLockExclusive(&snapshotLock);
+    ReleaseSRWLockExclusive(lock);
     return completed;
 }
-static void observeMeleeLevel(const MeleeTicket &ticket, bool high) noexcept {
-    if (!ticket.epoch || ticket.key.hand >= 2) return;
-    AcquireSRWLockExclusive(&snapshotLock);
-    auto &owner = localSnapshotOwner.melee[ticket.key.hand];
+static bool observeMeleeLevel(const MeleeTicket &ticket, bool high) noexcept {
+    if (!ticket.epoch || ticket.key.hand >= 2) return false;
+    auto *lock = meleeRecordLock(ticket.authoritative);
+    AcquireSRWLockExclusive(lock);
+    auto *owner = meleeRecord(ticket.authoritative, ticket.slot, ticket.key.hand);
     // Normal native step completion observes an already completed, unchanged
     // level. It cannot create an initial level or supply a release/quiet witness.
-    if (owner.epoch == ticket.epoch && owner.key == ticket.key &&
-        owner.consumption.edge(ticket.key, high) == NativeConsumptionBinding::Edge::None)
-        owner.consumption.complete(ticket.key, ticket.receipt, high);
-    ReleaseSRWLockExclusive(&snapshotLock);
+    bool completed = false;
+    if (owner && owner->epoch == ticket.epoch && owner->key == ticket.key &&
+        owner->consumption.edge(ticket.key, high) == NativeConsumptionBinding::Edge::None)
+        completed = owner->consumption.complete(ticket.key, ticket.receipt, high);
+    ReleaseSRWLockExclusive(lock);
+    return completed;
 }
 static void abortMeleeTicket(const MeleeTicket &ticket) noexcept {
     if (!ticket.epoch || ticket.key.hand >= 2) return;
-    AcquireSRWLockExclusive(&snapshotLock);
-    auto &owner = localSnapshotOwner.melee[ticket.key.hand];
-    if (owner.epoch == ticket.epoch && owner.key == ticket.key &&
-        owner.consumption.retire(ticket.key, ticket.receipt)) {
-        owner.releaseObserved = false;
-        owner.resetGesture = true;
-        owner.blocked = true;
+    auto *lock = meleeRecordLock(ticket.authoritative);
+    AcquireSRWLockExclusive(lock);
+    auto *owner = meleeRecord(ticket.authoritative, ticket.slot, ticket.key.hand);
+    if (owner && owner->epoch == ticket.epoch && owner->key == ticket.key &&
+        owner->consumption.retire(ticket.key, ticket.receipt)) {
+        owner->releaseObserved = false;
+        owner->resetGesture = true;
+        owner->blocked = true;
     }
-    ReleaseSRWLockExclusive(&snapshotLock);
+    ReleaseSRWLockExclusive(lock);
 }
 static void prepareMelee(PreparedPlayer &entry, bool sourceCurrent) {
-    if (!meleePreparationAllowed(entry)) return;
+    if (!meleePreparationAllowed(entry) || !primaryBindingsCurrent(entry)) return;
     const auto source = copySnapshot();
-    if (!primaryBindingsCurrent(entry)) return;
-    const bool sourceOwner = source.initialized && source.player == entry.subject &&
-        source.playerHandle == entry.handle && source.rider == entry.rider;
+    const auto authority = entry.authoritative ? copyAuthority(entry.subject) : Authority{};
+    const bool sourceOwner = entry.authoritative ?
+        (authority.player == entry.handle && authority.rider == entry.rider &&
+         authority.sample.negotiated && authority.sample.incarnation == entry.incarnation) :
+        (source.initialized && source.player == entry.subject && source.playerHandle == entry.handle &&
+         source.rider == entry.rider);
+    if (entry.authoritative)
+        for (unsigned hand = 0; hand < 2; ++hand) {
+            const auto bit = uint8_t(1u << hand);
+            const auto &pose = entry.observer ?
+                (entry.observerSample.receipt[hand].hand == hand ? entry.observerSample.pulse[hand] :
+                    entry.observerSample.latest.pose) : authority.sample.pose;
+            auto &capture = entry.melee[hand];
+            capture.gesture = {bool(pose.gestureEligibleMask & bit),
+                entry.observer ? network::ObserverGestureIntents::level(pose, hand,
+                    entry.observerSample.receipt[hand].hand == hand) :
+                    bool((pose.gestureDownMask | pose.gesturePulseMask) & bit), false, false,
+                pose.gestureGeneration[hand]};
+            capture.sequence = pose.gestureSequence[hand]; capture.tickMs = pose.gestureTickMs[hand];
+            capture.quietSequence = pose.gestureQuietSequence[hand];
+            capture.quietTickMs = pose.gestureQuietTickMs[hand];
+        }
     bool targets[2]{};
     for (unsigned hand = 0; hand < 2; ++hand) targets[hand] = meleeTargetCurrent(entry, hand);
     if (!primaryBindingsCurrent(entry)) return;
-    const auto now = GetTickCount64();
-    AcquireSRWLockExclusive(&snapshotLock);
-    // Reserve/rebind both stationary slots before accepting either gesture.
+    auto *lock = meleeRecordLock(entry.authoritative);
+    AcquireSRWLockExclusive(lock);
+    if (entry.authoritative) {
+        entry.meleeSlot = 18;
+        for (unsigned slot = 0; slot < authorities.size(); ++slot)
+            if (authorities[slot].payload.player == entry.handle &&
+                authorities[slot].payload.sample.incarnation == entry.incarnation) {
+                entry.meleeSlot = slot; break;
+            }
+        if (entry.meleeSlot >= authorities.size()) {
+            ReleaseSRWLockExclusive(lock); return;
+        }
+    }
+    auto &nextEpoch = entry.authoritative ? authorities[entry.meleeSlot].nextMeleeEpoch :
+                                          localSnapshotOwner.nextMeleeEpoch;
+    // Native consumption is stationary and independent of the physical sampler.
+    // Only the chosen execution role observes this weapon's callbacks.
     for (unsigned hand = 0; hand < 2; ++hand) {
-        auto &owner = localSnapshotOwner.melee[hand];
+        auto &owner = *meleeRecord(entry.authoritative, entry.meleeSlot, hand);
         const auto key = meleeKey(entry, hand);
         const bool same = targets[hand] && owner.player == entry.subject &&
             owner.weapon == entry.weapon[hand] && owner.world == simulationInterval->preparedWorld &&
@@ -1375,10 +1513,11 @@ static void prepareMelee(PreparedPlayer &entry, bool sourceCurrent) {
             owner.consumption.retire();
             owner.releaseObserved = false; owner.blocked = true; owner.epoch = 0;
             owner.player = owner.weapon = owner.world = nullptr;
-            owner.teardownDepth = 0; owner.resetGesture = false; owner.gesture = {};
-            if (sourceOwner && targets[hand] && localSnapshotOwner.nextMeleeEpoch) {
-                const auto epoch = localSnapshotOwner.nextMeleeEpoch;
-                localSnapshotOwner.nextMeleeEpoch = nextConsumptionRevision(epoch);
+            owner.teardownDepth = 0; owner.resetGesture = false;
+            owner.gestureArmed = false; owner.gestureGeneration = 0;
+            owner.gestureSequence = owner.quietAfter = 0;
+            if (sourceOwner && !entry.observerCancellationOnly && targets[hand] && nextEpoch) {
+                const auto epoch = nextEpoch; nextEpoch = nextConsumptionRevision(epoch);
                 if (owner.consumption.activate(key, epoch)) {
                     owner.key = key; owner.epoch = epoch; owner.player = entry.subject;
                     owner.weapon = entry.weapon[hand]; owner.world = simulationInterval->preparedWorld;
@@ -1386,37 +1525,81 @@ static void prepareMelee(PreparedPlayer &entry, bool sourceCurrent) {
                 }
             }
         }
-        entry.melee[hand].candidate = targets[hand] && owner.epoch && owner.consumption.matches(key);
-        entry.melee[hand].epoch = owner.epoch;
+        auto &capture = entry.melee[hand];
+        capture.candidate = targets[hand] && owner.epoch && owner.consumption.matches(key);
+        capture.epoch = owner.epoch;
+        if (!capture.candidate) continue;
+        if (owner.resetGesture) {
+            // A native stop may complete after this quiet capture, during an
+            // unlocked getter/submit. Fence the entire pre-preparation sample;
+            // only a later source quiet can rearm this native consumer.
+            owner.gestureArmed = false;
+            owner.quietAfter = std::max(owner.quietAfter, capture.sequence);
+            owner.resetGesture = false;
+        }
+        if (owner.gestureGeneration != capture.gesture.generation) {
+            owner.gestureArmed = false;
+            owner.gestureGeneration = capture.gesture.generation;
+            owner.quietAfter = capture.sequence;
+            owner.gestureSequence = capture.sequence;
+        }
+        owner.gestureSequence = std::max(owner.gestureSequence, capture.sequence);
+        const auto bit = uint8_t(1u << hand);
+        const bool allowed = sourceOwner && sourceCurrent && capture.gesture.eligible &&
+            owner.releaseObserved && !owner.blocked && !owner.teardownDepth &&
+            owner.consumption.edge(owner.key, false) != NativeConsumptionBinding::Edge::Unknown &&
+            (entry.authoritative ? !(authority.sample.pose.wheelOrEquipBlockedMask & bit) :
+                (!source.selecting[hand] && !source.ui.wheel[hand].open && !(source.input.blockedWheels & bit)));
+        const bool ownQuiet = nativeGestureQuietWitness(owner.quietAfter, capture.sequence, capture.tickMs,
+                                                        capture.quietSequence, capture.quietTickMs);
+        if (allowed && ownQuiet) owner.gestureArmed = true;
+        if (!allowed || !owner.gestureArmed || !ownQuiet) capture.gesture.down = false;
     }
-    for (unsigned hand = 0; hand < 2; ++hand) {
-        auto &owner = localSnapshotOwner.melee[hand];
-        if (!entry.melee[hand].candidate) continue;
-        if (owner.resetGesture) { owner.gesture = {}; owner.resetGesture = false; }
-        const bool allowed = sourceOwner && sourceCurrent && owner.releaseObserved && !owner.blocked &&
-            !owner.teardownDepth && owner.consumption.edge(owner.key, false) !=
-                NativeConsumptionBinding::Edge::Unknown && !source.selecting[hand] &&
-            !source.ui.wheel[hand].open && !(source.input.blockedWheels & (1u << hand));
-        entry.melee[hand].gesture = owner.gesture.sample(source.input,
-            {entry.handle, entry.weaponHandle[hand], source.generation, hand},
-            source.inputProducer, now, allowed);
-    }
-    ReleaseSRWLockExclusive(&snapshotLock);
+    ReleaseSRWLockExclusive(lock);
 }
 static bool meleeGestureCurrent(PreparedPlayer &entry, unsigned hand) {
     if (hand >= 2 || !entry.melee[hand].candidate || !entry.melee[hand].gesture.eligible ||
         !entry.melee[hand].gesture.down || !meleeTargetCurrent(entry, hand)) return false;
     bool sourceCurrent = false;
     primarySourceHands(entry, false, &sourceCurrent);
+    if (!sourceCurrent || !primaryTopology(entry, false)) return false;
+    const auto &captured = entry.melee[hand];
+    if (entry.observer) {
+        if (!multiplayer::observerGesturesCurrent(entry.observerSample, hand)) return false;
+        AcquireSRWLockShared(&authorityLock);
+        const auto *owner = meleeRecord(true, entry.meleeSlot, hand);
+        const bool valid = owner && meleeOwnerMatches(*owner, entry, hand) && owner->releaseObserved &&
+            owner->gestureArmed && !owner->blocked && !owner->teardownDepth && !owner->resetGesture;
+        ReleaseSRWLockShared(&authorityLock);
+        return valid;
+    }
+    if (entry.authoritative) {
+        const auto authority = copyAuthority(entry.subject);
+        const auto live = multiplayer::authority(entry.subject);
+        const auto &pose = live.pose;
+        const auto bit = uint8_t(1u << hand);
+        if (!currentWeaponSample(authority.sample, live, hand) ||
+            pose.gestureGeneration[hand] != captured.gesture.generation ||
+            pose.gestureSequence[hand] != captured.sequence || pose.gestureTickMs[hand] != captured.tickMs ||
+            !(pose.gestureEligibleMask & bit) || !((pose.gestureDownMask | pose.gesturePulseMask) & bit) ||
+            (pose.wheelOrEquipBlockedMask & bit)) return false;
+        AcquireSRWLockShared(&authorityLock);
+        const auto *owner = meleeRecord(true, entry.meleeSlot, hand);
+        const bool valid = owner && meleeOwnerMatches(*owner, entry, hand) && owner->releaseObserved &&
+            owner->gestureArmed && !owner->blocked && !owner->teardownDepth && !owner->resetGesture;
+        ReleaseSRWLockShared(&authorityLock);
+        return valid;
+    }
     const auto source = copySnapshot();
-    if (!sourceCurrent || source.selecting[hand] || source.ui.wheel[hand].open ||
-        (source.input.blockedWheels & (1u << hand)) || !primaryTopology(entry, false)) return false;
+    if (source.selecting[hand] || source.ui.wheel[hand].open || (source.input.blockedWheels & (1u << hand)) ||
+        (multiplayer::remoteClient() && !multiplayer::localGestureAllowed(entry.subject, hand,
+            entry.intentEpoch[hand], captured.gesture.generation, captured.sequence, entry.sequence))) return false;
     const auto now = GetTickCount64();
     AcquireSRWLockShared(&snapshotLock);
     const auto &owner = localSnapshotOwner.melee[hand];
-    const bool valid = meleeOwnerMatches(owner, entry, hand) && owner.releaseObserved &&
-        !owner.blocked && !owner.teardownDepth && !owner.resetGesture &&
-        owner.gesture.current(entry.melee[hand].gesture, source.input,
+    const bool valid = meleeOwnerMatches(owner, entry, hand) && owner.releaseObserved && owner.gestureArmed &&
+        !owner.gestureInvalidated && !owner.blocked && !owner.teardownDepth && !owner.resetGesture &&
+        owner.gesture.current(captured.gesture, source.input,
             {entry.handle, entry.weaponHandle[hand], source.generation, hand}, source.inputProducer, now);
     ReleaseSRWLockShared(&snapshotLock);
     return valid;
@@ -1437,10 +1620,17 @@ static void dispatchMelee(PreparedPlayer &entry, unsigned hand, bool high,
     withNativeFinally([&] {
         original(entry.subject, entry.button[hand] ^ entry.flip);
         if (high && primaryBindingsCurrent(entry)) frame.committed = completeMeleeTicket(ticket, true);
+        if (high && frame.committed && entry.observer)
+            multiplayer::finishObserverGesture(entry.observerSample, hand);
         if (!frame.committed) abortMeleeTicket(ticket);
     }, [&](bool aborted) noexcept {
         meleeDispatch = frame.previous;
-        if (aborted) { abortMeleeTicket(ticket); nativeInputFailed(); }
+        if (aborted) {
+            abortMeleeTicket(ticket);
+            // Scalar native retirement only. The next normal preparation
+            // discards a now-inadmissible retained observer edge (or it expires).
+            nativeInputFailed();
+        }
     });
 }
 static void reconcileMelee(PreparedPlayer &entry, unsigned hand, bool manual) {
@@ -1448,44 +1638,160 @@ static void reconcileMelee(PreparedPlayer &entry, unsigned hand, bool manual) {
         !primaryTopology(entry, false)) return;
     const bool desired = manual || meleeGestureCurrent(entry, hand);
     NativeConsumptionBinding::Edge edge = NativeConsumptionBinding::Edge::Unknown;
-    AcquireSRWLockShared(&snapshotLock);
-    const auto &owner = localSnapshotOwner.melee[hand];
-    if (meleeOwnerMatches(owner, entry, hand) && !owner.blocked && !owner.teardownDepth)
-        edge = owner.consumption.edge(owner.key, desired);
-    ReleaseSRWLockShared(&snapshotLock);
+    auto *lock = meleeRecordLock(entry.authoritative);
+    AcquireSRWLockShared(lock);
+    const auto *owner = meleeRecord(entry.authoritative, entry.meleeSlot, hand);
+    if (owner && meleeOwnerMatches(*owner, entry, hand) && !owner->blocked && !owner->teardownDepth)
+        edge = owner->consumption.edge(owner->key, desired);
+    ReleaseSRWLockShared(lock);
     if (edge == NativeConsumptionBinding::Edge::Press)
         dispatchMelee(entry, hand, true, originalPrimaryPress);
     else if (edge == NativeConsumptionBinding::Edge::Release)
         dispatchMelee(entry, hand, false, originalPrimaryRelease);
 }
-static void preparePrimary(PreparedPlayer &entry, bool authoritative) {
-    // Recognition/neutral were reserved before update/authorityStep. Only this
-    // initial preparation can introduce high; native reentry sees that neutral.
-    if (!entry.recognized || entry.revoked || entry.prepared) return;
-    entry.prepared = true; // One attempt, including failed/neutral preparation.
-    if (!entry.handle || resolve(entry.handle) != entry.subject || entry.revoked) return;
-    entry.authoritative = authoritative;
+static bool capturePrimaryBinding(PreparedPlayer &entry) {
+    if (entry.bindingCaptured)
+        return primaryBindingsCurrent(entry);
+    if (!entry.handle || resolve(entry.handle) != entry.subject || entry.revoked) return false;
     entry.brainHandle = primaryField(entry.subject, 0x38c);
     entry.brain = entry.brainHandle ? resolve(entry.brainHandle) : nullptr;
-    if (entry.revoked || !readNativeRider(entry.subject, entry.rider) || entry.revoked) return;
+    if (entry.revoked || !readNativeRider(entry.subject, entry.rider) || entry.revoked) return false;
+    entry.hands = 0;
     for (unsigned hand = 0; hand < 2; ++hand) {
         entry.weaponHandle[hand] = nativeHandle(entry.subject, hand);
         entry.weapon[hand] = entry.weaponHandle[hand] ? resolve(entry.weaponHandle[hand]) : nullptr;
         if (entry.weaponHandle[hand]) entry.hands |= uint8_t(1u << hand);
     }
     if (!entry.hands || (entry.hands == 3 && entry.weapon[0] == entry.weapon[1]) ||
-        !primaryBindingsCurrent(entry)) return;
+        !primaryBindingsCurrent(entry)) return false;
+    entry.bindingCaptured = true;
+    return true;
+}
+static void prepareLocalGestureSource(Snapshot &source) {
+    if (!meleeConfigured || !settings.physicalMelee) return;
+    auto *entry = preparedPrimary(source.player);
+    if (!entry || entry->prepared || entry->gestureSourceCaptured) return;
+    entry->gestureSourceCaptured = true;
+    entry->recognized |= primaryLocalRecognized(source, source.player, source.playerHandle);
+    const auto *frame = zoomManagerFrame;
+    const bool phase = meleeConfigured && settings.physicalMelee && entry->recognized && !entry->revoked &&
+        frame && frame->current && frame->preparation && !frame->previous && simulationInterval &&
+        !simulationInterval->previous && nativeMainThread && nativeMainThread() && nativeInputHealthy() &&
+        currentSimulation() == frame->simulation && currentWorld() == frame->world;
+    bool allowed = phase && source.initialized && source.ui.gameplay && fresh(source.input) &&
+        source.player == entry->subject && source.playerHandle == entry->handle &&
+        source.rider.handheld() && !recenterHeld(source.input);
+    if (allowed) {
+        allowed = capturePrimaryBinding(*entry) &&
+            primaryTopology(*entry, !entry->topologyCaptured) && primaryBindingsCurrent(*entry);
+        if (allowed) entry->topologyCaptured = true;
+    }
+    bool target[2]{};
+    if (allowed)
+        for (unsigned hand = 0; hand < 2; ++hand)
+            target[hand] = source.handle[hand] == entry->weaponHandle[hand] &&
+                meleeBindingTarget(*entry, hand);
+    if (allowed && !primaryBindingsCurrent(*entry)) target[0] = target[1] = false;
+    const auto now = GetTickCount64();
+    AcquireSRWLockExclusive(&snapshotLock);
+    for (unsigned hand = 0; hand < 2; ++hand) {
+        auto &owner = localSnapshotOwner.melee[hand];
+        const bool usable = target[hand] && !owner.gestureInvalidated && !source.selecting[hand] &&
+            !source.ui.wheel[hand].open && !(source.input.blockedWheels & (1u << hand));
+        const auto sample = owner.gesture.sample(source.input,
+            {source.playerHandle, source.handle[hand], source.generation, hand},
+            source.inputProducer, now, usable);
+        owner.gestureInvalidated = false;
+        if (target[hand]) {
+            owner.gesturePlayer = entry->subject; owner.gestureWeapon = entry->weapon[hand];
+        }
+        if (owner.quietGeneration != sample.generation) {
+            owner.quietGeneration = sample.generation;
+            owner.quietSequence = owner.quietTickMs = 0;
+        }
+        if (sample.eligible && sample.fresh && sample.quiet) {
+            owner.quietSequence = source.input.sequence; owner.quietTickMs = source.input.tickMs;
+        }
+        auto &capture = entry->melee[hand];
+        capture.gesture = sample;
+        capture.sequence = source.input.sequence; capture.tickMs = source.input.tickMs;
+        capture.quietSequence = owner.quietSequence; capture.quietTickMs = owner.quietTickMs;
+    }
+    ReleaseSRWLockExclusive(&snapshotLock);
+}
+static void appendLocalGesturePose(const Snapshot &source, network::PosePacket &pose) {
+    if (!meleeConfigured || !settings.physicalMelee) return;
+    auto *entry = preparedPrimary(source.player);
+    if (!entry || entry->revoked || !entry->gestureSourceCaptured) return;
+    AcquireSRWLockShared(&snapshotLock);
+    for (unsigned hand = 0; hand < 2; ++hand) {
+        const auto &capture = entry->melee[hand];
+        const auto &physical = localSnapshotOwner.melee[hand];
+        const auto bit = uint8_t(1u << hand);
+        if (!capture.gesture.eligible || physical.gestureInvalidated ||
+            source.handle[hand] != entry->weaponHandle[hand] || source.ui.currentWeapon[hand] != 0 ||
+            !(pose.validMask & (bit << 1)) || (pose.wheelOrEquipBlockedMask & bit) ||
+            !physical.gesture.current(capture.gesture, source.input,
+                {source.playerHandle, source.handle[hand], source.generation, hand}, source.inputProducer,
+                GetTickCount64())) continue;
+        pose.gestureEligibleMask |= bit;
+        if (capture.gesture.down) pose.gestureDownMask |= bit;
+        pose.gestureGeneration[hand] = capture.gesture.generation;
+        pose.gestureSequence[hand] = capture.sequence; pose.gestureTickMs[hand] = capture.tickMs;
+        if (capture.quietSequence) {
+            pose.gestureQuietMask |= bit;
+            pose.gestureQuietSequence[hand] = capture.quietSequence;
+            pose.gestureQuietTickMs[hand] = capture.quietTickMs;
+        }
+    }
+    ReleaseSRWLockShared(&snapshotLock);
+}
+static void preparePrimary(PreparedPlayer &entry, bool authoritative) {
+    // Recognition/neutral were reserved before update/authorityStep. Only this
+    // initial preparation can introduce high; native reentry sees that neutral.
+    if (!entry.recognized || entry.revoked || entry.prepared) return;
+    entry.prepared = true; // One attempt, including failed/neutral preparation.
+    entry.authoritative = authoritative;
+    if (!capturePrimaryBinding(entry)) return;
     bool sourceCurrent = false;
     const uint8_t fire = primarySourceHands(entry, true, &sourceCurrent) & entry.hands;
     if (!fire && !meleePreparationAllowed(entry)) return;
-    if (!primaryTopology(entry, true) || !primaryWeaponReferences(entry, fire) ||
+    if (!primaryTopology(entry, !entry.topologyCaptured) || !primaryWeaponReferences(entry, fire) ||
         !nativeInputHealthy() || !primaryBindingsCurrent(entry)) return;
+    entry.topologyCaptured = true;
     const uint8_t liveFire = primarySourceHands(entry, false);
     if (!nativeInputHealthy() || !primaryBindingsCurrent(entry)) return;
     entry.primary = nativePrimaryProjection(entry.hands, fire & liveFire,
         entry.button[0], entry.button[1], entry.combo && entry.dual);
     if (entry.revoked) entry.primary.bits = 0;
     if (!entry.revoked) prepareMelee(entry, sourceCurrent);
+}
+static void prepareObserverMelee(PreparedPlayer &entry) {
+    if (!meleeConfigured || !settings.physicalMelee || entry.prepared || entry.revoked ||
+        !multiplayer::remoteClient()) return;
+    entry.observerSample = multiplayer::observerGestures(entry.handle);
+    const auto stored = copyAuthority(entry.subject);
+    entry.observerCancellationOnly = !entry.observerSample.latest.negotiated && stored.observer &&
+        stored.player == entry.handle && authorityMeleeReleaseObligation(entry.subject, entry.handle);
+    if (!entry.observerSample.latest.negotiated && !entry.observerCancellationOnly) return;
+    entry.observer = true; entry.authoritative = true; entry.recognized = true; entry.prepared = true;
+    entry.primary = {}; // Native manual/history stays unclaimed on the replica.
+    entry.incarnation = entry.observerCancellationOnly ? stored.sample.incarnation :
+        entry.observerSample.latest.incarnation;
+    if (capturePrimaryBinding(entry) && primaryTopology(entry, true) && primaryBindingsCurrent(entry)) {
+        entry.topologyCaptured = true;
+        if (!entry.observerCancellationOnly) {
+            Authority value;
+            value.player = entry.handle; value.hand[0] = entry.weaponHandle[0]; value.hand[1] = entry.weaponHandle[1];
+            value.rider = entry.rider; value.sample = entry.observerSample.latest; value.observer = true;
+            saveAuthority(value); // Reuses stationary rows; never freezes a server packet.
+        }
+        prepareMelee(entry, !entry.observerCancellationOnly && entry.observerSample.latest.valid);
+    }
+    for (unsigned hand = 0; hand < 2; ++hand)
+        if (entry.observerSample.receipt[hand].hand == hand &&
+            (!entry.melee[hand].candidate || !entry.melee[hand].gesture.down))
+            multiplayer::finishObserverGesture(entry.observerSample, hand); // Explicit admission discard.
 }
 static void refreshPrimary(PreparedPlayer &entry) {
     refreshMelee(entry);
@@ -1524,6 +1830,7 @@ static NativePrimaryValue primaryAdmission(void *subject, uintptr_t caller, bool
         return {};
     }
     auto *entry = preparedPrimary(subject);
+    if (entry && entry->observer) return {}; // Preserve replica native manual input.
     const auto snapshot = copySnapshot();
     const uint32_t handle = entry ? entry->handle : pointerHandle(subject);
     bool recognized = (entry && entry->recognized) || primaryLocalRecognized(snapshot, subject, handle);
@@ -1562,6 +1869,14 @@ static void opaqueMeleePrimary(void *subject, int32_t semantic) {
             break;
         }
     ReleaseSRWLockShared(&snapshotLock);
+    if (!player) {
+        AcquireSRWLockShared(&authorityLock);
+        for (const auto &bank : authorities)
+            for (const auto &owner : bank.melee)
+                if (owner.player == subject && owner.epoch && owner.consumption.matches(owner.key))
+                    player = owner.key.player;
+        ReleaseSRWLockShared(&authorityLock);
+    }
     if (!player || resolve(player) != subject) return;
     auto *entry = preparedPrimary(subject);
     const uint32_t right = nativeHandle(subject, 1), left = nativeHandle(subject, 0);
@@ -1598,14 +1913,13 @@ static void opaqueMeleePrimary(void *subject, int32_t semantic) {
     // preserves a known high for cancellation at the next safe native boundary.
     const auto targets = captured ? nativePrimaryReleaseTargets(unsigned(semantic),
         rightWeapon ? right : 0, leftWeapon ? left : 0, combo && dual) : NativePrimaryReleaseTargets{};
-    AcquireSRWLockExclusive(&snapshotLock);
-    for (unsigned hand = 0; hand < 2; ++hand) {
-        auto &owner = localSnapshotOwner.melee[hand];
-        if (owner.player != subject || owner.key.player != player || !owner.epoch) continue;
+    const auto retireAffected = [&](MeleeHandRecord &owner) {
+        const auto hand = owner.key.hand;
+        if (owner.player != subject || owner.key.player != player || !owner.epoch || hand >= 2) return;
         if (!captured) {
             owner.resetGesture = true;
             if (entry) entry->melee[hand].gesture.eligible = entry->melee[hand].gesture.down = false;
-            continue;
+            return;
         }
         for (unsigned i = 0; i < targets.count; ++i)
             if (owner.key.weapon == targets.primary[i] &&
@@ -1616,8 +1930,14 @@ static void opaqueMeleePrimary(void *subject, int32_t semantic) {
                 if (entry) entry->melee[hand].gesture.eligible = entry->melee[hand].gesture.down = false;
                 break;
             }
-    }
+    };
+    AcquireSRWLockExclusive(&snapshotLock);
+    for (auto &owner : localSnapshotOwner.melee) retireAffected(owner);
     ReleaseSRWLockExclusive(&snapshotLock);
+    AcquireSRWLockExclusive(&authorityLock);
+    for (auto &bank : authorities)
+        for (auto &owner : bank.melee) retireAffected(owner);
+    ReleaseSRWLockExclusive(&authorityLock);
 }
 static void canonicalMelee(void *subject, int32_t semantic, bool press, uintptr_t caller,
                            CanonicalPrimary original) {
@@ -1636,13 +1956,15 @@ static void canonicalMelee(void *subject, int32_t semantic, bool press, uintptr_
         if (!entry->melee[hand].candidate || entry->button[hand] < 0 ||
             (entry->button[hand] ^ entry->flip) != semantic || !meleeTargetCurrent(*entry, hand)) continue;
         const uint8_t bit = uint8_t(1u << entry->button[hand]);
-        if (!(invocation->value.mask & bit)) break;
-        const bool desired = (invocation->value.bits & bit) || meleeGestureCurrent(*entry, hand);
+        if (!entry->observer && !(invocation->value.mask & bit)) break;
+        const bool desired = (entry->observer ? press : bool(invocation->value.bits & bit)) ||
+            meleeGestureCurrent(*entry, hand);
         NativeConsumptionBinding::Edge edge = NativeConsumptionBinding::Edge::Unknown;
-        AcquireSRWLockShared(&snapshotLock);
-        const auto &owner = localSnapshotOwner.melee[hand];
-        if (meleeOwnerMatches(owner, *entry, hand)) edge = owner.consumption.edge(owner.key, desired);
-        ReleaseSRWLockShared(&snapshotLock);
+        auto *lock = meleeRecordLock(entry->authoritative);
+        AcquireSRWLockShared(lock);
+        const auto *owner = meleeRecord(entry->authoritative, entry->meleeSlot, hand);
+        if (owner && meleeOwnerMatches(*owner, *entry, hand)) edge = owner->consumption.edge(owner->key, desired);
+        ReleaseSRWLockShared(lock);
         if (edge == NativeConsumptionBinding::Edge::None) return; // Already completed; no invented receipt.
         if (edge == NativeConsumptionBinding::Edge::Unknown)
             dispatchMelee(*entry, hand, press, original); // Observe the actual manual callback only.
@@ -1666,9 +1988,21 @@ static void __fastcall primaryReleased(void *subject, void *, int32_t semantic) 
         canonicalMelee(subject, semantic, false, caller, originalPrimaryRelease);
     }, [](bool aborted) noexcept { if (aborted) nativeInputFailed(); });
 }
+static bool observerManualLevel(PreparedPlayer &entry, unsigned hand) {
+    // The trampoline still reaches installed scalar predicates. Shadow a held
+    // ancestor so its independently admitted gesture cannot become manual input.
+    NativePrimaryInvocation frame{entry.subject, {}, primaryInvocation, true, {}};
+    primaryInvocation = &frame;
+    int result = 0;
+    withNativeFinally([&] { result = originalFireButtonPressed(entry.subject, entry.button[hand]); },
+        [&](bool aborted) noexcept {
+            primaryInvocation = frame.previous;
+            if (aborted) nativeInputFailed();
+        });
+    return result != 0;
+}
 static void prepareMeleeStep(void *weapon, MeleeStepFrame &frame) {
     if (!meleeConfigured || !settings.physicalMelee) return;
-    if (!singlePlayer()) { retireLocalMelee(weapon); return; }
     if (!zoomManagerFrame || !zoomManagerFrame->current || !zoomManagerFrame->execution ||
         !simulationInterval || simulationInterval->previous || !nativeInputHealthy()) return;
     const auto ownerHandle = primaryField(weapon, 0x28);
@@ -1680,22 +2014,26 @@ static void prepareMeleeStep(void *weapon, MeleeStepFrame &frame) {
     refreshPrimary(*entry);
     if (!meleeTargetCurrent(*entry, hand)) return;
     frame.entry = entry; frame.weapon = weapon; frame.hand = hand; frame.epoch = entry->melee[hand].epoch;
-    reconcileMelee(*entry, hand, (entry->primary.bits & (1u << entry->button[hand])) != 0);
+    const bool manual = entry->observer ? observerManualLevel(*entry, hand) :
+        bool(entry->primary.bits & (1u << entry->button[hand]));
+    if (!meleeTargetCurrent(*entry, hand) || !primaryTopology(*entry, false)) return;
+    reconcileMelee(*entry, hand, manual);
     // A normal step of the same known level supersedes an older outer receipt,
     // including paths where native held checks are skipped. It does not seed
     // unknown history, invent an edge or provide a release/quiet witness.
-    const bool desired = (entry->primary.bits & (1u << entry->button[hand])) ||
-                         meleeGestureCurrent(*entry, hand);
+    const bool desired = manual || meleeGestureCurrent(*entry, hand);
     if (!meleeTargetCurrent(*entry, hand) || !primaryTopology(*entry, false)) return;
-    AcquireSRWLockShared(&snapshotLock);
-    const auto &record = localSnapshotOwner.melee[hand];
-    if (meleeOwnerMatches(record, *entry, hand) && !record.blocked && !record.teardownDepth &&
-        record.consumption.edge(record.key, desired) == NativeConsumptionBinding::Edge::None) {
-        frame.observation = {record.key, record.epoch, record.consumption.prepare(record.key)};
+    auto *lock = meleeRecordLock(entry->authoritative);
+    AcquireSRWLockShared(lock);
+    const auto *record = meleeRecord(entry->authoritative, entry->meleeSlot, hand);
+    if (record && meleeOwnerMatches(*record, *entry, hand) && !record->blocked && !record->teardownDepth &&
+        record->consumption.edge(record->key, desired) == NativeConsumptionBinding::Edge::None) {
+        frame.observation = {record->key, record->epoch, record->consumption.prepare(record->key),
+                             entry->authoritative, entry->meleeSlot};
         frame.level = desired;
         frame.observe = true;
     }
-    ReleaseSRWLockShared(&snapshotLock);
+    ReleaseSRWLockShared(lock);
 }
 static int __fastcall weaponFiringPressed(void *subject, void *, uint32_t handle) {
     const auto caller = reinterpret_cast<uintptr_t>(__builtin_return_address(0));
@@ -1902,8 +2240,10 @@ static void __fastcall entityStep(void *manager, void *) {
                         if (!handle || resolve(handle) != player)
                             continue;
                         const bool localPlayer = local(player);
-                        if (!interval->networkPrepared && !localPlayer)
+                        if (!interval->networkPrepared && !localPlayer) {
+                            prepareObserverMelee(*entry);
                             continue;
+                        }
                         if (localPlayer) {
                             update(player);
                             // Read the published existing snapshot, not Input:
@@ -2171,7 +2511,9 @@ static void __fastcall baseWeaponStep(void *weapon,void *) {
         meleeStep = &step;
         prepareMeleeStep(weapon, step);
         originalBaseWeaponStep(weapon);
-        if (step.observe) observeMeleeLevel(step.observation, step.level);
+        if (step.observe && observeMeleeLevel(step.observation, step.level) && step.level &&
+            step.entry && step.entry->observer)
+            multiplayer::finishObserverGesture(step.entry->observerSample, step.hand);
         if(caller==sniperBaseStepReturn && parent && parent==zoomContext &&
             parent->operation==ZoomOperation::Step && parent->weapon==weapon && !parent->revoked)
             zoomReconcile(*parent,false); // Never reserve/restart activation after native base.
@@ -3444,17 +3786,28 @@ static void logWeaponReceipt(const char *event,const LabWeaponReceipt &r,bool re
         static_cast<unsigned long long>(completionTick));
 }
 static VoidThis originalLabFireRelease=nullptr;
-static MeleeTicket captureMeleeStop(void *weapon, uintptr_t caller) noexcept {
-    MeleeTicket result;
-    if (!meleeConfigured || !settings.physicalMelee || caller != sawReleaseReturn) return result;
+struct MeleeStopReceipts {
+    std::array<MeleeTicket, 38> ticket{}; // Two local plus the existing eighteen two-hand owners.
+    unsigned count = 0;
+};
+static MeleeStopReceipts captureMeleeBindings(void *weapon) noexcept {
+    MeleeStopReceipts result;
+    if (!meleeConfigured || !settings.physicalMelee) return result;
     AcquireSRWLockShared(&snapshotLock);
     for (const auto &owner : localSnapshotOwner.melee)
-        if (owner.weapon == weapon && owner.epoch && owner.consumption.matches(owner.key)) {
-            result = {owner.key, owner.epoch, owner.consumption.prepare(owner.key)};
-            break;
-        }
+        if (owner.weapon == weapon && owner.epoch && owner.consumption.matches(owner.key))
+            result.ticket[result.count++] = {owner.key, owner.epoch, owner.consumption.prepare(owner.key)};
     ReleaseSRWLockShared(&snapshotLock);
+    AcquireSRWLockShared(&authorityLock);
+    for (unsigned slot = 0; slot < authorities.size(); ++slot)
+        for (const auto &owner : authorities[slot].melee)
+            if (owner.weapon == weapon && owner.epoch && owner.consumption.matches(owner.key))
+                result.ticket[result.count++] = {owner.key, owner.epoch, owner.consumption.prepare(owner.key), true, slot};
+    ReleaseSRWLockShared(&authorityLock);
     return result;
+}
+static MeleeStopReceipts captureMeleeStop(void *weapon, uintptr_t caller) noexcept {
+    return caller == sawReleaseReturn ? captureMeleeBindings(weapon) : MeleeStopReceipts{};
 }
 static void __fastcall labFireRelease(void *weapon,void *) {
     const auto caller = reinterpret_cast<uintptr_t>(__builtin_return_address(0));
@@ -3474,16 +3827,22 @@ static void __fastcall labFireRelease(void *weapon,void *) {
         originalLabFireRelease(weapon);
         returned=true;
         // Native165498 is before saw sound processing, not its completion.
-        if (completeMeleeTicket(nativeReceipt, false))
-            for (auto *frame = meleeDispatch; frame; frame = frame->previous)
-                if (frame->release && frame->weapon == weapon &&
-                    frame->ticket.key == nativeReceipt.key && frame->ticket.epoch == nativeReceipt.epoch) {
-                    frame->committed = true;
-                    break;
-                }
+        for (unsigned i = 0; i < nativeReceipt.count; ++i) {
+            const auto &ticket = nativeReceipt.ticket[i];
+            if (completeMeleeTicket(ticket, false))
+                for (auto *frame = meleeDispatch; frame; frame = frame->previous)
+                    if (frame->release && frame->weapon == weapon && frame->ticket.key == ticket.key &&
+                        frame->ticket.epoch == ticket.epoch && frame->ticket.authoritative == ticket.authoritative &&
+                        frame->ticket.slot == ticket.slot) {
+                        frame->committed = true; break;
+                    }
+        }
     },[&](bool unwind) noexcept {
         aborted=unwind;
-        if (unwind) { abortMeleeTicket(nativeReceipt); nativeInputFailed(); }
+        if (unwind) {
+            for (unsigned i = 0; i < nativeReceipt.count; ++i) abortMeleeTicket(nativeReceipt.ticket[i]);
+            nativeInputFailed();
+        }
     });
     if(receipt.active)logWeaponReceipt("release",receipt,returned,aborted,0);
 }
@@ -3514,39 +3873,48 @@ static void *__fastcall sawAssigned(void *destination, void *, const void *sourc
     return result;
 }
 static void __fastcall sawPutDown(void *weapon, void *, int reason) {
-    MeleeTicket ticket;
-    unsigned depth = 0;
-    AcquireSRWLockExclusive(&snapshotLock);
-    for (auto &owner : localSnapshotOwner.melee)
-        if (owner.weapon == weapon && owner.epoch && owner.consumption.matches(owner.key)) {
-            ticket = {owner.key, owner.epoch, owner.consumption.prepare(owner.key)};
-            depth = owner.teardownDepth;
-            if (depth == UINT_MAX) owner.blocked = true;
-            else owner.teardownDepth = depth + 1;
-            break;
+    const auto bindings = captureMeleeBindings(weapon);
+    std::array<unsigned, 38> depths{};
+    for (unsigned i = 0; i < bindings.count; ++i) {
+        const auto &ticket = bindings.ticket[i];
+        auto *lock = meleeRecordLock(ticket.authoritative);
+        AcquireSRWLockExclusive(lock);
+        auto *owner = meleeRecord(ticket.authoritative, ticket.slot, ticket.key.hand);
+        if (owner && owner->epoch == ticket.epoch && owner->key == ticket.key) {
+            depths[i] = owner->teardownDepth;
+            if (depths[i] == UINT_MAX) owner->blocked = true;
+            else owner->teardownDepth = depths[i] + 1;
         }
-    ReleaseSRWLockExclusive(&snapshotLock);
+        ReleaseSRWLockExclusive(lock);
+    }
     withNativeFinally([&] {
         originalSawPutDown(weapon, reason);
-        bool currentOwner = false;
-        if (ticket.epoch && ticket.key.hand < 2) {
-            AcquireSRWLockShared(&snapshotLock);
-            const auto &owner = localSnapshotOwner.melee[ticket.key.hand];
-            currentOwner = owner.epoch == ticket.epoch && owner.key == ticket.key && owner.weapon == weapon;
-            ReleaseSRWLockShared(&snapshotLock);
+        // Refusal preserves each role's history. Only a reacquired same binding
+        // with native state2 permits actual teardown retirement, never a low receipt.
+        for (unsigned i = 0; i < bindings.count; ++i) {
+            const auto &ticket = bindings.ticket[i];
+            auto *lock = meleeRecordLock(ticket.authoritative);
+            AcquireSRWLockShared(lock);
+            const auto *owner = meleeRecord(ticket.authoritative, ticket.slot, ticket.key.hand);
+            const bool currentOwner = owner && owner->epoch == ticket.epoch && owner->key == ticket.key &&
+                owner->weapon == weapon;
+            ReleaseSRWLockShared(lock);
+            if (currentOwner && resolve(ticket.key.weapon) == weapon && primaryField(weapon, 0xb0) == 2) {
+                retireLocalMelee(weapon); break;
+            }
         }
-        // PutDown can refuse. Only an actual still-owned state2 transition
-        // retires history; refusal preserves it for subsequent reconciliation.
-        if (currentOwner && resolve(ticket.key.weapon) == weapon && primaryField(weapon, 0xb0) == 2)
-            retireLocalMelee(weapon);
     }, [&](bool aborted) noexcept {
-        if (ticket.epoch && ticket.key.hand < 2) {
-            AcquireSRWLockExclusive(&snapshotLock);
-            auto &owner = localSnapshotOwner.melee[ticket.key.hand];
-            if (owner.epoch == ticket.epoch && owner.key == ticket.key) owner.teardownDepth = depth;
-            ReleaseSRWLockExclusive(&snapshotLock);
+        for (unsigned i = 0; i < bindings.count; ++i) {
+            const auto &ticket = bindings.ticket[i];
+            auto *lock = meleeRecordLock(ticket.authoritative);
+            AcquireSRWLockExclusive(lock);
+            auto *owner = meleeRecord(ticket.authoritative, ticket.slot, ticket.key.hand);
+            if (owner && owner->epoch == ticket.epoch && owner->key == ticket.key)
+                owner->teardownDepth = depths[i];
+            ReleaseSRWLockExclusive(lock);
+            if (aborted) abortMeleeTicket(ticket);
         }
-        if (aborted) { abortMeleeTicket(ticket); nativeInputFailed(); }
+        if (aborted) nativeInputFailed();
     });
 }
 static int __fastcall nativeFire(void *w, void *, float amount) {
@@ -5333,20 +5701,20 @@ bool attach(bool headless) {
       weaponCharge, originalWeaponCharge);
     H(g, "?GetShootingPlacement@CSniperWeaponEntity@SeriousEngine@@UAE?AVQuatVect@2@XZ", sniperShot,
       originalSniperShot);
+    if((!headless && labDualTrace()) || settings.physicalMelee)
+        H(g,"?OnFireReleased@CBaseWeaponEntity@SeriousEngine@@UAEXXZ",labFireRelease,originalLabFireRelease);
+    if (settings.physicalMelee) {
+        H(g,"?OnFireButtonPressed@CPuppetEntity@SeriousEngine@@UAEXJ@Z",primaryPressed,originalPrimaryPress);
+        H(g,"?OnFireButtonReleassed@CPuppetEntity@SeriousEngine@@UAEXJ@Z",primaryReleased,originalPrimaryRelease);
+        H(g,"?IsWeaponFiringPressed@CPlayerPuppetEntity@SeriousEngine@@UAEHV?$Handle@VCBaseWeaponEntity@SeriousEngine@@@2@@Z",weaponFiringPressed,originalWeaponHeld);
+        H(g,"?OnDelete@CCircularSawWeaponEntity@SeriousEngine@@UAEXXZ",sawDeleted,originalSawDelete);
+        H(g,"?OnWeaponPutDown@CCircularSawWeaponEntity@SeriousEngine@@UAEXXZ",sawWeaponPutDown,originalSawWeaponPutDown);
+        H(g,"?PutDown@CCircularSawWeaponEntity@SeriousEngine@@UAEXH@Z",sawPutDown,originalSawPutDown);
+        H(g,"??0CCircularSawWeaponEntity@SeriousEngine@@QAE@ABV01@@Z",sawCopied,originalSawCopy);
+        H(g,"??4CCircularSawWeaponEntity@SeriousEngine@@QAEAAV01@ABV01@@Z",sawAssigned,originalSawAssign);
+    }
     if (!headless) {
         H(g, "?DoTheFiring@CBaseWeaponEntity@SeriousEngine@@UAEHM@Z", nativeFire, originalNativeFire);
-        if(labDualTrace() || settings.physicalMelee)
-            H(g,"?OnFireReleased@CBaseWeaponEntity@SeriousEngine@@UAEXXZ",labFireRelease,originalLabFireRelease);
-        if (settings.physicalMelee) {
-            H(g,"?OnFireButtonPressed@CPuppetEntity@SeriousEngine@@UAEXJ@Z",primaryPressed,originalPrimaryPress);
-            H(g,"?OnFireButtonReleassed@CPuppetEntity@SeriousEngine@@UAEXJ@Z",primaryReleased,originalPrimaryRelease);
-            H(g,"?IsWeaponFiringPressed@CPlayerPuppetEntity@SeriousEngine@@UAEHV?$Handle@VCBaseWeaponEntity@SeriousEngine@@@2@@Z",weaponFiringPressed,originalWeaponHeld);
-            H(g,"?OnDelete@CCircularSawWeaponEntity@SeriousEngine@@UAEXXZ",sawDeleted,originalSawDelete);
-            H(g,"?OnWeaponPutDown@CCircularSawWeaponEntity@SeriousEngine@@UAEXXZ",sawWeaponPutDown,originalSawWeaponPutDown);
-            H(g,"?PutDown@CCircularSawWeaponEntity@SeriousEngine@@UAEXH@Z",sawPutDown,originalSawPutDown);
-            H(g,"??0CCircularSawWeaponEntity@SeriousEngine@@QAE@ABV01@@Z",sawCopied,originalSawCopy);
-            H(g,"??4CCircularSawWeaponEntity@SeriousEngine@@QAEAAV01@ABV01@@Z",sawAssigned,originalSawAssign);
-        }
         H(g, "?GetWeaponAbsPlacement@CBaseWeaponEntity@SeriousEngine@@QAEHABVMatrix34f@2@AAV32@@Z", weaponAbs,
           originalWeaponAbs);
         H(g, "?Render@CBaseWeaponEntity@SeriousEngine@@UAEXVMatrix34f@2@@Z", weaponRender,
@@ -5408,7 +5776,7 @@ bool attach(bool headless) {
     }
     if (!ok)
         rollbackNativeHooks();
-    meleeConfigured = ok && !headless && settings.physicalMelee;
+    meleeConfigured = ok && settings.physicalMelee;
     hooksReady = ok;
     log("Native VR hooks %s; no game/headset verification", ok ? "attached" : "failed");
     return ok;

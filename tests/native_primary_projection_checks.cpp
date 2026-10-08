@@ -239,6 +239,12 @@ constexpr bool gestureCannotBecomeManualHistory() {
                 // admitted observer-held call; it never clears stock input.
                 held.value = {};
                 if (nativePrimaryRead(original, &pawn, 4, &held) != (original | gesture)) return false;
+                // A nested observer manual read shadows the active held frame
+                // without projecting or inheriting G. Restoring it leaves the
+                // ancestor's independently admitted held read unchanged.
+                NativePrimaryInvocation rawManual{&pawn, {}, &held, true, {}};
+                if (nativePrimaryRead(original, &pawn, 4, &rawManual) != original) return false;
+                if (nativePrimaryRead(original, &pawn, 4, rawManual.previous) != (original | gesture)) return false;
                 // Constructing another held view from the same-pawn ancestor
                 // copies manual state only, never another weapon's gesture.
                 NativePrimaryInvocation another{&pawn, operatorFrame.value, &held, true};

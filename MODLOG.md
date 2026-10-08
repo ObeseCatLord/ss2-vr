@@ -1447,3 +1447,24 @@ preceding worked source. Exact source/products in IMPLEMENTATION_STATUS.md.
 No runtime or individual firing test; the user performs primary gameplay tests.
 Full MP gesture/observer delivery, first/copy usability and actual driver grab
 controls remain unfinished. Source checkpoint is development-only.
+
+## 2026-10-08 — local/authority/observer physical saw source
+
+Connected early physical sampling to the existing single Pose submit, wire7 G
+fields, per-kind immutable pending captures/conditional handoff receipt, stationary
+native Authority owners and consumption-aware Remote pulse retention. Observer
+manual/history stays native. Exact canonical/held/48FF0 boundaries retain original
+combat and transport. Integrated Astra/xhigh caught and main corrected stop/quiet
+ordering, source-loss cancellation, consumed-latest pulse extension, delayed-pulse
+arming and inherited held-G contamination of the original manual query. Bounded
+Source GO is engine271aba3f; effective backend routing unavailable.
+
+All products rebuilt on ab9b8ce8;61 Debug/61 Release groups,22 normal/-O compiled
+gates and19 private byte negative controls pass. IPC10/wire7. No game/runtime/
+firing/native server launched and no installed files/settings/saves changed.
+Source/publication and private package identities are recorded separately; no
+binary release is authorized by the source-only publication approval. Primary
+VR/shooting/vehicle/MP tests belong to the user. Default-off development feature,
+first/copy requires actual release then later quiet, positive driver geometry
+still unknown; full goal incomplete. See PHYSICAL_MELEE_CONSUMPTION.md and
+USER_VR_TEST.md for exact limitations and acceptance.

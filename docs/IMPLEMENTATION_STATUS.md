@@ -1,5 +1,51 @@
 # Implementation status — 2026-10-08
 
+## Reviewed MP physical melee source — 2026-10-08
+
+The default-off unique-saw adapter now connects the local physical sampler,
+server-authoritative native weapons and remote-observer native consumers.
+Wire7 adds separate G fields and reuses existing local retained captures, server
+pose intervals and Remote owners. It does not write G into native160/348, expand
+manual fire, invent observer live intent epochs or replace native combat.
+Matching wire7 client/server products are required; IPC remains10.
+
+Integrated Astra/xhigh Source GO covers engine SHA
+`271aba3f0c3173a2350111a13a0cec53dd7ef2135d2453774620422ca80f9591`.
+Main verified and adopted stop/quiet fencing, cancellation-only observer source
+loss, held-only latest fallback after pulse consumption, own quiet witnesses for
+delayed pulses, and scoped isolation of original observer manual reads.
+See [source disposition](PHYSICAL_MELEE_CONSUMPTION.md).
+Current-turn model/effort tags were verified; effective backend introspection was
+unavailable. Source GO does not establish native exception or MP gameplay behavior.
+
+All products rebuilt on source fingerprint
+`ab9b8ce84e25309b47cce63c40711214b5e8ac9f96d050e22dd0d1f776e42e46`.
+All61 Debug and61 Release groups pass with active assertions. Both x86 products'
+linked10-callback, native-finally, MP dispatch, muzzle, roomscale and12 melee
+cleanup/13 transitive scalar-body checks pass normally and with Python
+optimization (22 gate runs).19 private compiled-byte controls reject unsafe
+cleanup and removed TLS stores, including both new manual-query restore paths.
+The Release dependency-environment failure was corrected using the existing
+Capstone installation; no dependency reinstall was needed. Product contracts
+agree on IPC10/wire7, Input272/Request440/Ui352/Slot33554928/Shared83887840.
+
+| Product | SHA-256 |
+| --- | --- |
+| `d3d9.dll` | `22ff0d717ecb657a0ec63155d74500f596475c347abd868ad245bacae48ead9b` |
+| `ss2vr_host.exe` | `fa5503d4ddc0b69439687dc0bad6f38342a43741526e73baad90008a0eaa5124` |
+| `libopenxr_loader.dll` | `bb011caa82528c541a73967ce6408f82198ff4fd0358b38b54884719d863bd1d` |
+| `SS2VRServer.dll` | `a538b7f62412227f11f13bc27be79b0b58a1a974992607f13e2399da17813523` |
+
+No game, host, Wine/OpenXR, native server or input/firing probe ran for these
+changes. Nothing was deployed into the original installation or private game
+lab. Vehicle, shooting and primary VR/MP acceptance belong to the user. The
+comprehensive [test procedure](USER_VR_TEST.md) now includes physical saw priming,
+short-pulse/observer tests and matching-product requirements. First/copy state
+still requires a real native release and later quiet; no automatic state guess
+or synthetic initializing release was added. Positive driver-wheel geometry and
+broader vehicle control coverage remain open. Full goal is not claimed complete.
+Earlier SP/source entries below remain historical evidence for their own builds.
+
 ## Reviewed MP origin and SP saw source — 2026-10-08
 
 The controlling-local-XR roomscale route now supports negotiated multiplayer

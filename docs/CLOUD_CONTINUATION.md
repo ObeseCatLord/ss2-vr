@@ -1,15 +1,17 @@
 # Cloud continuation — 2026-10-05
 
 Current PC checkpoint: MP controlling-local settlement and immutable raw per-hand
-capture have bounded Astra Source GO. Default-off SP unique-saw gesture/native
-consumption is connected and reviewed, with source-loss cancellation, independent
-hand retirement and receipt ordering corrected. All products/61 Debug+Release
-checks, both x86 linked/cleanup/MP/roomscale gates and artifacts pass. Exact source
-and product identities are in IMPLEMENTATION_STATUS.md. No new runtime/firing
-probe. MP physical melee/observer delivery and actual driver controls remain open;
-first/copy saw requires a real native release before fresh quiet can arm. Primary
-VR/firing/vehicle testing belongs to the user. See MP_LOCAL_ORIGIN_CAPTURE.md and
-PHYSICAL_MELEE_CONSUMPTION.md. Historical entries retain their original scope.
+capture have bounded Astra Source GO. Default-off unique-saw gesture/native
+consumption now includes local, authoritative and remote-observer roles with
+wire7 delivery. Integrated Astra Source GO corrected stop/quiet ordering,
+source-loss cancellation, consumed-latest pulse extension, delayed pulse borrowing
+later arming and inherited manual-query G. Native160/348 stay manual-only.
+All products/61 Debug+Release groups and compiled gates pass; exact identities
+are in IMPLEMENTATION_STATUS.md. No new runtime/firing/MP probe. Actual driver
+control geometry and first/copy saw usability remain open. Primary VR/firing/
+vehicle/MP acceptance belongs to the user. See MP_LOCAL_ORIGIN_CAPTURE.md,
+PHYSICAL_MELEE_CONSUMPTION.md and USER_VR_TEST.md. Historical entries retain their
+original scope.
 
 
 Latest PC direct-scene work is in PC_GAMEPLAY_READINESS.md and DIRECT_GAMEPLAY_LAB.md.

@@ -113,6 +113,7 @@ struct Local {
     network::ConsumptionCredits credits;
     network::PosePacket latest;
     network::LocalPoseCapture capture;
+    uint8_t lastGestureDownMask = 0;
     bool hasLatest = false;
     uint64_t inputSequence = 0;
     IntentInputBoundary intentBoundary[2];
@@ -124,6 +125,7 @@ static void rejectLocalCapture() {
     local.pending.requireNeutral();
     local.hasLatest = false;
     local.lastFireMask = 0;
+    local.lastGestureDownMask = 0;
     network::invalidateWeaponIntents(local.latest, network::HandMask);
     for (auto &peer : peers)
         if (peer.avatar == local.avatar && peer.brain == local.brain && local.net == activeServer) {
@@ -153,6 +155,7 @@ static void stampInputEpochs(network::PosePacket &packet, uint64_t sequence, uin
 struct Remote {
     uint32_t avatar = 0, incarnation = 0;
     Sample sample;
+    network::ObserverGestureIntents gestures;
 };
 static std::array<Remote, 18> remotes;
 static uint64_t nonce() {
@@ -495,6 +498,7 @@ static void executeClientBody(void *unusedThis, int h, uint32_t brain, int j, in
                             if ((!same && (!remote.avatar || remote.avatar != mapped[1] ||
                                            network::newer(relay.subjectIncarnation, remote.incarnation))) ||
                                 (same && network::newer(relay.pose.sequence, remote.sample.pose.sequence))) {
+                                if (!same) remote = {};
                                 const uint64_t revision = same && remote.sample.valid &&
                                     compatiblePose(remote.sample.pose, relay.pose) ?
                                     remote.sample.presentationRevision : advancePresentationRevision();
@@ -504,6 +508,8 @@ static void executeClientBody(void *unusedThis, int h, uint32_t brain, int j, in
                                     true,      true, mapped[1], relay.subjectIncarnation, GetTickCount64(),
                                     relay.pose, {}, revision};
                             }
+                            if (remote.avatar == mapped[1] && remote.incarnation == relay.subjectIncarnation)
+                                remote.gestures.receive(remote.sample.pose, relay.pose, GetTickCount64());
                         }
                     }
                 }
@@ -591,6 +597,8 @@ static bool submitInput(void *player, network::PosePacket &admitted, bool reliab
     bool ready = false, retained = false;
     auto &token = handoff.token;
     uint8_t sentPulseMask = 0;
+    network::PendingIntents::HandoffReceipt pulseReceipt;
+    void *submittedNet = nullptr;
     bool accepted = false;
     if (!withPeerLock([&] {
         if (local.net != currentNet() || local.brain != brain || local.avatar != avatar) {
@@ -649,6 +657,7 @@ static bool submitInput(void *player, network::PosePacket &admitted, bool reliab
                 local.lastAck = 0;
                 local.sequence = 0;
                 local.lastFireMask = 0;
+                local.lastGestureDownMask = 0;
                 local.pending = {};
                 local.pending.requireNeutral();
                 local.intentBoundary[0] = local.intentBoundary[1] = {};
@@ -667,8 +676,11 @@ static bool submitInput(void *player, network::PosePacket &admitted, bool reliab
             local.hasLatest = true;
             admitted = packet;
             const uint8_t pressed = packet.fireMask & ~local.lastFireMask;
+            const uint8_t gesturePressed = packet.gestureDownMask & ~local.lastGestureDownMask;
             local.lastFireMask = packet.fireMask;
-            retained = coordinatesReady && reliableEdge && local.pending.retain(packet, pressed, now, capture);
+            local.lastGestureDownMask = packet.gestureDownMask;
+            retained = coordinatesReady && reliableEdge &&
+                local.pending.retain(packet, pressed, now, capture, gesturePressed);
             retained = local.hasLatest || retained;
             if (!local.serverNonce && local.clientNonce && !local.credits.full() &&
                 !local.credits.hasOutstandingCapability(local.clientNonce, 0)) {
@@ -688,6 +700,9 @@ static bool submitInput(void *player, network::PosePacket &admitted, bool reliab
                 outgoing.pose.sequence = ++local.sequence;
                 if (coordinatesReady)
                     sentPulseMask = local.pending.apply(outgoing.pose, now, local.capture);
+                sentPulseMask |= outgoing.pose.gesturePulseMask;
+                pulseReceipt = local.pending.handoffReceipt(sentPulseMask);
+                submittedNet = local.net;
                 if (!network::validatePose(outgoing.pose)) {
                     rejectLocalCapture();
                     network::invalidateWeaponIntents(admitted, network::HandMask);
@@ -714,7 +729,9 @@ static bool submitInput(void *player, network::PosePacket &admitted, bool reliab
     }
     if (accepted && sentPulseMask) {
         AcquireSRWLockExclusive(&lock);
-        local.pending.consume(sentPulseMask);
+        if (local.net == submittedNet && local.avatar == avatar &&
+            local.clientNonce == token.clientNonce && local.serverNonce == token.serverNonce)
+            local.pending.consume(sentPulseMask, pulseReceipt);
         ReleaseSRWLockExclusive(&lock);
     }
     return accepted || retained;
@@ -758,6 +775,24 @@ bool localPrimaryAllowed(void *player, unsigned hand, uint32_t intentEpoch,
         now - local.lastAck <= 500 && local.hasLatest && local.inputSequence == inputSequence &&
         local.intentBoundary[hand].epoch == intentEpoch &&
         local.pending.currentPrimaryIntent(local.latest, hand, intentEpoch, primaryGeneration, requireFire);
+    ReleaseSRWLockShared(&lock);
+    return allowed;
+}
+bool localGestureAllowed(void *player, unsigned hand, uint32_t intentEpoch,
+                         uint32_t gestureGeneration, uint64_t gestureSequence,
+                         uint64_t inputSequence, bool requireDown) {
+    if (hand >= 2 || !intentEpoch || !gestureGeneration || !gestureSequence || !player ||
+        !hooksReady.load(std::memory_order_acquire) || !isClient || !isClient()) return false;
+    const auto avatar = handleOf(player);
+    auto *net = currentNet();
+    const auto now = GetTickCount64();
+    AcquireSRWLockShared(&lock);
+    const bool allowed = net && local.net == net && avatar && local.avatar == avatar &&
+        local.clientNonce && local.serverNonce && local.lastAck && now >= local.lastAck &&
+        now - local.lastAck <= 500 && local.hasLatest && local.inputSequence == inputSequence &&
+        local.intentBoundary[hand].epoch == intentEpoch &&
+        local.pending.currentGestureIntent(local.latest, hand, intentEpoch, gestureGeneration,
+                                           gestureSequence, requireDown);
     ReleaseSRWLockShared(&lock);
     return allowed;
 }
@@ -807,7 +842,8 @@ static Sample freezeInput(void *player) {
             peer.frozen = result;
             if (tickPrepared)
                 peer.frozenTick = tickSerial;
-            if (result.valid && (relayPose.pulseMask || !peer.lastRelay || now - peer.lastRelay >= 50)) {
+            if (result.valid && (relayPose.pulseMask || relayPose.gesturePulseMask ||
+                                 !peer.lastRelay || now - peer.lastRelay >= 50)) {
                 peer.lastRelay = now;
                 relayAvatar = peer.avatar;
                 relayIncarnation = peer.incarnation;
@@ -830,7 +866,7 @@ static Sample freezeInput(void *player) {
         forwarded.relay = {relayPose, relayAvatar, relayIncarnation};
         forwarded.relay.pose.clientNonce = recipient.clientNonce;
         forwarded.relay.pose.serverNonce = recipient.serverNonce;
-        send(recipient.brain, forwarded, false, recipient.slot);
+        send(recipient.brain, forwarded, (relayPose.pulseMask | relayPose.gesturePulseMask) != 0, recipient.slot);
     }
     return result;
 }
@@ -995,6 +1031,65 @@ Sample presentation(void *player) {
     ReleaseSRWLockShared(&lock);
     return result;
 }
+ObserverGestureSample observerGestures(uint32_t avatar) {
+    ObserverGestureSample result;
+    if (server()) return result;
+    const auto now = GetTickCount64();
+    void *net = currentNet();
+    AcquireSRWLockExclusive(&lock);
+    if (local.net && local.net == net && local.clientNonce && local.serverNonce)
+        for (auto &remote : remotes)
+            if (remote.avatar == avatar && remote.sample.valid &&
+                remote.sample.pose.clientNonce == local.clientNonce &&
+                remote.sample.pose.serverNonce == local.serverNonce &&
+                now >= remote.sample.receivedMs && now - remote.sample.receivedMs <= network::MaxPoseAgeMs) {
+                result.latest = remote.sample;
+                for (unsigned h = 0; h < 2; ++h)
+                    remote.gestures.sample(remote.sample.pose, h, now, result.pulse[h], result.receipt[h]);
+                break;
+            }
+    ReleaseSRWLockExclusive(&lock);
+    return result;
+}
+bool observerGesturesCurrent(const ObserverGestureSample &captured, unsigned hand) {
+    if (hand >= 2 || !captured.latest.valid) return false;
+    const auto live = observerGestures(captured.latest.avatar);
+    const auto &a = captured.latest; const auto &b = live.latest;
+    if (!b.valid || a.incarnation != b.incarnation || a.presentationRevision != b.presentationRevision ||
+        a.pose.sequence != b.pose.sequence || a.pose.clientNonce != b.pose.clientNonce ||
+        a.pose.serverNonce != b.pose.serverNonce || a.pose.trackingGeneration != b.pose.trackingGeneration ||
+        a.pose.intentEpoch[hand] != b.pose.intentEpoch[hand] ||
+        a.pose.nativeWeaponId[hand] != b.pose.nativeWeaponId[hand]) return false;
+    if (captured.receipt[hand].hand != hand) return true; // Current held latest, no retained edge.
+    const auto now = GetTickCount64();
+    bool result = false;
+    AcquireSRWLockShared(&lock);
+    for (const auto &remote : remotes)
+        if (remote.avatar == a.avatar && remote.incarnation == a.incarnation &&
+            remote.sample.pose.sequence == a.pose.sequence &&
+            remote.sample.presentationRevision == a.presentationRevision &&
+            remote.sample.pose.clientNonce == local.clientNonce &&
+            remote.sample.pose.serverNonce == local.serverNonce) {
+            result = remote.gestures.current(remote.sample.pose, captured.receipt[hand], now); break;
+        }
+    ReleaseSRWLockShared(&lock);
+    return result;
+}
+bool finishObserverGesture(const ObserverGestureSample &captured, unsigned hand) {
+    if (hand >= 2 || captured.receipt[hand].hand != hand) return false;
+    bool result = false;
+    AcquireSRWLockExclusive(&lock);
+    if (local.clientNonce == captured.latest.pose.clientNonce &&
+        local.serverNonce == captured.latest.pose.serverNonce)
+        for (auto &remote : remotes)
+            if (remote.avatar == captured.latest.avatar && remote.incarnation == captured.latest.incarnation &&
+                remote.sample.pose.clientNonce == local.clientNonce &&
+                remote.sample.pose.serverNonce == local.serverNonce) {
+                result = remote.gestures.finish(captured.receipt[hand]); break;
+            }
+    ReleaseSRWLockExclusive(&lock);
+    return result;
+}
 PresentationReadGuard::PresentationReadGuard(bool acquireNow) : server_(server()) {
     if (acquireNow) acquire();
 }
@@ -1080,6 +1175,12 @@ void invalidatePlayer(void *player) {
 void invalidateWeapons(void *player, uint32_t generation, uint8_t handMask) {
     uint32_t avatar = handleOf(player);
     AcquireSRWLockExclusive(&lock);
+    for (auto &remote : remotes)
+        if (remote.avatar == avatar) {
+            remote.gestures.cancel(handMask);
+            network::invalidateWeaponIntents(remote.sample.pose, handMask);
+            remote.sample.presentationRevision = advancePresentationRevision();
+        }
     for (auto &peer : peers)
         if (peer.avatar == avatar) {
             peer.validation.invalidateWeaponGeneration(generation, handMask);

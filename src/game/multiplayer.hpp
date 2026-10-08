@@ -1,5 +1,6 @@
 #pragma once
 #include "common/network.hpp"
+#include "common/observer_gesture_intents.hpp"
 #include <array>
 #include <windows.h>
 namespace ss2vr::game::multiplayer {
@@ -27,6 +28,9 @@ bool submit(void *player, network::PosePacket &pose, bool reliableEdge,
 // admission. This borrows existing Local/Pending state, not another scheduler.
 bool localPrimaryAllowed(void *player, unsigned hand, uint32_t intentEpoch,
                          uint32_t primaryGeneration, uint64_t inputSequence, bool requireFire = true);
+bool localGestureAllowed(void *player, unsigned hand, uint32_t intentEpoch,
+                         uint32_t gestureGeneration, uint64_t gestureSequence,
+                         uint64_t inputSequence, bool requireDown = true);
 // Read the existing ACK/pose ownership at native zoom use; no second gate.
 bool localZoomAllowed(void *player,unsigned hand,uint32_t intentEpoch,
                       uint32_t zoomGeneration,uint64_t inputSequence);
@@ -54,6 +58,16 @@ void completeTick();
 void abortTick() noexcept;
 Sample authority(void *player);
 Sample presentation(void *player);
+struct ObserverGestureSample {
+    Sample latest;
+    network::PosePacket pulse[2];
+    network::ObserverGestureIntents::Receipt receipt[2];
+};
+// Simulation-only copy of the recipient-admitted presentation and retained
+// physical edges. No lock is held while the caller runs native weapon callbacks.
+ObserverGestureSample observerGestures(uint32_t avatar);
+bool observerGesturesCurrent(const ObserverGestureSample &, unsigned hand);
+bool finishObserverGesture(const ObserverGestureSample &, unsigned hand);
 // Narrow read transaction for remote frame publication. Acquired after the
 // renderer binding lock; sample() omits age, which is checked at pair admission.
 // All presentation lifecycle writers use the exclusive side of this lock.

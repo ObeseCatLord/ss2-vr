@@ -21,7 +21,7 @@ def inspect(path):
     starts = {address: name for name, (address, _) in bodies.items()}
     cleanup_names = ['dispatchMelee(', 'primaryPressed(', 'primaryReleased(', 'weaponFiringPressed(',
                      'baseWeaponStep(', 'labFireRelease(', 'sawDeleted(', 'sawWeaponPutDown(',
-                     'sawCopied(', 'sawAssigned(', 'sawPutDown(']
+                     'sawCopied(', 'sawAssigned(', 'sawPutDown(', 'observerManualLevel(']
     permitted_helpers = ['abortMeleeTicket(', 'nativeInputFailed(']
     permitted_system = {'AcquireSRWLockExclusive@4', 'ReleaseSRWLockExclusive@4',
                         'AcquireSRWLockShared@4', 'ReleaseSRWLockShared@4'}
@@ -29,7 +29,8 @@ def inspect(path):
     symbols = subprocess.check_output(['objdump', '-tC', str(path)], text=True)
     tls_restores = {'dispatchMelee(': ('meleeDispatch', 2),
                     'weaponFiringPressed(': ('meleeHeld', 2),
-                    'baseWeaponStep(': ('meleeStep', 1)}
+                    'baseWeaponStep(': ('meleeStep', 1),
+                    'observerManualLevel(': ('primaryInvocation', 2)}
 
     def instructions(body):
         result = []

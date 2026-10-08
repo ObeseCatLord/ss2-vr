@@ -5,7 +5,16 @@ Older no-runtime/no-launch statements below record the original plan and are
 superseded by AGENTS.md and CLOUD_CONTINUATION.md. Full native dual wield and
 multiplayer with mod users remain required; teleport is excluded.
 
-Target: installed Steam Serious Sam 2, fingerprints in installed-build.json. Create source and compiled development package for proper OpenXR stereo, six-DOF head and hand tracking, independent native dual weapons, per-hand wheels, smooth movement and snap turn. No actual game/headset testing or launch. No claim of tested playability.
+Current implementation closure: native scopes, complete admitted flat overlays,
+remote-head frozen-pair rendering and default-off controlling-local roomscale are
+connected. The unique-saw adapter now includes local/authority/observer roles and
+wire7 retention with bounded Astra Source GO. First/copy state still needs a real
+native release then quiet; positive driver-control geometry is not established.
+The user performs primary VR, vehicle, shooting and multiplayer gameplay tests.
+Build/offline/source acceptance does not certify those tests. See current status
+and the comprehensive USER_VR_TEST.md preparation procedure.
+
+Historical initial target: installed Steam Serious Sam 2, fingerprints in installed-build.json. Create source and compiled development package for proper OpenXR stereo, six-DOF head and hand tracking, independent native dual weapons, per-hand wheels, smooth movement and snap turn. No actual game/headset testing or launch. No claim of tested playability.
 
 ## Architecture
 Preserve Serious Engine 2 and Sam2Game.dll. x86 d3d9 proxy acquires the actual device via pinned MinHook CreateDevice interception and loads game hooks. x64 ss2vr_host owns OpenXR+D3D11/actions and composition layers. Classic D3D9 CPU readback transports completed stereo images. This is the smallest compatible initial bridge; no renderer/game rewrite, custom inventory, gameplay state machine, OpenVR fallback or speculative D3D9Ex upgrade.

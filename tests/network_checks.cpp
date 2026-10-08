@@ -1,4 +1,5 @@
 #include "common/network.hpp"
+#include "common/observer_gesture_intents.hpp"
 #include "common/controls.hpp"
 #include "common/intent_boundary.hpp"
 #include <cstdlib>
@@ -78,7 +79,7 @@ static bool nearPose(const Pose &a, const Pose &b) {
            std::abs(a.q.w-b.q.w) < 1e-5f;
 }
 static void rawCaptureChecks() {
-    static_assert(WireVersion == 6);
+    static_assert(WireVersion == 7);
     for (unsigned active = 0; active < 2; ++active) {
         auto packet = validPose();
         packet.validMask = uint8_t(1u | (2u << active));
@@ -335,7 +336,515 @@ static void captureBootstrapChecks() {
               "eligible post-bootstrap neutral rearms normally without mutating the inactive handed packet");
     }
 }
+static PosePacket gesturePose(uint64_t sample, uint8_t down = HandMask, uint64_t quiet = 900,
+                              uint32_t generation = 1) {
+    auto p = validPose(uint32_t(sample));
+    p.primarySampleEligibleMask = p.primaryNeutralSampleMask = 0;
+    p.gestureEligibleMask = HandMask;
+    p.gestureDownMask = down;
+    p.gestureQuietMask = quiet ? HandMask : 0;
+    for (unsigned hand = 0; hand < 2; ++hand) {
+        p.nativeWeaponId[hand] = 0;
+        p.gestureGeneration[hand] = generation;
+        p.gestureSequence[hand] = p.gestureTickMs[hand] = sample;
+        p.gestureQuietSequence[hand] = p.gestureQuietTickMs[hand] = quiet;
+    }
+    return p;
+}
+static void observerGestureChecks() {
+    {
+        ObserverGestureIntents single;
+        auto released = gesturePose(1000, 0); released.gesturePulseMask = 1;
+        single.receive(released, released, 5000);
+        PosePacket source; ObserverGestureIntents::Receipt receipt;
+        check(single.sample(released, 0, 5000, source, receipt) &&
+            ObserverGestureIntents::level(source, 0, true), "released retained observer edge enters one interval");
+        check(single.finish(receipt) && single.current(released, receipt, 5001) &&
+            ObserverGestureIntents::level(source, 0, true), "completed edge survives its admitted native interval");
+        for (unsigned tick = 1; tick <= 3; ++tick)
+            check(!single.sample(released, 0, 5000 + tick, source, receipt) &&
+                !ObserverGestureIntents::level(released, 0, false), "consumed pulse cannot extend latest held level");
+    }
+    ObserverGestureIntents pending;
+    auto pulse = gesturePose(1000); pulse.gesturePulseMask = HandMask;
+    auto low = gesturePose(1001, 0, 1001);
+    pending.receive(pulse, pulse, 5000);
+    pending.receive(low, low, 5001);
+    PosePacket held; ObserverGestureIntents::Receipt first, right;
+    check(pending.sample(low, 0, 5002, held, first) && held.gestureSequence[0] == 1000 &&
+          pending.sample(low, 1, 5002, held, right), "newer low retains both observer pulses");
+    check(pending.finish(first) && pending.current(low, first, 5003) && !pending.finish(first) &&
+          pending.sample(low, 1, 5003, held, right), "native completion is per-hand and receipt-conditional");
+    pending.cancel(1);
+    check(!pending.current(low, first, 5003), "cancellation revokes even a completed frozen edge");
+    pending.receive(low, pulse, 5004);
+    check(!pending.sample(low, 0, 5004, held, first), "duplicate consumed relay cannot replay");
+    check(pending.finish(right), "other hand completes independently");
+    ObserverGestureIntents delayed;
+    delayed.receive(low, low, 5000); delayed.receive(low, pulse, 5001);
+    check(delayed.sample(low, 0, 5002, held, first), "out-of-order reliable pulse survives newer low");
+    check(!pending.finish(first), "receipt cannot consume another Remote owner");
+    auto second = gesturePose(1002); second.gesturePulseMask = 1;
+    delayed.receive(second, second, 5003);
+    check(delayed.finish(first), "capacity discard preserves the older exact pending receipt");
+    delayed.receive(second, second, 5004);
+    check(!delayed.sample(second, 0, 5005, held, first), "capacity-discarded edge never becomes debt");
+    ObserverGestureIntents stale;
+    stale.receive(pulse, pulse, 5000);
+    check(!stale.sample(low, 0, 5201, held, first), "observer pulse expires using local receive age");
+    stale.receive(low, pulse, 5202);
+    check(!stale.sample(low, 0, 5203, held, first), "expired pulse cannot be replayed by duplicate delivery");
+    ObserverGestureIntents replaced;
+    replaced.receive(pulse, pulse, 5000);
+    check(replaced.sample(pulse, 0, 5000, held, first), "capture before native owner replacement");
+    auto context = low; ++context.intentEpoch[0];
+    replaced.receive(context, context, 5001);
+    check(!replaced.finish(first) && !replaced.sample(context, 0, 5002, held, first),
+          "intent epoch replacement cancels old observer receipt");
+    replaced.receive(context, pulse, 5003);
+    check(!replaced.sample(context, 0, 5004, held, first), "old-context delayed pulse rejected");
+    auto blocked = pulse; blocked.wheelOrEquipBlockedMask = 1;
+    ObserverGestureIntents unavailable; unavailable.receive(pulse, pulse, 5000);
+    unavailable.receive(blocked, blocked, 5001);
+    check(!unavailable.sample(blocked, 0, 5002, held, first) &&
+          unavailable.sample(blocked, 1, 5002, held, right), "wheel loss cancels only affected observer hand");
+}
+static void manualDown(PosePacket &p, uint8_t hands) {
+    p.physicalDownMask = p.fireMask = hands;
+    p.primarySampleEligibleMask = HandMask;
+    p.primaryNeutralSampleMask = uint8_t(HandMask & ~hands);
+}
+static void gestureWireChecks() {
+    auto p = gesturePose(UINT64_MAX, HandMask, UINT64_MAX - 1, UINT32_MAX);
+    p.gesturePulseMask = HandMask;
+    manualDown(p, HandMask);
+    Message m{}, decoded{};
+    m.kind = Kind::Relay; m.relay = {p, UINT32_MAX, UINT32_MAX};
+    std::string wire;
+    check(encode(m, wire) && wire.size() == 348 && wire.size() <= MaxCarrierAscii,
+          "wire7 largest gesture relay remains within the existing ASCII carrier budget");
+    check(parse(wire, decoded) == ParseResult::Valid && decoded.relay.pose.gesturePulseMask == 3 &&
+              decoded.relay.pose.gestureDownMask == 3 && decoded.relay.pose.fireMask == 3 &&
+              decoded.relay.pose.gestureGeneration[1] == UINT32_MAX &&
+              decoded.relay.pose.gestureSequence[0] == UINT64_MAX &&
+              decoded.relay.pose.gestureTickMs[1] == UINT64_MAX &&
+              decoded.relay.pose.gestureQuietSequence[1] == UINT64_MAX - 1 &&
+              decoded.relay.pose.gestureQuietTickMs[0] == UINT64_MAX - 1,
+          "gesture stamps and independent manual levels round trip for both hands without truncation");
+    std::vector<uint8_t> bytes;
+    check(detail::unbase64(std::string_view(wire).substr(CarrierTag.size()), bytes), "gesture relay decodes");
+    bytes[0] = 6;
+    check(parse(std::string(CarrierTag) + detail::base64(bytes), decoded) == ParseResult::Malformed,
+          "wire6 cannot silently negotiate the gesture extension");
+    bytes[0] = WireVersion; bytes.pop_back();
+    check(parse(std::string(CarrierTag) + detail::base64(bytes), decoded) == ParseResult::Malformed,
+          "truncated gesture stamp is rejected");
+    for (unsigned field = 0; field < 21; ++field) {
+        auto bad = gesturePose(1000);
+        switch (field) {
+        case 0: bad.gestureEligibleMask |= 4; break;
+        case 1: bad.gestureDownMask |= 4; break;
+        case 2: bad.gestureQuietMask |= 4; break;
+        case 3: bad.gesturePulseMask |= 4; break;
+        case 4: bad.gestureEligibleMask &= ~1; break;
+        case 5: bad.gestureGeneration[0] = 0; break;
+        case 6: bad.gestureSequence[0] = 0; break;
+        case 7: bad.gestureTickMs[0] = 0; break;
+        case 8: bad.gestureQuietSequence[0] = 0; break;
+        case 9: bad.gestureQuietTickMs[0] = 0; break;
+        case 10: bad.gestureQuietMask &= ~1; break;
+        case 11: bad.gestureQuietSequence[0] = 1001; break;
+        case 12: bad.gestureQuietTickMs[0] = 1001; break;
+        case 13: bad.gestureQuietSequence[0] = 1000; break;
+        case 14: bad.gestureQuietSequence[0] = bad.gestureQuietTickMs[0] = 1000; break;
+        case 15: bad.nativeWeaponId[0] = 1; break;
+        case 16: bad.requestedWeapon[0] = 0; break;
+        case 17: bad.wheelOrEquipBlockedMask = 1; break;
+        case 18: bad.validMask &= ~2; break;
+        case 19: bad.validMask &= ~1; break;
+        case 20: bad.grip[0].p.x = std::numeric_limits<float>::infinity(); break;
+        }
+        m.kind = Kind::Pose; m.pose = bad;
+        check(!encode(m, wire), "malformed gesture state cannot be encoded");
+        bytes.clear(); detail::put8(bytes, WireVersion); detail::put8(bytes, uint8_t(Kind::Pose));
+        detail::put16(bytes, 0); detail::writePosePacket(bytes, bad);
+        check(parse(std::string(CarrierTag) + detail::base64(bytes), decoded) == ParseResult::Malformed,
+              "untrusted malformed gesture state is rejected by the actual parser");
+    }
+    auto inactive = validPose();
+    inactive.gestureSequence[0] = 1;
+    check(!validatePose(inactive), "ineligible gesture cannot smuggle orphan source metadata");
+    auto quiet = gesturePose(1000, 0, 1000);
+    check(validatePose(quiet), "a current quiet sample may be low");
+    auto unarmed = gesturePose(1000, 3, 0);
+    check(validatePose(unarmed), "valid unarmed observation is distinct from transport admission");
+    invalidateWeaponIntents(p, 1);
+    check(!p.gestureSequence[0] && !p.gestureGeneration[0] && p.gestureEligibleMask == 2 &&
+              p.gestureDownMask == 2 && p.gesturePulseMask == 2 && p.gestureQuietMask == 2 &&
+              p.physicalDownMask == 3 && p.fireMask == 2,
+          "hand-local intent invalidation clears G provenance without inventing manual releases");
+}
+static void gestureAdmissionChecks() {
+    PendingIntents pending;
+    pending.requireNeutral();
+    auto rawNeutral = validPose();
+    pending.observeSnapshot(rawNeutral, 990);
+    check(pending.primaryAllowed(0) && !pending.gestureAllowed(0),
+          "actual manual neutral cannot manufacture a quiet gesture witness");
+    auto high = gesturePose(1000, 3, 0);
+    check(!pending.retain(high, 0, 1000, fixtureCapture(high, 1000), 3) && !pending.gestureAllowed(0),
+          "first gesture high without quiet remains unarmed");
+    auto quiet = gesturePose(1010, 0, 1010);
+    check(pending.observeCapture(quiet, fixtureCapture(quiet, 1010), 1010) &&
+              pending.gestureAllowed(0) && !pending.primaryAllowed(0),
+          "fresh quiet arms G while unavailable raw manual action remains unarmed");
+    auto throttled = gesturePose(1050, 3, 1010);
+    check(pending.retain(throttled, 0, 1050, fixtureCapture(throttled, 1050), 3) &&
+              pending.currentGestureIntent(throttled, 0, 1, 1, 1050) &&
+              !pending.currentGestureIntent(throttled, 0, 2, 1, 1050) &&
+              !pending.currentGestureIntent(throttled, 0, 1, 2, 1050) &&
+              !pending.currentGestureIntent(throttled, 0, 1, 1, 1049),
+          "quiet survives throttle and currentGestureIntent checks epoch, stream and source sample");
+    pending.requireNeutral(1);
+    auto after = gesturePose(1060, 3, 1010);
+    pending.observeCapture(after, fixtureCapture(after, 1060), 1060);
+    check(!pending.gestureAllowed(0) && pending.gestureAllowed(1),
+          "a cached quiet witness cannot rearm an interrupted hand or interrupt the other hand");
+    auto recovered = gesturePose(1070, 0, 1070);
+    pending.observeCapture(recovered, fixtureCapture(recovered, 1070), 1070);
+    check(pending.currentGestureIntent(recovered, 0, 1, 1, 1070, false) &&
+              !pending.currentGestureIntent(recovered, 0, 1, 1, 1070),
+          "new quiet recovers independently and does not pretend to be held");
+    auto inconsistent = recovered; inconsistent.gestureDownMask = 1;
+    pending.observeSnapshot(inconsistent, 1071);
+    pending.filterPrimaryIntents(inconsistent);
+    check(!(inconsistent.gestureEligibleMask & 1), "same source sample cannot change low into high");
+
+    PeerState peer; check(peer.bindCapability(11, 22), "gesture peer binds existing capability");
+    auto remote = gesturePose(900000, 3, 899999); remote.sequence = 1;
+    check(peer.acceptPose(remote, 10) && remote.gestureDownMask == 3 && !remote.fireMask &&
+              !peer.physicalFireAllowed(0),
+          "sender clocks may differ from receiver clock; persistent quiet is not manual release");
+    auto repeated = remote; repeated.sequence = 2;
+    check(peer.acceptPose(repeated, 211) && !repeated.gestureEligibleMask,
+          "outer packet progress cannot refresh a stale repeated gesture source");
+    auto next = gesturePose(900010, 0, 900010); next.sequence = 3;
+    check(peer.acceptPose(next, 212) && next.gestureEligibleMask == 3,
+          "new source quiet recovers after timeout without comparing clocks across peers");
+    auto replacement = gesturePose(900020, 3, 900019, 2); replacement.sequence = 4;
+    check(peer.acceptPose(replacement, 213) && replacement.gestureDownMask == 3, "new gesture stream accepted");
+    auto stale = gesturePose(900030, 3, 900029, 1); stale.sequence = 5;
+    check(peer.acceptPose(stale, 214) && !stale.gestureEligibleMask && peer.gesture[0].generation == 2,
+          "retired gesture generation neither grants intent nor rewrites the newer stream");
+    auto rewind = replacement; rewind.sequence = 6; rewind.gestureSequence[0]--; rewind.gestureTickMs[0]--;
+    rewind.gestureQuietSequence[0]--; rewind.gestureQuietTickMs[0]--;
+    check(peer.acceptPose(rewind, 215) && rewind.gestureEligibleMask == 2,
+          "source sequence rollback is rejected independently per hand");
+    peer.invalidateWeaponGeneration(1, 1);
+    auto rebound = gesturePose(900040, 3, 900019, 2); rebound.sequence = 7; rebound.intentEpoch[0] = 2;
+    check(peer.acceptPose(rebound, 216) && rebound.gestureEligibleMask == 2,
+          "new weapon epoch cannot reuse a pre-replacement quiet witness");
+    auto rearmed = gesturePose(900050, 0, 900050, 2); rearmed.sequence = 8; rearmed.intentEpoch[0] = 2;
+    check(peer.acceptPose(rearmed, 217) && rearmed.gestureEligibleMask == 3,
+          "current epoch plus new quiet recovers the replaced hand");
+    auto relabeled = gesturePose(900070, 3, 900060, 2); relabeled.sequence = 9; relabeled.intentEpoch[0] = 2;
+    relabeled.gestureQuietTickMs[0] = 900050;
+    check(peer.acceptPose(relabeled, 218) && relabeled.gestureEligibleMask == 2,
+          "quiet source identity cannot advance its sequence while reusing an older witness tick");
+}
+static void gestureRetentionChecks() {
+    auto high = gesturePose(1000);
+    auto capture = fixtureCapture(high, 1000);
+    capture.head = pose(.7f, -.4f, 0); capture.grip[0] = pose(1.7f, -.3f, .1f);
+    PendingIntents pending;
+    check(pending.retain(high, 0, 1000, capture, 1), "gesture edge occupies the existing capture slot");
+    auto second = gesturePose(1010, 2);
+    auto right = fixtureCapture(second, 1010);
+    right.head = pose(.2f, .1f, .2f); right.grip[1] = pose(-.8f, .2f, .3f);
+    check(pending.retain(second, 0, 1010, right, 2), "other hand retains its own capture and TTL");
+    auto low = gesturePose(1020, 0);
+    auto current = fixtureCapture(low, 1020); current.frame.origin.p = {.4f, -.1f, .1f}; current.frame.turn = .6f;
+    check(composeLocalPose(low, current, 1020) && !pending.apply(low, 1020, current) &&
+              low.gesturePulseMask == 3 && !low.gestureDownMask && !low.fireMask && !low.pulseMask,
+          "released G pulses survive separately; apply still returns only manual pulses");
+    check(nearPose(low.grip[0], bodyHandTracking(current.frame.origin, current.frame.turn, capture.head, capture.grip[0])) &&
+              nearPose(low.grip[1], bodyHandTracking(current.frame.origin, current.frame.turn, right.head, right.grip[1])) &&
+              low.gestureSequence[0] == 1000 && low.gestureSequence[1] == 1010 && validatePose(low),
+          "both retained G samples use their own raw head/grip against the current origin");
+    auto expired = gesturePose(1200, 0);
+    check(!pending.apply(expired, 1200, fixtureCapture(expired, 1200)) && expired.gesturePulseMask == 2,
+          "origin composition never renews either gesture TTL");
+    pending.consume(expired.gesturePulseMask);
+    auto duplicate = second;
+    check(!pending.retain(duplicate, 0, 1200, right, 2), "consumed gesture source cannot be retained again");
+
+    for (bool separateCalls : {false, true}) {
+        PendingIntents combined;
+        auto both = gesturePose(1000); manualDown(both, 3);
+        auto raw = fixtureCapture(both, 1000);
+        if (separateCalls) check(combined.retain(both, 3, 1000, raw), "manual capture admitted first");
+        check(combined.retain(both, separateCalls ? 0 : 3, 1000, raw, 3),
+              "same captured input coalesces manual and G without another queue");
+        auto released = gesturePose(1010, 0); manualDown(released, 0);
+        check(combined.apply(released, 1010, fixtureCapture(released, 1010)) == 3 &&
+                  released.gesturePulseMask == 3 && !released.fireMask && !released.gestureDownMask && validatePose(released),
+              "simultaneous completed manual/G taps remain distinct legal pulses");
+    }
+    {
+        PendingIntents priority;
+        auto manual = gesturePose(1000, 0); manualDown(manual, 1);
+        auto first = fixtureCapture(manual, 1000); first.grip[0] = pose(.3f, .1f, .2f);
+        check(priority.retain(manual, 1, 1000, first), "manual priority fixture retained");
+        auto swing = gesturePose(1010, 1); auto newer = fixtureCapture(swing, 1010);
+        swing.primarySampleEligibleMask = 3; swing.primaryNeutralSampleMask = 3;
+        newer.grip[0] = pose(.8f, .3f, .1f);
+        check(!priority.retain(swing, 0, 1010, newer, 1) && priority.mask(1010) == 1 && !priority.gestureMask(1010),
+              "different-time gesture cannot overwrite or coalesce into the manual capture");
+        auto delivered = swing;
+        check(priority.apply(delivered, 1010, newer) == 1 && !delivered.gesturePulseMask &&
+                  nearPose(delivered.grip[0], first.grip[0]), "existing manual capture geometry is preserved");
+        priority.consume(1);
+        check(!priority.retain(swing, 0, 1010, newer, 1), "capacity-discarded G edge cannot become later pulse debt");
+    }
+    {
+        PendingIntents priority;
+        auto initial = high; manualDown(initial, 0);
+        check(priority.retain(initial, 0, 1000, capture, 1), "G-only slot admitted before a later manual edge");
+        auto manual = gesturePose(1010, 0); manualDown(manual, 1);
+        auto newer = fixtureCapture(manual, 1010); newer.grip[0] = pose(.8f, .3f, .1f);
+        check(priority.retain(manual, 1, 1010, newer) && priority.mask(1010) == 1 && !priority.gestureMask(1010),
+              "later manual edge replaces a G-only capture");
+        auto delivered = manual;
+        check(priority.apply(delivered, 1010, newer) == 1 && !delivered.gesturePulseMask &&
+                  nearPose(delivered.grip[0], newer.grip[0]), "replacement carries the actual new manual geometry");
+    }
+    {
+        PendingIntents full;
+        check(full.retain(high, 0, 1000, capture, 1), "one G capture fills the hand");
+        auto later = gesturePose(1010, 1, 1005); auto raw = fixtureCapture(later, 1010);
+        check(!full.retain(later, 0, 1010, raw, 1), "a second G capture is explicitly discarded at capacity");
+        auto delivered = later;
+        check(!full.apply(delivered, 1010, raw) && delivered.gesturePulseMask == 1 &&
+                  delivered.gestureSequence[0] == 1000, "capacity preserves the earliest captured G identity");
+        full.consume(1);
+        check(!full.retain(later, 0, 1010, raw, 1), "discarded second G cannot reappear after capacity opens");
+    }
+    for (unsigned altered = 0; altered < 2; ++altered) {
+        PendingIntents sameId;
+        auto both = high; manualDown(both, 1);
+        auto raw = fixtureCapture(both, 1000);
+        check(sameId.retain(both, 1, 1000, raw), "manual geometry held immutable for coalescing check");
+        auto different = raw;
+        if (altered) different.head.p.x += .1f;
+        else different.grip[0].p.x += .1f;
+        check(!sameId.retain(both, 0, 1000, different, 1),
+              "identical source IDs cannot coalesce different captured head/grip data");
+        auto outgoing = both;
+        check(sameId.apply(outgoing, 1000, raw) == 1 && !outgoing.gesturePulseMask &&
+                  nearPose(outgoing.grip[0], raw.grip[0]), "rejected coalescing preserves the manual capture");
+    }
+    {
+        PendingIntents separate;
+        auto both = high; manualDown(both, 1);
+        check(separate.retain(both, 1, 1000, fixtureCapture(both, 1000), 1), "both source kinds initially retained");
+        auto unavailableManual = gesturePose(1010, 0);
+        check(!separate.apply(unavailableManual, 1010, fixtureCapture(unavailableManual, 1010)) &&
+                  unavailableManual.gesturePulseMask == 1 && !unavailableManual.pulseMask,
+              "manual action loss removes only manual retention when gesture provenance remains eligible");
+    }
+    for (unsigned stamp = 0; stamp < 3; ++stamp) {
+        PendingIntents invalidSource;
+        auto packet = high; auto raw = fixtureCapture(packet, 1000);
+        if (stamp == 0) ++packet.gestureSequence[0];
+        if (stamp == 1) ++packet.gestureTickMs[0];
+        if (stamp == 2) { raw.frame.sequence = raw.frame.tickMs = 1300; }
+        check(!invalidSource.retain(packet, 0, raw.frame.tickMs, raw, 1) && !invalidSource.gestureAllowed(0),
+              "future or stale sender gesture stamps cannot acquire a raw capture");
+    }
+    for (unsigned changed = 0; changed < 8; ++changed) {
+        PendingIntents retired;
+        check(retired.retain(high, 0, 1000, capture, 1), "G replacement fixture retained");
+        auto next = gesturePose(1010); auto raw = fixtureCapture(next, 1010);
+        switch (changed) {
+        case 0: ++raw.frame.avatar; break;
+        case 1: ++raw.frame.producer; break;
+        case 2: ++raw.frame.session; break;
+        case 3: ++raw.frame.reference; break;
+        case 4: ++raw.frame.trackingEpoch; break;
+        case 5: ++next.intentEpoch[0]; break;
+        case 6: next.nativeWeaponId[0] = 1; break;
+        case 7: next.requestedWeapon[0] = 0; break;
+        }
+        check(!retired.apply(next, 1010, raw) && !(next.gesturePulseMask & 1) && !retired.gestureAllowed(0),
+              "owner/capability/replaced-weapon context discards pending G and requires new quiet");
+    }
+    for (unsigned active = 0; active < 2; ++active) {
+        PendingIntents isolated;
+        auto one = gesturePose(1000); invalidateGestureIntents(one, uint8_t(1u << (1-active)));
+        one.validMask = uint8_t(1 | (2u << active));
+        auto raw = fixtureCapture(one, 1000); raw.grip[1-active].p.x = std::numeric_limits<float>::quiet_NaN();
+        check(composeLocalPose(one, raw, 1000) && isolated.retain(one, 0, 1000, raw, uint8_t(1u << active)) &&
+                  !isolated.apply(one, 1000, raw) && one.gesturePulseMask == (1u << active) && validatePose(one),
+              "G retention preserves independence from an invalid inactive offhand");
+    }
+    {
+        PendingIntents overflow;
+        check(overflow.retain(high, 0, 1000, capture, 1), "overflow starts with retained G");
+        auto next = gesturePose(1010); auto raw = fixtureCapture(next, 1010); raw.head.p.x = 1e20f;
+        check(!prepareLocalPose(next, raw, capture.frame, raw.frame.avatar, 1010),
+              "production pose preparation rejects finite raw head overflow");
+        overflow.requireNeutral(); // Existing rejectLocalCapture boundary.
+        check(!overflow.apply(next, 1010, raw) && !next.gesturePulseMask && !next.gestureEligibleMask,
+              "finite raw head overflow revokes G rather than hiding behind a clamp");
+    }
+}
+static void pendingHandoffChecks() {
+    auto both = gesturePose(1000); manualDown(both, HandMask);
+    const auto raw = fixtureCapture(both, 1000);
+    {
+        PendingIntents pending;
+        check(pending.retain(both, 0, 1000, raw, 1), "handoff starts with a G-only capture");
+        const auto sent = pending.handoffReceipt(1);
+        auto manual = gesturePose(1010, 0); manualDown(manual, 1);
+        check(pending.retain(manual, 1, 1010, fixtureCapture(manual, 1010)),
+              "native-send reentry replaces G-only capture with later manual input");
+        pending.consume(1, sent);
+        check(pending.mask(1010) == 1 && !pending.gestureMask(1010),
+              "stale G handoff cannot erase the replacement manual capture");
+    }
+    for (bool gestureFirst : {false, true}) {
+        PendingIntents pending;
+        check(pending.retain(both, gestureFirst ? 0 : 1, 1000, raw, gestureFirst ? 1 : 0),
+              "one source kind is captured before native send");
+        const auto sent = pending.handoffReceipt(1);
+        auto settled = raw; settled.frame.origin.p.x += .2f; settled.frame.turn = .3f;
+        check(pending.retain(both, gestureFirst ? 1 : 0, 1000, settled, gestureFirst ? 0 : 1),
+              "same raw input merges another source kind during native-send reentry");
+        pending.consume(1, sent);
+        check(pending.mask(1000) == (gestureFirst ? 1 : 0) &&
+                  pending.gestureMask(1000) == (gestureFirst ? 0 : 1),
+              "handoff consumes only submitted kinds, preserving the kind merged during native send");
+        pending.consume(1, sent);
+        check(pending.active(0, 1000), "repeated stale handoff cannot consume the newly merged kind");
+        pending.consume(1, pending.handoffReceipt(1));
+        check(!pending.active(0, 1000), "remaining kind is consumed by its own matching handoff");
+    }
+    {
+        PendingIntents pending, other;
+        check(pending.retain(both, 3, 1000, raw, 3) && other.retain(both, 3, 1000, raw, 3),
+              "both hands and source kinds are ready for normal handoff");
+        const auto empty = pending.handoffReceipt(0), first = pending.handoffReceipt(1);
+        pending.consume(3, empty);
+        other.consume(3, first);
+        check(pending.mask(1000) == 3 && pending.gestureMask(1000) == 3 && other.mask(1000) == 3 &&
+                  other.gestureMask(1000) == 3, "empty/foreign receipts cannot consume pending input");
+        pending.consume(3, first);
+        check(pending.mask(1000) == 2 && pending.gestureMask(1000) == 2,
+              "a receipt covers only its captured hand even with a larger consume mask");
+        const auto second = pending.handoffReceipt(3);
+        pending.consume(1, second);
+        check(pending.mask(1000) == 2, "consume mask cannot retire a different hand");
+        pending.consume(3, second);
+        check(!pending.mask(1000) && !pending.gestureMask(1000), "matching MG handoff consumes both kinds");
+    }
+    for (bool expire : {false, true}) {
+        PendingIntents pending;
+        check(pending.retain(both, 1, 1000, raw, 1), "interruption starts with an MG receipt");
+        const auto sent = pending.handoffReceipt(1);
+        const uint64_t quietTime = expire ? 1200 : 1010;
+        if (expire) check(!pending.mask(quietTime) && !pending.gestureMask(quietTime), "captured input expires");
+        else pending.requireNeutral(1);
+        pending.consume(1, sent);
+        check(!pending.active(0, quietTime), "late completion cannot revive expired/canceled input");
+        auto quiet = gesturePose(quietTime, 0, quietTime); manualDown(quiet, 0);
+        check(pending.observeCapture(quiet, fixtureCapture(quiet, quietTime), quietTime),
+              "actual fresh neutral/quiet permits recovery after interruption");
+        auto fresh = gesturePose(quietTime + 10, 1, quietTime); manualDown(fresh, 1);
+        check(pending.retain(fresh, 1, quietTime + 10, fixtureCapture(fresh, quietTime + 10), 1),
+              "recovered source retains a new MG capture");
+        pending.consume(1, sent);
+        check(pending.mask(quietTime + 10) == 1 && pending.gestureMask(quietTime + 10) == 1,
+              "pre-interruption receipt cannot retire recovered input");
+    }
+    for (unsigned changed = 0; changed < 8; ++changed) {
+        PendingIntents pending;
+        check(pending.retain(both, 1, 1000, raw, 1), "source replacement starts with an MG receipt");
+        const auto sent = pending.handoffReceipt(1);
+        auto quiet = gesturePose(1010, 0, 1010, 2); manualDown(quiet, 0);
+        auto context = fixtureCapture(quiet, 1010);
+        switch (changed) {
+        case 0: ++context.frame.avatar; break;
+        case 1: ++context.frame.producer; break;
+        case 2: ++context.frame.session; break;
+        case 3: ++context.frame.reference; break;
+        case 4: ++context.frame.trackingEpoch; break;
+        case 5: ++quiet.trackingGeneration; ++context.frame.trackingGeneration; break;
+        case 6: ++quiet.intentEpoch[0]; break;
+        case 7: ++quiet.primaryInputGeneration[0]; break;
+        }
+        check(pending.observeCapture(quiet, context, 1010), "replacement context observes fresh quiet and neutral");
+        auto fresh = quiet; fresh.gestureSequence[0] = fresh.gestureSequence[1] = 1020;
+        fresh.gestureTickMs[0] = fresh.gestureTickMs[1] = 1020; fresh.gestureDownMask = 1;
+        manualDown(fresh, 1); context.frame.sequence = context.frame.tickMs = 1020;
+        check(pending.retain(fresh, 1, 1020, context, 1), "replacement source retains MG in existing hand slot");
+        pending.consume(1, sent);
+        check(pending.mask(1020) == 1 && pending.gestureMask(1020) == 1,
+              "stale source-context receipt cannot retire replacement provenance");
+    }
+    for (unsigned changed = 0; changed < 5; ++changed) {
+        PendingIntents pending;
+        auto manual = validPose(); manualDown(manual, 1);
+        auto capture = fixtureCapture(manual, 1000);
+        check(pending.retain(manual, 1, 1000, capture), "exact-identity comparison starts with manual input");
+        const auto sent = pending.handoffReceipt(1);
+        pending.cancel(1);
+        // Deliberately hold the unchanged fields/expiry equal: each distinct
+        // raw capture or source identity must independently defeat stale consume.
+        switch (changed) {
+        case 0: capture.head.p.x += .1f; break;
+        case 1: capture.grip[0].p.z += .1f; break;
+        case 2: ++capture.frame.sequence; break;
+        case 3: manual.nativeWeaponId[0] = 3; break;
+        case 4: ++capture.frame.producer; break;
+        }
+        check(pending.retain(manual, 1, 1000, capture), "canceled slot receives distinct capture at the same expiry");
+        pending.consume(1, sent);
+        check(pending.mask(1000) == 1, "raw/identity mismatch alone preserves replacement capture");
+    }
+}
+static void gestureIntervalChecks() {
+    for (uint8_t held : {uint8_t(0), uint8_t(3)}) {
+        OrderedPosePolicy server;
+        server.validation.bindCapability(11, 22);
+        auto packet = gesturePose(1000, held); packet.sequence = 1; packet.gesturePulseMask = 3;
+        Ack ack; PosePacket sample, relay;
+        check(server.receive(packet, 10, ack) && server.freeze(11, sample, &relay) &&
+                  !sample.fireMask && !sample.pulseMask && sample.gesturePulseMask == 3 &&
+                  sample.gestureDownMask == held && relay.gesturePulseMask == 3 &&
+                  !server.active.gesturePulseMask && validatePose(relay),
+              "freeze grants G pulse for one interval without expanding manual or held G levels");
+        check(server.finishInterval(ack) && ack.acceptedSequence == 1 &&
+                  server.freeze(12, sample, &relay) && !sample.gesturePulseMask && sample.gestureDownMask == held,
+              "normal transport settlement is distinct from one-use G pulse and retained held level");
+        packet.sequence = 2;
+        check(server.receive(packet, 13, ack) && server.freeze(14, sample) && !sample.gesturePulseMask &&
+                  sample.gestureDownMask == held && server.finishInterval(ack),
+              "new outer sequence cannot replay the same gesture pulse identity");
+        auto fresh = gesturePose(1010, held); fresh.sequence = 3; fresh.gesturePulseMask = 3;
+        check(server.receive(fresh, 15, ack) && server.freeze(16, sample), "next gesture interval admitted");
+        server.abortInterval();
+        check(!server.freeze(17, sample) && !sample.gestureDownMask && !sample.gesturePulseMask &&
+                  server.peekInterval(ack) && ack.acceptedSequence == 3,
+              "aborted interval discards G but retains the exact existing transport token");
+    }
+}
 int main() {
+    observerGestureChecks();
+    gestureWireChecks();
+    gestureAdmissionChecks();
+    gestureRetentionChecks();
+    pendingHandoffChecks();
+    gestureIntervalChecks();
     rawCaptureChecks();
     captureBootstrapChecks();
     Message hello{};

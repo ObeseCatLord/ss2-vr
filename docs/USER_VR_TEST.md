@@ -68,9 +68,18 @@ Beyond's controller model determines its bindings. Use the current package's
 7. Test each eligible scoped hand: enter/release zoom, turn the other hand,
    fire, switch that hand and interrupt tracking. Magnified image, muzzle and
    zoom ownership must belong to the same weapon; surrounding world FOV stays normal.
-8. Test physical melee only when the integration owner marks it enabled. Check
-   intended contacts, misses, manual firing coexistence, held/released motion,
-   switching, carried objects and lifecycle transitions. Record any unintended throw.
+8. The unique-saw physical adapter is a default-off development option. For a
+   separate test pass enable `[Melee]Enabled=1` in the private test copy; use
+   matching wire7 clients/server and the same setting on participating native
+   consumers. After selecting or replacing a saw, perform a normal trigger
+   press/release and hold still before testing motion. Unknown/copy state is
+   never guessed low. Test both hands where native eligibility permits, with
+   ordinary and flipped button mapping; coupled/alternative targets stay native.
+9. Check saw contacts/misses, native cadence, manual firing coexistence, short
+   moving→still transitions, held-query cooldown skips, switching and carried
+   objects. Try source loss/recovery, death/respawn and re-equipping after a swing.
+   No carried object may be thrown by physical motion. Verify each receiving MP
+   role has actually observed the native release before expecting gesture arming.
 
 ## Wheels, menus and comfort
 
@@ -107,7 +116,12 @@ mod user: head/hands/weapons, body motion, supported dual wield, scopes, melee,
 vehicle seats and native hit results. Include physical head displacement mixed
 with joystick movement, walls/support movement, packet delay where available,
 death/respawn, reconnect and level changes. Remote body correction must not cause
-detached hands or reset local physical travel. Pose packets or counters alone
+detached hands or reset local physical travel. For saw gestures, include a short swing followed immediately by stillness while
+another player observes. A newer low pose must not erase the edge; a consumed
+released edge must not keep the observer firing during later intervals. Where
+controlled delay is available, test duplicates/reordering/expiry, with no old
+swing after stop/rearm. Test manual+physical motion together and each hand
+independently. Pose packets or counters alone
 do not pass this test: another player must see coherent native gameplay.
 
 ## Reporting and recovery

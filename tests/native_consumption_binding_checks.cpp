@@ -9,6 +9,18 @@ using namespace ss2vr;
 static_assert(!std::is_copy_constructible_v<NativeConsumptionBinding>);
 static_assert(!std::is_move_constructible_v<NativeConsumptionBinding>);
 int main() {
+    // Same-generation native high20 -> stop50 -> reset-fenced quiet60 ->
+    // quiet70 arms. A delayed pulse40/quiet30 may not borrow that later arming.
+    assert(nativeGestureQuietWitness(60, 70, 70, 70, 70));
+    assert(!nativeGestureQuietWitness(60, 40, 40, 30, 30));
+    // QuietN captured before an intervening stop is fenced through N during
+    // preparation. MovingN+1 still carries quietN; only later quiet can rearm.
+    assert(!nativeGestureQuietWitness(100, 100, 100, 100, 100));
+    assert(!nativeGestureQuietWitness(100, 101, 101, 100, 100));
+    assert(nativeGestureQuietWitness(100, 102, 102, 102, 102));
+    assert(!nativeGestureQuietWitness(100, 102, 102, 103, 102));
+    assert(!nativeGestureQuietWitness(100, 102, 102, 102, 103));
+    assert(!nativeGestureQuietWitness(100, 102, 102, 102, 0));
     using Edge=NativeConsumptionBinding::Edge;
     const NativeConsumptionBindingKey right{11,22,1},left{11,33,0};
     NativeConsumptionBinding owner;
