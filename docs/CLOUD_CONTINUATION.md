@@ -23,6 +23,15 @@ firing or movement. This is not grasp, driver steering, physical melee or full
 VR acceptance; comprehensive gameplay testing remains primarily user-operated.
 Old attempted collector commands are historical and must not be reused.
 
+The native activation observer now preserves per-guard receipts and startup
+return codes. A valid nongame console/GUI comparison found both seeing the exact
+owned foreground; the independent owner samples agreed before/during/after.
+No subsystem defect was demonstrated. Stop that diagnostic hypothesis rather
+than add activation policy or repeat audits. Astra caught/fixed an interval
+coverage misclassification; 21 display checks and 22 evidence checks pass normal/
+optimized. A fresh neutral SS2 collection with the new receipts is being prepared
+as source work; do not launch it without renewed bounded capture authority.
+
 ## PC continuation authority — 2026-10-07
 
 The user now permits PC development, additional sessions and runtime testing where feasible. This supersedes historical root-only, transfer-only, pause and no-runtime restrictions. Native safety, privacy, anonymous publication, Actions-off and no destructive cleanup remain. The isolated public checkout starts at commit `8d172189aa0fbddadc1c1786eedbc38db8368487`, tree `07b2508387d1a367107673020e6162eba9e17fd4`, including both queued checkpoints. All28 reachable commits passed the full-history empty-email gate; Actions is disabled and workflow files absent. The old installed-game checkout and its unaccepted melee changes remain separate; no old ancestry was imported. Cloud edits have stopped; the PC main session is integration owner.

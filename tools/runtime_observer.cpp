@@ -2,6 +2,7 @@
 #include "common/ipc.hpp"
 #include "common/frame_policy.hpp"
 #include "common/weapon_view.hpp"
+#include "lab_window_focus.hpp"
 #include <cstdio>
 #include <tlhelp32.h>
 #include <shellapi.h>
@@ -43,7 +44,7 @@ static bool loadingOwner(DWORD pid,const wchar_t *path,OwnedLoading &out) {
     out.stage=ok?2:1;
     HANDLE modules=ok?CreateToolhelp32Snapshot(TH32CS_SNAPMODULE|TH32CS_SNAPMODULE32,pid):INVALID_HANDLE_VALUE;
     if(modules==INVALID_HANDLE_VALUE)out.error=GetLastError();
-    uint32_t base=0,engine=0,core=0,exe=0;MODULEENTRY32W module{sizeof(module)};
+    uint32_t base=0,engine=0,core=0,exe=0;MODULEENTRY32W module{};module.dwSize=sizeof(module);
     if(modules!=INVALID_HANDLE_VALUE) {
         if(Module32FirstW(modules,&module))do {
             if(!_wcsicmp(module.szModule,L"Sam2Game.dll"))base=static_cast<uint32_t>(reinterpret_cast<uintptr_t>(module.modBaseAddr));
@@ -124,7 +125,7 @@ static bool stockProcess(const wchar_t *path,OwnedStockProcess &out) {
     std::wstring expected(path);for(auto &c:expected)if(c==L'/')c=L'\\';
     HANDLE snapshot=CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS,0);
     if(snapshot==INVALID_HANDLE_VALUE)return false;
-    PROCESSENTRY32W entry{sizeof(entry)};bool ambiguous=false;
+    PROCESSENTRY32W entry{};entry.dwSize=sizeof(entry);bool ambiguous=false;
     if(Process32FirstW(snapshot,&entry))do {
         if(_wcsicmp(entry.szExeFile,L"Sam2.exe"))continue;
         HANDLE h=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION|PROCESS_VM_READ,FALSE,entry.th32ProcessID);
@@ -142,7 +143,7 @@ static bool stockProcess(const wchar_t *path,OwnedStockProcess &out) {
 static uint32_t stockModule(DWORD pid,const wchar_t *name) {
     HANDLE snapshot=CreateToolhelp32Snapshot(TH32CS_SNAPMODULE|TH32CS_SNAPMODULE32,pid);
     if(snapshot==INVALID_HANDLE_VALUE)return 0;
-    uint32_t base=0;MODULEENTRY32W module{sizeof(module)};
+    uint32_t base=0;MODULEENTRY32W module{};module.dwSize=sizeof(module);
     if(Module32FirstW(snapshot,&module))do {
         if(!_wcsicmp(module.szModule,name))base=static_cast<uint32_t>(reinterpret_cast<uintptr_t>(module.modBaseAddr));
     }while(Module32NextW(snapshot,&module));
@@ -198,8 +199,55 @@ static StockCameraRead stockCameraRead(const OwnedStockProcess &process) {
     // another pass, or stale storage. These remain capture-comparison candidates.
     return out;
 }
+static int stockFocus(int argc,wchar_t **argv) {
+    // Open the optional exclusive receipt before ownership guards so rejected
+    // attempts remain distinguishable. It never authorizes a window operation.
+    FILE *receipt=argc==5?_wfopen(argv[4],L"wbx"):nullptr;
+    if(argc==5&&!receipt)return 6;
+    OwnedStockProcess process;
+    OwnedLoading native{};
+    lab::WindowObservation target{};
+    lab::FocusObservation focus{};
+    bool identityVerified=false,creationVerified=false,targetChecked=false,called=false;
+    auto finish=[&](const char *stage,int code) {
+        if(!receipt)return code;
+        const int written=std::fprintf(receipt,
+            "{\"schema\":1,\"operation\":\"stock-focus\",\"stage\":\"%s\",\"returncode\":%d,"
+            "\"process_identity_verified\":%u,\"game_pid\":%u,\"process_creation\":%llu,\"creation_verified\":%u,"
+            "\"activation_repeated\":%u,\"target_checked\":%u,\"native_host_hwnd\":%llu,\"target_owner\":%u,\"target_thread\":%u,"
+            "\"target_title_matches\":%u,\"target_root_matches\":%u,\"visible_before\":%u,\"iconic_before\":%u,"
+            "\"foreground_called\":%u,\"foreground_before_hwnd\":%llu,\"foreground_before_owner\":%u,\"foreground_before_thread\":%u,"
+            "\"show_called\":%u,\"show_requested\":%u,\"foreground_requested\":%u,\"foreground_observed\":%u,"
+            "\"foreground_after_hwnd\":%llu,\"foreground_after_owner\":%u,\"foreground_after_thread\":%u,\"foreground_after_title_matches\":%u}\n",
+            stage,code,identityVerified,static_cast<unsigned>(process.pid),static_cast<unsigned long long>(process.creation),creationVerified,
+            native.activationRepeated,targetChecked,lab::windowValue(target.window),static_cast<unsigned>(target.owner),static_cast<unsigned>(target.thread),
+            target.titleMatches,target.rootMatches,target.visible,target.iconic,called,
+            lab::windowValue(focus.before.window),static_cast<unsigned>(focus.before.owner),static_cast<unsigned>(focus.before.thread),
+            focus.showCalled,focus.showRequested,focus.foregroundRequested,focus.foregroundObserved,
+            lab::windowValue(focus.after.window),static_cast<unsigned>(focus.after.owner),static_cast<unsigned>(focus.after.thread),focus.after.titleMatches);
+        const int closed=std::fclose(receipt);receipt=nullptr;
+        return written<0||closed!=0?7:code;
+    };
+    if(!stockProcess(argv[2],process))return finish("process-identity",4);
+    identityVerified=true;
+    wchar_t *end=nullptr;const auto expected=std::wcstoull(argv[3],&end,10);
+    if(!expected||!end||*end||expected!=process.creation)return finish("process-creation",8);
+    creationVerified=true;
+    loadingOwner(process.pid,argv[2],native);
+    if(!native.activationRepeated)return finish("native-association",8);
+    target=lab::observeWindow(reinterpret_cast<HWND>(uintptr_t(native.hostHwnd)),L"Serious Sam 2");
+    targetChecked=true;
+    if(target.owner!=process.pid)return finish("window-owner",8);
+    if(!target.titleMatches)return finish("window-title",8);
+    if(!target.rootMatches)return finish("window-root",8);
+    // Same activation policy as before; process handle remains retained. No
+    // waits, input attachment, foreign-window operations or native state writes.
+    called=true;focus=lab::requestBorrowedForeground(target.window,target.iconic,L"Serious Sam 2");
+    return finish("foreground-observed",focus.foregroundObserved?0:8);
+}
 static int stockCommand(int argc,wchar_t **argv) {
     if(argc!=4&&!(argc==5&&(!wcscmp(argv[1],L"stock-focus")||!wcscmp(argv[1],L"stock-background"))))return 2;
+    if(!wcscmp(argv[1],L"stock-focus"))return stockFocus(argc,argv);
     OwnedStockProcess process;if(!stockProcess(argv[2],process))return 4;
     if(!wcscmp(argv[1],L"stock-status")) {
         auto *file=_wfopen(argv[3],L"wbx");if(!file)return 6;
@@ -207,7 +255,7 @@ static int stockCommand(int argc,wchar_t **argv) {
         bool onlineNull=false;const bool local=stockTransport(process,onlineNull);
         const auto camera=stockCameraRead(process);
         std::fprintf(file,"{\"game_pid\":%u,\"process_creation\":%llu,\"tick_ms\":%llu,\"local_transport\":%u,\"online_interface_null\":%u,\"loading_ready\":%u,\"loading_stage\":%u,\"loading_error\":%u,\"loading_table_rva\":%u,\"loading_native_ready\":%u,\"menu_clear\":%u,\"camera_repeated_equal\":%u,\"view_pose_match\":%u,\"perspective_projection\":%u,\"mouse_zero\":%u,\"camera\":",
-            process.pid,static_cast<unsigned long long>(process.creation),static_cast<unsigned long long>(GetTickCount64()),local,onlineNull,ready,loading.stage,loading.error,
+            static_cast<unsigned>(process.pid),static_cast<unsigned long long>(process.creation),static_cast<unsigned long long>(GetTickCount64()),local,onlineNull,ready,loading.stage,loading.error,
             loading.module&&loading.table?loading.table-loading.module:0,loading.ready,camera.menuClear,camera.equal,camera.viewMatches,camera.perspective,camera.mouseZero);
         pose(file,camera.camera);std::fprintf(file,",\"projection\":[");
         for(unsigned i=0;i<16;++i)std::fprintf(file,"%s%.9g",i?",":"",camera.projection.m[i]);
@@ -217,7 +265,7 @@ static int stockCommand(int argc,wchar_t **argv) {
     wchar_t *end=nullptr;const auto expected=std::wcstoull(argv[3],&end,10);
     if(!expected||!end||*end||expected!=process.creation)return 8;
     // Retain the original process handle through posting to prevent PID reuse.
-    if(!wcscmp(argv[1],L"stock-focus")||!wcscmp(argv[1],L"stock-background")) {
+    if(!wcscmp(argv[1],L"stock-background")) {
         OwnedLoading native{};loadingOwner(process.pid,argv[2],native);
         if(!native.activationRepeated)return 8;
         const HWND window=reinterpret_cast<HWND>(uintptr_t(native.hostHwnd));DWORD owner=0;
@@ -237,16 +285,6 @@ static int stockCommand(int argc,wchar_t **argv) {
             }
             return requested?0:8;
         }
-        bool showRequested=false;
-        if(iconic)showRequested=ShowWindowAsync(window,SW_RESTORE);
-        const bool foregroundRequested=SetForegroundWindow(window);
-        const bool foreground=GetForegroundWindow()==window;
-        if(receipt) {
-            std::fprintf(receipt,"{\"native_host_hwnd\":%u,\"visible_before\":%u,\"iconic_before\":%u,\"show_requested\":%u,\"foreground_requested\":%u,\"foreground_observed\":%u}\n",
-                native.hostHwnd,visible,iconic,showRequested,foregroundRequested,foreground);
-            if(std::fclose(receipt)!=0)return 7;
-        }
-        return foreground?0:8;
     }
     if(!wcscmp(argv[1],L"stock-close")) {
         EnumWindows(closeWindow,static_cast<LPARAM>(process.pid));return 0;
@@ -259,6 +297,22 @@ static int stockCommand(int argc,wchar_t **argv) {
 }
 int wmain(int argc,wchar_t **argv) {
     if(argc<3)return 2;
+    if(!wcscmp(argv[1],L"private-foreground-status")) {
+        wchar_t selected[2]{};
+        if(argc!=3 || argv[2][0]!=L'Z' || argv[2][1]!=L':' ||
+           GetEnvironmentVariableW(L"SS2VR_LAB_PRIVATE_DISPLAY",selected,2)!=1 || selected[0]!=L'1')return 10;
+        // Nongame read-only observation: no target selection/activation or game
+        // memory access. A console build may observe its own foreground window.
+        auto *file=_wfopen(argv[2],L"wbx");if(!file)return 6;
+        const ULONGLONG entryTick=GetTickCount64();
+        Sleep(250); // Fixed opportunity for independent owner-side sampling.
+        const auto window=lab::observeWindow(GetForegroundWindow(),L"SS2VR private display prerequisite");
+        const int written=std::fprintf(file,"{\"schema\":1,\"operation\":\"private-foreground-status\",\"entry_tick_ms\":%llu,\"tick_ms\":%llu,\"observer_pid\":%lu,\"observer_thread\":%lu,\"console_hwnd\":%llu,\"foreground_hwnd\":%llu,\"foreground_owner\":%lu,\"foreground_thread\":%lu,\"probe_title_matches\":%s,\"foreground_visible\":%s}\n",
+            static_cast<unsigned long long>(entryTick),static_cast<unsigned long long>(GetTickCount64()),GetCurrentProcessId(),GetCurrentThreadId(),lab::windowValue(GetConsoleWindow()),
+            lab::windowValue(window.window),window.owner,window.thread,
+            window.titleMatches?"true":"false",window.visible?"true":"false");
+        const int closed=std::fclose(file);return written<0||closed!=0?7:0;
+    }
     if(!wcsncmp(argv[1],L"stock-",6))return stockCommand(argc,argv);
     Channel channel;if(!channel.open(argv[2],false))return 3;
     if(wcscmp(argv[1],L"status")==0) {
@@ -304,7 +358,7 @@ int wmain(int argc,wchar_t **argv) {
         const bool up=PostMessageW(loading.window,WM_KEYUP,VK_RETURN,static_cast<LPARAM>(0xc01c0001u));
         if(receipt) {
             std::fprintf(receipt,"{\"game_pid\":%u,\"native_simulation\":%u,\"native_world_start_blocked\":%u,\"native_input_exclusive\":%u,\"native_ok_dispatch_enabled\":%u,\"native_current_menu\":%u,\"down_posted\":%u,\"up_posted\":%u}\n",
-                pid,loading.simulation,loading.blocked,loading.exclusive,loading.dispatcher,loading.menu,down,up);
+                static_cast<unsigned>(pid),loading.simulation,loading.blocked,loading.exclusive,loading.dispatcher,loading.menu,down,up);
             if(std::fclose(receipt)!=0)return 7;
         }
         return down&&up?0:9;
@@ -380,7 +434,8 @@ int wmain(int argc,wchar_t **argv) {
         request.input.trigger[0],request.input.trigger[1],request.input.handValid[0],request.input.handValid[1],
         request.input.primaryActiveMask,request.input.primaryInputGeneration[0],request.input.primaryInputGeneration[1]);
     for(unsigned h=0;h<2;++h) {
-        if(h)std::fprintf(f,",");const auto &v=request.fov[h];
+        if(h)std::fprintf(f,",");
+        const auto &v=request.fov[h];
         std::fprintf(f,"[%.9g,%.9g,%.9g,%.9g]",v.left,v.right,v.up,v.down);
     }
     std::fprintf(f,"]}\n");return std::fclose(f)==0?0:7;
@@ -389,5 +444,6 @@ int wmain(int argc,wchar_t **argv) {
 // GUI subsystem avoids creating a console that can steal the owned game's focus.
 int WINAPI wWinMain(HINSTANCE,HINSTANCE,wchar_t *,int) {
     int argc=0;auto **argv=CommandLineToArgvW(GetCommandLineW(),&argc);
-    if(!argv)return 2;const int result=wmain(argc,argv);LocalFree(argv);return result;
+    if(!argv)return 2;
+    const int result=wmain(argc,argv);LocalFree(argv);return result;
 }

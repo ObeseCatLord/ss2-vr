@@ -69,6 +69,20 @@ def validate_display_probe(cfg, private):
     mode=cfg.get('display_prerequisite_only',False)
     if type(mode) is not bool:raise ValueError('Display prerequisite-only selection must be boolean')
     if mode and selected is None:raise ValueError('Prerequisite-only mode requires its pinned native probe')
+    variants=cfg.get('display_focus_comparison')
+    if variants is not None:
+        if not mode or not isinstance(variants,list) or len(variants)!=2:
+            raise ValueError('Foreground comparison requires two sealed nongame observers')
+        for variant,name,subsystem in zip(variants,('console','gui'),(3,2)):
+            if not isinstance(variant,dict) or set(variant)!={'name','path','sha256'} or variant['name']!=name:
+                raise ValueError('Foreground observer identity differs')
+            path=checked_file(variant['path'],variant['sha256'])
+            if not path.is_relative_to(private):raise ValueError('Foreground observer must be private')
+            data=path.read_bytes();offset=int.from_bytes(data[60:64],'little')
+            if data[:2]!=b'MZ' or data[offset:offset+6]!=b'PE\0\0\x4c\x01' or \
+               data[offset+24:offset+26]!=b'\x0b\x01' or \
+               int.from_bytes(data[offset+92:offset+94],'little')!=subsystem:
+                raise ValueError('Foreground observer PE32/subsystem differs')
     if selected is None:return
     if not isinstance(selected,dict) or set(selected)!={'path','sha256'}:
         raise ValueError('Display prerequisite requires its exact executable identity')
@@ -81,6 +95,10 @@ def validate_display_probe(cfg, private):
         if len(header)!=64 or header[:2]!=b'MZ':raise ValueError('Display prerequisite is not a PE')
         stream.seek(struct.unpack_from('<I',header,60)[0]);pe=stream.read(6)
     if pe!=b'PE\0\0L\x01':raise ValueError('Display prerequisite must use the game x86 architecture')
+    if variants is not None:
+        data=path.read_bytes();offset=int.from_bytes(data[60:64],'little')
+        if data[offset+24:offset+26]!=b'\x0b\x01' or int.from_bytes(data[offset+92:offset+94],'little')!=2:
+            raise ValueError('Foreground comparison requires a GUI owner probe')
 
 def require_display_timing(report):
     if not isinstance(report,dict) or type(report.get('schema')) is not int or report['schema']!=1 or report.get('stage')!='swapchain-query' or \
@@ -91,6 +109,36 @@ def require_display_timing(report):
         value=report.get(key)
         if type(value) is not int or not 1<value<=16384:
             raise RuntimeError('Private D3D9 display prerequisite returned an invalid current mode')
+
+def owner_foreground_samples(path):
+    if path.is_symlink() or not path.is_file() or path.stat().st_size>131072:
+        raise RuntimeError('Owner foreground samples are not a bounded native file')
+    rows=[]
+    for line in path.read_bytes().splitlines(keepends=True):
+        if not line.endswith(b'\n'):continue # Native writer may still be flushing this row.
+        row=json.loads(line)
+        if not isinstance(row,dict) or type(row.get('tick_ms')) is not int or not 0<=row['tick_ms']<=0xffffffffffffffff or \
+           any(type(row.get(k)) is not int or not 0<=row[k]<=0xffffffff for k in ('foreground_hwnd','foreground_owner','foreground_thread')) or \
+           type(row.get('probe_title_matches')) is not bool:
+            raise RuntimeError('Owner foreground sample differs')
+        if rows and row['tick_ms']<rows[-1]['tick_ms']:raise RuntimeError('Owner foreground sample clock reversed')
+        rows.append(row)
+    if not rows:raise RuntimeError('Owner foreground sample is absent')
+    return rows
+
+def foreground_interval(rows, entry, observed):
+    """Only fresh native owner samples bracketing the child's actual interval."""
+    prior=[row for row in rows if row['tick_ms']<=entry]
+    later=[row for row in rows if row['tick_ms']>observed]
+    during=[row for row in rows if entry<row['tick_ms']<=observed]
+    before=prior[-1] if prior else None;after=later[0] if later else None
+    covered=False
+    if before and after and during and entry<=observed:
+        sequence=[before,*during,after]
+        # Owner samples every20ms; gaps over100ms make this diagnostic inconclusive.
+        covered=(entry-before['tick_ms']<=100 and after['tick_ms']-observed<=100 and
+                 all(0<=b['tick_ms']-a['tick_ms']<=100 for a,b in zip(sequence,sequence[1:])))
+    return before,during,after,covered
 
 def display_timing_probe(cfg,env,deadline,run_dir):
     selected=cfg.get('display_timing_probe')
@@ -110,11 +158,65 @@ def display_timing_probe(cfg,env,deadline,run_dir):
     receipt=run_dir/'display-timing-native.json'
     if receipt.exists() or receipt.is_symlink():raise RuntimeError('Native display receipt already exists')
     probe_env['SS2VR_DISPLAY_TIMING_OUTPUT']='Z:'+str(receipt)
+    comparisons=cfg.get('display_focus_comparison')
+    if comparisons:probe_env['SS2VR_LAB_FOCUS_COMPARE']='1'
     try:
         with output.open('xb') as log:
             # Use the existing observer/tool route. Proton "run" starts through
             # steam.exe; runinprefix directly invokes the diagnostic executable.
             process=subprocess.Popen([cfg['proton'],'runinprefix',str(path)],env=probe_env,stdout=log,stderr=subprocess.STDOUT)
+            observations=[]
+            if comparisons:
+                ready=Path(str(receipt)+'.window-ready.json');ready_deadline=min(deadline,time.monotonic()+10)
+                target=None
+                while time.monotonic()<ready_deadline:
+                    if process.poll() is not None:raise RuntimeError('Foreground probe retired before its observation opportunity')
+                    if ready.is_symlink():raise RuntimeError('Foreground ready receipt is a symlink')
+                    if ready.exists():
+                        if not ready.is_file() or ready.stat().st_size>4096:
+                            raise RuntimeError('Foreground ready receipt is not a bounded file')
+                        try:target=json.loads(ready.read_text())
+                        except json.JSONDecodeError:pass # Exclusive native write may still be in progress.
+                        else:break
+                    time.sleep(.02)
+                if not isinstance(target,dict) or type(target.get('schema')) is not int or target['schema']!=1 or \
+                   type(target.get('baseline_foreground')) is not bool or \
+                   any(type(target.get(k)) is not int or not 0<target[k]<=0xffffffff for k in ('probe_pid','target_hwnd','target_thread')):
+                    raise RuntimeError('Foreground probe has no valid ready receipt')
+                owner_samples=Path(str(receipt)+'.owner-foreground.jsonl')
+                for variant in comparisons:
+                    observed=run_dir/('foreground-'+variant['name']+'.json')
+                    if process.poll() is not None:raise RuntimeError('Foreground probe retired before observer execution')
+                    checked_file(variant['path'],variant['sha256'])
+                    before_launch=owner_foreground_samples(owner_samples)[-1]
+                    selected_cfg=dict(cfg,observer=variant['path'])
+                    observer(selected_cfg,probe_env,'private-foreground-status','Z:'+str(observed),
+                             timeout=remaining(deadline,3),deadline=deadline)
+                    if process.poll() is not None:raise RuntimeError('Foreground probe retired during observer execution')
+                    if observed.is_symlink() or not observed.is_file() or not 1<=observed.stat().st_size<=4096:
+                        raise RuntimeError('Foreground observer has no bounded native receipt')
+                    sample=json.loads(observed.read_text())
+                    if not isinstance(sample,dict) or type(sample.get('schema')) is not int or sample['schema']!=1 or \
+                       sample.get('operation')!='private-foreground-status' or \
+                       type(sample.get('tick_ms')) is not int or not 0<=sample['tick_ms']<=0xffffffffffffffff or \
+                       type(sample.get('entry_tick_ms')) is not int or not 0<=sample['entry_tick_ms']<=sample['tick_ms'] or \
+                       any(type(sample.get(k)) is not int or not 0<sample[k]<=0xffffffff for k in ('observer_pid','observer_thread')) or \
+                       any(type(sample.get(k)) is not int or not 0<=sample[k]<=0xffffffff for k in ('console_hwnd','foreground_hwnd','foreground_owner','foreground_thread')) or \
+                       any(type(sample.get(k)) is not bool for k in ('probe_title_matches','foreground_visible')):
+                        raise RuntimeError('Foreground observer receipt differs')
+                    after_deadline=min(deadline,time.monotonic()+.5)
+                    while True:
+                        rows=owner_foreground_samples(owner_samples);after=rows[-1]
+                        if after['tick_ms']>sample['tick_ms'] or time.monotonic()>=after_deadline:break
+                        if process.poll() is not None:raise RuntimeError('Foreground probe retired before owner post-observation')
+                        time.sleep(.02)
+                    before,during,after,covered=foreground_interval(rows,sample['entry_tick_ms'],sample['tick_ms'])
+                    baseline=bool(before and target['baseline_foreground'] and before['foreground_hwnd']==target['target_hwnd'] and
+                              before['foreground_owner']==target['probe_pid'] and before['probe_title_matches'])
+                    observations.append({'variant':variant['name'],'sha256':variant['sha256'],
+                        'target':target,'sample':sample,'owner_before_launch':before_launch,'owner_before':before,
+                        'owner_during':during,'owner_after':after,'interval_covered':covered,
+                        'baseline_present':baseline,'conclusive':bool(baseline and covered)})
             code=process.wait(timeout=remaining(deadline,30))
         # Native file output is independent of Proton/Wine console routing.
         # Launcher exit alone never certifies the native program's result.
@@ -122,6 +224,9 @@ def display_timing_probe(cfg,env,deadline,run_dir):
             raise RuntimeError('Private D3D9 display prerequisite has no bounded native receipt; game was not launched')
         report=json.loads(receipt.read_text())
         require_display_timing(report)
+        if comparisons:
+            report['foreground_comparison']=observations
+            report['foreground_comparison_conclusive']=all(row['conclusive'] for row in observations)
         (run_dir/'display-timing.json').write_text(json.dumps(report,indent=2)+'\n')
         return report
     finally:
@@ -320,6 +425,26 @@ def observer(cfg, env, command, token, output=None, timeout=20, deadline=None):
         return json.loads(status_file.read_text())
     return None
 
+def recorded_native_focus(cfg, env, token, creation, receipt, deadline, timeout=3):
+    """Record a bounded existing activation attempt, including rejected guards."""
+    if receipt.exists() or receipt.is_symlink():raise RuntimeError('Activation receipt already exists')
+    record={'receipt_path':str(receipt),'observer_returncode':0,'receipt_present':False}
+    try:
+        observer(cfg,env,'stock-focus',token,(creation,'Z:'+str(receipt)),
+                 timeout=remaining(deadline,timeout),deadline=deadline)
+    except ObserverError as error:
+        record['observer_returncode']=error.code
+        if error.code!=8:raise
+    if receipt.is_symlink():raise RuntimeError('Activation receipt is a symlink')
+    if receipt.exists():
+        if not receipt.is_file() or not 1<=receipt.stat().st_size<=4096:
+            raise RuntimeError('Activation receipt is not a bounded native file')
+        record['native_receipt']=json.loads(receipt.read_text())
+        record['receipt_present']=True
+    # Absence is recorded explicitly, never interpreted as activation success.
+    # Keep existing request bounds and loading gates, including rejected code8.
+    return record
+
 def validate_idle_probe(cfg):
     enabled=cfg.get('idle_weapon_probe',False)
     if type(enabled) is not bool:raise ValueError('Idle collection selection must be explicit boolean')
@@ -334,7 +459,7 @@ def validate_idle_probe(cfg):
 
 IDLE_TOOLS=('runtime_lab.py','assess_idle_weapon.py','replay_idle_geometry.py',
             'measure_idle_reference.py','match_idle_geometry.py',
-            'private_display_lab.py','display_timing_probe.cpp')
+            'private_display_lab.py','display_timing_probe.cpp','lab_window_focus.hpp')
 IDLE_INVENTORIES=('game/Content/SeriousSam2/Config','game/Content/PlayerProfiles',
                   'prefix/pfx/drive_c/users')
 IDLE_FIXED_FILES=('game/Content/SeriousSam2/Sam2.ini','game/Bin/SS2VR/SS2VR.ini',
@@ -874,11 +999,10 @@ def run(cfg):
                 incarnation=observer(cfg,env,'stock-status',stock_token,timeout=remaining(deadline,3),deadline=deadline)
                 if incarnation.get('loading_native_ready')==1:
                     receipt=run_dir/('early-activation-'+str(native_focus_requests)+'.json')
-                    try:observer(cfg,env,'stock-focus',stock_token,(incarnation['process_creation'],'Z:'+str(receipt)),timeout=remaining(deadline,3),deadline=deadline)
-                    except ObserverError as error:
-                        if error.code!=8:raise
+                    attempt=recorded_native_focus(cfg,env,stock_token,incarnation['process_creation'],receipt,deadline)
                     native_focus_requests+=1
                     manifest['native_focus_requests']=native_focus_requests
+                    manifest.setdefault('native_activation_requests',[]).append(attempt)
                     if receipt.exists():manifest.setdefault('early_activation_requests',[]).append(json.loads(receipt.read_text()))
                 last_native_focus=time.monotonic()
             if stock and owned_game and owned_window:
@@ -944,11 +1068,11 @@ def run(cfg):
                     native_focus_requests<4 and time.monotonic()-last_native_focus>=2):
                     incarnation=observer(cfg,env,'stock-status',stock_token,timeout=remaining(deadline),deadline=deadline)
                     if incarnation['game_pid']!=state['game_pid']:raise RuntimeError('Native focus owner differs from the channel')
-                    try:observer(cfg,env,'stock-focus',stock_token,(incarnation['process_creation'],),timeout=remaining(deadline),deadline=deadline)
-                    except ObserverError as error:
-                        if error.code!=8:raise
+                    receipt=run_dir/('activation-'+str(native_focus_requests)+'.json')
+                    attempt=recorded_native_focus(cfg,env,stock_token,incarnation['process_creation'],receipt,deadline,timeout=20)
                     native_focus_requests+=1;last_native_focus=time.monotonic()
                     manifest['native_focus_requests']=native_focus_requests
+                    manifest.setdefault('native_activation_requests',[]).append(attempt)
                 if state.get('loading_ready') and not loading_continue_sent:
                     native_log=(lab/'Bin/SS2VR.log').read_text(errors='replace')
                     native_receipts=re.findall(r'Lab native scene stream bytes=(\d+) positionRestored=(\d+) sha256=([a-f0-9]{64})',native_log)

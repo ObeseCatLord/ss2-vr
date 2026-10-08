@@ -101,3 +101,50 @@ A diagnostic success uses result `display_prerequisite_only`, simulation/hardwar
 false, game/Monado launch requested false and cleanup_errors empty. Native online
 shutdown observed false is expected because SS2 never loads. The subsequent
 geometry collector remains a separately controlled actual-game operation.
+
+## Borrowed-window activation evidence
+
+The replacement neutral capture loaded the verified scene and started the host,
+but remained at native loading stage 3 with no Win32 host foreground. Its four
+requests did not establish four successful activations: the known-channel branch
+discarded code 8 and omitted the optional native receipt. The capture ended with
+normal native isolation shutdown, clean owned retirement and preserved user data.
+No weapon geometry was captured; the single SS2 replacement approval is consumed.
+
+The source now passes a unique receipt for each existing bounded startup request.
+`stock-focus` records process/incarnation, native association and target guards
+even when rejected, plus target and foreground HWND/owner/thread before and after
+the existing restore/foreground request. Code 8 and an absent receipt are explicit
+evidence, never successful activation. The same four-request cap, deadline and
+native loading/menu gates remain. No native state or loading flags are written.
+
+A shared borrowed-window diagnostic is also used by the nongame D3D9 probe on its
+own visible private window after verifying its process/thread/title/root. Its
+`window_activation` receipt reports ownership, visibility, restoration and actual
+foreground result before resource/window retirement. The probe cannot select a
+foreign target. Graphics readiness is independent of activation success; this
+check cannot certify SS2 foreground, gameplay, geometry or grasp. The shared header
+is included in the exact prepared tool seal. Comprehensive gameplay stays
+primarily user-operated, and repeated nongame private display checks are approved.
+
+A separately sealed console/GUI comparison is available only in prerequisite-only
+mode. Its owner probe must be PE32 GUI subsystem 2; two exact observer binaries
+use the same source with console subsystem 3 versus GUI subsystem 2. The owner
+holds its tool-created window for eight seconds, samples foreground every 20 ms
+and pumps messages. Each observer reads foreground after 250 ms, including its
+own PID/thread and console HWND. The harness preserves independent owner
+observations before, during and after each child. It never reactivates the owner
+during measurement. An absent target baseline before either variant, expired
+owner opportunity or missing fresh bracketing cannot prove a difference; the
+comparison remains inconclusive. This diagnostic stops before SS2/Monado and
+cannot establish the historical SS2 cause. Stop this branch after a valid
+comparison; an actual receipted neutral SS2 observation remains a separate gate.
+
+The actual reviewed comparison completed with both console and GUI observers
+seeing the exact same owned foreground, confirmed independently throughout their
+entry-to-observation intervals. No subsystem difference was demonstrated. This
+hypothesis is closed; changing native activation policy or selecting another
+observer subsystem is not justified by this result. The remaining discriminating
+observation is actual SS2 with the new per-guard receipts, under separately
+renewed bounded authority. No native geometry or physical-release acceptance
+follows from this nongame diagnostic.

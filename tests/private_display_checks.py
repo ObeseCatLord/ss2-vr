@@ -1,5 +1,5 @@
 """Offline prerequisite/ownership regressions. No display/Wine/game is launched."""
-import hashlib,json,subprocess,sys,tempfile,unittest
+import hashlib,json,subprocess,sys,tempfile,time,unittest
 from pathlib import Path
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
@@ -8,6 +8,72 @@ import private_display_lab as display
 GOOD={'schema':1,'stage':'swapchain-query','operation':'get-raster-status','desktop_hz':60,'adapter_hz':60,'swapchain_hz':60,
       'width':1280,'height':720,'raster_called':True,'cleanup_completed':True,'hresult':0,'scanline':0,'in_vblank':True}
 class Checks(unittest.TestCase):
+    def test_child_interval_needs_fresh_owner_coverage_not_post_observation_samples(self):
+        def rows(ticks):return [{'tick_ms':tick} for tick in ticks]
+        before,during,after,covered=lab.foreground_interval(rows(range(90,371,20)),100,350)
+        self.assertTrue(covered);self.assertEqual(before['tick_ms'],90)
+        self.assertTrue(all(100<row['tick_ms']<=350 for row in during));self.assertEqual(after['tick_ms'],370)
+        for ticks,entry,observed in [([90,360,370],100,350),([0,110,130,350,370],100,350),
+                                     ([90,110,130,350,500],100,350),([110,130,350,370],100,350),
+                                     ([90,110,130,350],100,350),([90,110,130,350,370],350,100)]:
+            with self.subTest(ticks=ticks):self.assertFalse(lab.foreground_interval(rows(ticks),entry,observed)[3])
+    def test_foreground_comparison_requires_sealed_nongame_gui_owner_and_exact_variant_subsystems(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            def executable(name,subsystem):
+                path=root/name;data=bytearray(192);data[:2]=b'MZ';data[60:64]=(64).to_bytes(4,'little')
+                data[64:70]=b'PE\0\0L\x01';data[88:90]=b'\x0b\x01';data[156:158]=subsystem.to_bytes(2,'little')
+                path.write_bytes(data);return {'path':str(path),'sha256':hashlib.sha256(data).hexdigest()}
+            cfg={'display_prerequisite_only':True,'display_timing_probe':executable('owner.exe',2),
+                 'display_focus_comparison':[{'name':'console',**executable('console.exe',3)},
+                                             {'name':'gui',**executable('gui.exe',2)}]}
+            lab.validate_display_probe(cfg,root)
+            for change in ({'display_prerequisite_only':False},{'display_focus_comparison':[]},
+                           {'display_focus_comparison':list(reversed(cfg['display_focus_comparison']))},
+                           {'display_timing_probe':executable('wrong-owner.exe',3)}):
+                with self.subTest(change=change),self.assertRaises(ValueError):lab.validate_display_probe(cfg|change,root)
+    def test_owner_foreground_samples_require_complete_bounded_monotonic_native_rows(self):
+        with tempfile.TemporaryDirectory() as d:
+            p=Path(d)/'owner.jsonl';row={'tick_ms':1,'foreground_hwnd':100,'foreground_owner':32,
+                'foreground_thread':36,'probe_title_matches':True}
+            p.write_text(json.dumps(row)+'\n'+json.dumps(row|{'tick_ms':2})+'\n'+ '{"tick_ms":')
+            self.assertEqual(lab.owner_foreground_samples(p),[row,row|{'tick_ms':2}])
+            for data in ('',json.dumps(row|{'tick_ms':True})+'\n',json.dumps(row)+'\n'+json.dumps(row|{'tick_ms':0})+'\n',
+                         json.dumps(row|{'foreground_owner':-1})+'\n','x'*131073):
+                p.write_text(data)
+                with self.assertRaises((RuntimeError,json.JSONDecodeError)):lab.owner_foreground_samples(p)
+    def test_native_activation_records_success_rejection_and_missing_receipt(self):
+        for code,present in [(0,True),(8,True),(8,False),(0,False)]:
+            with self.subTest(code=code,present=present),tempfile.TemporaryDirectory() as d:
+                receipt=Path(d)/'activation.json';deadline=time.monotonic()+5
+                native={'stage':'window-owner' if code else 'foreground-observed','returncode':code}
+                def attempt(cfg,env,command,token,output,**kw):
+                    self.assertEqual(command,'stock-focus');self.assertEqual(token,'owned-game')
+                    self.assertEqual(output,(123,'Z:'+str(receipt)))
+                    self.assertEqual(kw['deadline'],deadline)
+                    if present:receipt.write_text(json.dumps(native))
+                    if code:raise lab.ObserverError(command,code)
+                with patch.object(lab,'observer',side_effect=attempt) as operation:
+                    record=lab.recorded_native_focus({}, {},'owned-game',123,receipt,deadline,timeout=20)
+                    operation.assert_called_once()
+                    self.assertGreater(operation.call_args.kwargs['timeout'],3)
+                    self.assertLessEqual(operation.call_args.kwargs['timeout'],5)
+                self.assertEqual(record['observer_returncode'],code)
+                self.assertEqual(record['receipt_present'],present)
+                if present:self.assertEqual(record['native_receipt'],native)
+                else:self.assertNotIn('native_receipt',record)
+    def test_native_activation_preserves_fatal_codes_and_refuses_colliding_receipts(self):
+        with tempfile.TemporaryDirectory() as d:
+            receipt=Path(d)/'activation.json';deadline=time.monotonic()+5
+            with patch.object(lab,'observer',side_effect=lab.ObserverError('stock-focus',6)):
+                with self.assertRaises(lab.ObserverError) as error:
+                    lab.recorded_native_focus({}, {},'owned-game',123,receipt,deadline)
+                self.assertEqual(error.exception.code,6)
+            receipt.symlink_to(Path(d)/'missing')
+            with patch.object(lab,'observer') as operation:
+                with self.assertRaisesRegex(RuntimeError,'already exists'):
+                    lab.recorded_native_focus({}, {},'owned-game',123,receipt,deadline)
+                operation.assert_not_called()
     def test_zero_current_mode_failure_or_forged_success_is_not_readiness(self):
         lab.require_display_timing(GOOD)
         for key,value in [('schema',True),('stage','invalid-current-mode'),('raster_called',1),

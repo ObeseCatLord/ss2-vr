@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <d3d9.h>
 #include <cstdio>
+#include "lab_window_focus.hpp"
 struct Receipt {
     HANDLE file{INVALID_HANDLE_VALUE};
     ~Receipt() { if (file!=INVALID_HANDLE_VALUE) CloseHandle(file); }
@@ -43,7 +44,8 @@ int main() {
         receipt.emit("{\"schema\":1,\"stage\":\"window-registration-failed\",\"win32_error\":%lu,\"raster_called\":false}\n",GetLastError());
         api->Release();return 6;
     }
-    HWND window=CreateWindowW(wc.lpszClassName,L"SS2VR private display prerequisite",WS_POPUP,
+    constexpr auto title=L"SS2VR private display prerequisite";
+    HWND window=CreateWindowW(wc.lpszClassName,title,WS_POPUP|WS_VISIBLE,
                              0,0,int(adapter.Width),int(adapter.Height),nullptr,nullptr,wc.hInstance,nullptr);
     if (!window) {
         receipt.emit("{\"schema\":1,\"stage\":\"window-create-failed\",\"win32_error\":%lu,\"raster_called\":false}\n",GetLastError());
@@ -63,6 +65,41 @@ int main() {
         if (!actual.Width || !actual.Height || actual.RefreshRate<=1) hr=D3DERR_INVALIDCALL;
         else {operation="get-raster-status";called=true;hr=chain->GetRasterStatus(&raster);}
     }
+    const auto target=ss2vr::lab::observeWindow(window,title);
+    const bool ownWindow=target.owner==GetCurrentProcessId() && target.thread && target.titleMatches && target.rootMatches;
+    ss2vr::lab::FocusObservation focus{};
+    const bool focusCalled=SUCCEEDED(hr) && called && ownWindow;
+    if (focusCalled) focus=ss2vr::lab::requestBorrowedForeground(window,target.iconic,title);
+    wchar_t compare[2]{};
+    if (focusCalled && GetEnvironmentVariableW(L"SS2VR_LAB_FOCUS_COMPARE",compare,2)==1 && compare[0]==L'1') {
+        // Bounded nongame observation opportunity for the separately launched
+        // observer. The normal receipt is still emitted after native cleanup.
+        wchar_t readyPath[1024]{},samplesPath[1024]{};
+        const int readyLength=std::swprintf(readyPath,1024,L"%ls.window-ready.json",destination);
+        const int samplesLength=std::swprintf(samplesPath,1024,L"%ls.owner-foreground.jsonl",destination);
+        Receipt ready,samples;
+        if (readyLength>0 && readyLength<1024)
+            ready.file=CreateFileW(readyPath,GENERIC_WRITE,FILE_SHARE_READ,nullptr,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,nullptr);
+        if (samplesLength>0 && samplesLength<1024)
+            samples.file=CreateFileW(samplesPath,GENERIC_WRITE,FILE_SHARE_READ,nullptr,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,nullptr);
+        auto sample=[&]() {
+            const auto foreground=ss2vr::lab::observeWindow(GetForegroundWindow(),title);
+            return samples.emit("{\"tick_ms\":%llu,\"foreground_hwnd\":%llu,\"foreground_owner\":%lu,\"foreground_thread\":%lu,\"probe_title_matches\":%s}\n",
+                static_cast<unsigned long long>(GetTickCount64()),ss2vr::lab::windowValue(foreground.window),foreground.owner,foreground.thread,
+                foreground.titleMatches?"true":"false");
+        };
+        if (ready.file!=INVALID_HANDLE_VALUE && samples.file!=INVALID_HANDLE_VALUE && sample() &&
+            ready.emit("{\"schema\":1,\"probe_pid\":%lu,\"target_hwnd\":%llu,\"target_thread\":%lu,\"baseline_foreground\":%s}\n",
+                GetCurrentProcessId(),ss2vr::lab::windowValue(window),target.thread,focus.foregroundObserved?"true":"false")) {
+            const ULONGLONG end=GetTickCount64()+8000;
+            MSG message{};
+            while(GetTickCount64()<end) {
+                while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)) {TranslateMessage(&message);DispatchMessageW(&message);}
+                if(!sample())break;
+                Sleep(20);
+            }
+        }
+    }
     if (chain) chain->Release();
     if (device) device->Release();
     api->Release();
@@ -70,8 +107,14 @@ int main() {
     const bool classRetired=UnregisterClassW(wc.lpszClassName,wc.hInstance)!=FALSE;
     const bool cleaned=windowDestroyed && classRetired;
     const bool emitted=receipt.emit("{\"schema\":1,\"stage\":\"swapchain-query\",\"operation\":\"%s\",\"desktop_hz\":%lu,\"adapter_hz\":%u,\"swapchain_hz\":%u,"
-                "\"width\":%u,\"height\":%u,\"raster_called\":%s,\"hresult\":%lu,\"scanline\":%u,\"in_vblank\":%s,\"cleanup_completed\":%s}\n",
+                "\"width\":%u,\"height\":%u,\"raster_called\":%s,\"hresult\":%lu,\"scanline\":%u,\"in_vblank\":%s,\"cleanup_completed\":%s,"
+                "\"window_activation\":{\"owned_target\":%s,\"target_hwnd\":%llu,\"target_owner\":%lu,\"target_thread\":%lu,\"visible\":%s,\"iconic\":%s,"
+                "\"called\":%s,\"show_called\":%s,\"show_requested\":%s,\"foreground_requested\":%s,\"foreground_observed\":%s,"
+                "\"before_hwnd\":%llu,\"before_owner\":%lu,\"after_hwnd\":%llu,\"after_owner\":%lu,\"after_thread\":%lu}}\n",
                 operation,desktop.dmDisplayFrequency,adapter.RefreshRate,actual.RefreshRate,actual.Width,actual.Height,
-                called?"true":"false",static_cast<unsigned long>(hr),raster.ScanLine,raster.InVBlank?"true":"false",cleaned?"true":"false");
+                called?"true":"false",static_cast<unsigned long>(hr),raster.ScanLine,raster.InVBlank?"true":"false",cleaned?"true":"false",
+                ownWindow?"true":"false",ss2vr::lab::windowValue(target.window),target.owner,target.thread,target.visible?"true":"false",target.iconic?"true":"false",
+                focusCalled?"true":"false",focus.showCalled?"true":"false",focus.showRequested?"true":"false",focus.foregroundRequested?"true":"false",focus.foregroundObserved?"true":"false",
+                ss2vr::lab::windowValue(focus.before.window),focus.before.owner,ss2vr::lab::windowValue(focus.after.window),focus.after.owner,focus.after.thread);
     return emitted ? (SUCCEEDED(hr)&&called&&cleaned?0:8) : 9;
 }

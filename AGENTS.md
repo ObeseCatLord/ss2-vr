@@ -18,13 +18,11 @@ owned cleanup and prior failed records. Do not turn this scope into gameplay,
 headset/controller, vehicle or network tests. Full gameplay testing remains
 primarily user-operated. One-attempt markers apply to each sealed prepared fixture,
 not to renewed user permission; use preserved independent preparations as needed.
-The earlier explicit "Allow one replacement private capture" still authorizes
-one neutral SS2 idle collection: its previous setups/prerequisites never launched
-SS2. The below blanket statement that a failed native prerequisite consumed that
-SS2 capture was an agent interpretation, not a user revocation, and is superseded
-by this clarification. Complete that single approved collection on the corrected
-private display; no firing/movement, individual weapon/vehicle or broad gameplay
-tests. Mark it consumed on actual SS2 launch and preserve its result.
+The earlier explicit "Allow one replacement private capture" remained valid while
+its failed prerequisites had never launched SS2. The former blanket statement
+that a failed prerequisite consumed it was an agent interpretation, not a user
+revocation. The one replacement has since ACTUALLY launched SS2 and is now
+consumed, as recorded below. Do not automatically retry game collection.
 
 ### Current replacement SS2 outcome
 The one approved replacement neutral SS2 collection has now actually launched
@@ -36,6 +34,17 @@ had no owned survivors/errors and 12 protected files remained unchanged. This
 consumes the one replacement SS2 capture authorization. Do not retry SS2
 collection automatically; continue source/offline work and the separately
 authorized nongame private display checks. Preserve all attempts and old guides.
+
+### Current bounded diagnosis and next prepared path
+The valid nongame console/GUI observer comparison found both seeing the exact
+owned foreground, independently confirmed by the owner throughout both intervals.
+No subsystem defect was demonstrated; stop that hypothesis and do not add native
+activation policy from it. Startup requests now preserve native guard-stage/
+returncode/target/foreground receipts, with original ownership gates and the
+four-request cap. A fresh neutral collection is prepared as source work; it is
+not authorized to launch yet. Its private current guide requires final scoped
+Astra handoff review and explicit renewed capture authority. Do not send the user
+to an older attempted package or treat idle geometry as first/copy melee release.
 
 ### Historical failed replacement prerequisite — superseded above
 The user approved ONE replacement private capture. Two display-only setup

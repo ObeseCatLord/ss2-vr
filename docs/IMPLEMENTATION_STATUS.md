@@ -30,6 +30,27 @@ or firing was sent. The replacement capture is consumed. Full grasp,
 driver steering and user-operated HMD/MP/firing/vehicle acceptance remain open.
 See [private collection procedure](PRIVATE_DISPLAY_COLLECTION.md).
 
+## Native foreground diagnosis — bounded comparison complete
+
+The startup observer now records each existing activation request, including
+native guard rejections, exact window ownership and actual foreground results.
+Astra caught and corrected a diagnostic classification bug: owner samples taken
+only after the child observation could have been treated as coverage. The final
+check requires the child's timestamped entry/observation interval, independent
+owner samples within it, endpoint brackets and gaps no greater than 100 ms.
+
+The actual private nongame comparison completed with both console and GUI
+observers seeing the exact same tool-owned foreground window. Independent owner
+observations before, during and after agreed; both intervals were conclusive.
+No observer-subsystem focus defect was demonstrated, so no production observer
+build policy was changed. Graphics and cleanup passed; SS2/Monado/collector never
+launched, and protected original files remained unchanged. Stop this hypothesis.
+The next discriminating step is a fresh neutral SS2 observation using the new
+per-guard receipts; it requires separately renewed bounded capture authority.
+21 display checks and 22 runtime-evidence checks pass normally and with optimized
+Python. The probe and both observer builds compile with warnings as errors.
+These tool changes do not alter the current mod-product fingerprint below.
+
 ## Full-project closure disposition
 
 Rig initialization and recenter now reuse the existing projected horizontal
