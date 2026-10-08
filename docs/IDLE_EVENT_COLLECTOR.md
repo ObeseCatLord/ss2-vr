@@ -46,28 +46,75 @@ alignment acceptance false. It does not launch a process.
 
 Astra/xhigh approved the source collection extent and parser supplement; effective
 backend routing is unattested. Main independently inspected compiled cleanup.
-Current engine SHA: `d22deb7612643a208301e9a9a44dcf847a155f6723dcab1cf1ff9db97e3879f4`.
-Remote-render SHA: `171628e073a2f8f02a36bae08e8e7257471f8e766e4fa49e59c3fc1096eab75d`.
-Source fingerprint: `17b58af2374f3b1fd3ca18e58ed3ed779c075ad5a5a1bfe90070ebacb40da75c`.
-All products rebuilt; 63 Debug and 63 Release groups and 26 normal/optimized
-compiled/native checks pass. Three private compiled-byte controls reject either
-missing TLS restore and a cdecl-to-ret4 mutation; production bytes remain unchanged.
-Portable hostile-storage fixtures exercise copied values after simulated original
-storage destruction. These checks do not execute native exceptions or gameplay.
+Current engine SHA: `13b28a1babd5e8aafa1441f2da932a42834afd7d6118efd50a6d8fbcfb4fc09c`.
+Remote-render SHA: `54e1d3f66720640c05d9c31d43b62f1595fee664eef570553b0d15f6c18f87b4`.
+Source fingerprint: `8d86d4912fbf263bc5ee62762ce1f301062cec6c1115c5123822333b226b3d07`.
+All products rebuilt; 64 Debug and 64 Release groups and 28 normal/optimized
+compiled/native checks pass. Five private compiled-byte controls reject either
+missing palette TLS restore, a cdecl-to-ret4 mutation, removed idle scratch
+retirement, and removed local containment; production objects are unchanged.
+The cleanup checker verifies eight scratch deletion sites and local GNU exception
+containment in both actual x86 objects. These are compiled checks, not execution
+of native exceptions, COM reentry or gameplay.
 
-## Remaining collector source work
+## Consumed ID1 draw stage — source implemented
 
-The next operation is read-only collection of the actual consumed ID1 vertex/index
-channels at the existing D3D9 draw boundary, then exact content/layout/count matching
-against privately decoded candidate geometry. Preserve real draw/mesh/palette
-ownership. Do not apply ID13-only buffer offsets to ID1, assume READONLY locks work
-on WRITEONLY buffers, or replace exact matching with bounds/count similarity.
-This is an incremental alternative to a historical pointer/lifetime registry.
+The existing D3D9 DIP owner now captures up to eight draws from the exact selected
+ID1 root or its validated descendants. It validates current model/draw pointers as
+exact renderer-array members before dereference, then reuses complete native
+model/mesh/draw/palette ownership and actual single-bone mapping. It copies current
+child CFG identity, surface/bone names, mapped affine and the existing native clip
+reference. No historical pointer registry, geometry replacement or guessed grip.
 
-Private candidate assets and geometry indexes were decoded using the existing
-bounded reader. Object-body roundtrips and channel hashes are supporting offline
-evidence; a trailing gun-mesh block is uninspected. No live association or physical
-grasp offset was inferred. Actual geometry/pose replay and a defensible measured
-grasp remain prerequisites before a reviewed runnable final collection handoff.
-No current user action can finish that unimplemented source operation. Keep all
-assets, geometry, logs, poses and captures private; do not ask for an unprepared run.
+A separate ID1 layout admission uses declared FLOAT3 positions, u16 indices and
+byte weights/local indices, matching stream offsets/strides/identities, and bounded
+UV ranges. Managed, usage-zero buffers only; WRITEONLY/dynamic/unknown layouts
+are declined. The native buffer admission is narrowly 0..254; absent sentinel255
+is rejected. Maximum1490 vertices/1332 triangles is a diagnostic budget, not native
+coverage. One privately inspected gun LOD lacks weights/local indices and is
+explicitly unsupported; it is not evidence that the runtime selects that LOD.
+
+The same COM owner and lock ledger copy five channels, unlock, hash owned bytes,
+then take the second binding/constants/declaration snapshot. Actual shader words
+(max512), finite constants(max256) and declaration(max65) are retained for private
+interpretation. Shader bytes alone do not establish position equivalence. Existing
+output-transaction interference checks extend through original draw and resource
+release; any loss rejects the trace. Ordinary allocation failure is locally
+contained before exactly-once native forwarding. All eight ownership-helper
+scratch vectors live above the explicit native-finally frame. Scope13 retains its
+original range/content/geometry admission and exact spans despite larger scratch.
+
+The reader requires schema2 and every declared chunk. Zero draw traces are
+explicitly event/pose-only, not geometry completion. `tools/match_idle_geometry.py`
+compares every channel hash, format, offset, count and buffer size to a private
+candidate index, rejecting absence/ambiguity. It reports consumed input equivalence
+only; historical loaded bytes, shader replay, grasp and alignment remain false.
+
+| Astra finding | Disposition |
+| --- | --- |
+| Allocating scratch could skip original forwarding or leak across unwind | Adopted local containment and explicit ownership, including helper scratch |
+| Extra shader inputs were not retained | Adopted bounded full declaration copy and strict reader grammar |
+| Binding snapshot preceded hashing | Adopted final snapshot after hashing |
+| Output reentry could invalidate capture during Release | Adopted transaction admission/checks through binding/device retirement |
+| Scope13 gate changed unintentionally | Restored original geometry routing condition |
+| Zero draws could look complete | Explicit event/pose-only classification; no geometry match |
+| Producer/parser bounds differed | Matching buffer sentinel and shader/declaration budgets |
+
+Astra/xhigh gave source GO for this bounded capture after corrections; effective
+backend routing remains unattested. This is not full-collector or runtime acceptance.
+
+## Remaining source operation before user handoff
+
+Interpret the copied actual shader inputs/program/constants against privately
+matched candidate vertices, compare projected output with the captured native clip
+reference, and derive a defensible measured grasp in that actual pose. Unknown
+shader inputs or winning blend/cache interpretation must produce precise failures;
+bone names or bounding boxes cannot substitute for anatomy. Private candidate
+object-body roundtrips and channel hashes remain supporting evidence; a trailing
+gun-mesh block is uninspected. Idle geometry cannot certify actual first-use/copy
+melee release. That remains separate native behavior and user acceptance.
+
+No game, debugger, headset, firing or vehicle observation was launched, and no
+package was deployed. The collector is not ready for a user-operated final handoff.
+The next step remains source/offline replay and grasp work; no user decision is
+required to implement it. All assets, indexes, telemetry and captures stay private.

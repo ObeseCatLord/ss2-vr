@@ -1,5 +1,6 @@
 #include "scope_gpu.hpp"
 #include "scope_observer.hpp"
+#include "idle_observer.hpp"
 #include "game.hpp"
 #include "native_finally.hpp"
 #include "common/scope_buffer_layout.hpp"
@@ -54,15 +55,17 @@ struct ProbeOwner {
     bool busy = false;
     uint64_t generation = 0;
     ScopeRasterObservation raster;
+    IdleGeometryCopy idle;
+    IdleWeaponTrace *idleTrace=nullptr;
     BoundInputs bindings[2];
     ScopeLockLedger lock;
     IDirect3DVertexBuffer9 *lockedVertex = nullptr;
     IDirect3DIndexBuffer9 *lockedIndex = nullptr;
     void *mapped = nullptr;
-    std::array<uint8_t,ScopeVertices*12> positions{};
-    std::array<uint8_t,ScopeTriangles*6> indices{};
-    std::array<uint8_t,ScopeVertices*4> weights{}, localIndices{};
-    std::array<uint8_t,ScopeVertices*8> uv{};
+    std::array<uint8_t,IdleGeometryVertices*12> positions{};
+    std::array<uint8_t,IdleGeometryTriangles*6> indices{};
+    std::array<uint8_t,IdleGeometryVertices*4> weights{}, localIndices{};
+    std::array<uint8_t,IdleGeometryVertices*8> uv{};
     BCRYPT_ALG_HANDLE algorithm = nullptr;
     BCRYPT_HASH_HANDLE hash = nullptr;
     std::array<uint8_t,1024> hashObject{};
@@ -122,6 +125,7 @@ static bool unlock() noexcept {
 }
 static void cleanup(bool aborted) noexcept {
     const bool retired = probe.generation != graphicsResourceGeneration();
+    if (aborted && probe.idleTrace) probe.idleTrace->reject();
     if (aborted) { retireScopeGeometry(); if (!retired) scopeGpuFault(); }
     if (probe.imageChanged) restoreImageState(probe.device);
     if (probe.lock.phase == ScopeLockPhase::Acquired) unlock();
@@ -142,18 +146,21 @@ static void cleanup(bool aborted) noexcept {
     release(probe.device);
     if (probe.transaction) {
         // Current performs identity comparisons only, never dereferences device.
-        if (!retired && probe.split && (!current || !scopeGpuTransactionCurrent(device))) scopeGpuFault();
+        const bool afterRelease=scopeGpuTransactionCurrent(device);
+        if(probe.idleTrace && (retired || !current || !afterRelease))probe.idleTrace->reject();
+        if (!retired && probe.split && (!current || !afterRelease)) scopeGpuFault();
         scopeGpuTransactionEnd();
     }
     probe.sourceView = {}; probe.imageConstants = {};
     probe.transaction = probe.split = probe.imageChanged = probe.imageRestoreFailed = false;
     probe.cap = {}; probe.uvRows={}; probe.program={}; probe.colorProgram={};
+    probe.idleTrace=nullptr;
     probe.busy = false;
 }
 static bool identity(IUnknown *object,IUnknown *&out) {
     return object && SUCCEEDED(object->QueryInterface(IID_IUnknown,reinterpret_cast<void **>(&out))) && out;
 }
-static bool boundInputs(IDirect3DDevice9 *d,BoundInputs &b,const ScopeIndexedDraw &draw) {
+static bool boundInputs(IDirect3DDevice9 *d,BoundInputs &b,const ScopeIndexedDraw &draw,bool idle=false) {
     b.values = {}; b.count = MAXD3DDECLLENGTH+1;
     D3DCAPS9 caps{};
     if (FAILED(d->GetDeviceCaps(&caps)) || !caps.MaxVertexShaderConst || caps.MaxVertexShaderConst > 256) return false;
@@ -168,7 +175,7 @@ static bool boundInputs(IDirect3DDevice9 *d,BoundInputs &b,const ScopeIndexedDra
         b.elements[i]={e.Stream,e.Offset,e.Type,e.Method,e.Usage,e.UsageIndex};
         if (e.Stream == 6 && e.Type != D3DDECLTYPE_UNUSED) weights = true;
     }
-    b.values.surface=probe.raster.pose.layout;
+    b.values.surface=idle?probe.idle.raster.layout:probe.raster.pose.layout;
     b.values.draw=draw;
     // The three mandatory streams precede independently optional stream 6.
     ScopeStreamInput *streams[]{&b.values.positions,&b.values.localIndices,&b.values.uv,&b.values.weights};
@@ -190,7 +197,8 @@ static bool boundInputs(IDirect3DDevice9 *d,BoundInputs &b,const ScopeIndexedDra
     b.values.index={index.Size,index.Usage,uint32_t(index.Pool),uint32_t(index.Format),0};
     b.values.indexObject=reinterpret_cast<uintptr_t>(b.identity[4]);
     ScopeCopyRanges ranges;
-    if (!scopeBufferRanges(b.values,std::span(b.elements).first(b.count),ranges) ||
+    if (!(idle?idleBufferRanges(b.values,std::span(b.elements).first(b.count),ranges):
+               scopeBufferRanges(b.values,std::span(b.elements).first(b.count),ranges)) ||
         FAILED(d->GetVertexShader(&b.shader)) || !b.shader || !identity(b.shader,b.identity[6]) ||
         FAILED(d->GetVertexShaderConstantF(8,b.uvRows[0].data(),2))) return false;
     for (const auto &row:b.uvRows) for (float value:row) if (!std::isfinite(value)) return false;
@@ -198,15 +206,15 @@ static bool boundInputs(IDirect3DDevice9 *d,BoundInputs &b,const ScopeIndexedDra
 }
 // Shader objects expose no bytecode mutator; same canonical identity in the
 // second snapshot pins the program admitted here. All calls precede VB locks.
-static bool boundProgram() {
+static bool boundProgram(bool idle=false) {
     auto *shader=probe.bindings[0].shader;
     UINT size=0;
     if (!shader || FAILED(shader->GetFunction(nullptr,&size)) || size<8 ||
-        size%sizeof(uint32_t) || size>sizeof(probe.program)) return false;
+        size%sizeof(uint32_t) || size>sizeof(probe.program) || (idle && size>sizeof(probe.idle.program))) return false;
     const UINT expected=size;
     if (FAILED(shader->GetFunction(probe.program.data(),&size)) || size!=expected) return false;
     probe.programWords = size/sizeof(uint32_t);
-    return scopeUvProgram(std::span(probe.program).first(probe.programWords));
+    return idle || scopeUvProgram(std::span(probe.program).first(probe.programWords));
 }
 // Optional color admission is independent of the existing geometry/UV path.
 // All COM output owners live in ProbeOwner before calls, including partial
@@ -292,7 +300,9 @@ static bool hashSlices() {
     if (BCryptOpenAlgorithmProvider(&probe.algorithm,BCRYPT_SHA256_ALGORITHM,nullptr,0)<0 ||
         BCryptGetProperty(probe.algorithm,BCRYPT_OBJECT_LENGTH,reinterpret_cast<PUCHAR>(&size),sizeof(size),&reported,0)<0 ||
         reported!=sizeof(size) || !size || size>probe.hashObject.size()) return false;
-    const ScopeSliceBytes slices{probe.positions,probe.indices,probe.weights,probe.localIndices,probe.uv};
+    const ScopeSliceBytes slices{std::span(probe.positions).first(ScopeVertices*12),
+        std::span(probe.indices).first(ScopeTriangles*6),std::span(probe.weights).first(ScopeVertices*4),
+        std::span(probe.localIndices).first(ScopeVertices*4),std::span(probe.uv).first(ScopeVertices*8)};
     const std::array<std::span<const uint8_t>,5> bytes{slices.positions,slices.indices,slices.weights,slices.localIndices,slices.uv};
     constexpr const char *expected[]{
         "a83d4d52827f2f95418f46c2ef8f8eca3ac594110ff35173bef4a526188a99c2",
@@ -312,6 +322,50 @@ static bool hashSlices() {
             if (expected[i][2*j]!=hex[digest[j]>>4] || expected[i][2*j+1]!=hex[digest[j]&15]) return false;
     }
     return copyScopeCap(slices,probe.cap);
+}
+static bool hashIdleSlices(const ScopeCopyRanges &ranges) {
+    DWORD size=0,reported=0;
+    if(BCryptOpenAlgorithmProvider(&probe.algorithm,BCRYPT_SHA256_ALGORITHM,nullptr,0)<0 ||
+       BCryptGetProperty(probe.algorithm,BCRYPT_OBJECT_LENGTH,reinterpret_cast<PUCHAR>(&size),sizeof(size),&reported,0)<0 ||
+       reported!=sizeof(size) || !size || size>probe.hashObject.size())return false;
+    const std::array<std::span<uint8_t>,5> storage{probe.positions,probe.indices,probe.weights,probe.localIndices,probe.uv};
+    for(unsigned i=0;i<5;++i) {
+        if(ranges.slices[i].size>storage[i].size() ||
+           BCryptCreateHash(probe.algorithm,&probe.hash,probe.hashObject.data(),size,nullptr,0,0)<0 ||
+           BCryptHashData(probe.hash,storage[i].data(),ranges.slices[i].size,0)<0 ||
+           BCryptFinishHash(probe.hash,probe.idle.hashes[i].data(),32,0)<0)return false;
+        const auto h=probe.hash;probe.hash=nullptr;if(BCryptDestroyHash(h)<0)return false;
+    }
+    return true;
+}
+static bool sameInputs(const BoundInputs &a,const BoundInputs &b) {
+    return a.values==b.values && a.count==b.count && a.elements==b.elements &&
+        std::equal(std::begin(a.identity),std::end(a.identity),std::begin(b.identity)) &&
+        a.constantCount==b.constantCount &&
+        !std::memcmp(a.constants.data(),b.constants.data(),a.constantCount*4*sizeof(float));
+}
+static bool collectIdleGeometry(IDirect3DDevice9 *d,const ScopeIndexedDraw &draw) {
+    if(!nativeUiDeviceCurrent(d))return false;
+    ScopeCopyRanges ranges;
+    if(!boundInputs(d,probe.bindings[0],draw,true) ||
+       !idleBufferRanges(probe.bindings[0].values,std::span(probe.bindings[0].elements).first(probe.bindings[0].count),ranges) ||
+       !boundProgram(true))return false;
+    const std::array<std::span<uint8_t>,5> storage{probe.positions,probe.indices,probe.weights,probe.localIndices,probe.uv};
+    for(unsigned i=0;i<5;++i)
+        if(ranges.slices[i].size>storage[i].size() || !copySlice(i==1,ranges.slices[i],storage[i].first(ranges.slices[i].size)))return false;
+    if(!hashIdleSlices(ranges) || !boundInputs(d,probe.bindings[1],draw,true) ||
+       !sameInputs(probe.bindings[0],probe.bindings[1]))return false;
+    IdleRasterCopy now;IdleWeaponTrace *trace=nullptr;
+    if(!currentIdleRaster(now,trace) || trace!=probe.idleTrace || now!=probe.idle.raster ||
+       !nativeUiDeviceCurrent(d) || probe.generation!=graphicsResourceGeneration() || !scopeGpuTransactionCurrent(d))return false;
+    probe.idle.inputs=probe.bindings[0].values;
+    probe.idle.words=unsigned(probe.programWords);
+    std::copy_n(probe.program.begin(),probe.programWords,probe.idle.program.begin());
+    probe.idle.declarationCount=probe.bindings[0].count;
+    probe.idle.declaration=probe.bindings[0].elements;
+    probe.idle.constantCount=probe.bindings[0].constantCount;
+    probe.idle.constants=probe.bindings[0].constants;
+    return true;
 }
 static constexpr D3DSAMPLERSTATETYPE imageSamplerStates[]{D3DSAMP_ADDRESSU,D3DSAMP_ADDRESSV,D3DSAMP_ADDRESSW,
     D3DSAMP_MAGFILTER,D3DSAMP_MINFILTER,D3DSAMP_MIPFILTER,D3DSAMP_SRGBTEXTURE,D3DSAMP_MAXMIPLEVEL,
@@ -404,17 +458,21 @@ static HRESULT probeScopeDraw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base
                      UINT start,UINT primitives,uintptr_t caller,ScopeIndexedForward forward) noexcept {
     if (!scopeGpuForwardingAllowed()) return D3DERR_INVALIDCALL;
     const auto gfx=reinterpret_cast<uintptr_t>(GetModuleHandleW(L"GfxD3D.dll"));
+    if(probe.busy && probe.idleTrace)probe.idleTrace->reject();
     if (probe.busy || !gfx || caller != gfx+0xa011) return forward(d,type,base,minimum,vertices,start,primitives);
     // All owning state exists above NativeFinally; no stack-native pointer is
     // kept through any COM call, and no allocation/native callback occurs locked.
     probe.busy=true;
-    probe.cap={}; probe.raster={}; probe.uvRows={}; probe.program={}; probe.colorProgram={};
+    probe.cap={}; probe.raster={}; probe.idle={}; probe.idleTrace=nullptr; probe.uvRows={}; probe.program={}; probe.colorProgram={};
     probe.generation=graphicsResourceGeneration();
     probe.programWords=0;
     HRESULT result=D3DERR_INVALIDCALL;
     withNativeFinally([&] {
         bool colorCandidate=false;
         bool admitted=currentScopeRaster(probe.raster) && nativeUiDeviceCurrent(d);
+        // Establish the borrowed ID1 trace before the first retained COM call,
+        // so reentry during AddRef also rejects the outer observation.
+        const bool idleCandidate=!probe.raster.pose.valid && currentIdleRaster(probe.idle.raster,probe.idleTrace);
         probe.device = d; d->AddRef();
         if (admitted) probe.transaction = scopeGpuTransactionBegin(d);
         if (admitted) {
@@ -423,7 +481,9 @@ static HRESULT probeScopeDraw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base
             admitted=boundInputs(d,probe.bindings[0],draw) &&
                 scopeBufferRanges(probe.bindings[0].values,std::span(probe.bindings[0].elements).first(probe.bindings[0].count),ranges) && boundProgram();
             if (admitted) colorCandidate=boundColor(d,probe.bindings[0].color,true);
-            const std::array<std::span<uint8_t>,5> bytes{probe.positions,probe.indices,probe.weights,probe.localIndices,probe.uv};
+            const std::array<std::span<uint8_t>,5> bytes{std::span(probe.positions).first(ScopeVertices*12),
+                std::span(probe.indices).first(ScopeTriangles*6),std::span(probe.weights).first(ScopeVertices*4),
+                std::span(probe.localIndices).first(ScopeVertices*4),std::span(probe.uv).first(ScopeVertices*8)};
             for (unsigned i=0;admitted && i<bytes.size();++i) admitted=copySlice(i==1,ranges.slices[i],bytes[i]);
             if (probe.lock.outstanding() || fatalDraw.load(std::memory_order_acquire)) return;
             if (admitted) admitted=boundInputs(d,probe.bindings[1],draw) &&
@@ -472,8 +532,20 @@ static HRESULT probeScopeDraw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base
                 }
             }
         }
+        bool idleAdmitted=false;
+        if(idleCandidate) {
+            probe.transaction=scopeGpuTransactionBegin(d);
+            idleAdmitted=probe.transaction && collectIdleGeometry(d,{uint32_t(type),base,minimum,vertices,start,primitives});
+        }
+        if(probe.idleTrace && !idleAdmitted)probe.idleTrace->reject();
         if (!scopeGpuForwardingAllowed()) return;
         if (!probe.split) result=forward(d,type,base,minimum,vertices,start,primitives);
+        if(probe.idleTrace && idleAdmitted) {
+            IdleRasterCopy now;IdleWeaponTrace *trace=nullptr;
+            const bool current=currentIdleRaster(now,trace) && trace==probe.idleTrace && now==probe.idle.raster &&
+                nativeUiDeviceCurrent(d) && probe.generation==graphicsResourceGeneration() && scopeGpuTransactionCurrent(d);
+            probe.idleTrace->draw(probe.idle,SUCCEEDED(result),current);
+        }
         if (probe.raster.pose.valid) {
             if (!admitted || FAILED(result) || probe.generation!=graphicsResourceGeneration()) retireScopeGeometry();
             else recordScopeGeometry(probe.raster,probe.cap,ScopeUvTransform{probe.uvRows},colorCandidate);

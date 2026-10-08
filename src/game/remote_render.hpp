@@ -2,6 +2,7 @@
 
 #include "common/protocol.hpp"
 #include "common/scope_pose.hpp"
+#include "common/idle_weapon_trace.hpp"
 #include <cstdint>
 #include <windows.h>
 
@@ -16,6 +17,7 @@ void noteSimulationThread();
 bool checkNativeThread();
 // Passive observers decline foreign/unknown ownership without poisoning it.
 bool ownsNativeThread();
+bool copyIdleRaster(void *instance,IdleRasterCopy &out);
 ScopeRasterStatus copyScopeRaster(void *instance, Matrix34 &affine, ScopeSurfaceLayout &layout);
 
 // Called on the simulation thread after the original CPlayerOnStep.

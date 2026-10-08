@@ -35,17 +35,21 @@ inline bool disjointMatrixStorage(uintptr_t a, size_t countA, uintptr_t b, size_
         return false;
     return a + bytesA <= b || b + bytesB <= a;
 }
+struct PaletteOwnerScratch {
+    std::vector<int32_t> meshOwners,drawOwners;
+    std::vector<uint8_t> mapped;
+};
 // Resolve native back-links, not pointer proximity or a current-draw global.
 // On failure no ownership view is usable and caller makes zero palette writes.
 inline bool paletteDrawOwners(std::span<const PaletteModelRange> models,
                               std::span<const PaletteMeshRange> meshes,
                               std::span<const PaletteDrawRange> draws,
-                              std::span<const PaletteMap> maps, std::vector<int32_t> &owners) {
+                              std::span<const PaletteMap> maps, std::vector<int32_t> &owners,PaletteOwnerScratch &scratch) {
     owners.clear();
     if (models.empty())
         return false;
-    std::vector<int32_t> meshOwners(meshes.size(), -1), drawOwners(draws.size(), -1);
-    std::vector<uint8_t> mapped(maps.size(), 0);
+    auto &meshOwners=scratch.meshOwners;auto &drawOwners=scratch.drawOwners;auto &mapped=scratch.mapped;
+    meshOwners.assign(meshes.size(),-1);drawOwners.assign(draws.size(),-1);mapped.assign(maps.size(),0);
     for (size_t model = 0; model < models.size(); ++model) {
         const auto range = models[model];
         if (!validPaletteSpan(range.first, range.count, meshes.size()))
@@ -84,5 +88,12 @@ inline bool paletteDrawOwners(std::span<const PaletteModelRange> models,
             return false;
     owners = std::move(drawOwners);
     return true;
+}
+inline bool paletteDrawOwners(std::span<const PaletteModelRange> models,
+                              std::span<const PaletteMeshRange> meshes,
+                              std::span<const PaletteDrawRange> draws,
+                              std::span<const PaletteMap> maps,std::vector<int32_t> &owners) {
+    PaletteOwnerScratch scratch;
+    return paletteDrawOwners(models,meshes,draws,maps,owners,scratch);
 }
 } // namespace ss2vr

@@ -8,8 +8,9 @@ This historical hold blocked public publication pending renewed confirmation. It
 
 ## Current PC continuation — start here
 The idle diagnostic collector is source work. Its event/pose stage is connected
-and reviewed for collection only; consumed-geometry association and positive
-grasp remain incomplete. Do not launch gameplay, debugger, headset, firing or
+and reviewed for collection only; consumed draw/channel snapshots and an offline
+exact candidate matcher are implemented. Actual shader replay and positive grasp
+remain incomplete. Do not launch gameplay, debugger, headset, firing or
 vehicle probes for this work, ask the user to operate an unprepared collector,
 or assume they accepted feature omissions. Use the current source and exact
 offline/compiled gates; see docs/IDLE_EVENT_COLLECTOR.md. No current user action

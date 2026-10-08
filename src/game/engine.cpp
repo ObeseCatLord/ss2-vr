@@ -4013,6 +4013,18 @@ bool currentIdleDraw(ScopeDrawBinding &out,IdleDrawIdentity &identity,IdleWeapon
     trace=physicalWeapon->idle;
     return true;
 }
+bool currentIdleRaster(IdleRasterCopy &out,IdleWeaponTrace *&trace) {
+    out={};trace=nullptr;ScopeDrawBinding binding;IdleDrawIdentity identity;
+    if(!currentIdleDraw(binding,identity,trace))return false;
+    if(trace->stage!=IdleWeaponTrace::Stage::Palette || !trace->poseCopied)return false;
+    if(!remote_render::copyIdleRaster(binding.modelInstance,out) || out.rootConfig!=trace->config) {
+        trace->reject();return false;
+    }
+    out.binding=identity;
+    out.clipValid=executedUiProjectionValid && scopeCapClip(executedUiProjection,physicalWeapon->pass.world.view,out.affine,out.clip);
+    if(!out.clipValid){trace->reject();return false;}
+    return true;
+}
 static bool idleWeaponDiagnosticsEnabled() {
     static const bool enabled=[] {wchar_t value[2]{};
         return GetEnvironmentVariableW(L"SS2VR_LAB_IDLE_WEAPON",value,2)==1 && value[0]==L'1';}();
@@ -4020,8 +4032,8 @@ static bool idleWeaponDiagnosticsEnabled() {
 }
 static void emitIdleWeaponTrace(const IdleWeaponTrace &trace) {
     const auto &b=trace.binding;
-    log("Lab idle draw source=%.*s ipc=%u wire=%u request=%llu input=%llu owner=%u weapon=%u model=%u generation=%u hand=%u eye=%u stage=%u cfg=%u file=%u resource=%d contributors=%u matrices=%u historicalBytes=0 grasp=0",
-        64,ss2vrBuildContract.sourceFingerprint.data(),ss2vrBuildContract.ipcAbi,ss2vrBuildContract.wireVersion,
+    log("Lab idle draw schema=2 draws=%u source=%.*s ipc=%u wire=%u request=%llu input=%llu owner=%u weapon=%u model=%u generation=%u hand=%u eye=%u stage=%u cfg=%u file=%u resource=%d contributors=%u matrices=%u historicalBytes=0 grasp=0",
+        trace.draws,64,ss2vrBuildContract.sourceFingerprint.data(),ss2vrBuildContract.ipcAbi,ss2vrBuildContract.wireVersion,
         b.request,b.input,b.owner,b.weapon,b.model,b.generation,b.hand,b.eye,unsigned(trace.stage),
         trace.config.configuration,trace.config.file,trace.config.resource,trace.contributors,trace.matrixCount);
     if(trace.stage!=IdleWeaponTrace::Stage::Complete)return;
@@ -4044,6 +4056,40 @@ static void emitIdleWeaponTrace(const IdleWeaponTrace &trace) {
     for(unsigned i=0;i<trace.matrixCount;++i)emitMatrix("canonical",i,trace.matrices[i]);
     log("Lab idle stretch request=%llu eye=%u hand=%u values=%.9g,%.9g,%.9g",b.request,b.eye,b.hand,
         trace.stretch.x,trace.stretch.y,trace.stretch.z);
+    for(unsigned n=0;n<trace.draws;++n) {
+        const auto &g=trace.geometry[n];const auto &r=g.raster;const auto &v=g.inputs;
+        log("Lab idle geometry request=%llu eye=%u hand=%u index=%u modelRecord=%u drawRecord=%u surface=%u instance=%u surfaceName=%u boneName=%u bone=%d cfg=%u file=%u resource=%d words=%u constants=%u declaration=%u",
+            b.request,b.eye,b.hand,n,r.modelRecord,r.drawRecord,r.surface,r.instance,r.surfaceName,r.boneName,r.bone,
+            r.renderConfig.configuration,r.renderConfig.file,r.renderConfig.resource,g.words,g.constantCount,g.declarationCount);
+        auto words=[&](const char *kind,unsigned chunk,std::span<const uint32_t> values) {
+            char text[32*9]{};unsigned cursor=0;
+            for(auto value:values)cursor+=unsigned(std::snprintf(text+cursor,sizeof(text)-cursor,"%s%08x",cursor?",":"",value));
+            log("Lab idle geometryData request=%llu eye=%u hand=%u index=%u kind=%s chunk=%u values=%s",
+                b.request,b.eye,b.hand,n,kind,chunk,text);
+        };
+        std::array<uint32_t,12> affine{};std::memcpy(affine.data(),r.affine.m,sizeof(affine));words("affine",0,affine);
+        std::array<uint32_t,16> clip{};std::memcpy(clip.data(),r.clip.m,sizeof(clip));words("clip",0,clip);
+        const std::array<uint32_t,14> layout{uint32_t(r.layout.vertices),uint32_t(r.layout.triangles),
+            r.layout.channels[0].offset,r.layout.channels[0].format,r.layout.channels[0].buffer,
+            r.layout.channels[1].offset,r.layout.channels[1].format,r.layout.channels[1].buffer,
+            r.layout.channels[2].offset,r.layout.channels[2].format,r.layout.channels[2].buffer,
+            r.layout.channels[3].offset,r.layout.channels[3].format,r.layout.channels[3].buffer};words("layout",0,layout);
+        const std::array<uint32_t,10> descriptions{v.vertex.size,v.vertex.usage,v.vertex.pool,v.vertex.format,v.vertex.fvf,
+            v.index.size,v.index.usage,v.index.pool,v.index.format,v.index.fvf};words("buffers",0,descriptions);
+        const std::array<uint32_t,6> draw{v.draw.topology,uint32_t(v.draw.base),v.draw.minimum,v.draw.vertices,v.draw.start,v.draw.primitives};words("draw",0,draw);
+        const std::array<uint32_t,18> streams{uint32_t(v.positions.object),v.positions.offset,v.positions.stride,v.positions.frequency,
+            uint32_t(v.localIndices.object),v.localIndices.offset,v.localIndices.stride,v.localIndices.frequency,
+            uint32_t(v.weights.object),v.weights.offset,v.weights.stride,v.weights.frequency,
+            uint32_t(v.uv.object),v.uv.offset,v.uv.stride,v.uv.frequency,uint32_t(v.indexObject),uint32_t(v.softwarePositions)};words("streams",0,streams);
+        for(unsigned i=0;i<5;++i) {std::array<uint32_t,8> hash{};
+            std::memcpy(hash.data(),g.hashes[i].data(),32);words("hash",i,hash);}
+        for(unsigned i=0;i<g.declarationCount;++i) {const auto &e=g.declaration[i];
+            const std::array<uint32_t,6> fields{e.stream,e.offset,e.type,e.method,e.usage,e.usageIndex};words("declaration",i,fields);}
+        for(unsigned i=0;i<g.words;i+=32)words("program",i,std::span(g.program).subspan(i,std::min(32u,g.words-i)));
+        for(unsigned i=0;i<g.constantCount;++i) {std::array<uint32_t,4> values{};
+            std::memcpy(values.data(),g.constants[i].data(),16);words("constant",i,values);}
+    }
+
 }
 void recordScopeObservation(const ScopeDrawBinding &binding, const Matrix34 &affine,
                             const ScopeSurfaceLayout &layout) {

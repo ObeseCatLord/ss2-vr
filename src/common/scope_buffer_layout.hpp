@@ -47,28 +47,11 @@ struct ScopeCopyRanges {
 inline bool scopeByteRange(uint32_t offset, uint32_t size, uint32_t capacity) {
     return size && uint64_t(offset) + size <= capacity;
 }
-// Metadata admission only. Actual context, COM ownership, unlock completion
-// and five content hashes are separate mandatory gates at the live boundary.
-inline bool scopeBufferRanges(const ScopeBufferInputs &in,
-                              std::span<const ScopeDeclarationElement> declaration,
-                              ScopeCopyRanges &out) {
-    out = {};
-    const ScopeSurfaceLayout stock{884,928, {{{0,0x85,0}, {0,0x87,0},
-                                            {151520,0x80,0}, {155056,0x80,0}}}};
-    if (in.surface != stock || in.softwarePositions || in.draw.topology != 4 ||
-        in.draw.base || in.draw.minimum || in.draw.vertices != ScopeVertices ||
-        in.draw.start || in.draw.primitives != ScopeTriangles ||
-        !in.positions.object || in.localIndices.object != in.positions.object ||
-        in.uv.object != in.positions.object || !in.indexObject ||
-        in.vertex.size != 212128 || in.vertex.usage || in.vertex.pool != 1 ||
-        in.vertex.format != 100 || in.vertex.fvf ||
-        in.index.size != 19038 || in.index.usage || in.index.pool != 1 || in.index.format != 101 ||
-        in.positions.offset || in.positions.stride != 12 || in.positions.frequency != 1 ||
-        in.localIndices.offset != 155056 || in.localIndices.stride != 4 || in.localIndices.frequency != 1 ||
-        in.uv.offset != 181824 || in.uv.stride != 8 || in.uv.frequency != 1 ||
-        declaration.empty() || declaration.size() > 65)
-        return false;
-    bool position = false, local = false, weights = false, uv = false, ended = false;
+// Shared declaration grammar only; ID-specific range/content admission stays separate.
+inline bool declaredGeometryInputs(std::span<const ScopeDeclarationElement> declaration,bool &weights) {
+    weights=false;
+    if(declaration.empty() || declaration.size()>65)return false;
+    bool position = false, local = false, uv = false, ended = false;
     std::array<bool,4> entries{};
     for (size_t i = 0; i < declaration.size(); ++i) {
         const auto e = declaration[i];
@@ -100,6 +83,31 @@ inline bool scopeBufferRanges(const ScopeBufferInputs &in,
         seen = true;
     }
     if (!ended || !position || !local || !uv) return false;
+    return true;
+}
+// Metadata admission only. Actual context, COM ownership, unlock completion
+// and five content hashes are separate mandatory gates at the live boundary.
+inline bool scopeBufferRanges(const ScopeBufferInputs &in,
+                              std::span<const ScopeDeclarationElement> declaration,
+                              ScopeCopyRanges &out) {
+    out = {};
+    const ScopeSurfaceLayout stock{884,928, {{{0,0x85,0}, {0,0x87,0},
+                                            {151520,0x80,0}, {155056,0x80,0}}}};
+    if (in.surface != stock || in.softwarePositions || in.draw.topology != 4 ||
+        in.draw.base || in.draw.minimum || in.draw.vertices != ScopeVertices ||
+        in.draw.start || in.draw.primitives != ScopeTriangles ||
+        !in.positions.object || in.localIndices.object != in.positions.object ||
+        in.uv.object != in.positions.object || !in.indexObject ||
+        in.vertex.size != 212128 || in.vertex.usage || in.vertex.pool != 1 ||
+        in.vertex.format != 100 || in.vertex.fvf ||
+        in.index.size != 19038 || in.index.usage || in.index.pool != 1 || in.index.format != 101 ||
+        in.positions.offset || in.positions.stride != 12 || in.positions.frequency != 1 ||
+        in.localIndices.offset != 155056 || in.localIndices.stride != 4 || in.localIndices.frequency != 1 ||
+        in.uv.offset != 181824 || in.uv.stride != 8 || in.uv.frequency != 1 ||
+        declaration.empty() || declaration.size() > 65)
+        return false;
+    bool weights=false;
+    if (!declaredGeometryInputs(declaration,weights)) return false;
     if (weights && (in.weights.object != in.positions.object || in.weights.offset != 151520 ||
                     in.weights.stride != 4 || in.weights.frequency != 1)) return false;
     ScopeCopyRanges next{{{{0,10608},{0,5568},{151520,3536},{155056,3536},{181824,7072}}}, weights};

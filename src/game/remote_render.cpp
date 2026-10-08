@@ -714,6 +714,69 @@ static bool idleConfig(void *instance,IdleConfigIdentity &out) {
     std::memcpy(&out.resource,reinterpret_cast<void*>(configuration+0x10),4);
     return true; // Numeric current CResource identity, not a historical byte join.
 }
+struct IdleRasterStorage {
+    PaletteOwnerScratch paletteScratch;
+    std::vector<PaletteModelRange> models;
+    std::vector<PaletteMeshRange> meshes;
+    std::vector<PaletteDrawRange> draws;
+    std::vector<int32_t> owners;
+    std::vector<ModelRecord> tree;
+};
+static bool readIdleRaster(void *instance,IdleRasterCopy &out,IdleRasterStorage &storage) {
+    out={};
+    if(!instance || !hooksReady.load(std::memory_order_acquire) || !ready.load(std::memory_order_acquire) ||
+       !ownsNativeThread() || paletteInvalidated)return false;
+    std::span<NativeModelRecord> records;std::span<NativeMeshRecord> meshes;
+    std::span<NativeDrawEntry> draws;std::span<NativeBone> bones;
+    std::span<PaletteMap> maps;std::span<Matrix34> palette;
+    if(!rendererArray(0x2eac20,MaxModelRecords,records) || !rendererArray(0x2eac30,MaxNativeEntries,meshes) ||
+       !rendererArray(0x2eac50,MaxNativeEntries,draws) || !rendererArray(0x2eac60,MaxNativeBones,bones) ||
+       !rendererArray(0x2eac70,MaxPaletteMatrices,maps) || !rendererArray(0x2eac90,MaxPaletteMatrices,palette))return false;
+    uintptr_t modelPointer=0,drawPointer=0,surfacePointer=0;int32_t softwarePosition=0;
+    std::memcpy(&modelPointer,reinterpret_cast<void*>(engineBase+0x2eab50),4);
+    std::memcpy(&drawPointer,reinterpret_cast<void*>(engineBase+0x2eab48),4);
+    std::memcpy(&surfacePointer,reinterpret_cast<void*>(engineBase+0x2eab44),4);
+    std::memcpy(&softwarePosition,reinterpret_cast<void*>(engineBase+0x2c7f88),4);
+    // Exact membership before dereferencing either current native pointer.
+    const auto member=[](uintptr_t pointer,auto span,size_t &index) {
+        const auto base=reinterpret_cast<uintptr_t>(span.data());
+        if(!pointer || pointer<base || (pointer-base)%sizeof(span[0]))return false;
+        index=(pointer-base)/sizeof(span[0]);return index<span.size();
+    };
+    size_t modelIndex=0,drawIndex=0,root=0;unsigned roots=0;
+    if(softwarePosition!=-1 || !member(modelPointer,records,modelIndex) || !member(drawPointer,draws,drawIndex))return false;
+    for(size_t i=0;i<records.size();++i)if(records[i].instance==instance) {root=i;++roots;}
+    if(roots!=1 || !root)return false;
+    auto &models=storage.models;auto &meshRanges=storage.meshes;
+    auto &drawRanges=storage.draws;auto &owners=storage.owners;auto &tree=storage.tree;
+    for(const auto &r:records) {int32_t first=0,count=0;
+        std::memcpy(&first,reinterpret_cast<const uint8_t*>(&r)+8,4);
+        std::memcpy(&count,reinterpret_cast<const uint8_t*>(&r)+0xc,4);
+        models.push_back({first,count});tree.push_back({r.parent,reinterpret_cast<uintptr_t>(r.instance),r.world});}
+    for(const auto &m:meshes)meshRanges.push_back({m.owner,m.first,m.count});
+    for(const auto &d:draws)drawRanges.push_back({d.mesh,d.first,d.count});
+    bool descendant=false;
+    if(!ancestorContains(tree,modelIndex,root,descendant) || !descendant ||
+       !paletteDrawOwners(models,meshRanges,drawRanges,maps,owners,storage.paletteScratch) || owners[drawIndex]!=int32_t(modelIndex))return false;
+    const auto &draw=draws[drawIndex];const auto &model=records[modelIndex];
+    uintptr_t declaredSurface=0;std::memcpy(&declaredSurface,reinterpret_cast<const uint8_t*>(&draw)+0x18,4);
+    if(surfacePointer!=declaredSurface || !readableMemory(reinterpret_cast<void*>(surfacePointer),0x130) ||
+       draw.count!=1 || draw.first<0 || size_t(draw.first)>=maps.size() || size_t(draw.first)>=palette.size())return false;
+    const auto mapping=maps[size_t(draw.first)];
+    if(mapping.draw!=int32_t(drawIndex) || mapping.bone<0 || size_t(mapping.bone)>=bones.size() ||
+       bones[size_t(mapping.bone)].owner!=int32_t(modelIndex) ||
+       !readableMemory(bones[size_t(mapping.bone)].definition,4) ||
+       !idleConfig(instance,out.rootConfig) || !idleConfig(model.instance,out.renderConfig))return false;
+    out.affine=affineMultiply(model.world,palette[size_t(draw.first)]);
+    Matrix34 inverse;if(!finiteMatrix(model.world) || !finiteMatrix(palette[size_t(draw.first)]) ||
+                        !affineInverse(out.affine,inverse))return false;
+    out.layout=scopeSurfaceLayout(reinterpret_cast<const uint8_t*>(surfacePointer));
+    out.modelRecord=uint32_t(modelIndex);out.drawRecord=uint32_t(drawIndex);out.surface=uint32_t(surfacePointer);
+    out.instance=uint32_t(reinterpret_cast<uintptr_t>(model.instance));out.bone=mapping.bone;
+    std::memcpy(&out.surfaceName,reinterpret_cast<void*>(surfacePointer),4);
+    std::memcpy(&out.boneName,bones[size_t(mapping.bone)].definition,4);
+    return !paletteInvalidated;
+}
 static void observeIdleQuery(void *queue,uintptr_t caller) {
     ScopeDrawBinding binding;IdleDrawIdentity identity;IdleWeaponTrace *trace=nullptr;
     if(!currentIdleDraw(binding,identity,trace))return;
@@ -1006,6 +1069,15 @@ bool checkNativeThread() {
 bool ownsNativeThread() {
     const DWORD owner = simulationThread.load(std::memory_order_acquire);
     return scopeObservationThread(owner, GetCurrentThreadId(), isMainThread && isMainThread());
+}
+bool copyIdleRaster(void *instance,IdleRasterCopy &out) {
+    std::optional<IdleRasterStorage> storage(std::in_place);bool observed=false;
+    // Owners live above this frame. GNU allocation failure declines diagnostics
+    // locally; foreign unwind retires every vector before crossing the caller.
+    withNativeFinally([&] {observed=readIdleRaster(instance,out,*storage);},[&](bool aborted) noexcept {
+        storage.reset();if(aborted)observed=false;
+    });
+    return observed;
 }
 ScopeRasterStatus copyScopeRaster(void *instance, Matrix34 &affine, ScopeSurfaceLayout &layout) {
     return readScopeRaster(instance,affine,layout);

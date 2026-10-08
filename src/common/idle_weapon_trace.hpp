@@ -1,5 +1,6 @@
 #pragma once
 #include "model_tree.hpp"
+#include "idle_geometry.hpp"
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -25,14 +26,44 @@ struct IdleAnimationValue {
     std::array<uint32_t,8> contribution{};
     std::array<uint32_t,4> header{}; // IDENT, first/last frame, raw speed bits; not CResource.
 };
+struct IdleRasterCopy {
+    IdleDrawIdentity binding{};
+    IdleConfigIdentity rootConfig{},renderConfig{};
+    uint32_t modelRecord=0,drawRecord=0,surface=0,instance=0,surfaceName=0,boneName=0;
+    int32_t bone=-1;
+    ScopeSurfaceLayout layout{};
+    Matrix34 affine{};
+    Matrix44 clip{};
+    bool clipValid=false;
+    bool operator==(const IdleRasterCopy &other) const noexcept {
+        return binding==other.binding && rootConfig==other.rootConfig && renderConfig==other.renderConfig &&
+            modelRecord==other.modelRecord && drawRecord==other.drawRecord && surface==other.surface &&
+            instance==other.instance && surfaceName==other.surfaceName && boneName==other.boneName && bone==other.bone &&
+            layout==other.layout && clipValid==other.clipValid &&
+            std::equal(std::begin(clip.m),std::end(clip.m),std::begin(other.clip.m)) && std::equal(std::begin(affine.m),std::end(affine.m),std::begin(other.affine.m));
+    }
+};
+struct IdleGeometryCopy {
+    static constexpr unsigned MaxProgramWords=512,MaxConstants=256;
+    IdleRasterCopy raster{};
+    ScopeBufferInputs inputs{};
+    std::array<std::array<uint8_t,32>,5> hashes{};
+    std::array<uint32_t,MaxProgramWords> program{};
+    std::array<std::array<float,4>,MaxConstants> constants{};
+    std::array<ScopeDeclarationElement,65> declaration{};
+    unsigned declarationCount=0;
+    unsigned words=0,constantCount=0;
+};
 struct IdleWeaponTrace {
-    static constexpr unsigned MaxContributors=16,MaxMatrices=64;
+    static constexpr unsigned MaxContributors=16,MaxMatrices=64,MaxDraws=8;
     enum class Stage : uint8_t { Empty,Event,Palette,Rejected,Complete };
     Stage stage=Stage::Empty;
     IdleDrawIdentity binding{};
     IdleConfigIdentity config{};
     std::array<IdleAnimationValue,MaxContributors> animations{};
     std::array<Matrix34,MaxMatrices> matrices{};
+    std::array<IdleGeometryCopy,MaxDraws> geometry{};
+    unsigned draws=0;
     Matrix34 world{};
     Matrix34 nativePlacement{},trackedPlacement{},controller{};
     Vec3 stretch{};
@@ -78,6 +109,17 @@ struct IdleWeaponTrace {
            !std::isfinite(scale.x) || !std::isfinite(scale.y) || !std::isfinite(scale.z)) {reject();return false;}
         for(const auto &m:source)if(!finiteMatrix(m)) {reject();return false;}
         world=transform;stretch=scale;std::copy(source.begin(),source.end(),matrices.begin());poseCopied=true;return true;
+    }
+    bool draw(const IdleGeometryCopy &copy,bool originalCompleted,bool current) noexcept {
+        if(stage!=Stage::Palette || !poseCopied || copy.raster.binding!=binding || copy.raster.rootConfig!=config ||
+           !copy.raster.clipValid || !originalCompleted || !current || draws>=MaxDraws || copy.words<2 || copy.words>IdleGeometryCopy::MaxProgramWords ||
+           !copy.declarationCount || copy.declarationCount>65 || !copy.constantCount || copy.constantCount>IdleGeometryCopy::MaxConstants || !finiteMatrix(copy.raster.affine)) {
+            reject();return false;
+        }
+        for(unsigned i=0;i<draws;++i)if(geometry[i].raster.drawRecord==copy.raster.drawRecord) {reject();return false;}
+        for(unsigned i=0;i<copy.constantCount;++i)for(float value:copy.constants[i])
+            if(!std::isfinite(value)) {reject();return false;}
+        geometry[draws++]=copy;return true;
     }
     bool finish(bool nativeCompleted,bool generationCurrent) noexcept {
         if(stage!=Stage::Palette || !poseCopied || !placementObserved || !nativeCompleted || !generationCurrent) {reject();return false;}

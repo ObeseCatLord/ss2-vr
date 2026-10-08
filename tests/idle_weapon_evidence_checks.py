@@ -3,9 +3,10 @@ from pathlib import Path
 import unittest
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 from assess_idle_weapon import assess
+from match_idle_geometry import match
 
 SOURCE='a'*64
-DRAW=f'Lab idle draw source={SOURCE} ipc=10 wire=7 request=100 input=90 owner=1 weapon=2 model=3 generation=4 hand=0 eye=1 stage=4 cfg=20 file=30 resource=5 contributors=1 matrices=1 historicalBytes=0 grasp=0'
+DRAW=f'Lab idle draw schema=2 draws=0 source={SOURCE} ipc=10 wire=7 request=100 input=90 owner=1 weapon=2 model=3 generation=4 hand=0 eye=1 stage=4 cfg=20 file=30 resource=5 contributors=1 matrices=1 historicalBytes=0 grasp=0'
 ANIM='Lab idle animation request=100 eye=1 hand=0 index=0 raw=00000001,00000002,00000003,00000004,00000005,00000006,00000007,00001000 header=00000037,00000000,0000000a,3f800000'
 MATRICES=[f'Lab idle matrix request=100 eye=1 hand=0 kind={kind} index=0 values=1,0,0,0,0,1,0,0,0,0,1,0' for kind in ['world','nativePlacement','trackedPlacement','controller','canonical']]
 STRETCH='Lab idle stretch request=100 eye=1 hand=0 values=-1,1,1'
@@ -17,7 +18,50 @@ class Checks(unittest.TestCase):
         self.assertEqual(len(r['copied_event_pose_observations']),1)
         self.assertFalse(r['alignment_accepted']);self.assertFalse(r['positive_grasp_verified'])
         self.assertFalse(r['historical_loaded_bytes_verified'])
+        self.assertEqual(r['copied_event_pose_observations'][0]['evidence_class'],'event-pose-only')
+        self.assertFalse(r['copied_event_pose_observations'][0]['geometry_observed'])
         self.assertEqual(r['copied_event_pose_observations'][0]['stretch'],[-1,1,1])
+    def test_consumed_geometry_copy(self):
+        import struct
+        def row(kind,chunk,values):
+            return 'Lab idle geometryData request=100 eye=1 hand=0 index=0 kind='+kind+' chunk='+str(chunk)+' values='+','.join(f'{x:08x}' for x in values)
+        header='Lab idle geometry request=100 eye=1 hand=0 index=0 modelRecord=1 drawRecord=0 surface=40 instance=50 surfaceName=60 boneName=70 bone=0 cfg=20 file=30 resource=5 words=2 constants=1 declaration=5'
+        data=[row('affine',0,[0x3f800000,0,0,0,0,0x3f800000,0,0,0,0,0x3f800000,0]),
+              row('clip',0,[0]*16),
+              row('layout',0,[317,338,0,133,0,0,135,0,12680,128,0,13948,128,0]),
+              row('buffers',0,[17752,0,1,100,0,2028,0,1,101,0]),
+              row('draw',0,[4,0,0,317,0,338]),
+              row('streams',0,[1,0,12,1,1,13948,4,1,1,12680,4,1,1,15216,8,1,2,0]),
+              *[row('hash',i,[i+1]*8) for i in range(5)],
+              *[row('declaration',i,e) for i,e in enumerate([[0,0,2,0,5,0],[5,0,8,0,5,5],[6,0,8,0,5,6],[3,0,1,0,5,3],[255,0,17,0,0,0]])],row('program',0,[0xfffe0101,0xffff]),row('constant',0,[0,0,0,0])]
+        text=VALID.replace('draws=0','draws=1')+'\n'+header+'\n'+'\n'.join(data)
+        result=assess(text,SOURCE)
+        self.assertFalse(result['alignment_accepted'])
+        self.assertEqual(result['copied_event_pose_observations'][0]['geometry'][0]['words'],2)
+        channels=('positions','indices','weights','local_indices','uv')
+        candidate={'hand':{'asset_sha256':'b'*64,'candidate_channels':[{
+            'single_body_influence':True,'mesh_object':1,'lod':0,'vertices':317,'triangles':338,
+            'whole_vertex_buffer_bytes':17752,'whole_index_buffer_bytes':2028,
+            'channel_ranges':dict(zip(channels,[
+                {'offset':0,'size':3804,'format':133,'buffer':0},
+                {'offset':0,'size':2028,'format':135,'buffer':0},
+                {'offset':12680,'size':1268,'format':128,'buffer':0},
+                {'offset':13948,'size':1268,'format':128,'buffer':0},
+                {'offset':15216,'size':2536,'format':132,'buffer':0}])),
+            'channel_sha256':{name:struct.pack('<8I',*([i+1]*8)).hex() for i,name in enumerate(channels)}}]}}
+        self.assertTrue(match(result,candidate)['consumed_channels_all_uniquely_matched'])
+        self.assertFalse(match(result,candidate)['alignment_accepted'])
+        import copy
+        for channel in channels:
+            bad=copy.deepcopy(candidate);bad['hand']['candidate_channels'][0]['channel_sha256'][channel]='0'*64
+            self.assertFalse(match(result,bad)['consumed_channels_all_uniquely_matched'])
+        ambiguous=copy.deepcopy(candidate);ambiguous['other']=ambiguous['hand']
+        self.assertEqual(match(result,ambiguous)['matches'][0]['result'],'ambiguous')
+        for bad in [text.replace(data[-1],''),text+'\n'+data[0],text.replace('words=2','words=513'),
+                    text.replace('bone=0','bone=-1'),text.replace('values=00000000,00000000,00000000,00000000','values=7fc00000,00000000,00000000,00000000'),
+                    text.replace(data[3],row('buffers',0,[17752,8,1,100,0,2028,0,1,101,0])),
+                    text.replace(data[5],row('streams',0,[1,0,12,1,3,13948,4,1,1,12680,4,1,1,15216,8,1,2,0]))]:
+            with self.assertRaises(ValueError):assess(bad,SOURCE)
     def test_rejection_is_not_truncated_success(self):
         r=assess(DRAW.replace('stage=4','stage=3'),SOURCE)
         self.assertFalse(r['copied_event_pose_observations'])

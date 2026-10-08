@@ -63,4 +63,26 @@ int main() {
         assert(t.pose(identity,{1,1,1},{&identity,1}));
         if(failure==0)t.placementObserved=false;assert(!t.finish(failure!=1,failure!=2));
     }
+    const auto ready=[&] {
+        IdleWeaponTrace t;assert(t.admit(id));assert(t.placement(id,identity,identity,identity));
+        assert(t.event(id,cfg,true,1));assert(t.animation(0,{}));assert(t.palette(id,cfg,true,1));
+        assert(t.pose(identity,{1,1,1},{&identity,1}));return t;
+    };
+    IdleGeometryCopy g;g.raster.binding=id;g.raster.rootConfig=cfg;g.raster.affine=identity;g.raster.clipValid=true;
+    g.words=2;g.constantCount=1;g.declarationCount=1;
+    {auto t=ready();assert(t.draw(g,true,true));g.constants[0][0]=1;
+     assert(t.geometry[0].constants[0][0]==0);assert(!t.draw(g,true,true));}
+    for(unsigned failure=0;failure<3;++failure) {
+        auto t=ready();auto bad=g;
+        if(failure==0)bad.raster.binding.generation++;
+        assert(!t.draw(bad,failure!=1,failure!=2));assert(t.stage==IdleWeaponTrace::Stage::Rejected);
+    }
+    {auto t=ready();for(unsigned i=0;i<8;++i){g.raster.drawRecord=i;assert(t.draw(g,true,true));}
+     g.raster.drawRecord=8;assert(!t.draw(g,true,true));}
+
+    {auto t=ready();assert(t.finish(true,true));assert(t.draws==0);} // Event/pose-only, not geometry evidence.
+    {auto changed=g.raster;changed.clip.m[0]=1;assert(!(changed==g.raster));}
+    {auto changed=g.raster;changed.affine.m[3]=.1f;assert(!(changed==g.raster));}
+    {auto t=ready();g.raster.clipValid=false;assert(!t.draw(g,true,true));}
+
 }

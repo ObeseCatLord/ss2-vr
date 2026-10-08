@@ -2,18 +2,19 @@
 
 ## Full-project closure disposition
 
-The [event-time ID1 collector](IDLE_EVENT_COLLECTOR.md) now has connected original
-query/palette/placement hooks and a bounded offline reader. Collection-only Astra
-GO and compiled checks do not certify geometry/grasp association or runtime.
-Current compiled source fingerprint is
-`17b58af2374f3b1fd3ca18e58ed3ed779c075ad5a5a1bfe90070ebacb40da75c`;
-63 Debug + 63 Release groups and 26 normal/optimized gates pass.
-Current products: game `8d6edcbe19e303960bc8c6fa0e78bc0009ef24b130bbea3b43fba1293b44a6f8`,
-server `5f7c7ea03adc1b5a17017d587b7d2e2ef19e359c51006ab24fad7b317e96ecaa`,
-host `2ffdc02dcafbee7f83d0470183413c5c8cf3ac79d81578a160a881d1e4fa83de`,
+The [ID1 collector](IDLE_EVENT_COLLECTOR.md) now connects event/palette/placement
+and consumed D3D9 geometry, exact five-channel matching, and retained actual
+shader/constants/declarations. Astra source GO covers bounded collection only.
+Private shader replay and measured grasp remain source work before a runnable
+user handoff. No game/debugger/headset/firing/vehicle probe or deployment occurred.
+Current source fingerprint `8d86d4912fbf263bc5ee62762ce1f301062cec6c1115c5123822333b226b3d07`;
+64 Debug + 64 Release groups, 28 normal/optimized compiled/native gates and five
+private compiled-byte rejection controls pass. No native exception/COM reentry ran.
+Current products: game `c2d6b8fdd1661e1970bd583605c5307d33180b4694b4b0a4cff306e6b659079c`,
+server `9195d006a904cac8453213604b4bad43a7eb575a97545998aeb572f4f663e5fd`,
+host `80ee612a9ae6b5cfad8cef2bceee22aed0fd3dfadbc6bfe16ad63a4b6425dae8`,
 loader `bb011caa82528c541a73967ce6408f82198ff4fd0358b38b54884719d863bd1d`.
-Previous first-gesture and MP source identities below remain historical. Nothing
-was deployed or launched for this collector increment.
+Earlier source/package identities below are historical and immutable.
 
 The [final Astra source pass](FULL_PROJECT_SOURCE_CLOSURE.md) found connected
 major feature paths, but full implementation is still open. Resolve one ID1
