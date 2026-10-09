@@ -498,6 +498,10 @@ def idle_probe_weapon(cfg):
     return selected
 
 def validate_idle_probe(cfg):
+    preparation=cfg.get('prepare_sniper_fixture',False)
+    if type(preparation) is not bool:raise ValueError('Sniper preparation must be an explicit boolean')
+    if preparation and idle_probe_weapon(cfg)!=13:
+        raise ValueError('Sniper preparation requires the exact neutral ID13 collector')
     if idle_probe_weapon(cfg) is None:return
     if cfg.get('renderer_mode','vr')!='vr' or not isinstance(cfg.get('expected_product_source'),str) or \
        not re.fullmatch('[a-f0-9]{64}',cfg['expected_product_source']):
@@ -507,7 +511,7 @@ def validate_idle_probe(cfg):
     if cfg.get('pose_steps')!=[{'name':'baseline','head':cfg.get('baseline_head')}]:
         raise ValueError('Idle collection requires only the stationary baseline pose')
 
-IDLE_TOOLS=('runtime_lab.py','assess_idle_weapon.py','idle_stream_evidence.py','idle_submission_evidence.py','idle_projection_evidence.py','idle_native_reference.py','replay_idle_geometry.py',
+IDLE_TOOLS=('runtime_lab.py','collect_idle_evidence.py','assess_idle_weapon.py','idle_stream_evidence.py','idle_submission_evidence.py','idle_projection_evidence.py','idle_native_reference.py','replay_idle_geometry.py',
             'measure_idle_reference.py','match_idle_geometry.py',
             'private_display_lab.py','display_timing_probe.cpp','lab_window_focus.hpp','private_x11_windows.cpp')
 IDLE_INVENTORIES=('game/Content/SeriousSam2/Config','game/Content/PlayerProfiles',
@@ -568,6 +572,36 @@ def validate_idle_preparation(cfg,private,lab,prefix):
     if set(record.get('source_tools',{}))!=set(IDLE_TOOLS):raise ValueError('Idle tool inventory differs')
     for name,expected in record['source_tools'].items():checked_file(ROOT/'tools'/name,expected)
 
+def validate_sniper_destination(lab):
+    destination=lab/'Temp/SS2VR'
+    if destination.is_symlink() or not destination.is_dir() or not destination.resolve(strict=True).is_relative_to(lab.resolve()):
+        raise ValueError('Sniper preparation requires its owned private save directory')
+    if any((destination/name).exists() or (destination/name).is_symlink() for name in
+           ('sniper-id13.sav','sniper-id13.sav.preload')):
+        raise ValueError('Sniper preparation cannot overwrite an existing fixture')
+
+def sniper_preparation_receipt(log,lab):
+    if 'Lab sniper preparation failed' in log:
+        raise ValueError('Native sniper preparation rejected its fixture')
+    events=list(re.finditer(r'Lab sniper preparation (?:issued stage=(grant|select|save) owner=(\d+)|complete owner=(\d+) nativeId=13 path=([^\r\n]+))',log))
+    stages=[m[1] or 'complete' for m in events]
+    owners=[int(m[2] or m[3]) for m in events]
+    if stages!=['grant','select','save','complete'] or len(set(owners))!=1 or not 0<owners[0]<=0xffffffff:
+        raise ValueError('Native sniper preparation lacks one coherent completion sequence')
+    expected='Z:'+str(lab.resolve()).replace('/','\\')+'\\Temp\\SS2VR\\sniper-id13.sav'
+    if events[-1][4].casefold()!=expected.casefold():
+        raise ValueError('Native save destination differs from the owned lab')
+    files={}
+    for name in ('sniper-id13.sav','sniper-id13.sav.preload'):
+        path=lab/'Temp/SS2VR'/name
+        if name.endswith('.preload') and not path.exists() and not path.is_symlink():continue
+        if path.is_symlink() or not path.is_file() or not path.resolve(strict=True).is_relative_to(lab.resolve()):
+            raise ValueError('Native sniper save is missing or redirected')
+        if not 0<path.stat().st_size<=32*1024*1024:raise ValueError('Native sniper save exceeds its evidence budget')
+        files[str(path.relative_to(lab))]={'bytes':path.stat().st_size,'sha256':digest(path)}
+    return {'schema':1,'native_id':13,'owner':owners[0],'native_stages':stages,'files':files,
+            'private_cheated_fixture':True,'save_reload_verified':False,'alignment_accepted':False}
+
 def validate(cfg):
     validate_idle_probe(cfg)
     private=Path(cfg['private_root']).resolve(strict=True)
@@ -600,6 +634,9 @@ def validate(cfg):
     for name, expected in receipt['files'].items(): checked_file(lab/name,expected)
     startup=cfg['startup']
     expected_arguments=['+mod','SeriousSam2','+sam_bBootSequence','0','+sam_bSkipMovies','1','+level',cfg['scene']['entry']]
+    if cfg.get('prepare_sniper_fixture'):
+        expected_arguments[6:6]=['+sam_iEnableCheats','1']
+        validate_sniper_destination(lab)
     zero_mouse_arguments=expected_arguments[:6]+['+inp_fMouseSensitivity','0']+expected_arguments[6:]
     if startup['arguments'] not in (expected_arguments,zero_mouse_arguments):
         raise ValueError('Only the verified stock local +level startup is admitted')
@@ -961,6 +998,8 @@ def run(cfg):
     env.pop('SS2VR_LAB_IDLE_WEAPON',None)
     selected_idle_weapon=idle_probe_weapon(cfg)
     if selected_idle_weapon is not None:env['SS2VR_LAB_IDLE_WEAPON']=str(selected_idle_weapon)
+    env.pop('SS2VR_LAB_PREPARE_SNIPER',None)
+    if cfg.get('prepare_sniper_fixture'):env['SS2VR_LAB_PREPARE_SNIPER']='1'
     env.pop('SS2VR_LAB_GRIP_RESOURCES',None)
     if cfg.get('grip_resource_probe'):env['SS2VR_LAB_GRIP_RESOURCES']='1'
     if stock:env['SS2VR_LAB_STOCK_RENDER']='1'
@@ -1231,6 +1270,21 @@ def run(cfg):
             manifest['result']='stock_image_captured_camera_unverified'
             manifest['camera_comparison_acceptance']=False
             return run_dir
+        if cfg.get('prepare_sniper_fixture'):
+            preparation_deadline=min(deadline,time.monotonic()+35)
+            while True:
+                native_path=lab/'Bin/SS2VR.log'
+                if native_path.stat().st_size>16*1024*1024:raise ValueError('Preparation log exceeds its evidence budget')
+                native=native_path.read_text(errors='strict')
+                if 'Lab sniper preparation failed' in native:raise RuntimeError('Native private sniper preparation failed; preserve logs')
+                if 'Lab sniper preparation complete' in native:
+                    manifest['sniper_preparation']=sniper_preparation_receipt(native,lab)
+                    state=observer(cfg,env,'status',token,timeout=remaining(deadline),deadline=deadline)
+                    if state['game_pid']!=owned_game['pid']:raise RuntimeError('Prepared sniper process changed')
+                    if state.get('current_weapon',[None,None])[1]==13:break
+                if time.monotonic()>=preparation_deadline:raise TimeoutError('Native private sniper preparation did not complete')
+                if not still_owned(owned_game):raise RuntimeError('Owned game exited during private sniper preparation')
+                time.sleep(.1)
         baseline=cfg['expected_baseline_head'];baseline_packet=cfg['baseline_head']
         for step in cfg['pose_steps']:
             if not step['name'].replace('-','').isalnum():raise ValueError('Unsafe pose step name')

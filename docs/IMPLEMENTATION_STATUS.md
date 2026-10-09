@@ -1,5 +1,29 @@
 # Implementation status — 2026-10-09
 
+## Native private sniper preparation — source GO, actual probe next
+
+A one-shot private adapter now uses the verified stock cheat data argument,
+native Give All, native ID13 selection and normal save. It preserves native
+inventory/ammo/changeability, exact sole-local roster/brain/pawn ownership and
+online isolation. Each action advances its stage before entry and runs only once
+on a later outer main-thread simulation tick. Contained callback failure and
+native abort permanently latch failure; exact caller/phase/revision/presentation
+are rechecked immediately before every mutation. No release or zoom priming.
+
+The sealed launcher admits preparation only with neutral ID13; fresh private
+save/preload paths, ordered same-owner completion, nonempty bounded file hashes
+and current right-hand sniper are required. The private fixture remains cheated;
+reload, grasp and alignment are explicitly unverified. ID13 correction stays off.
+See PRIVATE_SNIPER_PREPARATION.md and OFFLINE_IDLE_COLLECTION.md.
+
+Astra/xhigh source GO; local tags verified, independent backend unattested.
+All4products rebuilt on d458bd6474c1b12cd89996c2b3fa66b30a2c70859a87164a880a209ffb4a4168,
+IPC10/wire7;77Debug/77Release and36normal/-O native/compiled gates pass.
+Runtime evidence26groups and wrapper9groups pass normal/-O. No new native run
+has been claimed. Next: one fresh private neutral grant/equip/save capture,
+then actual Black draw association and alignment integration; broader full-mod
+features and user-operated device/gameplay acceptance remain unfinished.
+
 ## Private sniper fixture preparation — current operation
 
 The user has no existing sniper save and explicitly authorized verified save

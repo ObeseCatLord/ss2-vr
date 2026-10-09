@@ -18,6 +18,7 @@ bool nativeModuleFingerprint(HMODULE,const char *);
 // normal game/Steam behavior is untouched when the opt-in is absent.
 void installLabOnlineIsolation();
 void validateLabOnlineIsolation(bool gameplay);
+bool labOnlineIsolationInstalled() noexcept;
 bool foregroundGame();
 void deviceReady(IDirect3DDevice9 *device);
 void deviceCreated(IDirect3DDevice9 *device);

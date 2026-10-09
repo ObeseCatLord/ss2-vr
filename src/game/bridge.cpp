@@ -319,6 +319,9 @@ void installLabOnlineIsolation() {
     labIsolationPhase.store(2,std::memory_order_release);
     log("Lab online isolation installed synchronously at D3D9 factory entry; interface=0");
 }
+bool labOnlineIsolationInstalled() noexcept {
+    return labIsolationPhase.load(std::memory_order_acquire)==2 && labOnlineIsolated;
+}
 void validateLabOnlineIsolation(bool gameplay) {
     const auto phase=labIsolationPhase.load(std::memory_order_acquire);
     if (!phase) return;

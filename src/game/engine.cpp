@@ -1,4 +1,5 @@
 #include "common/controls.hpp"
+#include "common/lab_preparation.hpp"
 #include "common/ui.hpp"
 #include "common/build_contract.hpp"
 #include "common/rig_revision.hpp"
@@ -188,6 +189,22 @@ using GameInfoGet = uint32_t *(__cdecl *)(uint32_t *);
 static WeaponButton nativeWeaponButton = nullptr;
 static IntThis nativeFlipButtons = nullptr, nativeComboWeapons = nullptr;
 static GameInfoGet nativeGameInfo = nullptr;
+// Explicit private-fixture preparation only; no production inventory behavior.
+using LabPlayerGet = uint32_t *(__thiscall *)(void *,uint32_t *,int);
+using LabSelect = void(__thiscall *)(void *,int,int,int,int);
+static IntThis labCheatsEnabled=nullptr;
+static VoidThis labGiveAll=nullptr;
+static LabSelect labSelectSniper=nullptr;
+static void(__cdecl *labSaveSniper)(const char *)=nullptr;
+static uintptr_t labBrainGetter=0,labPuppetGetter=0;
+static bool labSniperConfigured=false;
+using LabSniperStage=LabPreparationStage;
+static struct : LabPreparationProgress {
+    uint64_t deadline=0;
+    void *simulation=nullptr,*world=nullptr;
+    uint32_t player=0,brain=0,game=0;
+    char savePath[1024]{};
+} labSniper;
 static uintptr_t primaryOperatorReturn = 0, primaryHeldReturn = 0;
 static IntThis originalSniperAlternativePress = nullptr;
 static int(__cdecl *nativeMainThread)() = nullptr;
@@ -1265,6 +1282,7 @@ struct SimulationInterval {
 };
 static void runPostSimulationRoomscale(SimulationInterval &);
 static void runPostSimulationHeadVisibility(SimulationInterval &);
+static void runPostSimulationSniper(SimulationInterval &);
 static thread_local SimulationInterval *simulationInterval = nullptr;
 static thread_local const NativePrimaryInvocation *primaryInvocation = nullptr;
 static PreparedPlayer *preparedPrimary(void *subject) noexcept {
@@ -2282,6 +2300,7 @@ static void __fastcall simulationStep(void *simulation, void *) {
         originalSimulationStep(simulation);
         runPostSimulationRoomscale(interval);
         runPostSimulationHeadVisibility(interval);
+        runPostSimulationSniper(interval);
         // Retire input only after all original entity/script/physics work.
         if (interval.networkPrepared && nativeInputHealthy())
             multiplayer::completeTick();
@@ -5950,6 +5969,144 @@ static __attribute__((noinline)) void runPostSimulationHeadVisibility(Simulation
     });
 }
 
+static __attribute__((noinline)) void runPostSimulationSniper(SimulationInterval &interval) {
+    if(!labSniperConfigured || interval.previous ||
+       !interval.managerPrepared || !nativeInputHealthy() ||
+       !nativeMainThread || !nativeMainThread())return;
+    if(!labSniper.begin())return; // Before any callback-capable validation or native getter.
+    const uint64_t revision=simulationRevision;
+    withNativeFinally([&] {
+        auto fail=[&](const char *why) {
+            labSniper.stage=LabSniperStage::Failed;
+            log("Lab sniper preparation failed reason=%s",why);
+        };
+        if(!labOnlineIsolationInstalled()) {fail("isolation");return;}
+        validateLabOnlineIsolation(true);
+        auto phaseCurrent=[&] {
+            return interval.simulation && interval.preparedWorld && interval.preparedManager &&
+                simulationInterval==&interval && interval.nativeCaller==roomscaleSimulationReturn &&
+                currentSimulation()==interval.simulation && currentWorld()==interval.preparedWorld &&
+                primaryField(interval.simulation,0x4c)==0 &&
+                primaryField(interval.preparedWorld,0x74)==reinterpret_cast<uintptr_t>(interval.preparedManager) &&
+                simulationRevision==revision && nativeInputHealthy() && nativePresentationIdleForBodyMove();
+        };
+        if(!phaseCurrent()) {fail("simulation-phase");return;}
+        const auto s=copySnapshot();
+        const bool bound=labSniper.player!=0;
+        if(bound && (GetTickCount64()>labSniper.deadline ||
+           currentSimulation()!=labSniper.simulation || currentWorld()!=labSniper.world ||
+           s.playerHandle!=labSniper.player)) {fail("owner-or-deadline");return;}
+        if(currentSimulation()!=interval.simulation || currentWorld()!=interval.preparedWorld ||
+           !nativePresentationIdleForBodyMove() || !singlePlayer() || !livePlayer(s) ||
+           !vrSession(s) || !fresh(s.input) || !s.ui.gameplay || !s.rider.handheld() ||
+           !nativeRiderCurrent(s.player,s.rider) || !trackingEligible(s.player))return;
+        if(s.use || s.jump || s.sprint || s.input.zoomDownMask)return fail("nonneutral");
+        for(unsigned hand=0;hand<2;++hand)
+            if(s.input.trigger[hand]!=0 || s.input.axis[hand][0]!=0 || s.input.axis[hand][1]!=0 ||
+               s.input.buttons[hand] || s.fire[hand] || s.zoom[hand] || s.selecting[hand] ||
+               s.ui.wheel[hand].open) return fail("nonneutral");
+        uint32_t gameHandle=0;nativeGameInfo(&gameHandle);
+        void *game=gameHandle?resolve(gameHandle):nullptr;
+        if(!livePlayer(s)) {fail("game-getter-owner");return;}
+        const uint32_t brainHandle=primaryField(s.player,0x38c);
+        void *brain=brainHandle?resolve(brainHandle):nullptr;
+        auto currentOwner=[&] {
+            return phaseCurrent() && livePlayer(s) &&
+                resolve(gameHandle)==game && game && resolve(brainHandle)==brain && brain &&
+                primaryField(s.player,0x38c)==brainHandle && primaryField(brain,0x28)==s.playerHandle &&
+                !(primaryField(s.player,0x10)&2) && !(primaryField(brain,0x10)&2) &&
+                !(primaryField(game,0x10)&2) && phaseCurrent();
+        };
+        if(!currentOwner() || (bound && (gameHandle!=labSniper.game || brainHandle!=labSniper.brain))) {
+            fail("native-owner");return;
+        }
+        const auto table=primaryField(game,0);
+        if(table>UINTPTR_MAX-0x1b8 || !readableMemory(reinterpret_cast<void *>(table+0x1b0),8) ||
+           primaryField(reinterpret_cast<void *>(table),0x1b0)!=labBrainGetter ||
+           primaryField(reinterpret_cast<void *>(table),0x1b4)!=labPuppetGetter) {fail("roster-getters");return;}
+        unsigned population=0;
+        for(int slot=0;slot<17;++slot) {
+            uint32_t rosterBrain=0;
+            reinterpret_cast<LabPlayerGet>(labBrainGetter)(game,&rosterBrain,slot);
+            if(!currentOwner()) {fail("roster-owner");return;}
+            if(!rosterBrain)continue;
+            uint32_t rosterPawn=0;
+            reinterpret_cast<LabPlayerGet>(labPuppetGetter)(game,&rosterPawn,slot);
+            if(!currentOwner() || ++population!=1 || rosterBrain!=brainHandle || rosterPawn!=s.playerHandle) {
+                fail("ambiguous-roster");return;
+            }
+        }
+        uint32_t latestGame=0;nativeGameInfo(&latestGame);
+        if(population!=1 || latestGame!=gameHandle || !currentOwner() || !local(s.player) || !currentOwner()) {
+            fail("local-target");return;
+        }
+        if(!bound) {
+            labSniper.player=s.playerHandle;labSniper.brain=brainHandle;labSniper.game=gameHandle;
+            labSniper.simulation=interval.simulation;labSniper.world=interval.preparedWorld;
+            labSniper.deadline=GetTickCount64()+30000;
+        }
+        if(labSniper.issuedTick==simulationRevision)return;
+        if(labSniper.stage==LabSniperStage::Waiting) {
+            const bool cheats=labCheatsEnabled(game)!=0;
+            if(!currentOwner()) {fail("cheat-owner");return;}
+            if(!cheats)return;
+            if(!phaseCurrent()) {fail("grant-phase");return;}
+            labSniper.stage=LabSniperStage::Granted;labSniper.issuedTick=simulationRevision;
+            labGiveAll(game);
+            log("Lab sniper preparation issued stage=grant owner=%u",labSniper.player);
+            return;
+        }
+        if(labSniper.stage==LabSniperStage::Granted) {
+            const bool inventory=inInventory(static_cast<uint8_t *>(s.player)+0x8f8,13)!=0;
+            if(!currentOwner()) {fail("inventory-owner");return;}
+            if(!inventory) {fail("native-grant-excluded-sniper");return;}
+            const bool change=canChange(s.player,1)!=0;
+            if(!currentOwner()) {fail("selection-owner");return;}
+            if(!change)return;
+            if(!phaseCurrent()) {fail("selection-phase");return;}
+            labSniper.stage=LabSniperStage::Selected;labSniper.issuedTick=simulationRevision;
+            labSelectSniper(s.player,13,1,0,0);
+            // Selection may delete old weapon bindings. Reacquire next tick.
+            log("Lab sniper preparation issued stage=select owner=%u",labSniper.player);
+            return;
+        }
+        if(labSniper.stage==LabSniperStage::Selected || labSniper.stage==LabSniperStage::SaveIssued) {
+            const uint32_t handle=nativeHandle(s.player,1);
+            void *weapon=handle?resolve(handle):nullptr;
+            if(!weapon || handle==nativeHandle(s.player,0) || primaryField(weapon,0x28)!=s.playerHandle ||
+               primaryField(weapon,0xb4)!=13 || primaryField(weapon,0xb0)!=1 ||
+               !nativeSniper(weapon) || primaryField(weapon,0xd4))return;
+            const bool zooming=nativeZoomFlag(weapon)!=0;
+            if(!currentOwner() || resolve(handle)!=weapon || nativeHandle(s.player,1)!=handle) {fail("sniper-owner");return;}
+            if(zooming)return;
+        }
+        if(labSniper.stage==LabSniperStage::Selected) {
+            char preload[1100]{};
+            std::snprintf(preload,sizeof(preload),"%s.preload",labSniper.savePath);
+            if(GetFileAttributesA(labSniper.savePath)!=INVALID_FILE_ATTRIBUTES ||
+               GetFileAttributesA(preload)!=INVALID_FILE_ATTRIBUTES) {fail("save-collision");return;}
+            if(!phaseCurrent()) {fail("save-phase");return;}
+            labSniper.stage=LabSniperStage::SaveIssued;labSniper.issuedTick=simulationRevision;
+            labSaveSniper(labSniper.savePath);
+            // Save can temporarily switch worlds. Borrow nothing across it.
+            log("Lab sniper preparation issued stage=save owner=%u",labSniper.player);
+            return;
+        }
+        if(labSniper.stage==LabSniperStage::SaveIssued) {
+            const DWORD attributes=GetFileAttributesA(labSniper.savePath);
+            if(attributes==INVALID_FILE_ATTRIBUTES || (attributes&(FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_REPARSE_POINT))) {
+                fail("native-save-missing");return;
+            }
+            labSniper.stage=LabSniperStage::Complete;
+            log("Lab sniper preparation complete owner=%u nativeId=13 path=%s",labSniper.player,labSniper.savePath);
+        }
+    },[&](bool aborted) noexcept {
+        const bool healthy=nativeInputHealthy();
+        labSniper.finish(aborted,healthy);
+        if(aborted || !healthy)nativeInputFailed();
+    });
+}
+
 static std::vector<void *> ownedHooks;
 static bool attachPoisoned = false;
 static bool rollbackNativeHooks() {
@@ -6024,6 +6181,25 @@ bool attach(bool headless) {
     const auto graphics = headless ? nullptr : GetModuleHandleW(L"GfxD3D.dll");
     roomscaleConfigured=false;
     meleeConfigured=false;
+    labSniperConfigured=false;
+    wchar_t prepareSniper[2]{};
+    if(GetEnvironmentVariableW(L"SS2VR_LAB_PREPARE_SNIPER",prepareSniper,2)==1 && prepareSniper[0]==L'1') {
+        if(headless || !labOnlineIsolationInstalled() || selectedIdleProbeWeapon()!=13)return false;
+        char directory[768]{},executable[1024]{};
+        const DWORD cwd=GetCurrentDirectoryA(sizeof(directory),directory);
+        const DWORD exe=GetModuleFileNameA(nullptr,executable,sizeof(executable));
+        if(!cwd || cwd>=sizeof(directory) || !exe || exe>=sizeof(executable))return false;
+        char *tail=std::strrchr(executable,'\\');if(!tail)return false;*tail=0;
+        tail=std::strrchr(executable,'\\');if(!tail)return false;*tail=0;
+        if(_stricmp(directory,executable))return false; // Launcher owns lab cwd, not user's game.
+        std::snprintf(labSniper.savePath,sizeof(labSniper.savePath),"%s\\Temp\\SS2VR\\sniper-id13.sav",directory);
+        labGiveAll=reinterpret_cast<VoidThis>(reinterpret_cast<uintptr_t>(g)+0xd5b70);
+        labSelectSniper=reinterpret_cast<LabSelect>(reinterpret_cast<uintptr_t>(g)+0x102340);
+        labSaveSniper=reinterpret_cast<decltype(labSaveSniper)>(reinterpret_cast<uintptr_t>(g)+0x22f00);
+        labBrainGetter=reinterpret_cast<uintptr_t>(g)+0xd41b0;
+        labPuppetGetter=reinterpret_cast<uintptr_t>(g)+0xd41e0;
+        labSniperConfigured=true;
+    }
     roomscaleEngineBase=reinterpret_cast<uintptr_t>(e);
     weaponConfigurationVtable=uint32_t(reinterpret_cast<uintptr_t>(e)+0x2095b4);
     roomscaleSimulationReturn=reinterpret_cast<uintptr_t>(g)+0x258de;
@@ -6105,6 +6281,10 @@ bool attach(bool headless) {
     S(e, "?wldGetCurrent@SeriousEngine@@YAPAVCWorld@1@XZ", currentWorld);
     S(g, "?samIsSinglePlayer@SeriousEngine@@YAHXZ", singlePlayer);
     S(g, "?samGetGameInfoEntity@SeriousEngine@@YA?AV?$Handle@VCGameInfoEntity@SeriousEngine@@@1@XZ", nativeGameInfo);
+    if(labSniperConfigured) {
+        S(g,"?IsCheatingEnabled@CGameInfoEntity@SeriousEngine@@QAEHXZ",labCheatsEnabled);
+        ok=reinterpret_cast<uintptr_t>(labCheatsEnabled)==reinterpret_cast<uintptr_t>(g)+0x118cf0 && ok;
+    }
     S(g, "?IsComboWeaponsEnabled@CGameInfoEntity@SeriousEngine@@QAEHXZ", nativeComboWeapons);
     S(g, "?IsFlippingFireButtons@CPlayerPuppetEntity@SeriousEngine@@UAEHXZ", nativeFlipButtons);
     S(g, "?GetWeaponFiringButton@CPlayerPuppetEntity@SeriousEngine@@UAEJV?$Handle@VCBaseWeaponEntity@SeriousEngine@@@2@@Z", nativeWeaponButton);

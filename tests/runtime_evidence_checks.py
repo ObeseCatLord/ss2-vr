@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 from assess_runtime import (complete_pairs_for_pose,first_person_depth_probe,dual_topologies,
     DualPhaseEvidence,require_dual_capture,dual_weapon_events,successful_dual_fire)
-from runtime_lab import (native_grip_resource_receipts,validate_idle_probe,validate_idle_preparation,idle_probe_weapon,
+from runtime_lab import (native_grip_resource_receipts,validate_idle_probe,validate_idle_preparation,idle_probe_weapon,validate_sniper_destination,sniper_preparation_receipt,
                          idle_configuration_digest,IDLE_FIXED_FILES,IDLE_TOOLS)
 
 HEAD={'p':[0,0,0],'q':[0,0,0,1]}
@@ -43,6 +43,54 @@ class IdleProbeSelectionChecks(unittest.TestCase):
             disabled={'idle_native_id':13}
             if enabled is not None:disabled['idle_weapon_probe']=enabled
             with self.assertRaises(ValueError):validate_idle_probe(disabled)
+
+    def test_sniper_preparation_needs_exact_neutral_selector(self):
+        cfg={'idle_weapon_probe':True,'idle_native_id':13,'prepare_sniper_fixture':True,
+             'expected_product_source':'a'*64,'baseline_head':[0,1.6,0,0,0,0],
+             'pose_steps':[{'name':'baseline','head':[0,1.6,0,0,0,0]}]}
+        validate_idle_probe(cfg)
+        for change in ({'idle_native_id':1},{'idle_weapon_probe':False},
+                       {'prepare_sniper_fixture':1},{'prepare_sniper_fixture':None},
+                       {'native_dual_probe':'zap-initial-inventory'}):
+            with self.subTest(change=change),self.assertRaises(ValueError):validate_idle_probe({**cfg,**change})
+
+    def test_sniper_save_destination_collision_and_redirection(self):
+        with tempfile.TemporaryDirectory() as d:
+            lab=Path(d)/'game';lab.mkdir();destination=lab/'Temp/SS2VR'
+            with self.assertRaises(ValueError):validate_sniper_destination(lab)
+            destination.mkdir(parents=True);validate_sniper_destination(lab)
+            for name in ('sniper-id13.sav','sniper-id13.sav.preload'):
+                p=destination/name;p.write_bytes(b'preserve')
+                with self.assertRaises(ValueError):validate_sniper_destination(lab)
+                self.assertEqual(p.read_bytes(),b'preserve');p.unlink()
+                p.symlink_to(destination/'absent')
+                with self.assertRaises(ValueError):validate_sniper_destination(lab)
+                p.unlink()
+            destination.rmdir();destination.symlink_to(Path(d))
+            with self.assertRaises(ValueError):validate_sniper_destination(lab)
+
+    def test_sniper_receipt_requires_order_owner_and_actual_private_files(self):
+        with tempfile.TemporaryDirectory() as d:
+            lab=Path(d)/'game';destination=lab/'Temp/SS2VR';destination.mkdir(parents=True)
+            path=destination/'sniper-id13.sav';path.write_bytes(b'offline test fixture')
+            win='Z:'+str(lab).replace('/','\\')+'\\Temp\\SS2VR\\sniper-id13.sav'
+            grant='Lab sniper preparation issued stage=grant owner=12\n'
+            select='Lab sniper preparation issued stage=select owner=12\n'
+            save='Lab sniper preparation issued stage=save owner=12\n'
+            complete='Lab sniper preparation complete owner=12 nativeId=13 path='+win+'\n'
+            log=grant+select+save+complete
+            report=sniper_preparation_receipt(log,lab)
+            self.assertEqual(report['files']['Temp/SS2VR/sniper-id13.sav']['sha256'],hashlib.sha256(path.read_bytes()).hexdigest())
+            self.assertFalse(report['alignment_accepted']);self.assertFalse(report['save_reload_verified'])
+            for bad in (select+grant+save+complete,log+complete,log.replace('stage=save owner=12','stage=save owner=13'),
+                        log.replace(win,'Z:\\wrong\\sniper-id13.sav'),log+'Lab sniper preparation failed reason=owner\n'):
+                with self.subTest(log=bad),self.assertRaises(ValueError):sniper_preparation_receipt(bad,lab)
+            companion=destination/'sniper-id13.sav.preload';companion.write_bytes(b'private companion')
+            self.assertEqual(len(sniper_preparation_receipt(log,lab)['files']),2)
+            companion.unlink();companion.symlink_to(destination/'missing')
+            with self.assertRaises(ValueError):sniper_preparation_receipt(log,lab)
+            companion.unlink();path.write_bytes(b'')
+            with self.assertRaises(ValueError):sniper_preparation_receipt(log,lab)
 
 class IdlePreparationChecks(unittest.TestCase):
     def prepared(self,root):
