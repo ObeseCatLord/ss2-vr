@@ -1,5 +1,23 @@
 # Mod journal
 
+## 2026-10-09 — observe borrowed hovercraft control state
+
+Added an optional passive callback observer to the existing mounted-look route,
+retaining an existing resolved rider solely as an equality token. Copies only
+native-borrowed class/mode/abilities and nullable parameter/renderable tokens;
+no resource getter, steering or physics change. Native-finally restores TLS and
+rejects nested/duplicate/aborted samples. Rows explicitly deny resource/frame/
+physical-steering association. Fresh native-owned render association remains open.
+
+Astra source/parser GO. The compiled checker was corrected after Astra found
+cleanup branch/value, COFF call-relocation and post-restore TLS-overwrite false
+positives. Actual-byte negative controls reject those mutations; finite12-case
+cleanup proof and callback-entry stack checks have bounded Astra GO. Mounted
+interior stack and incoming capture provenance remain source-review limits.
+All4products rebuilt on8f6062cbd41f1aebe8c5493c2ecb10babeb2f4e5a6ca1f15a997c2ea80206ff3;
+80Debug/80Release checks and targeted client/server gates normal/-O pass.
+No vehicle, gameplay, input, headset or network runtime occurred in this slice.
+
 ## 2026-10-09 — isolate native palette ownership failures
 
 Corrected capture accounting: V40/V41 each have14name and18palette rejections.

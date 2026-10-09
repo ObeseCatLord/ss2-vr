@@ -1,5 +1,26 @@
 # Implementation status — 2026-10-09
 
+## Passive ride-control observer implemented — physical grabs still open
+
+The existing mounted-look route now has an opt-in borrowed-receiver scalar
+observer for the two pinned hovercraft classes. It retains the existing rider
+resolution as an equality token, forwards native clamps once, and restores TLS
+through native-finally cleanup. It copies mode/execution/movement abilities and
+nullable parameter/renderable tokens; it performs no model/resource lookup and
+applies no steering. Default controls, native physics and ClientAction remain
+unchanged. See [RIDE_CONTROL_OBSERVATION](RIDE_CONTROL_OBSERVATION.md).
+
+All four products rebuilt with fingerprint
+8f6062cbd41f1aebe8c5493c2ecb10babeb2f4e5a6ca1f15a997c2ea80206ff3,
+IPC10/wire7.80Debug/80Release groups passed. Current game/server compiled
+forwarding/cleanup checks and actual-instruction mutation controls pass in normal
+and Python -O modes. Scalar parser controls reject false resource/frame/steering
+claims. Astra/xhigh bounded native source, parser and corrected checker reviews accepted
+the observer. Local current routing tags verified; backend unattested. No vehicle/game/input/headset/network runtime
+occurred for this change. A fresh native-owned ride→renderable→instance join,
+installed resource identity and evaluated control frame remain prerequisites for
+physical cockpit grabs; the scalar observer alone does not satisfy them.
+
 ## Auto Shotgun collection source path implemented
 
 Native ID2 now uses the existing isolated neutral grant/equip/save preparation,

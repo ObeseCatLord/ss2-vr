@@ -1,5 +1,6 @@
 #include "common/controls.hpp"
 #include "common/lab_preparation.hpp"
+#include "common/ride_control_observation.hpp"
 #include "common/ui.hpp"
 #include "common/build_contract.hpp"
 #include "common/rig_revision.hpp"
@@ -578,8 +579,9 @@ static bool trackingAnchor(void *p, Pose &out) {
         return false;
     return nativeTrackingAnchor(p, out);
 }
-bool readNativeRider(void *player, RiderIdentity &out) {
+bool readNativeRider(void *player, RiderIdentity &out,void **rideToken) {
     out = {};
+    if(rideToken)*rideToken=nullptr;
     if (!player || !resolve || !pointerHandle || !invalidSeatIdent)
         return false;
     RiderIdentity value;
@@ -591,17 +593,23 @@ bool readNativeRider(void *player, RiderIdentity &out) {
     memcpy(&value.state, bytes + 0x548, 4);
     memcpy(&value.seat, bytes + 0x54c, 4);
     value.seatValid = value.seat != *invalidSeatIdent;
-    if (value.ride && !resolve(value.ride))
+    void *ride=value.ride?resolve(value.ride):nullptr;
+    if (value.ride && !ride)
         return false;
     if (value.state == 3 && !value.seated())
         return false;
     out = value;
+    if(rideToken)*rideToken=ride; // Equality token only; no new native lookup.
     return true;
 }
-bool nativeRiderCurrent(void *player, const RiderIdentity &expected) {
+bool nativeRiderCurrent(void *player, const RiderIdentity &expected,void **rideToken) {
+    if(rideToken)*rideToken=nullptr;
     RiderIdentity live;
-    return expected.player && resolve && resolve(expected.player) == player &&
-           readNativeRider(player, live) && live == expected;
+    void *ride=nullptr;
+    const bool current=expected.player && resolve && resolve(expected.player) == player &&
+           readNativeRider(player, live,rideToken?&ride:nullptr) && live == expected;
+    if(current && rideToken)*rideToken=ride;
+    return current;
 }
 bool nativeTrackingAnchor(void *player, Pose &out, const RiderIdentity *expected) {
     RiderIdentity identity;
@@ -5265,7 +5273,42 @@ static ControlSample sampledControls;
 static SRWLOCK controlsLock = SRWLOCK_INIT;
 using LookClamp = void(__thiscall *)(void *, Vec3 &);
 using QuaternionEuler = Vec3 *(__cdecl *)(Vec3 *, const Quat &);
-static LookClamp originalLookClamp = nullptr;
+static LookClamp originalLookClamp = nullptr,originalRideLookClamp=nullptr;
+static bool labRideControlConfigured=false;
+static uintptr_t controlsGameBase=0;
+static thread_local RideControlObservation *activeRideControlObservation=nullptr;
+static std::atomic<unsigned> labRideControlRows=0;
+static void __fastcall observedRideLookClamp(void *ride,void *,Vec3 &look) {
+    auto *observation=activeRideControlObservation;
+    if(!observation) {originalRideLookClamp(ride,look);return;}
+    const bool entered=observation->enter(reinterpret_cast<uintptr_t>(ride),
+        reinterpret_cast<uintptr_t>(&look),GetCurrentThreadId());
+    withNativeFinally([&] {
+        if(entered) {
+            RideControlScalars row{};
+            // Only this original callback's borrowed receiver may provide bytes.
+            // The prior resolve token is used solely for equality above.
+            if(readableMemory(ride,0x4d0)) {
+                uint32_t table=0;std::memcpy(&table,ride,4);
+                if(table>=controlsGameBase && (table-controlsGameBase==0x2a8558 ||
+                                               table-controlsGameBase==0x2b8420)) {
+                    row.classRva=uint32_t(table-controlsGameBase);
+                    const auto *bytes=static_cast<const uint8_t*>(ride);
+                    std::memcpy(&row.mode,bytes+0x4c4,4);
+                    std::memcpy(&row.executionAbilities,bytes+0x2d8,4);
+                    std::memcpy(&row.movementAbilities,bytes+0x4cc,4);
+                    std::memcpy(&row.parameterToken,bytes+0x47c,4);
+                    std::memcpy(&row.renderableToken,bytes+0x120,4);
+                }
+            }
+            observation->copy(row);
+        }
+        originalRideLookClamp(ride,look); // Exactly one original call, even for rejected sampling.
+    },[&](bool aborted) noexcept {
+        if(entered)observation->finishCallback(aborted);
+        else if(aborted)observation->finishOuter(true);
+    });
+}
 static QuaternionEuler quaternionEuler = nullptr;
 using PlayerControls = void(__thiscall *)(void *, uint8_t, Vec3, Vec3);
 using OperatorMoveDir = Vec3 *(__thiscall *)(void *, Vec3 *, Vec3, Vec3);
@@ -5273,7 +5316,7 @@ static PlayerControls originalPlayerControls = nullptr;
 static OperatorMoveDir nativeOperatorMoveDir = nullptr;
 static uintptr_t playerControlsReturn = 0, swimmingPlayerVtable = 0;
 static uintptr_t inactivePlayerControlsReturn = 0;
-static uintptr_t controlsGameBase = 0, controlsExeBase = 0;
+static uintptr_t controlsExeBase = 0;
 static SwimmingStrokes swimmingStrokes;
 static bool currentControls(int, const Snapshot &, const ControlSample &, bool);
 
@@ -5567,6 +5610,9 @@ static void __fastcall mountedLookClamp(void *brain, void *, Vec3 &look) {
 #else
     const auto caller = reinterpret_cast<uintptr_t>(__builtin_return_address(0));
 #endif
+    auto *previousObservation=activeRideControlObservation;
+    if(previousObservation) {previousObservation->declined=true;previousObservation->copied=false;}
+    void *rideToken=nullptr;
     ControlSample captured;
     AcquireSRWLockShared(&controlsLock);
     captured = sampledControls;
@@ -5592,15 +5638,44 @@ static void __fastcall mountedLookClamp(void *brain, void *, Vec3 &look) {
             if (validNativeBodyPose(aim)) {
                 quaternionEuler(&desired, aim.q);
                 desired.z = 0; // Native vehicle control look has heading/pitch, zero bank.
+                void *candidateRideToken=nullptr;
                 if (std::isfinite(desired.x) && std::isfinite(desired.y) &&
-                    nativeRiderCurrent(snapshot.player, captured.rider) && resolve(brainHandle) == brain) {
+                    nativeRiderCurrent(snapshot.player, captured.rider,labRideControlConfigured?&candidateRideToken:nullptr) && resolve(brainHandle) == brain) {
                     look = desired;
+                    rideToken=candidateRideToken;
                 }
             }
         }
     }
-    originalLookClamp(brain, look); // Preserve native ride/camera pitch limits and downstream RPC.
+    if(!labRideControlConfigured || !rideToken || previousObservation ||
+       primaryField(snapshot.player,0)!=swimmingPlayerVtable) {
+        originalLookClamp(brain,look);return;
+    }
+    RideControlObservation observation;
+    observation.rideToken=reinterpret_cast<uintptr_t>(rideToken); // Never dereferenced here.
+    observation.lookToken=reinterpret_cast<uintptr_t>(&look);
+    observation.thread=GetCurrentThreadId();
+    withNativeFinally([&] {
+        activeRideControlObservation=&observation;
+        originalLookClamp(brain,look); // Preserve native clamp/ClientAction exactly once.
+    },[&](bool aborted) noexcept {
+        activeRideControlObservation=previousObservation;
+        observation.finishOuter(aborted);
+    });
+    if(observation.publishable()) {
+        auto ordinal=labRideControlRows.load(std::memory_order_relaxed);
+        while(ordinal<64 && !labRideControlRows.compare_exchange_weak(ordinal,ordinal+1,std::memory_order_relaxed)) {}
+        if(ordinal<64) {
+            const auto &row=observation.values;
+            log("Lab rideControl schema=1 source=%.*s ordinal=%u input=%llu generation=%u session=%u reference=%u player=%u ride=%u seat=%u brain=%u thread=%u class=%u mode=%u executionAbilities=%u movementAbilities=%u parameterToken=%u renderableToken=%u callbackCalls=%u callbackReturned=1 resourceAssociated=0 frameAssociated=0 steeringApplied=0",
+                64,ss2vrBuildContract.sourceFingerprint.data(),ordinal+1,captured.input.sequence,captured.generation,
+                captured.input.session,captured.input.reference,captured.rider.player,captured.rider.ride,
+                captured.rider.seat,brainHandle,observation.thread,row.classRva,row.mode,
+                row.executionAbilities,row.movementAbilities,row.parameterToken,row.renderableToken,observation.calls);
+        }
+    }
 }
+
 static void __fastcall poll(void *b, void *) {
     originalPoll(b);
     if (!ids[0])
@@ -6442,6 +6517,12 @@ bool attach(bool headless) {
     controlsGameBase = reinterpret_cast<uintptr_t>(g);
     controlsExeBase = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
     swimmingPlayerVtable = reinterpret_cast<uintptr_t>(g) + 0x29e878;
+    wchar_t rideControlFlag[2]{};
+    labRideControlConfigured=!headless &&
+        GetEnvironmentVariableW(L"SS2VR_LAB_RIDE_CONTROL",rideControlFlag,2)==1 && rideControlFlag[0]==L'1';
+    if(labRideControlConfigured &&
+       (reinterpret_cast<uintptr_t>(GetProcAddress(g,"?ClampLookDirEulAsRide@CPuppetEntity@SeriousEngine@@UAEXAAVVector3f@2@@Z"))!=reinterpret_cast<uintptr_t>(g)+0x901b0 ||
+        primaryField(reinterpret_cast<void*>(swimmingPlayerVtable),0x5a0)!=reinterpret_cast<uintptr_t>(g)+0x901e0))return false;
     if (!headless) {
         expectedDepthRange = reinterpret_cast<DepthRange>(reinterpret_cast<uint8_t *>(graphics) + 0x56a0);
         expectedProjectionSet = reinterpret_cast<ProjectionSet>(reinterpret_cast<uint8_t *>(graphics) + 0x69a0);
@@ -6593,6 +6674,9 @@ bool attach(bool headless) {
           originalThirdPerson);
         H(g, "?ClampLookDirEul@CPlayerBrainEntity@SeriousEngine@@QAEXAAVVector3f@2@@Z", mountedLookClamp,
           originalLookClamp);
+        if(labRideControlConfigured)
+            H(g,"?ClampLookDirEulAsRide@CPuppetEntity@SeriousEngine@@UAEXAAVVector3f@2@@Z",
+              observedRideLookClamp,originalRideLookClamp);
         H(e, "?Prepare@CViewRenCmd@SeriousEngine@@QAEXABVMatrix34f@2@ABVMatrix44f@2@ABVBox1f@2@K@Z",
           viewPrepare, originalViewPrepare);
         H(e, "?Execute@CViewRenCmd@SeriousEngine@@UAEXXZ", viewExecute, originalViewExecute);

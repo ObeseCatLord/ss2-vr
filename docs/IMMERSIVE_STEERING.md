@@ -291,3 +291,13 @@ completed report and retains private raw evidence outside source. Current local
 Astra/xhigh tags were verified; backend identity remains unattested. No vehicle,
 input, game, headset or network runtime ran. These facts are a native route
 boundary, not full vehicle source or runtime acceptance.
+
+## Borrowed mode observation source implemented
+
+The optional [ride-control scalar observer](RIDE_CONTROL_OBSERVATION.md) now
+copies mode/abilities at the existing original clamp boundary, with exactly-once
+forwarding and native-finally cleanup. Parameter and renderable values remain
+equality tokens. It neither identifies installed resources nor supplies an
+evaluated control frame, and has not run in a vehicle. The next association must
+join the current native-owned ride, renderable and model instance; pointer
+matching across frames is insufficient. Physical grabbing remains unimplemented.
