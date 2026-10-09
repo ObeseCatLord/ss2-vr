@@ -1,5 +1,33 @@
 # Cloud continuation — 2026-10-05
 
+## Current integrated checkpoint and actual collector diagnosis
+
+The four reviewed parallel commits have been cherry-picked in order onto
+`bb95eb45439abc8af3c8aebbea06b9bf467e0785`. The integrated tip is
+`f1bb7f5e5eac7221801f195f4b5726dc4b0b6dcd` (see exact mapping in
+[parallel integration](PARALLEL_INTEGRATION.md)). Strict primary-input admission,
+private candidate export, pinned selected-field production and CTest registration
+are now present. All four products rebuilt against source fingerprint
+`162790f5b7f37e6887ff76d44a5f76319af8cdd0fee960c6043cd95d68f8ad85`. All 67 Debug and 67 Release groups, 31 optimized
+producer/exporter groups and 28 normal/optimized compiled/native gates pass.
+IPC10/wire7 and compiled layouts remain unchanged. This integrated build has not
+run in game; isolated contribution binaries were not imported or deployed.
+
+The previous diagnostic build did run: private neutral capture reached native
+Jungle gameplay with 106 complete projection pairs, normal native isolation
+shutdown, no owned survivors/errors and 12 protected files unchanged. Geometry
+remains rejected: 32 rejected records, zero accepted draws. Twelve qualified
+bound-input failures stop at range substep20. The native declaration has channels
+on streams7/8; the collector currently selects5/6. Their exact roles and bound
+resource offsets must be proved before a narrow mapping correction. Event/cache
+ownership and winning Idle admission remain separate gates; neither has been
+relaxed. No head-motion, hardware, firing, vehicle or network pass is claimed.
+The metadata tools prove selected static asset fields only; native rendered
+association, physical grasp, alignment and full-mod completion remain open.
+
+Earlier entries below retain historical identities and evidence limits.
+
+
 ## Current bound-input diagnostic checkpoint
 
 The first-rejection capture reached gameplay but identified13first-eye bound-input

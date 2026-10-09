@@ -8,14 +8,15 @@ This historical hold blocked public publication pending renewed confirmation. It
 
 ## Current PC continuation — start here
 
-Latest active diagnostic products: source fingerprint
-`782e716e38b6cf6081d3fe7940004e5ac815e1bd702ee2f987c82fff25e019b3`,
-IPC10/wire7. Native Jungle/projection stereo now reaches gameplay in private
-neutral captures; geometry remains rejected. First-bound-input substeps/HRESULTs
-and qualified scalar/mask outputs are implemented, rebuilt and Astra-approved.
-All65Debug/65Release/28normal-O gates pass. Fresh diagnostic preparation/handoff
-review precedes the next capture; no cache/Idle/event/layout gate is relaxed.
-Earlier product/status entries retain historical evidence, not latest identities.
+Latest integrated products: source fingerprint
+`162790f5b7f37e6887ff76d44a5f76319af8cdd0fee960c6043cd95d68f8ad85`, IPC10/wire7. Four reviewed
+parallel source commits are integrated; all67Debug/67Release and28normal/-O
+compiled/native gates pass. See docs/PARALLEL_INTEGRATION.md. No integrated runtime
+or deployment yet. The previous private neutral capture reached106native projection
+pairs but rejected all32geometry records. Twelve detailed failures expose an actual
+native declaration7/8 versus collector5/6 mismatch; prove roles/resource offsets
+before adapting. Event/cache/Idle/grasp gates remain intact. Earlier identities
+below are historical evidence, not current preparation instructions.
 
 ### Current repeated neutral SS2 capture authority
 The user explicitly answered "Allow necessary private neutral captures" to the
