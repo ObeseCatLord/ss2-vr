@@ -2,6 +2,11 @@
 #include "network.hpp"
 
 namespace ss2vr {
+// Only the already-admitted stock sniper binding preserves its native-selected
+// reach. This chooses no new origin and does not certify a visual child point.
+constexpr bool preserveNativeMuzzleReach(uint32_t nativeId,bool alignmentAdmitted) noexcept {
+    return alignmentAdmitted && nativeId==13;
+}
 // Transient evidence from native ownership and the frozen authoritative sample.
 // This stores no policy across ticks and never resolves game pointers itself.
 struct MuzzleBinding {

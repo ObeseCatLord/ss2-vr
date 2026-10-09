@@ -1,5 +1,15 @@
 # Mod journal
 
+## 2026-10-09 — preserve admitted native sniper reach
+
+ID13 local/authority retargeting now retains the existing admitted vector instead
+of applying radial shortening. Other IDs keep their bound; ownership/configuration/
+calibration checks, native selection, aim and charge remain intact. Astra/xhigh
+policy/final source GO,79Debug/79Release and8compiled gates pass. Corrected the
+new test fixture to include charge in its native model root, matching the existing
+contract and verifying charge once. No new firing/hardware acceptance claimed.
+
+
 ## 2026-10-09 — existing-call sniper attachment provenance
 
 Added a private-lab passive hook around the existing native attachment return.

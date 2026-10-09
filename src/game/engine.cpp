@@ -3600,7 +3600,8 @@ static Pose *shooting(void *w, Pose *out, PoseGet original, const Snapshot *snap
                     } else if(weaponAlignmentSupported(primaryField(w,0xb4)))return;
                     Pose grip = compose(body, context.sample.pose.grip[context.hand]);
                     *out = retargetShot(camera, *out, compose(inverse(camera), modelPose).p, grip,
-                                        .5f, displacement,alignment);
+                                        .5f, displacement,alignment,
+                                        preserveNativeMuzzleReach(alignmentEvidence.nativeId,alignmentEvidence.weapon!=0));
                     return;
                 }
                 Pose body, nativeCamera;
@@ -3655,7 +3656,8 @@ static Pose *shooting(void *w, Pose *out, PoseGet original, const Snapshot *snap
                 Pose target;
                 if (calibrationAdmitted)
                     target = retargetShot(nativeCamera, *out, c.nativeModelLocal.p, hand,
-                                         .5f, c.nativeDisplacement,c.nativeAlignment);
+                                         .5f, c.nativeDisplacement,c.nativeAlignment,
+                                         preserveNativeMuzzleReach(c.alignment.nativeId,c.alignmentApplied));
                 else
                     target = {normalize(multiply(hand.q, multiply(inverse(nativeCamera.q), out->q))), hand.p};
                 diagnosticRejection=17;
@@ -3706,7 +3708,7 @@ static Pose *shooting(void *w, Pose *out, PoseGet original, const Snapshot *snap
                     const auto v=local.p-(c.nativeModelLocal.p-c.nativeDisplacement)+c.nativeAlignment;
                     const auto radius=std::sqrt(dot(v,v));
                     const auto &b=c.alignment;
-                    log("Lab sniper muzzle witness schema=1 input=%llu generation=%u owner=%u weapon=%u hand=%u nativeId=%u model=%u instance=%u selector=%u cfg=%u file=%u resource=%d stretch=%.9g,%.9g,%.9g cacheAge=%llu nativeReturn=%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g camera=%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g modelLocal=%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g handPose=%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g charge=%.9g,%.9g,%.9g correction=%.9g,%.9g,%.9g vector=%.9g,%.9g,%.9g radius=%.9g bound=0.5 target=%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g",
+                    log("Lab sniper muzzle witness schema=1 input=%llu generation=%u owner=%u weapon=%u hand=%u nativeId=%u model=%u instance=%u selector=%u cfg=%u file=%u resource=%d stretch=%.9g,%.9g,%.9g cacheAge=%llu nativeReturn=%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g camera=%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g modelLocal=%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g handPose=%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g charge=%.9g,%.9g,%.9g correction=%.9g,%.9g,%.9g vector=%.9g,%.9g,%.9g radius=%.9g bound=0.5 reachPreserved=%u target=%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g",
                         s.input.sequence,s.generation,b.owner,b.weapon,context.hand,b.nativeId,b.model,b.instance,b.selector,
                         b.configuration,b.file,b.resource,b.baseStretch.x,b.baseStretch.y,b.baseStretch.z,now-c.tickMs,
                         nativeReturned.p.x,nativeReturned.p.y,nativeReturned.p.z,nativeReturned.q.x,nativeReturned.q.y,nativeReturned.q.z,nativeReturned.q.w,
@@ -3715,6 +3717,7 @@ static Pose *shooting(void *w, Pose *out, PoseGet original, const Snapshot *snap
                         hand.p.x,hand.p.y,hand.p.z,hand.q.x,hand.q.y,hand.q.z,hand.q.w,
                         c.nativeDisplacement.x,c.nativeDisplacement.y,c.nativeDisplacement.z,
                         c.nativeAlignment.x,c.nativeAlignment.y,c.nativeAlignment.z,v.x,v.y,v.z,radius,
+                        unsigned(preserveNativeMuzzleReach(c.alignment.nativeId,c.alignmentApplied)),
                         target.p.x,target.p.y,target.p.z,target.q.x,target.q.y,target.q.z,target.q.w);
                 }
                 laserTraceValue(LaserTraceStage::Muzzle,"certified",s,context.hand,0,

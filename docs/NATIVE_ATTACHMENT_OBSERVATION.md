@@ -67,3 +67,30 @@ Negative altered-object controls reject missing forwarding, failed/duplicate
 admission, incomplete copies and removed normal/abort depth/TLS restoration.
 These checks do not prove actual native unwinding, concurrent execution or visual
 alignment at runtime.
+
+## Subsequent ID13 reach policy
+
+After the actual existing-call receipt and bounded Astra review, ID13 now skips
+only the retarget adapter's radial shortening for an already-admitted alignment
+binding. Local and authoritative paths retain their ordinary final binding and
+ownership checks. Displacement/alignment arithmetic, native returned orientation
+and getter selection remain unchanged; all other IDs retain the existing bound.
+The diagnostic `reachPreserved` flag distinguishes bypass from its nominal0.5m
+bound. No captured IDENT or raw attachment matrix is used to choose a new origin.
+
+This preserves the admitted route's reach. It does not prove the exact original
+shooting invocation's parent transform, visual muzzle coincidence or firing. The
+cached calibration reference differs from the original invocation's parent; it
+must not be substituted as proof. Final source review accepted the small policy
+change and corrected charge fixture. User-operated gameplay/hardware acceptance
+remains open; no firing probe is authorized for the agent.
+
+## Review disposition
+
+| Recommendation | Disposition |
+| --- | --- |
+| Observe only the successful existing attachment call | Adopted; exact caller, one forward and protected value-only receipt. |
+| Reject mixed invalid/unknown receipt records | Adopted; namespace-first consumer and negative regressions. |
+| Preserve admitted ID13 route reach only | Adopted; skip radial shortening, retain native arithmetic and final binding checks. |
+| Substitute the visual child or cached parent as proof | Rejected; separate points and invocation times remain distinct evidence. |
+| Claim exact parent reconstruction or firing acceptance | Deferred; neither is proved by this neutral receipt. |

@@ -1,5 +1,23 @@
 # Implementation status — 2026-10-09
 
+## Admitted sniper native reach preserved
+
+The ID13 local and authoritative muzzle adapters now preserve the existing-route
+vector after the ordinary calibration/ownership/final binding checks. Other IDs
+and unadmitted bindings retain the0.5m bound. Native displacement, alignment,
+orientation and getter selection are unchanged. No visual child point or captured
+IDENT replaces the selected native origin. The private witness records whether
+reach preservation applied.
+
+Astra/xhigh policy and final source GO; local routing verified, backend unattested.
+All4products rebuilt;79Debug/79Release and8compiled attachment/muzzle normal/-O
+gates pass. Regression checks retain a long native vector, charge exactly once,
+short-vector equality and unchanged orientation, and reject other/unadmitted IDs.
+Runtime verification of this new reach policy remains pending. Exact same-call
+parent reconstruction, visual muzzle coincidence and user-operated firing/device/
+multiplayer acceptance remain unverified. Full implementation remains open.
+
+
 ## Existing-call sniper attachment captured in native runtime
 
 The fresh isolated neutral run loaded the exact Jungle scene, completed native

@@ -27,6 +27,26 @@ static Observation dispatch(bool accepted, bool sniper = true, bool nested = fal
     return result;
 }
 int main() {
+    for(uint32_t id : {0u,1u,12u,13u,14u,UINT32_MAX}) {
+        check(!preserveNativeMuzzleReach(id,false),"Unadmitted reach exception");
+        check(preserveNativeMuzzleReach(id,true)==(id==13),"Reach policy changed another weapon");
+    }
+    const Pose native{{}, {.04658699f,.35394251f,-.59738034f}};
+    const Pose tracked{yaw(.7f),{3,2,-9}};
+    const Vec3 charge{.1f,.02f,0},alignment{-.02f,0,.003f},root{.03f,-.01f,.005f};
+    const auto expected=tracked.p+rotate(tracked.q,native.p-root+charge+alignment);
+    const auto unbounded=retargetShot({},native,root+charge,tracked,.5f,charge,alignment,
+                                    preserveNativeMuzzleReach(13,true));
+    check(dot(unbounded.p-expected,unbounded.p-expected)<1e-12f,"Native reach changed vector/charge/alignment");
+    const auto limited=retargetShot({},native,root+charge,tracked,.5f,charge,alignment);
+    check(dot(limited.p-unbounded.p,limited.p-unbounded.p)>.01f,"Long native vector still truncated");
+    check(limited.q.x==unbounded.q.x && limited.q.y==unbounded.q.y &&
+          limited.q.z==unbounded.q.z && limited.q.w==unbounded.q.w,"Reach changed native aim orientation");
+    const Pose shortNative{{},{0,0,-.1f}};
+    const auto shortBounded=retargetShot({},shortNative,{},tracked);
+    const auto shortPreserved=retargetShot({},shortNative,{},tracked,.5f,{}, {},true);
+    check(shortBounded.p.x==shortPreserved.p.x && shortBounded.p.y==shortPreserved.p.y &&
+          shortBounded.p.z==shortPreserved.p.z,"Short native vector changed");
     Input input;
     input.headValid = input.handValid[0] = input.handValid[1] = 1;
     for (unsigned hand = 0; hand < 2; ++hand) {

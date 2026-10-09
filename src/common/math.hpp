@@ -158,7 +158,7 @@ inline Vec3 modelAnchorDisplacement(Quat nativeRotation, Vec3 stretch, Vec3 mode
 }
 inline Pose retargetShot(Pose anchor, Pose nativeShot, Vec3 nativeModelLocal, Pose hand,
                          float muzzleBound = .5f, Vec3 nativeDisplacement = {},
-                         Vec3 nativeAlignment = {}) {
+                         Vec3 nativeAlignment = {}, bool preserveNativeReach = false) {
     Pose shotLocal = compose(inverse(anchor), nativeShot);
     // Native model placement includes charge displacement, while the native
     // attachment getter does not. Remove it from the reference root, then add
@@ -167,9 +167,11 @@ inline Pose retargetShot(Pose anchor, Pose nativeShot, Vec3 nativeModelLocal, Po
     // vector BEFORE its reach bound. Bounding relative to the old distant model
     // root and then shifting the result can put the laser behind the handle.
     Vec3 muzzle = shotLocal.p - (nativeModelLocal - nativeDisplacement) + nativeAlignment;
-    float n = std::sqrt(dot(muzzle, muzzle));
-    if (n > muzzleBound)
-        muzzle = muzzle * (muzzleBound / n);
+    if (!preserveNativeReach) {
+        const float n = std::sqrt(dot(muzzle, muzzle));
+        if (n > muzzleBound)
+            muzzle = muzzle * (muzzleBound / n);
+    }
     return {normalize(multiply(hand.q, shotLocal.q)), hand.p + rotate(hand.q, muzzle + nativeDisplacement)};
 }
 } // namespace ss2vr
