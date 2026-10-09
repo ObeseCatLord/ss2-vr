@@ -320,9 +320,10 @@ def assess(text,expected_source):
         retained=r.get('retained_copies')
         if retained is not None:
             reason=r.get('rejection',{})
-            if r['stage']!=3 or reason.get('reason')!=32 or reason.get('preceding')!=2 or \
+            input_history=reason.get('reason')==32 and failure is not None and failure['step']==20 and failure['valid']==15
+            repeated_history=reason.get('reason')==11 and 1<=r['draws']<8 and failure is None and 'stream_probe' not in r
+            if r['stage']!=3 or not (input_history or repeated_history) or reason.get('preceding')!=2 or \
                     reason.get('state')!=(47|r['rawGripValid']*16) or reason.get('checks') or reason.get('callbacks')!=63 or \
-                    failure is None or failure['step']!=20 or failure['valid']!=15 or \
                     not 1<=r['contributors']<=16 or not 1<=r['matrices']<=64 or \
                     any(not r[k] for k in ('request','input','owner','weapon','model','generation','cfg','file')):
                 raise ValueError('Retained companion lacks original copied-state qualification')

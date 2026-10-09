@@ -1,5 +1,42 @@
 # Event-time ID1 collection — source implemented
 
+## Repeated native pass — preserve stored history, retain rejection
+
+Actual V19 source6f93947/fpf7363002 reached exact Jungle/135native projection pairs
+with clean native/owned/display shutdown and protected files unchanged. It has
+nine reason11 records (eye0,8right/1left), each one stored draw, precedingPalette,
+checks0/state63/callback63. Source reaches duplicate detection after original
+return/current qualification, before the second copy's constant validation. Its
+content and repeated-pass semantics are unobserved. No geometry/factors emitted
+because the existing retained predicate admitted only reason32.
+
+The minimal source extension keeps reason11 rejected and exposes only the earlier
+successfully stored copies. It requires1..7copies, exact copied state/callback63/
+identity and precedingPalette. Eight is forbidden because capacity is checked
+before duplicate detection. Reason32 still requires its original step20/valid15
+input-failure selector and permits up to8copies. Reader reason11 forbids invented
+input failure/passive receipts. Shared geometry validation still requires complete
+payloads and unique previously stored native records. Existing emitter/matcher/
+replay paths, optional factor bookends and historical limits stay unchanged.
+
+| Astra recommendation | Disposition |
+| --- | --- |
+| Preserve old duplicate admission until second-copy contents are known | Adopted; no API-ordinal policy or gate removal |
+| Expose already owned first-copy diagnostics | Adopted reason-specific predicate/reader extension only |
+| Respect producer capacity order | Reason11 max7; reason32 max8 preserved |
+| Prevent rejected second copy from contaminating history | Distinct bytes/NaN/changed program/hash/factor compiled regressions |
+| Keep successful diagnostic replay outside readiness | Positive five-hash matching and actual evaluator regression |
+| Test the eight-copy bound independently of truncation | Complete eight-payload negative11/positive32 fixtures |
+
+Source design/review GO, local Astra/xhigh metadata verified/backend unattested.
+Four products rebuilt on4d1c8050b71f2cc64484fb9fdf2f968ed505e3e8b366b5e60cda543d16aaf45a,
+IPC10/wire7. All68Debug/68Release and28normal/optimized native/compiled gates pass;
+19reader/14passive/7replay groups pass normal/optimized. New-build runtime is next,
+using a fresh sealed neutral fixture. It must produce a qualified stored draw with
+matched channels and52independent factor words, or a precise missing/unsupported
+outcome. No tolerance/old-eye/cache/grasp/nativeRelease relaxation. Archived V19
+cannot be rerun/resealed; assets/program bytes/captures remain private.
+
 ## Primitive-factor companion — scoped source GO
 
 The52float M/L/V/P diagnostic slice is implemented. M/L are copied from the selected
@@ -35,7 +72,8 @@ and without factors are identical, including positive five-hash fixtures.
 Four products rebuilt onf7363002cf44be1896440fe9bd7cfeeb67fee2d0076cb667ab85debd6c745b93,
 IPC10/wire7. All68Debug/68Release and28normal/optimized native/compiled gates pass;
 18reader and7replay groups pass normally/optimized. Latest local Astra/xhigh
-metadata verified; backend unattested. No native runtime of this build yet.
+metadata verified; backend unattested. The native V19 outcome above supersedes
+this historical pre-runtime status.
 
 The private comparison workflow reports separately named doubleP*V*M*L*position
 against unchanged shader output, alongside the old result. Synthetic cancelling-

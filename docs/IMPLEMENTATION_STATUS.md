@@ -1,6 +1,46 @@
 # Implementation status — 2026-10-08
 
-## Current primitive-factor diagnostics — source GO, runtime next
+## Native V19 outcome and reason-11 history correction
+
+The fresh neutral capture of source6f93947884ccfc1104d989887e5525eec5b754d1,
+fingerprintf7363002cf44be1896440fe9bd7cfeeb67fee2d0076cb667ab85debd6c745b93,
+reached the exact Jungle scene with135native projection pairs. Native isolation
+shutdown, empty native/wrapper owned cleanup, display retirement and12protected-
+file preservation passed. Whole collector failed:0accepted/32rejected records.
+Eighteen reject at Palette6, nine at DrawDuplicate11 and five at AnimationName19.
+
+All nine duplicates retain one previously stored draw, eye0 (8right/1left),
+precedingPalette/state63/callback63. The duplicate guard runs after successful
+original/current qualification but before the second copy's finite-constant check.
+That second copy's content is unobserved. The stored first copy was suppressed by
+the reason-32-only history predicate, so no geometry/factors were emitted. This is
+a collector evidence failure, separate from native stereo world rendering.
+
+The reviewed source correction permits retained history for reason11 with1..7
+stored copies, exact copied state/identity and callback63. Capacity rejects eight
+before duplicate detection, so an eight-copy reason11 receipt is impossible.
+Reason32's existing selector and eight-copy allowance remain unchanged. Only
+previously stored copies are exposed; no rejected second copy, invented input
+failure, passive payload or outer-current query is introduced. Duplicate rejection,
+uniqueness, source admission, original forwarding, finally and tolerance remain.
+
+Astra gave design/source GO. Distinguishable stored bytes survive changed second
+programs/hashes/factors and NaN constants. Tests cover1/7/8 capacity, failed
+original/current, later cleanup/finish, missing provenance and fabricated inputs.
+Positive matching and actual offline replay remain diagnostic. Complete eight-copy
+payloads test reason11 rejection and preserve reason32 compatibility. Local
+Astra/xhigh metadata verified; backend attestation unavailable.
+
+Four products rebuilt on
+4d1c8050b71f2cc64484fb9fdf2f968ed505e3e8b366b5e60cda543d16aaf45a,
+IPC10/wire7; all68Debug/68Release and28normal/optimized native/compiled gates pass,
+19reader/14passive/7replay groups pass normally/optimized. No runtime of this build.
+Next fresh sealed neutral capture should recover the first copy's independent
+operands for the fixed arithmetic comparison. Old fixtures remain immutable.
+Repeated-DIP admission, hand grasp, winning second-eye cache and native release
+are still unproved; full-mod/user-operated hardware/dual-wield/vehicle/MP scope stays open.
+
+## Historical primitive-factor diagnostics — source GO checkpoint
 
 The selected raster's model M/local palette L and already-owned camera V/projection
 P are now copied as optional value-only diagnostics. No new native lookup, COM
@@ -26,7 +66,8 @@ f7363002cf44be1896440fe9bd7cfeeb67fee2d0076cb667ab85debd6c745b93,
 IPC10/wire7 unchanged. All68Debug/68Release and28normal/optimized native/compiled
 gates pass. Eighteen reader groups and7replay groups pass normally/optimized. A
 private arithmetic diagnostic has synthetic cancelling-translation and malformed-
-output checks; it is not native geometry evidence. No runtime of this build yet.
+output checks; it is not native geometry evidence. The V19 outcome above supersedes
+this historical pre-runtime status.
 
 Next is a fresh sealed neutral operand capture, then independent doubleP*V*M*L
 comparison alongside the original projection result. Reference replacement and

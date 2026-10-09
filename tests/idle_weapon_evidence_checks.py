@@ -173,6 +173,7 @@ class Checks(unittest.TestCase):
         self.assertEqual(match(assess(self.factor_fixture(),SOURCE),candidate),match(result,candidate))
         retained=assess(self.factor_fixture(True),SOURCE)
         retained_match=match(retained,candidate)
+        self.assertEqual(match(assess(self.repeated_fixture(True),SOURCE),candidate),retained_match)
         self.assertEqual(retained_match['retained_diagnostic_matches'][0]['result'],'unique-consumed-channel-match')
         self.assertFalse(retained_match['copied_geometry_coverage_complete'])
         import copy
@@ -197,6 +198,51 @@ class Checks(unittest.TestCase):
         payload=payload.replace('Lab idle geometryData','Lab idle retainedGeometryData').replace('Lab idle geometry ','Lab idle retainedGeometry ')
         companion='Lab idle retainedCopies request=100 eye=0 hand=1 count=1 postOriginal=1 cleanupCertified=0 outerCurrent=0'
         return text+'\n'+companion+'\n'+payload
+    def repeated_fixture(self,factors=False):
+        text=self.factor_fixture(True) if factors else self.retained_fixture()
+        # Duplicate rejection has no CollectInputs/passive companion. Keep only
+        # the independently stored earlier draw and its optional factor payload.
+        return '\n'.join(line.replace('reason=32 ','reason=11 ') for line in text.splitlines()
+                         if not line.startswith('Lab idle input'))
+    def test_repeated_native_pass_preserves_stored_history_only(self):
+        for factors in (False,True):
+            text=self.repeated_fixture(factors);evidence=assess(text,SOURCE)
+            self.assertFalse(evidence['copied_event_pose_observations'])
+            r=evidence['rejected_or_missing_observations'][0]
+            self.assertEqual(r['rejection']['reason'],11);self.assertNotIn('input_failure',r)
+            self.assertEqual(len(r['retained_copies']['geometry']),1)
+            self.assertEqual('factors' in r['retained_copies']['geometry'][0],factors)
+            self.assertFalse(match(evidence,{})['copied_geometry_coverage_complete'])
+            lines=text.splitlines()
+            for line in (line for line in lines if 'Lab idle retained' in line):
+                with self.assertRaises(ValueError):assess('\n'.join(x for x in lines if x!=line),SOURCE)
+                with self.assertRaises(ValueError):assess(text+'\n'+line,SOURCE)
+            for bad in (text.replace('draws=1','draws=8').replace('count=1 postOriginal','count=8 postOriginal'),
+                        text.replace('callbacks=63','callbacks=47'),text.replace('state=63','state=47'),
+                        text.replace('checks=0','checks=1'),text.replace('preceding=2','preceding=1'),
+                        text.replace('model=3','model=0'),text.replace('file=30','file=0')):
+                with self.assertRaises(ValueError):assess(bad,SOURCE)
+            from idle_stream_evidence_checks import fixture
+            fabricated=fixture().splitlines()
+            for line in fabricated:
+                if line.startswith(('Lab idle inputFailure ','Lab idle streamProbe ')):
+                    with self.assertRaises(ValueError):assess(text+'\n'+line,SOURCE)
+        # Seven stored copies are reachable; eight are not. Repeated native
+        # records among those earlier copies still violate the unchanged grammar.
+        text=self.repeated_fixture();payload=[line for line in text.splitlines() if line.startswith(('Lab idle retainedGeometry ','Lab idle retainedGeometryData '))]
+        seven=text.replace('draws=1','draws=7').replace('count=1 postOriginal','count=7 postOriginal')
+        for index in range(1,7):seven+='\n'+'\n'.join(line.replace('index=0 ','index='+str(index)+' ').replace('drawRecord=0','drawRecord='+str(index)) for line in payload)
+        r=assess(seven,SOURCE)['rejected_or_missing_observations'][0]
+        self.assertEqual(len(r['retained_copies']['geometry']),7)
+        with self.assertRaises(ValueError):assess(seven.replace('drawRecord=6','drawRecord=0'),SOURCE)
+        extra='\n'.join(line.replace('index=0 ','index=7 ').replace('drawRecord=0','drawRecord=7') for line in payload)
+        eight=seven.replace('draws=7','draws=8').replace('count=7 postOriginal','count=8 postOriginal')+'\n'+extra
+        with self.assertRaises(ValueError):assess(eight,SOURCE)
+        old=self.retained_fixture().replace('draws=1','draws=8').replace('count=1 postOriginal','count=8 postOriginal')
+        for index in range(1,8):old+='\n'+'\n'.join(line.replace('index=0 ','index='+str(index)+' ').replace('drawRecord=0','drawRecord='+str(index)) for line in payload)
+        previous=assess(old,SOURCE)['rejected_or_missing_observations'][0]
+        self.assertEqual(previous['rejection']['reason'],32)
+        self.assertEqual(len(previous['retained_copies']['geometry']),8)
     @staticmethod
     def factor_words():
         import struct

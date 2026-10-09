@@ -185,6 +185,43 @@ int main() {
      });
      assert(count==4);
     }
+    for(unsigned count:{1u,7u}) {
+        auto t=ready();t.callbacks=63;
+        auto stored=g;stored.program[0]=0xfffe0101;stored.program[1]=0xffff;
+        stored.constants[0][0]=12;stored.hashes[0][0]=73;
+        stored.raster.factors.model=stored.raster.factors.local=stored.raster.factors.view=identity;
+        stored.raster.factors.model.m[3]=42;stored.raster.factors.paletteIndex=17;
+        stored.raster.factors.modelCopied=stored.raster.factors.cameraCopied=true;
+        stored.factorChecks=3;
+        for(unsigned i=0;i<count;++i){stored.raster.drawRecord=i;assert(t.draw(stored,true,true));}
+        auto second=stored;second.raster.drawRecord=0;second.program[1]=123;
+        second.constants[0][0]=std::numeric_limits<float>::quiet_NaN();
+        second.hashes[0][0]=99;second.raster.factors.model.m[3]=100;
+        assert(!t.draw(second,true,true));
+        assert(t.rejection==IdleWeaponTrace::Rejection::DrawDuplicate && t.stage==IdleWeaponTrace::Stage::Rejected && t.draws==count);
+        assert(t.geometry[0].program[1]==0xffff && t.geometry[0].constants[0][0]==12 &&
+               t.geometry[0].hashes[0][0]==73 && t.geometry[0].raster.factors.model.m[3]==42);
+        assert(t.retainedDrawCopiesAvailable());
+        t.reject(IdleWeaponTrace::Rejection::GpuAbort);assert(!t.finish(false,false));
+        assert(t.retainedDrawCopiesAvailable() && t.rejection==IdleWeaponTrace::Rejection::DrawDuplicate);
+        for(unsigned missing=0;missing<9;++missing) {
+            auto bad=t;
+            switch(missing) {case 0:bad.draws=0;break;case 1:bad.draws=8;break;case 2:bad.callbacks=47;break;
+                case 3:bad.rejectionChecks=1;break;case 4:bad.rejectionState=47;break;
+                case 5:bad.referencesCopied=false;break;case 6:bad.binding.model=0;break;
+                case 7:bad.config.file=0;break;case 8:bad.precedingStage=IdleWeaponTrace::Stage::Event;break;}
+            assert(!bad.retainedDrawCopiesAvailable());
+        }
+    }
+    {auto t=ready();t.callbacks=63;t.reject(IdleWeaponTrace::Rejection::DrawDuplicate);
+     assert(!t.retainedDrawCopiesAvailable());}
+    {auto t=ready();t.callbacks=63;auto copy=g;
+     for(unsigned i=0;i<8;++i){copy.raster.drawRecord=i;assert(t.draw(copy,true,true));}
+     copy.raster.drawRecord=0;assert(!t.draw(copy,true,true));
+     assert(t.rejection==IdleWeaponTrace::Rejection::Draw && !t.retainedDrawCopiesAvailable());}
+    for(bool original:{false,true}){auto t=ready();t.callbacks=63;assert(t.draw(g,true,true));
+        assert(!t.draw(g,original,!original));assert(t.rejection==IdleWeaponTrace::Rejection::Draw);
+        assert(t.draws==1 && !t.retainedDrawCopiesAvailable());}
     {auto t=ready();assert(t.draw(g,true,true));g.constants[0][0]=1;
      assert(t.geometry[0].constants[0][0]==0);assert(!t.draw(g,true,true));}
     for(unsigned failure=0;failure<3;++failure) {

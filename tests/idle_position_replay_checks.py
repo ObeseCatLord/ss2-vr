@@ -142,6 +142,16 @@ class Checks(unittest.TestCase):
                 factor_lines.append('Lab idle geometryData request=1 eye=0 hand=0 index=0 kind='+name+' chunk=0 values='+','.join(f'{x:08x}' for x in values))
             diagnostic=replay(assess('\n'.join([*lines,*factor_lines]),source),index,root,EVALUATOR,root)
             self.assertEqual(diagnostic,result)
+            stored=[line.replace('Lab idle geometry','Lab idle retainedGeometry') for line in [*lines,*factor_lines]
+                    if line.startswith('Lab idle geometry')]
+            repeated=[lines[0].replace('stage=4','stage=3'),
+                      'Lab idle rejection request=1 eye=0 hand=0 reason=11 preceding=2 checks=0 state=63 callbacks=63',
+                      'Lab idle retainedCopies request=1 eye=0 hand=0 count=1 postOriginal=1 cleanupCertified=0 outerCurrent=0',*stored]
+            historical=replay(assess('\n'.join(repeated),source),index,root,EVALUATOR,root)
+            self.assertEqual(historical['draws'],[]);self.assertEqual(len(historical['retained_diagnostic_draws']),1)
+            self.assertTrue(historical['retained_diagnostic_draws'][0]['position_replay']['position_replay_agrees_with_reference'])
+            self.assertFalse(historical['all_consumed_positions_agree_with_native_reference'])
+            self.assertFalse(historical['copied_geometry_coverage_complete']);self.assertFalse(historical['alignment_accepted'])
             annotation={'schema':1,'reference_kind':'indexed-surface-convention','semantic_status':'reviewed-convention',
                 'asset_sha256':index['test.mesh']['asset_sha256'],'mesh_object':1,'lod':0,'channel_index':0,
                 'channel_sha256':index['test.mesh']['candidate_channels'][0]['channel_sha256'],

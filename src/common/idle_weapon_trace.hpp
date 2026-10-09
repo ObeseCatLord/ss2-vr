@@ -250,8 +250,13 @@ struct IdleWeaponTrace {
     // and its current check, before cleanup. Neither cleanup nor outer finish is
     // certified. Keep the later rejection and whole-trace admission unchanged.
     bool retainedDrawCopiesAvailable() const noexcept {
-        return stage==Stage::Rejected && rejection==Rejection::CollectInputs &&
-            precedingStage==Stage::Palette && inputFailure.step==20 && inputFailure.valid==15 &&
+        const bool inputFailureHistory=rejection==Rejection::CollectInputs && inputFailure.step==20 && inputFailure.valid==15;
+        // Capacity is checked before duplicate detection; reason11 cannot have
+        // eight stored copies. Only the previously accepted copies are exposed.
+        const bool repeatedHistory=rejection==Rejection::DrawDuplicate && draws<MaxDraws &&
+            rejectionChecks==0 && rejectionState==(47u|(rawGripValid?16u:0u)) && callbacks==63;
+        return stage==Stage::Rejected && (inputFailureHistory || repeatedHistory) &&
+            precedingStage==Stage::Palette &&
             admitted && placementObserved && referencesCopied && poseCopied &&
             contributors && contributors<=MaxContributors && animationsCopied==contributors &&
             matrixCount && matrixCount<=MaxMatrices && draws && draws<=MaxDraws &&

@@ -8,6 +8,28 @@ This historical hold blocked public publication pending renewed confirmation. It
 
 ## Current PC continuation — start here
 
+Latest actual capture (6f93947/fpf7363002, V19) reached exact Jungle/135native
+projection pairs, clean native/owned/display shutdown and protected12unchanged.
+Collector failed:0accepted/32rejected,18Palette6/9DrawDuplicate11/5Name19. All9
+duplicates eye0,draws1,precedingPalette/state63/callback63. No geometry/factors
+emitted because historical retention only covered CollectInputs32. Fixture V19
+is archived and cannot be rerun/resealed.
+
+Reason11 stored-history retention is now implemented and Astra source-reviewed.
+It exposes ONLYearlier successfully stored copies; duplicate rejection, oldreason32
+selector/count8, uniqueness and all admission/forwarding/finally/tolerance stay
+unchanged. Reason11 permits1..7copies (capacity rejects8beforeduplicate), exact
+copiedstate/callback63/identity, no inventedinputfailure/passive payload. Positive
+matching/replay stay diagnostic. All four products rebuilt on
+4d1c8050b71f2cc64484fb9fdf2f968ed505e3e8b366b5e60cda543d16aaf45a,
+IPC10/wire7;68Debug/68Release+28normal/optimizednativegates pass,19reader/14passive/
+7replay groups normal/optimized. No runtime of this build. Next freshsealedneutral
+capture should recover first-copy52factors for independentmathcomparison; do not
+blindlyremove duplicategate/admitDIPordinals, widenepsilon, reuseeye cache or claim
+handgrasp/nativeRelease from idlecopies. Fullscope remainsopen.
+
+### Historical primitive-factor source checkpoint
+
 Per-draw primitive-factor diagnostics are now implemented and Astra source-reviewed.
 Selected raster M/L and owned camera V/P are copied into the existing value owner;
 ordinary raster equality/admission/affine/clip/tolerance stay unchanged. Optional
@@ -16,8 +38,8 @@ bookends. Shared serializer preserves all52words/labels; reader enforces exact
 optional inventory and retains post-original/pre-cleanup diagnostic limits.
 Four products rebuilt onf7363002cf44be1896440fe9bd7cfeeb67fee2d0076cb667ab85debd6c745b93,
 IPC10/wire7. All68Debug/68Release and28normal/optimized native gates pass;18reader
-and7replay groups pass normal/optimized. Source-only checkpoint, no runtime of
-these products yet. Next: fresh sealed private neutral factor collection and
+and7replay groups pass normal/optimized. This checkpoint preceded the V19 runtime
+described above. Its intended next step was private neutral factor collection and
 separate fixed doubleP*V*M*L comparison alongside the unchanged original result.
 Never select whichever grouping passes, use shader constants as their own proof,
 or infer grasp/native release from idle copies. Prior capture/fixture immutable.
