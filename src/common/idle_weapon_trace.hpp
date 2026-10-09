@@ -1,4 +1,5 @@
 #pragma once
+#include "idle_probe_selection.hpp"
 #include "idle_projection_probe.hpp"
 #include "model_tree.hpp"
 #include "idle_geometry.hpp"
@@ -263,6 +264,7 @@ struct IdleWeaponTrace {
     Matrix34 nativePlacement{},trackedPlacement{},controller{},rawGrip{},rawAim{};
     bool referencesCopied=false,rawGripValid=false;
     Vec3 stretch{};
+    int nativeId=1; // Legacy ID1 traces; explicit on every new production admission.
     bool admitted=false,placementObserved=false,poseCopied=false;
     unsigned contributors=0,animationsCopied=0,matrixCount=0;
 
@@ -281,12 +283,12 @@ struct IdleWeaponTrace {
             animationNameFailure={index,expected,value.header,true};
         reject(Rejection::QueryAnimationName);
     }
-    bool admit(const IdleDrawIdentity &identity) noexcept {
-        if(admitted || stage!=Stage::Empty || !identity.request || !identity.input || !identity.owner ||
+    bool admit(const IdleDrawIdentity &identity,int selectedNativeId=1) noexcept {
+        if(!idleProbeWeaponSupported(selectedNativeId) || admitted || stage!=Stage::Empty || !identity.request || !identity.input || !identity.owner ||
            !identity.weapon || !identity.model || !identity.generation || identity.hand>=2 || identity.eye>=2) {
             reject(Rejection::Admit);return false;
         }
-        binding=identity;admitted=true;return true;
+        binding=identity;nativeId=selectedNativeId;admitted=true;return true;
     }
     bool placement(const IdleDrawIdentity &identity,const Matrix34 &native,const Matrix34 &tracked,
                    const Matrix34 &physicalController) noexcept {

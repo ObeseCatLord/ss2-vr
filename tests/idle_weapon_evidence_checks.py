@@ -29,6 +29,30 @@ def geometry_fixture():
     return text,row,header,data
 
 class Checks(unittest.TestCase):
+    def test_native_weapon_selection_is_explicit(self):
+        result=assess(VALID,SOURCE)
+        self.assertEqual(result['copied_event_pose_observations'][0]['nativeId'],1)
+        self.assertFalse(result['copied_event_pose_observations'][0]['native_id_explicit'])
+        sniper=VALID.replace('schema=3','schema=4 copyLayout=1 nativeId=13')
+        result=assess(sniper,SOURCE)
+        self.assertEqual(result['copied_event_pose_observations'][0]['nativeId'],13)
+        self.assertTrue(result['copied_event_pose_observations'][0]['native_id_explicit'])
+        for bad in (sniper.replace('nativeId=13','nativeId=2'),sniper.replace('nativeId=13','nativeId=-1'),
+                    VALID.replace('schema=3','schema=3 nativeId=13')):
+            with self.assertRaises(ValueError):assess(bad,SOURCE)
+
+    def test_native_selector_consistency(self):
+        base=VALID.replace('schema=3','schema=4 copyLayout=1')
+        implicit=base
+        explicit=base.replace('copyLayout=1','copyLayout=1 nativeId=1')
+        sniper=base.replace('copyLayout=1','copyLayout=1 nativeId=13')
+        def combine(a,b):return a+'\n'+b.replace('request=100','request=101')
+        for a,b in [(explicit,sniper),(sniper,explicit),(implicit,sniper)]:
+            with self.assertRaisesRegex(ValueError,'Mixed native weapon'):
+                assess(combine(a,b),SOURCE)
+        self.assertEqual(len(assess(combine(implicit,explicit),SOURCE)['copied_event_pose_observations']),2)
+        self.assertEqual(len(assess(combine(sniper,sniper),SOURCE)['copied_event_pose_observations']),2)
+
     @staticmethod
     def ten_copy_fixture(retained=False):
         text,_,_,_=geometry_fixture();lines=text.splitlines()

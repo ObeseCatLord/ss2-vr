@@ -7,6 +7,24 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 from verify_idle_projection_probe_abi import decode,verify_sample,sample_prefix,instructions
 
 class Checks(unittest.TestCase):
+    def test_shared_collector_opt_in_contract(self):
+        from verify_idle_collector_abi import verify_opt_in_source,ROOT
+        remote=(ROOT/'src/game/remote_render.cpp').read_text()
+        engine=(ROOT/'src/game/engine.cpp').read_text()
+        policy=(ROOT/'src/common/idle_probe_selection.hpp').read_text()
+        verify_opt_in_source(remote,engine,policy)
+        controls=[
+            (remote.replace('if(idleProbeWeaponSupported(selectedIdleProbeWeapon()))','if(true)'),engine,policy),
+            (remote.replace('if(idleProbeWeaponSupported(selectedIdleProbeWeapon()))','if(idleProbeWeaponSupported(selectedIdleProbeWeapon()));'),engine,policy),
+            (remote.replace('install(engine,0xbbf0','install(engine,0xbbf1'),engine,policy),
+            (remote,engine.replace('n<3?idleProbeWeaponId','n<4?idleProbeWeaponId'),policy),
+            (remote,engine.replace('SS2VR_LAB_IDLE_WEAPON','SS2VR_UNGUARDED'),policy),
+            (remote,engine,policy.replace('13:-1','13:1')),
+            (remote,engine,policy.replace('id==1 || id==13','id==1 || id==13 || id==2'))]
+        for args in controls:
+            with self.subTest(control=args!= (remote,engine,policy)),self.assertRaises(ValueError):
+                verify_opt_in_source(*args)
+
     def test_pure_word_sampler(self):
         result=verify_sample(decode(bytes.fromhex('d9 3c 24 8b 01 c3'),0x1000))
         self.assertEqual(result['calls'],0);self.assertEqual(result['control_reads'],1)

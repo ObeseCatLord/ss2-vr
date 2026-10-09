@@ -15,6 +15,37 @@ ROOT=Path(__file__).resolve().parents[1]
 def require(ok,message):
     if not ok:raise ValueError(message)
 
+def verify_opt_in_source(remote,engine,policy):
+    # Bounded source contract, not a compiled dominance/lifetime proof.
+    def body(text,marker,immediate=False):
+        start=text.find(marker)
+        require(start>=0,'Missing opt-in selector extent')
+        begin=text.find('{',start);require(begin>=0,'Missing selector body')
+        if immediate:require(begin==start+len(marker),'Opt-in guard does not immediately own its block')
+        depth=0
+        for end in range(begin,len(text)):
+            if text[end]=='{':depth+=1
+            elif text[end]=='}':
+                depth-=1
+                if depth==0:return text[begin+1:end]
+        raise ValueError('Unclosed selector body')
+    compact=lambda text:re.sub(r'\s+','',text)
+    guard='if(idleProbeWeaponSupported(selectedIdleProbeWeapon()))'
+    normalized=compact(remote)
+    guarded=body(normalized,guard,immediate=True)
+    require(len(re.findall(r'install\(engine,0xbbf0,',normalized))==1,
+            'Original-End hook must occur once in its guarded source extent')
+    require(re.search(r'install\(engine,0xbbf0,',guarded) and 'originalAnimationEnd' in guarded,
+            'Original-End hook is not inside the selected opt-in extent')
+    selector=compact(body(engine,'int selectedIdleProbeWeapon() noexcept'))
+    require('GetEnvironmentVariableW(L"SS2VR_LAB_IDLE_WEAPON",value,3)' in selector and
+            'returnn<3?idleProbeWeaponId(std::wstring_view(value,n)):-1;' in selector and
+            'returnselected;' in selector,'Changed bounded shared opt-in selector')
+    pure=compact(body(policy,'inline int idleProbeWeaponId('))
+    supported=compact(body(policy,'inline bool idleProbeWeaponSupported('))
+    require(pure=='returnvalue==L"1"?1:value==L"13"?13:-1;' and
+            supported=='returnid==1||id==13;','Opt-in selector admits unsupported IDs')
+
 def verify(game,obj):
     path=game/'Bin/Engine.dll'
     require(hashlib.sha256(path.read_bytes()).hexdigest()==PIN,'Unsupported Engine fingerprint')
@@ -39,8 +70,8 @@ def verify(game,obj):
         instruction(0x3af6,'mov','eax, dword ptr [eax + 8]')
         instruction(0x3b06,'fld','dword ptr [eax + 0xc]')
     source=(ROOT/'src/game/remote_render.cpp').read_text()
-    require('SS2VR_LAB_IDLE_WEAPON' in source and re.search(r'install\(engine,\s*0xbbf0,',source),
-            'Missing opt-in original-End hook')
+    verify_opt_in_source(source,(ROOT/'src/game/engine.cpp').read_text(),
+                         (ROOT/'src/common/idle_probe_selection.hpp').read_text())
     require('nativeIdleQueryBorrow(caller,engineBase+0xddded' in source,'Observer uses wrong return-site gate')
     assembly=subprocess.check_output(['objdump','-drC','-Mintel',str(obj)],text=True)
     require('file format pe-i386' in assembly,'Expected compiled x86 observer')

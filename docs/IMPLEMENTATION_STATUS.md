@@ -1,5 +1,30 @@
 # Implementation status — 2026-10-09
 
+## Stock sniper reference and passive selector — capacity next
+
+Ten selected owned stock sniper archive objects were decoded/roundtripped without
+runtime. Astra/xhigh derived one fixed virtual handle reference for both retained
+mesh variants; owner independently reproduced the section centroid/area and
+selected vertices. No authored hand exists in those selected FP assemblies.
+Unzoomed native delegation/placement and existing scope-root propagation were
+verified. ID13 correction remains inactive pending actual gun-draw association.
+
+Source adds exact separately labelled passive ID13 selection and unzoomed-state
+rechecks; ID1/native gameplay/optics unchanged. New headers retain nativeID, reject
+mixed-ID logs and preserve historical ID1. Reviewed selector/verifier/consumer
+GO; stray-semicolon source-guard bypass caught/fixed. All4products rebuilt on
+a0a70ce20f36ca996aa480d42cb334ed6e7f59a7c7d116e6207a54ee5722698d,
+IPC10/wire7;75Debug/75Release and36effective normal/optimized gates pass.
+No new runtime/equip/switch/firing/vehicle/hardware/network operation.
+
+The gun Black surface exceeds existing1490vertex/1332triangle copies: known
+variants need2899/2904vertices and2245triangles. This prevents a complete runnable
+association path; no user action fixes that source limit. Next: coordinated
+bounded producer/assessor/replay/candidate capacity, retaining ID1 and production
+scope fences, then prepare/review an actual collection path. The authored muzzle
+also exceeds current0.5unit offset bound at unit stretch; no coincidence/limit
+acceptance inferred. See [sniper decision](SNIPER_MODEL_ALIGNMENT.md).
+
 ## Latest neutral diagnostic — visible lasers, intermittent cause unresolved
 
 Source4ee5b35/fingerprint674ef564 reached pinned Jungle with129native stereo

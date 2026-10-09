@@ -4203,10 +4203,20 @@ IdleWeaponTrace *idleProjectionOwner() noexcept {
     auto *trace=physicalWeapon->idle;
     return trace->admitted && trace->stage==IdleWeaponTrace::Stage::Palette && trace->poseCopied ? trace : nullptr;
 }
+int selectedIdleProbeWeapon() noexcept {
+    static const int selected=[] {wchar_t value[3]{};
+        const auto n=GetEnvironmentVariableW(L"SS2VR_LAB_IDLE_WEAPON",value,3);
+        return n<3?idleProbeWeaponId(std::wstring_view(value,n)):-1;}();
+    return selected;
+}
 bool currentIdleDraw(ScopeDrawBinding &out,IdleDrawIdentity &identity,IdleWeaponTrace *&trace) {
     out={};identity={};trace=nullptr;
     if (!physicalWeapon || !physicalWeapon->idle || !physicalWeapon->ordinaryCommand ||
-        !currentWeaponDraw(out,1) || primaryField(physicalWeapon->weapon,0xb0)!=1)
+        !idleProbeWeaponSupported(physicalWeapon->idle->nativeId) ||
+        physicalWeapon->idle->nativeId!=selectedIdleProbeWeapon() ||
+        !currentWeaponDraw(out,physicalWeapon->idle->nativeId) ||
+        primaryField(physicalWeapon->weapon,0xb0)!=1 ||
+        (physicalWeapon->idle->nativeId==13 && primaryField(physicalWeapon->weapon,0xd4)))
         return false;
     identity={out.requestSequence,out.inputSequence,out.ownerHandle,out.weaponHandle,
               out.modelHandle,out.generation,out.hand,unsigned(eyeIndex)};
@@ -4276,15 +4286,10 @@ bool idleRejectedRasterCurrent(const IdleRasterCopy &expected,const IdleWeaponTr
     IdleRasterCopy now;
     return copyBoundIdleRaster(binding,identity,trace,now) && now==expected;
 }
-static bool idleWeaponDiagnosticsEnabled() {
-    static const bool enabled=[] {wchar_t value[2]{};
-        return GetEnvironmentVariableW(L"SS2VR_LAB_IDLE_WEAPON",value,2)==1 && value[0]==L'1';}();
-    return enabled;
-}
 static void emitIdleWeaponTrace(const IdleWeaponTrace &trace) {
     const auto &b=trace.binding;
-    log("Lab idle draw schema=4 copyLayout=%u rawGripValid=%u draws=%u source=%.*s ipc=%u wire=%u request=%llu input=%llu owner=%u weapon=%u model=%u generation=%u hand=%u eye=%u stage=%u cfg=%u file=%u resource=%d contributors=%u matrices=%u historicalBytes=0 grasp=0",
-        IdleWeaponTrace::CopyLayout,unsigned(trace.rawGripValid),trace.draws,64,ss2vrBuildContract.sourceFingerprint.data(),ss2vrBuildContract.ipcAbi,ss2vrBuildContract.wireVersion,
+    log("Lab idle draw schema=4 nativeId=%d copyLayout=%u rawGripValid=%u draws=%u source=%.*s ipc=%u wire=%u request=%llu input=%llu owner=%u weapon=%u model=%u generation=%u hand=%u eye=%u stage=%u cfg=%u file=%u resource=%d contributors=%u matrices=%u historicalBytes=0 grasp=0",
+        trace.nativeId,IdleWeaponTrace::CopyLayout,unsigned(trace.rawGripValid),trace.draws,64,ss2vrBuildContract.sourceFingerprint.data(),ss2vrBuildContract.ipcAbi,ss2vrBuildContract.wireVersion,
         b.request,b.input,b.owner,b.weapon,b.model,b.generation,b.hand,b.eye,unsigned(trace.stage),
         trace.config.configuration,trace.config.file,trace.config.resource,trace.contributors,trace.matrixCount);
     if(trace.rejection!=IdleWeaponTrace::Rejection::None)
@@ -4839,13 +4844,15 @@ static void renderTrackedWeapon(void *w, Matrix34 m, bool sniper, uintptr_t call
         invocation = {w, hand, {executedWeaponWorld}, *nativeCurrentProjection,
                       *nativeDepthNear, *nativeDepthFar, {}, false};
         invocation.ordinaryCommand=ordinaryWeaponRenderReturn && caller==ordinaryWeaponRenderReturn;
-        if(invocation.ordinaryCommand && idleWeaponDiagnosticsEnabled() &&
-           primaryField(w,0xb4)==1 && primaryField(w,0xb0)==1) {
+        const int selectedId=selectedIdleProbeWeapon();
+        if(invocation.ordinaryCommand && idleProbeWeaponSupported(selectedId) &&
+           primaryField(w,0xb4)==unsigned(selectedId) && primaryField(w,0xb0)==1 &&
+           (selectedId!=13 || !primaryField(w,0xd4))) {
             static std::atomic<unsigned> attempts{0};
             if(attempts.fetch_add(1,std::memory_order_relaxed)<32) {
                 idleStorage.emplace();invocation.idle=&*idleStorage;
                 idleStorage->admit({eyeRequest.sequence,eyeRequest.input.sequence,s.playerHandle,
-                    s.handle[hand],primaryField(w,0x24),s.generation,unsigned(hand),unsigned(eyeIndex)});
+                    s.handle[hand],primaryField(w,0x24),s.generation,unsigned(hand),unsigned(eyeIndex)},selectedId);
             }
         }
     }

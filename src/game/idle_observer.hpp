@@ -2,7 +2,9 @@
 #include "common/idle_weapon_trace.hpp"
 #include "scope_observer.hpp"
 namespace ss2vr::game {
-// Valid only inside the original selected ID1 ordinary gun invocation.
+// Exact private environment selector; disabled unless ID1 or ID13 was selected.
+int selectedIdleProbeWeapon() noexcept;
+// Valid only inside the selected original ordinary unzoomed gun invocation.
 bool currentIdleRaster(IdleRasterCopy &,IdleWeaponTrace *&);
 bool currentIdleDraw(ScopeDrawBinding &,IdleDrawIdentity &,IdleWeaponTrace *&);
 IdleWeaponTrace *idleSubmissionOwner() noexcept;

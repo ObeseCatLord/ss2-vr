@@ -86,7 +86,7 @@ def validate_geometry(geometry,count,copy_layout=0):
 
 def assess(text,expected_source):
     if not re.fullmatch('[a-f0-9]{64}',expected_source):raise ValueError('Expected compiled source required')
-    records=[];current=None;seen=set();copy_layout=None;producer_schema=None
+    records=[];current=None;seen=set();copy_layout=None;producer_schema=None;producer_native_id=None
     for line in text.splitlines():
         if not line.startswith('Lab idle'):continue
         if not line.startswith('Lab idle ') or len(line.split())<3:
@@ -96,11 +96,18 @@ def assess(text,expected_source):
         if kind=='draw':
             names={'rawGripValid','schema','draws','source','ipc','wire','request','input','owner','weapon','model','generation','hand','eye',
                    'stage','cfg','file','resource','contributors','matrices','historicalBytes','grasp'}
-            if set(f) not in (names,names|{'copyLayout'}) or f['source']!=expected_source:raise ValueError('Idle build/schema mismatch')
+            if set(f) not in (names,names|{'copyLayout'},names|{'nativeId'},names|{'copyLayout','nativeId'}) or f['source']!=expected_source:raise ValueError('Idle build/schema mismatch')
             current={k:integer(v,-(1<<31),(1<<31)-1) if k=='resource' else
                      integer(v,0,(1<<64)-1 if k in ('request','input') else (1<<32)-1)
                      for k,v in f.items() if k!='source'}
             if 'copyLayout' in f and current['copyLayout']!=1:raise ValueError('Unknown copy ordinal layout')
+            current['native_id_explicit']='nativeId' in f
+            current.setdefault('nativeId',1) # Historical collector admitted only ID1.
+            if current['nativeId'] not in (1,13) or (current['nativeId']==13 and current['schema']!=4):
+                raise ValueError('Unsupported idle native weapon selection')
+            if producer_native_id is not None and producer_native_id!=current['nativeId']:
+                raise ValueError('Mixed native weapon selectors')
+            producer_native_id=current['nativeId']
             current.setdefault('copyLayout',0)
             if copy_layout is not None and copy_layout!=current['copyLayout']:raise ValueError('Mixed producer copy layouts')
             copy_layout=current['copyLayout']

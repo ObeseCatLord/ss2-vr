@@ -1009,8 +1009,7 @@ bool initialize(HMODULE engine, HMODULE core, HMODULE sam, HookInstallerRva inst
                  reinterpret_cast<void **>(&originalPalettePass)) || !originalPalettePass)
         return false;
     headTrackingEnabled = enableHeadTracking; // Writes require a frozen stereo pair.
-    wchar_t idleProbe[2]{};
-    if(GetEnvironmentVariableW(L"SS2VR_LAB_IDLE_WEAPON",idleProbe,2)==1 && idleProbe[0]==L'1') {
+    if(idleProbeWeaponSupported(selectedIdleProbeWeapon())) {
         stringId(&idleAnimationName,"Idle");
         if(idleAnimationName==*invalidId ||
            !install(engine,0xbbf0,reinterpret_cast<void*>(animationEnd),
