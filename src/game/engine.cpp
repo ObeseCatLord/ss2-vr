@@ -299,7 +299,9 @@ struct Calibration {
     WeaponAlignmentBinding alignment;
     bool alignmentApplied = false;
 };
+thread_local int eyeIndex = -1;
 static thread_local unsigned nativeWeaponRenderDepth=0;
+static thread_local unsigned nativeShotDepth = 0;
 static uint32_t weaponConfigurationVtable=0;
 static uint32_t primaryField(const void *object,unsigned offset) noexcept;
 static RigRevision rigPublication;
@@ -454,14 +456,55 @@ static Snapshot copySnapshot() {
     ReleaseSRWLockShared(&snapshotLock);
     return s;
 }
-static void invalidateMatchingCalibration(const Snapshot &snapshot, unsigned hand) noexcept {
+// Private lab only: bounded value receipts, never new native queries or cached
+// pointer dereferences. Per-stage caps keep noisy admission from hiding drawing.
+enum class LaserTraceStage : unsigned { Cache, Muzzle, Query, Sample, Freeze, Draw, Count };
+static bool laserTraceTicket(LaserTraceStage stage, uint64_t &order) {
+    static const bool enabled=[] { wchar_t value[2]{};
+        return GetEnvironmentVariableW(L"SS2VR_LAB_TRACE",value,2)==1 && value[0]==L'1'; }();
+    if(!enabled)return false;
+    static std::atomic<uint64_t> counts[unsigned(LaserTraceStage::Count)]{};
+    static std::atomic<uint64_t> sequence{0};
+    constexpr uint64_t cap=1024;
+    const auto index=unsigned(stage);
+    const auto count=counts[index].fetch_add(1,std::memory_order_relaxed);
+    order=sequence.fetch_add(1,std::memory_order_relaxed);
+    if(count==cap)log("Lab laser saturation schema=1 stage=%u cap=%llu dropped=1",index,cap);
+    // Counts include suppressed events. Other stages report the latest totals.
+    if(count>=cap)return false;
+    uint64_t dropped[unsigned(LaserTraceStage::Count)]{};
+    for(unsigned i=0;i<unsigned(LaserTraceStage::Count);++i) {
+        const auto n=counts[i].load(std::memory_order_relaxed);
+        dropped[i]=n>cap?n-cap:0;
+    }
+    log("Lab laser budget schema=1 order=%llu stage=%u dropped=%llu,%llu,%llu,%llu,%llu,%llu",
+        order,index,dropped[0],dropped[1],dropped[2],dropped[3],dropped[4],dropped[5]);
+    return true;
+}
+static void laserTraceValue(LaserTraceStage stage,const char *event,const Snapshot &s,
+                            unsigned hand,uint64_t request,unsigned reason,
+                            const Calibration *cache=nullptr,uintptr_t caller=0) {
+    uint64_t order;
+    if(!laserTraceTicket(stage,order))return;
+    const Calibration empty{};
+    const auto &c=cache?*cache:empty;
+    log("Lab laser event schema=1 order=%llu event=%s request=%llu input=%llu generation=%u owner=%u weapon=%u hand=%u eye=%d reason=%u renderDepth=%u shotDepth=%u caller=%p cacheValid=%u cacheWeapon=%u cacheTick=%llu alignment=%u",
+        order,event,request,s.input.sequence,s.generation,s.playerHandle,
+        hand<2?s.handle[hand]:0,hand,eyeIndex,reason,nativeWeaponRenderDepth,nativeShotDepth,
+        reinterpret_cast<void *>(caller),unsigned(c.valid),c.handle,c.tickMs,unsigned(c.alignmentApplied));
+}
+static void invalidateMatchingCalibration(const Snapshot &snapshot, unsigned hand,
+                                           unsigned reason=0,uintptr_t caller=0) noexcept {
     if (hand >= 2) return;
     AcquireSRWLockExclusive(&snapshotLock);
-    if (current.playerHandle == snapshot.playerHandle && current.generation == snapshot.generation &&
+    const auto before=calibration[hand];
+    const bool matched=current.playerHandle == snapshot.playerHandle && current.generation == snapshot.generation &&
         current.handle[hand] == snapshot.handle[hand] &&
-        calibration[hand].handle == snapshot.handle[hand])
-        calibration[hand].valid = false;
+        calibration[hand].handle == snapshot.handle[hand];
+    if(matched)calibration[hand].valid = false;
     ReleaseSRWLockExclusive(&snapshotLock);
+    laserTraceValue(LaserTraceStage::Cache,matched?"invalidate":"invalidation-unmatched",snapshot,
+                    hand,0,reason,&before,caller);
 }
 static bool primaryLocalRecognized(const Snapshot &snapshot, void *subject, uint32_t handle) noexcept {
     return nativePrimaryLocalRecognized(subject, handle, snapshot.player, snapshot.playerHandle,
@@ -655,21 +698,25 @@ static bool bodyAnchor(void *player, Pose &pose) {
     return nativeTrackingAnchor(player, pose);
 }
 static bool captureWeaponAlignment(void *player,void *weapon,unsigned hand,bool placement,
-                                   WeaponAlignmentBinding &out) {
+                                   WeaponAlignmentBinding &out,unsigned *failureStage=nullptr) {
     out={};
+    if(failureStage)*failureStage=1;
     if(hand>=2 || !alignmentBorrowPhase(nativeWeaponRenderDepth,placement) ||
        simulationThread.load(std::memory_order_relaxed)!=GetCurrentThreadId() ||
        !nativeMainThread || !nativeMainThread() || !readableMemory(weapon,0xc0) ||
        primaryField(weapon,0xb4)!=1)return false;
+    if(failureStage)*failureStage=2;
     const uint32_t owner=primaryField(weapon,0x28),model=primaryField(weapon,0x24);
     const uint32_t selector=primaryField(weapon,0xbc),handle=pointerHandle(weapon);
     if(!owner || resolve(owner)!=player || !handle || resolve(handle)!=weapon ||
        nativeHandle(player,int(hand))!=handle || nativeHandle(player,int(1-hand))==handle ||
        selector!=hand || !model)return false;
+    if(failureStage)*failureStage=3;
     void *instance=resolve(model);
     IdleConfigIdentity config;Vec3 stretch;
     if(!instance || !remote_render::copyModelConfigurationStretch(instance,weaponConfigurationVtable,
                                                                  config,stretch))return false;
+    if(failureStage)*failureStage=4;
     // No cached address is dereferenced. Resource-capable native getters must
     // be bracketed by fresh copies and equality at their owning call sites.
     if(primaryField(weapon,0xb4)!=1 || primaryField(weapon,0x28)!=owner ||
@@ -678,6 +725,7 @@ static bool captureWeaponAlignment(void *player,void *weapon,unsigned hand,bool 
        nativeHandle(player,int(hand))!=handle)return false;
     out={owner,handle,model,uint32_t(reinterpret_cast<uintptr_t>(instance)),selector,hand,
          config.configuration,config.file,config.resource,stretch};
+    if(failureStage)*failureStage=0;
     return true;
 }
 static bool alignmentDisplacement(const WeaponAlignmentBinding &binding,Quat rotation,Vec3 &out) {
@@ -2883,7 +2931,6 @@ static int __fastcall sniperAlternativePressed(void *w, void *) {
 thread_local void *eyePlayer = nullptr;
 thread_local Request eyeRequest;
 thread_local Snapshot eyeSnapshot;
-thread_local int eyeIndex = -1;
 thread_local Pose eyeAnchor, eyeNativeCamera;
 struct PhysicalWeaponInvocation {
     void *weapon = nullptr;
@@ -3362,7 +3409,6 @@ static void finishPhysicalWeapon(PhysicalWeaponInvocation &invocation, uint64_t 
         physicalWeapon = !aborted && generation == graphicsResourceGeneration() ? previous : nullptr;
     });
 }
-static thread_local unsigned nativeShotDepth = 0;
 struct MuzzleContext {
     bool accepted = false, authoritative = false;
     RiderIdentity rider;
@@ -3437,6 +3483,7 @@ static Pose *shooting(void *w, Pose *out, PoseGet original, const Snapshot *snap
     withNativeFinally([&] {
         const auto s = nested ? Snapshot{} : (snapshot ? *snapshot : copySnapshot());
         const auto context = nested ? MuzzleContext{} : muzzleContext(w, s, snapshot != nullptr);
+        unsigned diagnosticRejection=10;
         // Zoomed native sniper placement (Sam+172A70) is the owner's view
         // origin, not its gun attachment. Keep native zoom/damage, but obtain
         // the base weapon's attachment once for positively identified VR aim.
@@ -3446,10 +3493,13 @@ static Pose *shooting(void *w, Pose *out, PoseGet original, const Snapshot *snap
             [&] { original(w, out); },
             [&] { originalShot(w, out); },
             [&] {
+                diagnosticRejection=11;
                 if (!finite(*out) || resolve(context.handle) != w || resolve(context.owner) != context.player)
                     return;
+                diagnosticRejection=12;
                 if (!context.rider.handheld() || !nativeRiderCurrent(context.player, context.rider))
                     return;
+                diagnosticRejection=13;
                 uint32_t owner = 0;
                 memcpy(&owner, static_cast<uint8_t *>(w) + 0x28, sizeof(owner));
                 if (owner != context.owner || nativeHandle(context.player, int(context.hand)) != context.handle)
@@ -3484,8 +3534,10 @@ static Pose *shooting(void *w, Pose *out, PoseGet original, const Snapshot *snap
                     return;
                 }
                 Pose body, nativeCamera;
+                diagnosticRejection=14;
                 if (!vrSession(s) || !fresh(s.input) || !trackingAnchor(s.player, body))
                     return;
+                diagnosticRejection=15;
                 originalCamera(s.player, &nativeCamera);
                 if (!finite(nativeCamera) || !localWeaponCurrent(w, s, context.hand))
                     return;
@@ -3500,13 +3552,33 @@ static Pose *shooting(void *w, Pose *out, PoseGet original, const Snapshot *snap
                 bool calibrationAdmitted = c.valid && c.handle == context.handle &&
                     now >= c.tickMs && now - c.tickMs <= 100;
                 const bool wantsAlignment=primaryField(w,0xb4)==1;
+                diagnosticRejection=16;
                 if(wantsAlignment || c.alignmentApplied) {
                     WeaponAlignmentBinding binding;
+                    bool attempted=false,captured=false;
+                    unsigned failure=UINT_MAX;
                     calibrationAdmitted=calibrationAdmitted && wantsAlignment && c.alignmentApplied &&
-                        captureWeaponAlignment(context.player,w,context.hand,false,binding) &&
-                        c.alignment==binding;
+                        ([&] { attempted=true;
+                            captured=captureWeaponAlignment(context.player,w,context.hand,false,binding,&failure);
+                            return captured; }()) && c.alignment==binding;
+                    uint64_t order;
+                    if(laserTraceTicket(LaserTraceStage::Muzzle,order)) {
+                        log("Lab laser muzzle schema=1 order=%llu input=%llu generation=%u owner=%u weapon=%u hand=%u now=%llu cacheValid=%u cacheWeapon=%u cacheTick=%llu alignment=%u wants=%u attempted=%u captured=%u failure=%u equal=%u admitted=%u renderDepth=%u",
+                            order,s.input.sequence,s.generation,s.playerHandle,context.handle,context.hand,now,
+                            unsigned(c.valid),c.handle,c.tickMs,unsigned(c.alignmentApplied),unsigned(wantsAlignment),
+                            unsigned(attempted),unsigned(captured),failure,unsigned(captured&&c.alignment==binding),
+                            unsigned(calibrationAdmitted),nativeWeaponRenderDepth);
+                        const auto emitBinding=[&](const char *kind,const WeaponAlignmentBinding &b) {
+                            log("Lab laser binding schema=1 order=%llu kind=%s owner=%u weapon=%u model=%u instance=%u selector=%u hand=%u cfg=%u file=%u resource=%d stretch=%08x,%08x,%08x",
+                                order,kind,b.owner,b.weapon,b.model,b.instance,b.selector,b.hand,b.configuration,
+                                b.file,b.resource,std::bit_cast<uint32_t>(b.baseStretch.x),
+                                std::bit_cast<uint32_t>(b.baseStretch.y),std::bit_cast<uint32_t>(b.baseStretch.z));
+                        };
+                        emitBinding("cache",c.alignment);
+                        if(captured)emitBinding("current",binding);
+                    }
                     if(!calibrationAdmitted) {
-                        invalidateMatchingCalibration(s,context.hand);
+                        invalidateMatchingCalibration(s,context.hand,1);
                         return; // Never certify a zero correction for known ID1/ambiguous phase.
                     }
                 }
@@ -3516,20 +3588,28 @@ static Pose *shooting(void *w, Pose *out, PoseGet original, const Snapshot *snap
                                          .5f, c.nativeDisplacement,c.nativeAlignment);
                 else
                     target = {normalize(multiply(hand.q, multiply(inverse(nativeCamera.q), out->q))), hand.p};
+                diagnosticRejection=17;
                 if (!finite(target) || !localWeaponCurrent(w, s, context.hand))
                     return;
+                diagnosticRejection=18;
                 if(c.alignmentApplied) {
                     WeaponAlignmentBinding current;
                     if(!captureWeaponAlignment(context.player,w,context.hand,false,current) ||
                        current!=c.alignment) {
-                        invalidateMatchingCalibration(s,context.hand);
+                        invalidateMatchingCalibration(s,context.hand,2);
                         return;
                     }
                 }
+                laserTraceValue(LaserTraceStage::Muzzle,"certified",s,context.hand,0,
+                                calibrationAdmitted?0:1,&c);
                 if (calibrated)
                     *calibrated = calibrationAdmitted;
                 *out = target;
+                diagnosticRejection=0;
             }, calibrated);
+        if(snapshot)
+            laserTraceValue(LaserTraceStage::Muzzle,"attempt-completed",s,context.hand,0,
+                            diagnosticRejection);
     }, [&](bool aborted) noexcept {
         nativeShotDepth = previousDepth;
         if (aborted) {
@@ -3669,11 +3749,16 @@ static void trackedRayInitBody(uintptr_t caller, bool outermost) {
     originalRayInit();
     if (!outermost || nativeRayFaulted.load(std::memory_order_acquire) || laserQuerying ||
         eyeIndex >= 0 || scopeSource.active || caller != allowedRayReturn ||
-        simulationThread.load(std::memory_order_relaxed) != GetCurrentThreadId() || !nativeMainThread())
+        simulationThread.load(std::memory_order_relaxed) != GetCurrentThreadId() || !nativeMainThread()) {
+        if(caller==allowedRayReturn && outermost && !laserQuerying)
+            laserTraceValue(LaserTraceStage::Query,"admission-rejected",Snapshot{},2,0,1,nullptr,caller);
         return;
+    }
     auto s = copySnapshot();
     if ((!settings.lasers && !s.zoom[0] && !s.zoom[1]) ||
-        !vrSession(s) || !fresh(s.input) || !s.ui.gameplay || !livePlayer(s)) return;
+        !vrSession(s) || !fresh(s.input) || !s.ui.gameplay || !livePlayer(s)) {
+        laserTraceValue(LaserTraceStage::Query,"snapshot-rejected",s,2,0,2);return;
+    }
     bool requested = false;
     Request queryRequest;
     {
@@ -3690,11 +3775,14 @@ static void trackedRayInitBody(uintptr_t caller, bool outermost) {
                     break;
                 }
     }
-    if (!requested)
-        return;
+    if (!requested) {
+        laserTraceValue(LaserTraceStage::Query,"request-missing",s,2,0,3);return;
+    }
     Pose body;
-    if (!trackingAnchor(s.player, body))
-        return;
+    if (!trackingAnchor(s.player, body)) {
+        laserTraceValue(LaserTraceStage::Query,"anchor-rejected",s,2,queryRequest.sequence,4);return;
+    }
+    laserTraceValue(LaserTraceStage::Query,"admitted",s,2,queryRequest.sequence,0);
     LaserAim existing[2];
     AcquireSRWLockShared(&laserLock);
     memcpy(existing, laserAim, sizeof(existing));
@@ -3703,7 +3791,7 @@ static void trackedRayInitBody(uintptr_t caller, bool outermost) {
     LaserAim sampled[2];
     for (unsigned h = 0; h != 2; ++h) {
         if ((!settings.lasers && !(s.rider.handheld() && s.zoom[h])) || !s.input.handValid[h])
-            continue;
+            { laserTraceValue(LaserTraceStage::Sample,"rejected",s,h,queryRequest.sequence,1);continue; }
         Pose muzzle;
         Vec3 direction;
         VehicleLaserSource vehicle;
@@ -3712,25 +3800,25 @@ static void trackedRayInitBody(uintptr_t caller, bool outermost) {
         void *mechanism = nullptr;
         if (mounted) {
             if (h != 1 || !vehicleLaserMuzzle(s, queryRequest, vehicle, muzzle, direction))
-                continue;
+                { laserTraceValue(LaserTraceStage::Sample,"rejected",s,h,queryRequest.sequence,2);continue; }
             sourceHandle = s.rider.ride;
             mechanism = resolve(vehicle.mechanism);
         } else {
             if (!s.rider.handheld() || aliased(s) || s.ui.wheel[h].open || !s.handle[h] || s.selecting[h])
-                continue;
+                { laserTraceValue(LaserTraceStage::Sample,"rejected",s,h,queryRequest.sequence,3);continue; }
             void *w = resolve(s.handle[h]);
             if (!w || nativeHandle(s.player, h) != s.handle[h] || !laserModelScratchIdle())
-                continue;
+                { laserTraceValue(LaserTraceStage::Sample,"rejected",s,h,queryRequest.sequence,4);continue; }
             const int weapon = *reinterpret_cast<int *>(static_cast<uint8_t *>(w) + 0xb4);
             bool calibrated = false;
             shooting(w, &muzzle, weapon == 13 ? originalSniperShot : originalShot, &s, &calibrated);
             if (!finite(muzzle) || !calibrated || !localWeaponCurrent(w, s, h) || !laserModelScratchIdle())
-                continue;
+                { laserTraceValue(LaserTraceStage::Sample,"rejected",s,h,queryRequest.sequence,5);continue; }
             mechanism = getMechanism(s.player);
             direction = rotate(normalize(muzzle.q), {0, 0, -1});
         }
         if (!laserSampleCurrent(s, queryRequest) || !trackedHandCurrent(s.input, copySnapshot().input, h))
-            continue;
+            { laserTraceValue(LaserTraceStage::Sample,"rejected",s,h,queryRequest.sequence,6);continue; }
         const auto &old = existing[h];
         const uint64_t now = GetTickCount64();
         // Moving native aim may change without an origin change. Mounted rays
@@ -3761,7 +3849,7 @@ static void trackedRayInitBody(uintptr_t caller, bool outermost) {
         if (!std::isfinite(distance) || distance < 0 || distance > settings.laserDistance ||
             !laserSampleCurrent(s, queryRequest) || !trackedHandCurrent(s.input, copySnapshot().input, h) ||
             (mounted && !vehicleLaserCurrent(s, queryRequest, vehicle)))
-            continue;
+            { laserTraceValue(LaserTraceStage::Sample,"rejected",s,h,queryRequest.sequence,7);continue; }
         sampled[h] = {muzzle, body, ray.origin + ray.direction * distance, s.playerHandle, sourceHandle,
                       s.generation, s.input.sequence, GetTickCount64(), true, hit};
         sampled[h].kind = mounted ? LaserSourceKind::Vehicle : LaserSourceKind::Handheld;
@@ -3783,6 +3871,8 @@ static void trackedRayInitBody(uintptr_t caller, bool outermost) {
     for (unsigned h = 0; h != 2; ++h)
         laserAim[h] = sampled[h];
     ReleaseSRWLockExclusive(&laserLock);
+    for(unsigned h=0;h<2;++h)
+        laserTraceValue(LaserTraceStage::Sample,"published",s,h,queryRequest.sequence,sampled[h].valid?0:8);
 }
 static void __cdecl trackedRayInit() {
 #ifdef _MSC_VER
@@ -3818,13 +3908,29 @@ static void freezeLasers(const Request &request) {
         frame.selecting[h] = eyeSnapshot.selecting[h];
     }
     AcquireSRWLockShared(&laserLock);
+    const LaserAim observed[2]{laserAim[0],laserAim[1]};
     auto pair = freezeLaserPair(laserAim, frame);
     ReleaseSRWLockShared(&laserLock);
     std::copy(pair.begin(), pair.end(), eyeLasers);
+    for(unsigned h=0;h<2;++h) {
+        uint64_t order;
+        if(!laserTraceTicket(LaserTraceStage::Freeze,order))continue;
+        const auto &a=observed[h];
+        const auto drift=a.body.p-frame.body.p;
+        const auto alignment=a.body.q.x*frame.body.q.x+a.body.q.y*frame.body.q.y+
+                             a.body.q.z*frame.body.q.z+a.body.q.w*frame.body.q.w;
+        log("Lab laser freeze schema=1 order=%llu request=%llu input=%llu generation=%u owner=%u weapon=%u hand=%u eye=%d valid=%u sampleValid=%u sampleRequest=%llu sampleInput=%llu sampleGeneration=%u sampleOwner=%u sampleWeapon=%u now=%llu tick=%llu kinds=%u,%u handValid=%u wheel=%u selecting=%u finite=%u,%u,%u end=%.9g,%.9g,%.9g drift2=%.9g alignment=%.9g",
+            order,frame.requestSequence,frame.sequence,frame.generation,frame.owner,frame.weapon[h],h,eyeIndex,
+            unsigned(pair[h].valid),unsigned(a.valid),a.requestSequence,a.sequence,a.generation,a.owner,a.weapon,
+            frame.now,a.tickMs,unsigned(a.kind),unsigned(frame.kind),unsigned(frame.handValid[h]),
+            unsigned(frame.wheel[h]),unsigned(frame.selecting[h]),unsigned(finite(a.muzzle)),
+            unsigned(finite(a.body)),unsigned(finite(frame.body)),a.end.x,a.end.y,a.end.z,dot(drift,drift),alignment);
+    }
 }
 static void drawLasers() {
-    if (!settings.lasers || !eyeSnapshot.ui.gameplay || !currentCanvas || !*currentCanvas)
-        return;
+    if (!settings.lasers || !eyeSnapshot.ui.gameplay || !currentCanvas || !*currentCanvas) {
+        laserTraceValue(LaserTraceStage::Draw,"gate-rejected",eyeSnapshot,2,eyeRequest.sequence,1);return;
+    }
     // Establish identity model and this root's view/projection through native
     // helpers. Root Execute has no parent to restore its matrices.
     ortho();
@@ -3839,13 +3945,19 @@ static void drawLasers() {
     (*setDepthComparison)(42); // GfxD3D table at RVA11274 maps native index42 to D3DCMP_LESSEQUAL.
     for (unsigned h = 0; h != 2; ++h) {
         const auto &a = eyeLasers[h];
-        if (!a.valid)
-            continue;
+        if (!a.valid) {
+            laserTraceValue(LaserTraceStage::Draw,"sample-invalid",eyeSnapshot,h,eyeRequest.sequence,2);continue;
+        }
         const uint32_t color = h ? 0x40dfffffu : 0x60ff40ffu; // Native RGBA convention.
         const Vec3 side = rotate(a.muzzle.q, {.001f, 0, 0});
         drawLine(a.muzzle.p, a.end, color, UINT32_MAX);
         drawLine(a.muzzle.p + side, a.end + side, color, UINT32_MAX);
         drawLine(a.muzzle.p - side, a.end - side, color, UINT32_MAX);
+        uint64_t order;
+        if(laserTraceTicket(LaserTraceStage::Draw,order))
+            log("Lab laser dispatch schema=1 order=%llu request=%llu input=%llu generation=%u owner=%u weapon=%u hand=%u eye=%d hit=%u muzzle=%.9g,%.9g,%.9g end=%.9g,%.9g,%.9g linesReturned=3 visible=unproved",
+                order,a.requestSequence,a.sequence,a.generation,a.owner,a.weapon,h,eyeIndex,unsigned(a.hit),
+                a.muzzle.p.x,a.muzzle.p.y,a.muzzle.p.z,a.end.x,a.end.y,a.end.z);
         if (a.hit) {
             const float distance = std::sqrt(dot(a.end - a.muzzle.p, a.end - a.muzzle.p));
             const float radius = std::clamp(distance * .002f, .008f, .08f);
@@ -4592,7 +4704,7 @@ static int __fastcall weaponAbs(void *w, void *, const Matrix34 &view, Matrix34 
     };
     if (!result) {
         if (physical && physicalWeapon && physicalWeapon->hand >= 0)
-            invalidateMatchingCalibration(eyeSnapshot, unsigned(physicalWeapon->hand));
+            invalidateMatchingCalibration(eyeSnapshot, unsigned(physicalWeapon->hand),8,caller);
         return reject();
     }
     const auto s = eyeIndex >= 0 ? eyeSnapshot : copySnapshot();
@@ -4603,11 +4715,11 @@ static int __fastcall weaponAbs(void *w, void *, const Matrix34 &view, Matrix34 
     WeaponAlignmentBinding alignmentBefore,alignmentAfter;
     if(align && (caller!=weaponPlacementReturn ||
                  !captureWeaponAlignment(s.player,w,unsigned(h),true,alignmentBefore))) {
-        invalidateMatchingCalibration(s,unsigned(h));
+        invalidateMatchingCalibration(s,unsigned(h),3,caller);
         return reject();
     }
     if (invalidCharge || !finiteMatrix(out)) {
-        invalidateMatchingCalibration(s, unsigned(h));
+        invalidateMatchingCalibration(s, unsigned(h),4,caller);
         return reject(); // Unmanaged native callers retain result/out above.
     }
     if ((!physical && !fresh(s.input)) || !tracking.handValid[h] ||
@@ -4638,7 +4750,7 @@ static int __fastcall weaponAbs(void *w, void *, const Matrix34 &view, Matrix34 
     const Vec3 displacement = rotate(offset, charge);
     Vec3 alignment;
     if(align && !alignmentDisplacement(alignmentBefore,offset,alignment)) {
-        invalidateMatchingCalibration(s,unsigned(h));return reject();
+        invalidateMatchingCalibration(s,unsigned(h),5,caller);return reject();
     }
     const Pose target{normalize(multiply(hand.q, offset)), hand.p + rotate(hand.q, displacement+alignment)};
     if (!finite(target))
@@ -4656,14 +4768,14 @@ static int __fastcall weaponAbs(void *w, void *, const Matrix34 &view, Matrix34 
     if (calibrated)
         matrixPose(&flatPose, flatModel);
     if (!calibrated || invalidFlatCharge || !finite(flatPose)) {
-        invalidateMatchingCalibration(s, unsigned(h));
+        invalidateMatchingCalibration(s, unsigned(h),6,caller);
         return reject();
     }
     if (!localWeaponCurrent(w, s, unsigned(h)))
         return reject();
     if(align && (!captureWeaponAlignment(s.player,w,unsigned(h),true,alignmentAfter) ||
                  alignmentBefore!=alignmentAfter)) {
-        invalidateMatchingCalibration(s,unsigned(h));return reject();
+        invalidateMatchingCalibration(s,unsigned(h),7,caller);return reject();
     }
     AcquireSRWLockExclusive(&snapshotLock);
     const bool compatible = sameHandheldRig(s.rider, current.rider, s.generation, current.generation) &&
@@ -4688,7 +4800,10 @@ static int __fastcall weaponAbs(void *w, void *, const Matrix34 &view, Matrix34 
         }
         out = staged;
     }
+    const auto published=calibration[h];
     ReleaseSRWLockExclusive(&snapshotLock);
+    laserTraceValue(LaserTraceStage::Cache,placed?"published":"placement-rejected",s,unsigned(h),
+                    eyeIndex>=0?eyeRequest.sequence:0,0,&published,caller);
     if (!placed)
         return reject();
     return result;

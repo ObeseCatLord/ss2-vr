@@ -1,5 +1,23 @@
 # Latest exact noUV passive source checkpoint
 
+## Active next step — actual laser regression
+
+The connected ID1 source3ada6e8/fp424b6917 ran privately:127world stereo pairs,
+clean native/owned/display shutdown and protected12unchanged. Guns/hands visibly
+closer;10complete first-eye factor joins/20uploaded references agree. Fixed virtual
+reference error<=8.99416e-6native units, retained idle residual.000804926. World/GPU
+precision, physical contact and second-eye pose certification remain separate.
+Actual zero controls observed; no firing or movement/vehicle/hardware/network test.
+
+Aim lines present before alignment are absent afterward with Laser Enabled=1.
+This is an open regression, not accepted laser runtime. The bounded Astra review
+is complete: cause remains unknown; the proposed shooting-to-absolute-placement
+poisoning route is unproved. Main remains sole writer. Next source operation is
+capped passive diagnostics at existing cache/muzzle/sample/freeze/draw attempts,
+then a fresh bounded neutral observation. Preserve getter order/count and
+short-circuit evaluation; do not guess cause, loosen fences or rerun fixtures. Other weapon references and physical
+driver controls still require implementation; no full-mod completion claim.
+
 ## Current continuation — connected ID1 alignment
 
 Stock ID1 now uses the fixed virtual handle-centre correction at existing model,

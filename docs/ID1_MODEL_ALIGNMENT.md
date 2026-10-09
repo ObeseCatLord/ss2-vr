@@ -92,3 +92,27 @@ lifetime proof or executed exception test.
 No runtime, firing, movement, device, vehicle or network probe ran for this landing.
 The user remains primary gameplay/hardware tester. Remaining weapon references,
 physical driver controls and comprehensive acceptance are open.
+
+## Subsequent neutral observation and laser review
+
+Source3ada6e8 reached the pinned Jungle scene with127native stereo pairs and clean
+owned-process/display shutdown; protected files remained unchanged. Fixed handle
+reference error was at most8.99416e-6native units in10complete first-eye copies.
+This is copied-factor arithmetic, not GPU precision, contact or second-eye pose
+certification. The whole collector remained unqualified; no firing/movement test.
+
+Before/after eye images show a laser regression: both aim lines were visible before
+alignment and neither afterward, with lasers enabled. Astra/xhigh completed a
+bounded source/native review; local turn tags verified, backend unattested. The
+active rejection or visibility cause is unknown. No correction change is approved
+by that evidence.
+
+| Review recommendation | Disposition |
+| --- | --- |
+| Do not assume shooting poisons absolute-placement calibration | Adopted; verified shooting uses in-view matrix/attachment getters, not a proven absolute-placement call. |
+| Preserve phase, age, binding, reach and ownership fences | Adopted; no speculative relaxation. |
+| Distinguish cache/muzzle rejection from successful but hidden line dispatch | Adopted; next source work is capped passive records at existing attempts, with request/input/hand identities. |
+| Preserve getter order/count and short-circuit behavior | Adopted; diagnostics must copy existing values, never add native queries. |
+
+Remaining weapons and physical driver controls stay open. This runtime observation
+supersedes the preceding source-landing-only runtime statement.

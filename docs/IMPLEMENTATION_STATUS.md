@@ -1,5 +1,32 @@
 # Implementation status — 2026-10-09
 
+## Connected ID1 runtime observation — laser regression open
+
+Source3ada6e8/fingerprint424b6917 reached pinned Jungle in a fresh private neutral
+capture:127native stereo pairs, normal native/process/display shutdown, no owned
+survivors/cleanup errors and12protected files unchanged. Both eye images were
+inspected: full world stereo, closer native guns/hands. Actual input records show
+zero axes/triggers and closed wheels. No movement/firing/switch/zoom/vehicle/HMD/MP
+probe. A preceding incorrectly invoked inner collector was rejected before native
+launch; that attempted fixture is preserved and was not rerun.
+
+10complete first-eye hand/gun factor joins give20uploaded-transform references,
+all agreeing under unchanged tolerance. Fixed handle-reference/controller error
+is at most8.99416e-6native units; retained animated handle residual.000804926.
+These are copied-factor/native placement arithmetic, not independent world/GPU
+precision or physical contact. Second-eye pose remains unqualified and whole
+collector readiness incomplete; its wrapper rejection was not startup failure.
+
+Before/after images expose an active regression: old capture shows both aim lines,
+new aligned capture shows neither although Laser Enabled=1. Cause is not established.
+Astra completed the bounded investigation: sampling rejection versus hidden line
+dispatch remains unresolved. The proposed shooting-to-absolute-placement cache
+poisoning route is unproved; verified shooting calls use the in-view matrix and
+attachment getter. Adopted next step: capped passive records at existing cache,
+muzzle, sampling, freeze and draw boundaries, preserving native getter order and
+short-circuit evaluation. Fix the demonstrated boundary before extending alignment
+or declaring laser acceptance. Source GO does not certify laser runtime behavior.
+
 ## Stock ID1 handle alignment — connected source
 
 The virtual handle centre is connected at native model placement, local shot/laser
