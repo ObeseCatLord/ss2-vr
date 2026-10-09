@@ -8,6 +8,15 @@ This historical hold blocked public publication pending renewed confirmation. It
 
 ## Current PC continuation — start here
 
+Latest private capture of the710534 products reached Jungle and101native
+projectionpairs; both distinct static world-eye images inspected, cleanup and
+protected12files passed. Wholetrace geometry remains rejected:12firsteye records
+retain1qualified earlier draw each, then a later noUV0/1/5/6pass fails declaration
+grammar. Complete-only emission hides priorcopies. Next bounded Astra decision
+is rejected-diagnostic preservation of owned copies versus passive noUV observation;
+do not guess inactiveUV use or relax wholetrace/Idle/cache/grasp gates. Attempted
+fixture archived, never rerun/reseal. See latest IMPLEMENTATION_STATUS entry.
+
 Latest rebuilt products: source fingerprint
 `710534dfb75c9bb5ceac0653e5cc89daf8024a39b732526e1e751548c4dafbc1`, IPC10/wire7. ActualV15
 passive data showed local7/weights8 and unchanged202wordshader; an ID1-only exact

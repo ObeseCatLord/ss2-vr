@@ -1,3 +1,22 @@
+# Latest neutral outcome and concrete next boundary
+
+Source d98c3019d03603f8a857e4296159daa4cb73c497, rebuilt fingerprint
+710534dfb75c9bb5ceac0653e5cc89daf8024a39b732526e1e751548c4dafbc1 ran
+in a fresh sealed private fixture. Jungle identity,101native projection pairs,
+visually inspected distinct static world-eye images, native shutdown, owned
+cleanup and12protected-file preservation passed. No head-motion/HMD/network/
+firing/vehicle pass. Four reviewed parallel commits are fully integrated.
+
+Whole collector remains rejected. Twelvefirst-eye records each have draws=1
+before a subsequent0/1/5/6 declaration withoutUV3 fails grammar; all basic
+range checks pass. Existing Complete-only emission hides already copied prior
+geometry/program/hash data. Preserve the failed fixture. Current next design
+review compares exposing these owned copies only as rejected diagnostics with
+an additional bounded passive noUV shader observation. Never promote wholetrace,
+guess inactive UV consumption, reuse another eye's event or infer grasp/release.
+Main remains sole integration/runtime/publication owner. All68Debug/68Release
+and28normal/optimized compiled/native gates pass. Full goal remains active.
+
 # Cloud continuation — 2026-10-05
 
 ## Current ID1 observed-layout adapter — source GO

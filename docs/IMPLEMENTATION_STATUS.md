@@ -1,5 +1,34 @@
 # Implementation status — 2026-10-08
 
+## Latest neutral capture — rendering works, geometry gate remains
+
+The rebuilt observed-layout adapter ran in a fresh private fixture on source
+`d98c3019d03603f8a857e4296159daa4cb73c497`, fingerprint
+`710534dfb75c9bb5ceac0653e5cc89daf8024a39b732526e1e751548c4dafbc1`.
+Expected Jungle scene identity and101native projection pairs were recorded.
+Both world-eye images were visually inspected and show static stereo parallax.
+Native isolation shutdown, exact-owned cleanup and12protected files passed.
+No head-motion, physical hardware, firing, vehicle or network acceptance is claimed.
+
+The collector correctly remains incomplete:32rejected records, no completed
+whole-trace geometry/reference output. Twelve first-eye traces each retained one
+qualified draw before a later pass failed declaration grammar. That later pass
+declares0/1/5/6 with noUV3; its basic range checks pass. The current Complete-only
+emitter suppresses the earlier owned geometry copies after rejection. This is a
+concrete diagnostic boundary, not evidence that gameplay stereo is broken or
+that the unseen earlier shader/channel hashes match an asset.
+
+Next bounded decision: preserve already copied per-draw evidence as rejected
+diagnostics without promoting whole-trace/Idle/cache/grasp acceptance; compare
+that minimal change with extending passive observation of the noUV pass. Astra
+design review is pending. Do not widen declaration admission using an inactive
+UV binding, reuse cached-eye events or repeat this attempted fixture.
+
+The four parallel commits are integrated and the combined final tree rebuilt;
+see [integration mapping](PARALLEL_INTEGRATION.md). Current68Debug/68Release and
+28normal/optimized native/compiled gates pass. Source publication is authorized;
+private assets, shaders, capture payloads and runtime records remain local.
+
 ## Current ID1 observed-layout adapter — source GO
 
 The private neutral V15 run reached the expected Jungle scene and103complete
