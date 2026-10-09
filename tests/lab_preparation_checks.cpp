@@ -27,6 +27,19 @@ int main() {
     assert(normal.begin());normal.stage=LabPreparationStage::Complete;
     normal.finish(false,true);
     assert(!normal.begin());
+    LabPreparationProgress waitingPresentation;
+    waitingPresentation.stage=LabPreparationStage::Selected;
+    waitingPresentation.issuedTick=123; // Selection already issued exactly once.
+    for(unsigned tick=0;tick<3;++tick) {
+        assert(waitingPresentation.begin());
+        // Initial presentation-busy deferral never advances or reissues action.
+        waitingPresentation.finish(false,true);
+        assert(!waitingPresentation.busy && waitingPresentation.stage==LabPreparationStage::Selected &&
+               waitingPresentation.issuedTick==123);
+    }
+    assert(waitingPresentation.begin());
+    waitingPresentation.finish(false,false); // A contained native failure is terminal even while waiting.
+    assert(!waitingPresentation.begin());
     LabPreparationProgress beforeEntry;
     beforeEntry.stage=LabPreparationStage::Granted;
     beforeEntry.rejectInterval(); // Original simulation failed before adapter entry.

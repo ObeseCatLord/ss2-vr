@@ -1,5 +1,25 @@
 # Latest exact noUV passive source checkpoint
 
+## Presentation-only preparation deferral — source correction
+
+The fresh alternating-order run identified the exact stop: initial
+presentation-idle failed at Selected, after every preceding phase predicate
+passed. It reached the pinned Jungle scene and shut down cleanly;12protected files
+stayed unchanged. Four early ID13 records were rejected and no new save/image
+was requested. The earlier successful save and all attempted fixtures remain.
+
+The preparation adapter now defers only that initial presentation-busy condition,
+before player/resource borrowing or native action. Later owner/pre-action checks
+and all other phase/health failures still latch failure. Native action stages,
+issued-tick and existing deadline are retained; waiting does not reissue selection
+or extend the deadline. Explicit Astra/xhigh confirmation now accepted; local tags verified and backend
+unattested.77Debug/77Release checks and8compiled observer gates normal/-O pass.
+All4products/package use fingerprint5d514b1ffcea51b4b380a9ab86ef4cac48cd09a91509959d9fbd1256bc07bbce.
+A fresh sealed fixture passed check-only preflight and installed artifact verification.
+The failing predicate includes
+thread/device/lifecycle conditions as well as transaction occupancy; the log
+does not establish which constituent failed. No new runtime claimed.
+
 ## Reviewed neutral eye-order experiment prepared
 
 A sealed lab-only option alternates temporal first-eye order by request parity

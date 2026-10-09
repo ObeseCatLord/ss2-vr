@@ -5987,12 +5987,19 @@ static __attribute__((noinline)) void runPostSimulationSniper(SimulationInterval
         if(!labOnlineIsolationInstalled()) {fail("isolation");return;}
         validateLabOnlineIsolation(true);
         const char *phaseFailure="unsampled";
+        bool presentationBusy=false;
         auto phaseCheck=[&](bool passed,const char *label) {
             if(!passed)phaseFailure=label;
             return passed;
         };
         auto phaseCurrent=[&] {
             phaseFailure="none";
+            presentationBusy=false;
+            auto presentationCurrent=[&] {
+                const bool idle=nativePresentationIdleForBodyMove();
+                presentationBusy=!idle;
+                return phaseCheck(idle,"presentation-idle");
+            };
             // Preserve original evaluation order and short-circuiting. Labels
             // report the first failed existing check; no extra native queries.
             return phaseCheck(interval.simulation && interval.preparedWorld && interval.preparedManager,"prepared") &&
@@ -6003,10 +6010,13 @@ static __attribute__((noinline)) void runPostSimulationSniper(SimulationInterval
                 phaseCheck(primaryField(interval.simulation,0x4c)==0,"native-phase") &&
                 phaseCheck(primaryField(interval.preparedWorld,0x74)==reinterpret_cast<uintptr_t>(interval.preparedManager),"manager") &&
                 phaseCheck(simulationRevision==revision,"revision") &&
-                phaseCheck(nativeInputHealthy(),"input-health") &&
-                phaseCheck(nativePresentationIdleForBodyMove(),"presentation-idle");
+                phaseCheck(nativeInputHealthy(),"input-health") && presentationCurrent();
         };
         if(!phaseCurrent()) {
+            // Initial admission has borrowed no player/resource and issued no
+            // action. Wait for the existing presentation transaction to retire.
+            // Later pre-action/currentOwner phase failures still latch failure.
+            if(presentationBusy)return;
             log("Lab sniper phase failure check=%s stage=%u",phaseFailure,unsigned(labSniper.stage));
             fail("simulation-phase");return;
         }
