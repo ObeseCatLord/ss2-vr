@@ -13,7 +13,7 @@ int main() {
      a.layout.vertices=132;a.layout.triangles=108;
      const ScopeIndexedDraw draw{4,0,0,132,4782,108};
      IdleWeaponTrace trace;trace.stage=IdleWeaponTrace::Stage::Rejected;
-     trace.rejection=IdleWeaponTrace::Rejection::Draw;trace.draws=8;trace.rejectionChecks=32639;
+     trace.rejection=IdleWeaponTrace::Rejection::Draw;trace.draws=IdleWeaponTrace::MaxDraws;trace.rejectionChecks=32639;
      auto &s=trace.submissions;
      for(unsigned i=0;i<64;++i) {
         const auto slot=s.reserve(draw);assert(slot==i && s.rows[i].ordinal==i+1);
@@ -21,7 +21,7 @@ int main() {
         assert(s.rows[i].status==(i%2==0?IdleSubmissionTrace::Status::Qualified:IdleSubmissionTrace::Status::PreUnknown));
      }
      assert(s.reserve(draw)==IdleSubmissionTrace::NoSlot && s.attempts==65 && s.overflow);
-     assert(trace.rejection==IdleWeaponTrace::Rejection::Draw && trace.draws==8 && trace.rejectionChecks==32639);
+     assert(trace.rejection==IdleWeaponTrace::Rejection::Draw && trace.draws==IdleWeaponTrace::MaxDraws && trace.rejectionChecks==32639);
      s.attempts=UINT32_MAX;assert(s.reserve(draw)==IdleSubmissionTrace::NoSlot && s.attempts==UINT32_MAX);
      for(unsigned changed=0;changed<4;++changed) {
         IdleSubmissionTrace t;const auto slot=t.reserve(draw);auto b=a;
@@ -268,6 +268,19 @@ int main() {
      });
      assert(count==4);
     }
+    {static_assert(IdleWeaponTrace::MaxDraws==10);
+     auto t=ready();auto copy=g;
+     for(unsigned i=0;i<10;++i) {
+        copy.raster.drawRecord=5;copy.raster.instance=100+i;
+        copy.constants[0][0]=float(i);copy.hashes[0][0]=uint8_t(i);
+        assert(t.draw(copy,true,true));
+     }
+     assert(t.finish(true,true) && t.draws==10);
+     for(unsigned i=0;i<10;++i) {
+        assert(t.geometry[i].raster.instance==100+i && t.geometry[i].raster.drawRecord==5);
+        assert(t.geometry[i].constants[0][0]==float(i) && t.geometry[i].hashes[0][0]==i);
+     }
+    }
     {auto t=ready();t.callbacks=63;
         auto stored=g;stored.program[0]=0xfffe0101;stored.program[1]=0xffff;
         stored.constants[0][0]=12;stored.hashes[0][0]=73;
@@ -305,17 +318,18 @@ int main() {
     {auto t=ready();t.callbacks=63;t.reject(IdleWeaponTrace::Rejection::DrawDuplicate);
      assert(!t.retainedDrawCopiesAvailable());}
     {auto t=ready();t.callbacks=63;auto copy=g;
-     for(unsigned i=0;i<8;++i){copy.constants[0][0]=float(i);assert(t.draw(copy,true,true));}
+     for(unsigned i=0;i<IdleWeaponTrace::MaxDraws;++i){copy.constants[0][0]=float(i);assert(t.draw(copy,true,true));}
      copy.raster.drawRecord=0;assert(!t.draw(copy,true,true));
+     assert(t.draws==10);for(unsigned i=0;i<10;++i)assert(t.geometry[i].constants[0][0]==float(i));
      assert(t.rejection==IdleWeaponTrace::Rejection::Draw && t.rejectionChecks==32639);
      assert(t.retainedCapacityCopiesAvailable() && t.retainedDrawCopiesAvailable());
-     for(unsigned i=0;i<8;++i)assert(t.geometry[i].raster.drawRecord==g.raster.drawRecord);
+     for(unsigned i=0;i<IdleWeaponTrace::MaxDraws;++i)assert(t.geometry[i].raster.drawRecord==g.raster.drawRecord);
      for(unsigned bit=0;bit<15;++bit)if(bit!=7) {
         auto bad=t;bad.rejectionChecks&=~(1u<<bit);assert(!bad.retainedDrawCopiesAvailable());
      }
      for(unsigned variant=0;variant<9;++variant) {
         auto bad=t;
-        switch(variant) {case 0:bad.draws=7;break;case 1:bad.draws=9;break;
+        switch(variant) {case 0:bad.draws=IdleWeaponTrace::MaxDraws-1;break;case 1:bad.draws=IdleWeaponTrace::MaxDraws+1;break;
             case 2:bad.precedingStage=IdleWeaponTrace::Stage::Event;break;case 3:bad.callbacks=47;break;
             case 4:bad.rejectionState^=1;break;case 5:bad.inputFailure.step=20;break;
             case 6:bad.streamProbe.selected=true;break;case 7:bad.config.file=0;break;
@@ -323,7 +337,7 @@ int main() {
         assert(!bad.retainedCapacityCopiesAvailable() && !bad.retainedDrawCopiesAvailable());
      }
      auto mixed=ready();mixed.callbacks=63;
-     for(unsigned i=0;i<8;++i)assert(mixed.draw(copy,true,true));
+     for(unsigned i=0;i<IdleWeaponTrace::MaxDraws;++i)assert(mixed.draw(copy,true,true));
      assert(!mixed.draw(copy,false,true) && !mixed.retainedDrawCopiesAvailable());
      assert(!t.finish(true,true) && t.retainedDrawCopiesAvailable()); // Still rejected, no outer claim.
     }
@@ -337,8 +351,8 @@ int main() {
         if(failure==0)bad.raster.binding.generation++;
         assert(!t.draw(bad,failure!=1,failure!=2));assert(t.stage==IdleWeaponTrace::Stage::Rejected);
     }
-    {auto t=ready();for(unsigned i=0;i<8;++i){g.raster.drawRecord=i;assert(t.draw(g,true,true));}
-     g.raster.drawRecord=8;assert(!t.draw(g,true,true));}
+    {auto t=ready();for(unsigned i=0;i<IdleWeaponTrace::MaxDraws;++i){g.raster.drawRecord=i;assert(t.draw(g,true,true));}
+     g.raster.drawRecord=IdleWeaponTrace::MaxDraws;assert(!t.draw(g,true,true));}
 
     {auto t=ready();assert(t.finish(true,true));assert(t.draws==0);} // Event/pose-only, not geometry evidence.
     {auto changed=g.raster;changed.clip.m[0]=1;assert(!(changed==g.raster));}

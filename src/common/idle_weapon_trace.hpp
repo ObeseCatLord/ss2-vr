@@ -177,7 +177,7 @@ struct IdleSubmissionTrace {
 };
 static_assert(sizeof(IdleSubmissionTrace)<=16*1024); // Measured also by offline checks.
 struct IdleWeaponTrace {
-    static constexpr unsigned MaxContributors=16,MaxMatrices=64,MaxDraws=8;
+    static constexpr unsigned MaxContributors=16,MaxMatrices=64,MaxDraws=10;
     static constexpr unsigned CopyLayout=1; // Per-trace qualified-copy ordinals, not native record identity.
     enum class Stage : uint8_t { Empty,Event,Palette,Rejected,Complete };
     // Invocation-local scalars only; first rejection survives later cleanup.
@@ -349,7 +349,7 @@ struct IdleWeaponTrace {
     }
     bool retainedCapacityCopiesAvailable() const noexcept {
         // Exactly the original capacity check failed after a normal/current
-        // ninth draw. No ninth copy exists; expose only the eight owned values.
+        // eleventh draw. No eleventh copy exists; expose only ten owned values.
         constexpr uint32_t capacityOnly=((1u<<15)-1) & ~(1u<<7);
         return retainedCopyOwnerQualified() && rejection==Rejection::Draw &&
             draws==MaxDraws && rejectionChecks==capacityOnly && callbacks==63 &&

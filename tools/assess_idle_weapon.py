@@ -13,6 +13,9 @@ from idle_projection_evidence import consume as consume_projection_probe, valida
 
 ROOT=Path(__file__).resolve().parents[1]
 
+def draw_capacity(record):
+    return {3:8,4:10}[record['schema']]
+
 def fields(line):
     pairs=[part.split('=',1) for part in line.split()[3:]]
     if any(len(p)!=2 for p in pairs) or len({p[0] for p in pairs})!=len(pairs):
@@ -83,7 +86,7 @@ def validate_geometry(geometry,count,copy_layout=0):
 
 def assess(text,expected_source):
     if not re.fullmatch('[a-f0-9]{64}',expected_source):raise ValueError('Expected compiled source required')
-    records=[];current=None;seen=set();copy_layout=None
+    records=[];current=None;seen=set();copy_layout=None;producer_schema=None
     for line in text.splitlines():
         if not line.startswith('Lab idle'):continue
         if not line.startswith('Lab idle ') or len(line.split())<3:
@@ -101,7 +104,10 @@ def assess(text,expected_source):
             current.setdefault('copyLayout',0)
             if copy_layout is not None and copy_layout!=current['copyLayout']:raise ValueError('Mixed producer copy layouts')
             copy_layout=current['copyLayout']
-            if current['schema']!=3 or current['rawGripValid'] not in (0,1) or current['draws']>8:raise ValueError('Geometry schema/budget mismatch')
+            if current['schema'] not in (3,4) or current['rawGripValid'] not in (0,1) or current['draws']>draw_capacity(current):raise ValueError('Geometry schema/budget mismatch')
+            if current['schema']==4 and current['copyLayout']!=1:raise ValueError('Schema4 requires ordinal copies')
+            if producer_schema is not None and producer_schema!=current['schema']:raise ValueError('Mixed producer schemas')
+            producer_schema=current['schema']
             if current['ipc']!=10 or current['wire']!=7 or current['historicalBytes'] or current['grasp']:
                 raise ValueError('Unsupported layout or provenance/grasp claim')
             if current['stage'] not in range(5) or not 0<=current['contributors']<=16 or not 0<=current['matrices']<=64:
@@ -147,7 +153,7 @@ def assess(text,expected_source):
                 raise ValueError('Retained companion without one rejected record')
             if any(integer(f[k])!=current[k] for k in ('request','eye','hand')):
                 raise ValueError('Foreign retained companion')
-            count=integer(f['count'],1,8)
+            count=integer(f['count'],1,draw_capacity(current))
             if count!=current['draws'] or f['postOriginal']!='1' or f['cleanupCertified']!='0' or f['outerCurrent']!='0':
                 raise ValueError('Retained companion claim/count mismatch')
             current['retained_copies']={'count':count,'geometry':{},'evidence_class':'historical-post-original-pre-cleanup-copies',
@@ -263,7 +269,7 @@ def assess(text,expected_source):
             names={'request','eye','hand','index','modelRecord','drawRecord','surface','instance','surfaceName',
                    'boneName','bone','cfg','file','resource','words','constants','declaration'}
             if set(f)!=names:raise ValueError('Geometry schema mismatch')
-            index=integer(f['index'],0,7)
+            index=integer(f['index'],0,draw_capacity(current)-1)
             if index>=current['draws'] or index in geometry:raise ValueError('Duplicate/outside geometry')
             g={k:integer(v,-(1<<31),(1<<31)-1) if k=='resource' else integer(v,0,(1<<32)-1)
                for k,v in f.items() if k not in ('request','eye','hand','index')}
@@ -273,7 +279,7 @@ def assess(text,expected_source):
         elif kind=='geometryFactors':
             if set(f)!={'request','eye','hand','index','palette','bookends','postOriginal','cleanupCertified','outerCurrent'}:
                 raise ValueError('Factor companion schema mismatch')
-            index=integer(f['index'],0,7)
+            index=integer(f['index'],0,draw_capacity(current)-1)
             if index not in geometry or 'factors' in geometry[index]:raise ValueError('Factor companion before header or duplicate')
             if (integer(f['bookends']),integer(f['postOriginal']),integer(f['cleanupCertified']),integer(f['outerCurrent']))!=(3,1,0,0):
                 raise ValueError('Unsupported factor provenance claim')
@@ -284,7 +290,7 @@ def assess(text,expected_source):
             if set(f)!={'request','eye','hand','index','sequence','modelAddress','drawAddress',
                         'bookends','postOriginal','cleanupCertified','outerCurrent'}:
                 raise ValueError('Projection association schema mismatch')
-            index=integer(f['index'],0,7)
+            index=integer(f['index'],0,draw_capacity(current)-1)
             if index not in geometry or 'projection_association' in geometry[index] or 'factors' not in geometry[index]:
                 raise ValueError('Projection association before factors or duplicate')
             if (integer(f['bookends']),integer(f['postOriginal']),integer(f['cleanupCertified']),integer(f['outerCurrent']))!=(3,1,0,0):
@@ -294,7 +300,7 @@ def assess(text,expected_source):
                 'bookends':3,'post_original_return':True}
         elif kind=='geometryData':
             if set(f)!={'request','eye','hand','index','kind','chunk','values'}:raise ValueError('Geometry data schema mismatch')
-            index=integer(f['index'],0,7)
+            index=integer(f['index'],0,draw_capacity(current)-1)
             if index not in geometry:raise ValueError('Geometry payload before header')
             g=geometry[index];which=f['kind'];chunk=integer(f['chunk'],0,511)
             factors={'factorModel':12,'factorLocal':12,'factorView':12,'factorProjection':16}
@@ -352,7 +358,7 @@ def assess(text,expected_source):
             reason=r.get('rejection',{})
             input_history=reason.get('reason')==32 and failure is not None and failure['step']==20 and failure['valid']==15
             repeated_history=r['copyLayout']==0 and reason.get('reason')==11 and 1<=r['draws']<8 and failure is None and 'stream_probe' not in r
-            capacity_history=r['copyLayout']==1 and reason.get('reason')==10 and r['draws']==8 and retained['count']==8 and \
+            capacity_history=r['copyLayout']==1 and reason.get('reason')==10 and r['draws']==draw_capacity(r) and retained['count']==draw_capacity(r) and \
                 reason.get('checks')==32639 and failure is None and 'stream_probe' not in r
             if r['stage']!=3 or not (input_history or repeated_history or capacity_history) or reason.get('preceding')!=2 or \
                     reason.get('state')!=(47|r['rawGripValid']*16) or (not capacity_history and reason.get('checks')) or reason.get('callbacks')!=63 or \
@@ -377,7 +383,7 @@ def assess(text,expected_source):
             g['input_layout'] in (2,3,4) for g in r['geometry'].values()) else 'event-pose-and-consumed-draws') if r['draws'] else 'event-pose-only'
         r['geometry_observed']=bool(r['draws'])
         completed.append(r)
-    return {'schema':3,'source_fingerprint':expected_source,'native_execution_by_assessor':False,
+    return {'schema':producer_schema,'source_fingerprint':expected_source,'native_execution_by_assessor':False,
             'copied_event_pose_observations':completed,'rejected_or_missing_observations':rejected,
             'historical_loaded_bytes_verified':False,'positive_grasp_verified':False,'alignment_accepted':False,
             'remaining':['rendered geometry content association','interpreted winning blend/cache evidence','positive measured grasp reference']}

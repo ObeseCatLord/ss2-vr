@@ -35,6 +35,24 @@ def fixture(retained=False,flags=0):
     return '\n'.join([*lines,*producer(flags),*extras])
 
 class Checks(unittest.TestCase):
+    def test_schema4_associations_cover_last_two_indices_without_weakening_keys(self):
+        lines=fixture().splitlines()
+        geometry=[line for line in lines if line.startswith('Lab idle geometry')]
+        ten=[line.replace('schema=3 ','schema=4 copyLayout=1 ').replace('draws=1','draws=10')
+             for line in lines if not line.startswith('Lab idle geometry')]
+        for i in range(10):ten.extend(line.replace('index=0 ','index='+str(i)+' ') for line in geometry)
+        text='\n'.join(ten);e=assess(text,SOURCE)
+        g=e['copied_event_pose_observations'][0]['geometry']
+        self.assertEqual(set(g),set(range(10)))
+        for i in (8,9):
+            self.assertEqual(g[i]['projection_association']['sequence'],1)
+            self.assertFalse(g[i]['projection_association']['alignment_accepted'])
+            target='index='+str(i)+' sequence=1 modelAddress=1000 drawAddress=2000'
+            for bad in (target.replace('drawAddress=2000','drawAddress=2001'),
+                        target.replace('sequence=1','sequence=2')):
+                with self.assertRaises(ValueError):assess(text.replace(target,bad),SOURCE)
+        with self.assertRaises(ValueError):assess(text.replace('index=9 ','index=10 '),SOURCE)
+
     def test_cold_and_cached_modes_preserve_false_reference_claims(self):
         for retained in (False,True):
             for flags in (0,2,4,6):

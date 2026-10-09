@@ -1280,7 +1280,7 @@ def run(cfg):
             if len(log.encode())>16*1024*1024:raise ValueError('Idle log exceeds the bounded reader budget')
             evidence=assess(log,cfg['compiled_product_contract']['source_fingerprint'])
             path=run_dir/'idle-event-pose-geometry.json';path.write_text(json.dumps(evidence,indent=2)+'\n')
-            manifest['idle_collection']={'schema':3,'evidence_file':path.name,
+            manifest['idle_collection']={'schema':evidence['schema'],'evidence_file':path.name,
                 'complete_event_pose_observations':len(evidence['copied_event_pose_observations']),
                 'rejected_observations':len(evidence['rejected_or_missing_observations']),
                 'copied_geometry_draws':sum(o['draws'] for o in evidence['copied_event_pose_observations']),

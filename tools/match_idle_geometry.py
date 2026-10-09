@@ -45,8 +45,8 @@ def match_draws(observations,candidates,retained=False):
     return rows
 
 def match(evidence,candidates):
-    if evidence.get('schema')!=3 or evidence.get('alignment_accepted') is not False:
-        raise ValueError('Expected strict schema3 copied collector evidence')
+    if evidence.get('schema') not in (3,4) or evidence.get('alignment_accepted') is not False:
+        raise ValueError('Expected strict schema3/4 copied collector evidence')
     rows=match_draws(evidence['copied_event_pose_observations'],candidates)
     diagnostic=match_draws([o for o in evidence['rejected_or_missing_observations'] if 'retained_copies' in o],candidates,True)
     missing=[{'request':o['request'],'eye':o['eye'],'hand':o['hand'],'stage':o['stage']}

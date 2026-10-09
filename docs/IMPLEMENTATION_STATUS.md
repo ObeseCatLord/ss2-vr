@@ -1,5 +1,65 @@
 # Implementation status — 2026-10-09
 
+## Ten-copy content collector — implemented, native proof next
+
+V26's actual ten-call sequence justified extending the existing bounded geometry
+collector from8to10owned copies. Emission uses schema4; offline assessment maps
+schema3→8/schema4→10, requires ordinallayout1for4 and rejects mixedschemas.
+All geometry/count/capacity branches and direct matcher/replay/runtime manifest
+consumers handle the version. V25/V26 serialized schema3 reassessments are exactly
+unchanged. No geometry grammar, native forwarding, COM cleanup, projection cap8,
+position reference/tolerance, separate collector or hand-size admission was added.
+The ninth call already collected before rejecting storage: this adds two retained
+slots and only one further collection for the observed tenth call. An eleventh
+otherwise-qualified call still collects/forwards then rejects storage normally.
+
+All four products rebuilt on
+`28126fc622a87ab5cc47562cb8b714f43869b12a52e3124301a02a9166828dc5`,
+IPC10/wire7.72Debug/72Release and36normal/optimized native/compiled gates pass;
+22reader/9replay/8projection groups pass normally/optimized. Tests include ten
+owned copies/repeated native IDs, eleventh no-overwrite, twenty synthetic two-eye
+replay draws, slots8/9 associations, exact mixed-schema and capacity rejection.
+Astra/xhigh source GO and final scoped confirmation cover both narrow regression
+corrections and projection slots8/9. Local routing verified, backendunattested. Fixed trace storage
+105928bytes; both compiled x86 frames106672bytes (+15008), with probing. This is
+not runtime stack-safety acceptance. Production invocation reserves the frame even
+when diagnostic collection is off; no ownership relocation is justified by data.
+
+No runtime of the ten-copy source yet. Prepare a fresh13-tool-sealed neutral
+fixture to obtain actual tenth-surface bytes/hashes/declaration/program or the
+precise newly exposed rejection. V26 immutable. Layout317/338 alone is not a hand
+resource/content/pose/grasp certificate; the tenth surface currently has no
+same-invocation independent projection receipt. Physical alignment, driver controls
+and full user-operated hardware/shooting/melee/multiplayer acceptance remain open.
+See [bounded extension and disposition](IDLE_TEN_COPY_COLLECTOR.md).
+
+## V26 native indexed observation — next finite content edge
+
+Fresh source848021b/fingerprint732daee reached pinned Jungle with108native
+stereo projection pairs. Native shutdown, owned cleanup/survivors and private
+screen retirement passed;12protected files unchanged. Main visually inspected
+both eye images: world, weapons/lasers and stereo displacement. This stationary
+simulation does not certify dynamic head response or real hardware/network.
+
+All32invocations produced10qualified indexed API bookends each:320rows,
+nooverflow, normalHRESULT0 and matching pre/post identities surviving cleanup.
+Ordinal10/drawRecord5 in every invocation has317vertices/338triangles and all
+four channel layouts equal the private authored hand candidate. Both eyes and
+both hands are represented. This is an exact layout hint, not actual copied
+content, resource join, GPU visibility, winning pose or physical grasp proof.
+ModelRecord1/root config remain shared with the weapon pass; do not infer a
+separate hand instance from authored asset numbering.
+
+Whole readiness remains0accepted/32rejected:19Palette6,9capacityDraw10,
+4Name19. Nine first-eye invocations retain8copies each; all72copies uniquely
+match gunmesh3.18qualified cold native-order references agree;54legacy references
+agree36/fail18. Do not borrow cold associations for later material/cache draws.
+The wrapper's incomplete-reference outcome is not a scene/startup failure.
+V26 is archived immutable; no rerun/reseal or firing/movement/device/vehicle/
+network probe. The ten-call boundary now supports reviewing a minimal bounded
+collector budget change to obtain actual last-surface content. Other pose/name/
+reference/grasp gates remain open; no alignment correction has been installed.
+
 ## Current V25 result and indexed-submission observer
 
 Native VR world rendering is working in the simulated lab. V25 reached the

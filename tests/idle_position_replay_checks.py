@@ -314,6 +314,27 @@ class Checks(unittest.TestCase):
                 for name,values in EvidenceChecks.factor_words().items():
                     self.assertEqual(o['geometry'][0]['data'][name+':0'],values)
                     self.assertEqual(o['geometry'][1]['data'][name+':0'],[v+1 for v in values])
+            # The new producer retains the entire observed ten-call pass.
+            # Repeated native identities remain independent owned copies, with
+            # both distinct programs/assets including slots8/9 through replay.
+            ten_lines=[line.replace('draws=2','draws=10').replace('schema=3','schema=4')
+                       for line in pair_log.splitlines() if not line.startswith('Lab idle geometry')]
+            for i in range(10):
+                original=i%2
+                ten_lines.extend(line.replace(' index='+str(original)+' ',' index='+str(i)+' ')
+                                 for line in pair_log.splitlines()
+                                 if line.startswith('Lab idle geometry') and ' index='+str(original)+' ' in line)
+            ten_log='\n'.join(ten_lines)
+            ten_evidence=assess(ten_log+'\n'+ten_log.replace('eye=0','eye=1'),source)
+            self.assertEqual(ten_evidence['schema'],4)
+            ten=replay(ten_evidence,pair_index,root,EVALUATOR,root)
+            self.assertEqual(len(ten['draws']),20)
+            self.assertEqual([(r['eye'],r['geometry_index']) for r in ten['draws']],
+                             [(eye,i) for eye in (0,1) for i in range(10)])
+            self.assertEqual([r['candidates'][0]['candidate'] for r in ten['draws']],
+                             ['test.mesh','test2.mesh']*10)
+            self.assertTrue(ten['all_consumed_positions_agree_with_native_reference'])
+            self.assertFalse(ten['alignment_accepted'])
             first_measure=measure(pair,annotation)
             self.assertEqual([r['geometry_index'] for r in first_measure['measured_references']],[0,0])
             other_annotation=copy.deepcopy(annotation)

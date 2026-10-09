@@ -51,3 +51,30 @@ show its actual producer/parser path, safe owned shutdown and useful resource
 coverage. Only independently joined hand resource, winning event/cache pose and
 supported grasp evidence can unlock a physical alignment correction. An idle
 capture cannot establish native first-use/copy melee release.
+
+## V26 native indexed observation — next finite content edge
+
+Fresh source848021b/fingerprint732daee reached pinned Jungle with108native
+stereo projection pairs. Native shutdown, owned cleanup/survivors and private
+screen retirement passed;12protected files unchanged. Main visually inspected
+both eye images: world, weapons/lasers and stereo displacement. This stationary
+simulation does not certify dynamic head response or real hardware/network.
+
+All32invocations produced10qualified indexed API bookends each:320rows,
+nooverflow, normalHRESULT0 and matching pre/post identities surviving cleanup.
+Ordinal10/drawRecord5 in every invocation has317vertices/338triangles and all
+four channel layouts equal the private authored hand candidate. Both eyes and
+both hands are represented. This is an exact layout hint, not actual copied
+content, resource join, GPU visibility, winning pose or physical grasp proof.
+ModelRecord1/root config remain shared with the weapon pass; do not infer a
+separate hand instance from authored asset numbering.
+
+Whole readiness remains0accepted/32rejected:19Palette6,9capacityDraw10,
+4Name19. Nine first-eye invocations retain8copies each; all72copies uniquely
+match gunmesh3.18qualified cold native-order references agree;54legacy references
+agree36/fail18. Do not borrow cold associations for later material/cache draws.
+The wrapper's incomplete-reference outcome is not a scene/startup failure.
+V26 is archived immutable; no rerun/reseal or firing/movement/device/vehicle/
+network probe. The ten-call boundary now supports reviewing a minimal bounded
+collector budget change to obtain actual last-surface content. Other pose/name/
+reference/grasp gates remain open; no alignment correction has been installed.

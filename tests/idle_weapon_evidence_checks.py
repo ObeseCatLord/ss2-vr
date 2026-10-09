@@ -29,6 +29,49 @@ def geometry_fixture():
     return text,row,header,data
 
 class Checks(unittest.TestCase):
+    @staticmethod
+    def ten_copy_fixture(retained=False):
+        text,_,_,_=geometry_fixture();lines=text.splitlines()
+        head=lines[0].replace('schema=3 ','schema=4 copyLayout=1 ').replace('draws=1','draws=10')
+        copies=[line for line in lines if line.startswith('Lab idle geometry')]
+        if retained:
+            body=[head.replace('stage=4','stage=3'),
+                  'Lab idle rejection request=100 eye=1 hand=0 reason=10 preceding=2 checks=32639 state=63 callbacks=63',
+                  'Lab idle retainedCopies request=100 eye=1 hand=0 count=10 postOriginal=1 cleanupCertified=0 outerCurrent=0']
+            copies=[line.replace('Lab idle geometry','Lab idle retainedGeometry') for line in copies]
+        else:body=[head,*[line for line in lines[1:] if not line.startswith('Lab idle geometry')]]
+        for i in range(10):body.extend(line.replace('index=0 ','index='+str(i)+' ').replace('instance=50','instance='+str(50+i)) for line in copies)
+        return '\n'.join(body)
+    def test_schema4_ten_distinct_copies_match_and_preserve_old_budget(self):
+        for retained in (False,True):
+            text=self.ten_copy_fixture(retained);e=assess(text,SOURCE)
+            self.assertEqual(e['schema'],4)
+            r=(e['rejected_or_missing_observations'] if retained else e['copied_event_pose_observations'])[0]
+            g=r['retained_copies']['geometry'] if retained else r['geometry']
+            self.assertEqual(list(g),list(range(10)))
+            self.assertEqual([x['instance'] for x in g.values()],list(range(50,60)))
+            self.assertEqual([x['drawRecord'] for x in g.values()],[0]*10)
+            matched=match(e,{})
+            self.assertEqual(len(matched['retained_diagnostic_matches'] if retained else matched['matches']),10)
+            self.assertFalse(e['alignment_accepted']);self.assertFalse(e['positive_grasp_verified'])
+            lines=text.splitlines()
+            for bad in (text.replace('schema=4','schema=3'),text.replace('copyLayout=1 ','') ,
+                        text.replace('copyLayout=1','copyLayout=0'),text.replace('index=9 ','index=10 '),
+                        text+'\n'+next(x for x in lines if 'index=9 ' in x),
+                        '\n'.join(x for x in lines if 'index=8 ' not in x),
+                        text+'\n'+DRAW.replace('schema=3 ','schema=3 copyLayout=1 ').replace('request=100','request=101').replace('stage=4','stage=3')):
+                with self.subTest(retained=retained,bad=bad[:120]),self.assertRaises(ValueError):assess(bad,SOURCE)
+            mixed=text+'\n'+DRAW.replace('schema=3 ','schema=3 copyLayout=1 ').replace('request=100','request=101').replace('stage=4','stage=3')
+            with self.assertRaisesRegex(ValueError,'Mixed producer schemas'):assess(mixed,SOURCE)
+            if retained:
+                eight='\n'.join(line for line in lines if 'index=8 ' not in line and 'index=9 ' not in line)
+                eight=eight.replace('draws=10','draws=8').replace('count=10','count=8')
+                with self.assertRaisesRegex(ValueError,'Retained companion lacks original copied-state qualification'):assess(eight,SOURCE)
+                for bad in (text.replace('draws=10','draws=8').replace('count=10','count=8'),
+                            text.replace('checks=32639','checks=32767'),text.replace('count=10','count=11')):
+                    with self.assertRaises(ValueError):assess(bad,SOURCE)
+        self.assertEqual(assess(VALID,SOURCE)['schema'],3)
+
     def test_exact_capacity_history_preserves_eight_owned_copies_only(self):
         text,_,_,_=geometry_fixture()
         lines=text.splitlines();base='request=100 eye=1 hand=0'
