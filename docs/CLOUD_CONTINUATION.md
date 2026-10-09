@@ -1,5 +1,24 @@
 # Latest exact noUV passive source checkpoint
 
+## Native diagnostic capture succeeds — both-eye reference retained
+
+The fresh private run completed collection with seven qualifying Black draws
+spanning both eyes,140matched native/OpenXR world projection pairs, exact Jungle
+scene identity, private native sniper save, and clean native/display shutdown.
+12protected original files remain unchanged. No firing, movement, zoom, vehicle,
+network, head-motion or desktop-input probe occurred.
+
+Rejected observations were15name failures and10palette failures. Nine palette
+records lack the required own-event/configuration association (checks118), so no
+ownership-only receipt is emitted for them. One ownership-only failure (checks111)
+records both comparisons false: the selected instance has linked=0 and the copied
+cache owner is0. This proves rejection of that association, not what the native
+fallback/cache object means. No predicate or attempt quota was relaxed. Full
+collection readiness is true; visual grasp/contact and exact shooting-parent
+reconstruction remain unverified. Sourcea6a611410c5d9a6baeadd583e1d121fc4dbd24b7,
+products78b36974e14483481e6bafd53c747662b727f321bce9f67572eb5e80baa0a090.
+
+
 ## Palette ownership diagnosis — corrected capture accounting
 
 Astra inspected the actual retained V39/V40/V41 records. V40 and V41 each have
