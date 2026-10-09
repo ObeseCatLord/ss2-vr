@@ -1546,3 +1546,18 @@ source fingerprintdfb44d3c52cb357dd081efa8bea2dab264fba396539b62b7c080aa3e66f198
 IPC10/wire7. No ID2 runtime or firing/vehicle/network/headset probe occurred.
 Loaded/render association and actual multi-index pose arithmetic remain the next
 ID2 gate; physical driver controls and full user/device/MP acceptance remain open.
+
+## 2026-10-09 — hovercraft input mode and head-clearance instructions
+
+Astra resolved the inspected saucer/fighter control route: horizontal-strafe
+abilities select native mode2 before turning preference. X requests lateral
+translation while look yaw controls desired heading; a wheel-to-X mapping would
+be incorrect. Preserve native ClientAction, physics, throttle/aim/fire and fallback.
+Live entity/resource and evaluated cockpit-frame association remain the next
+physical-control source edge. No driver-control adapter or runtime test is claimed.
+
+Corrected a stale HeadComfort configuration comment: the existing world-volume
+path admits supported seated riders as well as handheld players. Native exclusions
+may omit the ridden mechanism, so cockpit-interior protection remains unverified.
+The user procedure now separates body movement from head-clearance settings.
+Defaults and native code are unchanged; no game or user settings were modified.

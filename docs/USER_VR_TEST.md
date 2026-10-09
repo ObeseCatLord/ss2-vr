@@ -43,6 +43,13 @@ Beyond's controller model determines its bindings. Use the current package's
    Test the enabled body/head collision behavior, corners, stairs and low roofs.
    Do not count an intentionally disabled collision feature as a pass.
 
+Body settlement and head-volume protection are separate development options:
+`[Roomscale]Enabled=1` requests body movement; `[HeadComfort]Enabled=1` requests
+the world-clearance guard and can make obstructed or unavailable world views
+opaque while retaining UI. Both default to0. The head path also admits supported
+seats, but native filtering may exclude the ridden mechanism, so cockpit-interior
+collision is not established. Record these settings and each outcome separately.
+
 ## Hands, aiming and native dual wield — user-operated firing
 
 1. Check each weapon's physical grip, size and orientation against its controller.

@@ -253,3 +253,41 @@ This does not reopen the completed car/saucer inventories. Keep joystick/native
 aim/physics/ClientAction unchanged. Private geometry/resources/previews remain
 local; no vehicle or input test ran. Local Astra/xhigh routing was verified;
 independent backend attestation was unavailable.
+
+## Hovercraft native control mode — 2026-10-09
+
+Astra/xhigh resolved the two inspected handle-bearing families' native input
+route without repeating their geometry census. The exact HoverSaucer and three
+HoverFighter parameter resources encode moving abilities41, including horizontal
+strafe bit8, and turning preference1. Horizontal-strafe admission precedes that
+preference: native EnforcePuppetMoveLook158810 selects the mode2 setter80690.
+This differs from the previously inspected wheeled mode3 sign/limit route.
+
+Serialized SHovercraftPuppetParams resolves to CHovercraftPuppetParams. Native
+CHovercraftPuppetEntity vtable2A8558 and CHovercraftCharacterEntity vtable2B8420
+share EnforcePuppetMoveLook158810, LerpToDesiredVelocityAndLook158BE0 and
+CalculateMovingAndRotatingRatio930A0. This verifies shared dispatch when these
+parameters are installed; it does not identify a live world entity/subclass.
+
+The original ClientAction/distributor preserves look, raw movement and processed
+movement. Mode2 uses processed movement; the native ratio helper converts it
+into the craft frame. At aligned headings, X requests lateral translation and
+-Z propulsion. Native look yaw requests body heading, with native speed limits,
+banking and physical joints retained. Raw X is neither a cockpit-wheel angle nor
+a direct yaw-rate command. A wheel-to-X mapping for these families is rejected.
+
+Neither this route nor the prior asset work establishes an independently animated
+handle or pivot. The remaining source edge is a bounded passive observation of
+local operated-seat/entity identity, installed parameter/model association, mode
+and active abilities, then an evaluated Main/Seat frame bound to that same render
+instance. Fighter Loading still prevents using fixed bind transforms as live
+geometry. Any eventual grab gesture must use the existing mounted-input/native
+ClientAction route, preserve joystick/throttle/aim/fire and require fresh squeeze
+release/rearm and smooth hand transfer. No physical control adapter is installed.
+
+The owned native fingerprint, reflection/dispatch/instruction/import boundaries
+and exact scalar resource spans passed100private static checks. Main read the
+completed report and retains private raw evidence outside source. Current local
+Astra/xhigh tags were verified; backend identity remains unattested. No vehicle,
+input, game, headset or network runtime ran. These facts are a native route
+boundary, not full vehicle source or runtime acceptance.
