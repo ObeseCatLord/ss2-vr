@@ -1,5 +1,24 @@
 # Latest exact noUV passive source checkpoint
 
+## Sniper reach correction confirmed in neutral native runtime
+
+A fresh isolated run reports an accepted ID13 `reachPreserved=1` witness with
+radius0.702938914m. Offline current-math reproduction matches the copied vector
+and target exactly; the previous bounded target differs by approximately0.203m.
+The run produced146matched native/OpenXR projection pairs and per-eye images,
+created its private sniper save, and shut down native/display processes without
+survivors or cleanup errors.12protected original files remain unchanged. No
+firing/movement/zoom/desktop input or physical-headset probe occurred.
+
+The broader model collector still rejected32early own-animation-name samples,
+so this run provides no new qualified rendered-handle/visual-muzzle association.
+Exact same-invocation parent reconstruction and visual muzzle coincidence remain
+unverified. Keep that evidence separate from the verified existing-route reach
+correction. Source034fd8cfc34bd3afa75cafdf3b18ba3309d26b60, products
+9c71b84624456b670815dbb6e77758a369444d6788d48528bdfd5ba187d47196.
+Full remaining implementation and user-operated gameplay/device acceptance stay open.
+
+
 ## Admitted sniper native reach preserved
 
 The ID13 local and authoritative muzzle adapters now preserve the existing-route
