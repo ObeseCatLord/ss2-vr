@@ -1,5 +1,32 @@
 # Implementation status — 2026-10-09
 
+## Live sniper alignment integrated — passive muzzle witness next
+
+The latest private capture completed native grant/select/save and supplied twelve
+qualified Black draws spanning both eyes and both hands (2,904vertices each,
+maximum clip error2.24969e-7). Each record has its own native Idle event, current
+resource/model/palette identity and own-source2 upload/reference association.
+No cross-eye cache receipt was borrowed. Native shutdown/private display cleanup
+were clean;12protected files unchanged. The new save/preload remain private.
+
+The harness stopped before images:29ready sniper status samples spanned10.042s,
+exhausting its ten-second pose-phase budget. Validated neutral idle collection
+now allows20s for the same30observations, still clipped to the global deadline;
+other modes keep10s. No image/device acceptance is claimed from this capture.
+
+The existing model-root adapter now supports the verified ID13 handle convention.
+Native ID participates in fresh binding/equality; placement, local and authority
+aim use the same correction once, preserving native charge/animation/stretch.
+Scope inherits that root. ID1 remains unchanged; unknown IDs do not receive this
+reference. Astra source GO, local Astra/xhigh tags verified, backend unattested.
+77Debug/77Release and4compiled muzzle-unwind gates normal/-O pass.
+
+The existing0.5m attachment clamp remains pending one passive, accepted idle
+original-return witness. A one-shot private row records its returned attachment,
+current receipt, camera/root/hand, charge/correction, pre-clamp vector/radius and
+unchanged target. It adds no native getter or firing. A fresh sealed package is
+being prepared; rendered-muzzle coincidence and full mod completion remain open.
+
 ## Presentation-only preparation deferral — source correction
 
 The fresh alternating-order run identified the exact stop: initial

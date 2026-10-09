@@ -183,3 +183,19 @@ ID13 environment plus installed lab isolation. Default production order stays
 left then right. Real own-event records for both eyes are still required; cache
 hits or exhausted32attempts may produce an inconclusive capture. It does not
 certify cached-eye continuity within a single request. Correction remains inactive.
+
+## ID13 root correction integrated
+
+Twelve actual qualified own-event Black observations now span both eyes and both
+hands. The existing binding carries native ID and rechecks it after configuration
+copy; model-root, local and authority aim share the declared ID13 reference once.
+Native charge, animation, signed stretch and scope-root propagation remain.
+Unknown weapon IDs receive no borrowed reference. This is the virtual handle
+convention, not authored hand skin, GPU/world provenance or physical acceptance.
+
+Astra source GO; native-ID mismatch, both hands/nonuniform stretch/animation
+residual checks pass, as do compiled muzzle cleanup gates for both products.
+The unchanged0.5m radius still limits attachment reach. One private neutral
+original-return witness will measure its actual pre-clamp vector and current
+receipt before any muzzle-policy change. No additional getter/firing is added;
+radius alone cannot certify rendered attachment direction or all animation states.

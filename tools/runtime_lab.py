@@ -1312,7 +1312,11 @@ def run(cfg):
             q=mul(mul([0,math.sin(yaw/2),0,math.cos(yaw/2)],
                       [math.sin(pitch/2),0,0,math.cos(pitch/2)]),[0,0,math.sin(roll/2),math.cos(roll/2)])
             expected=[baseline['p'][i]+head[i]-baseline_packet[i] for i in range(3)]
-            matches=0;previous=boundary;pose_deadline=min(deadline,time.monotonic()+10)
+            # Private neutral collection launches one owned observer per sample.
+            # Its startup overhead can exceed ten seconds for thirty samples;
+            # retain the same observations and clip to the global deadline.
+            pose_seconds=20 if cfg.get('idle_weapon_probe') else 10
+            matches=0;previous=boundary;pose_deadline=min(deadline,time.monotonic()+pose_seconds)
             while matches<30 and time.monotonic()<pose_deadline:
                 try:state=observer(cfg,env,'status',token,timeout=remaining(pose_deadline),deadline=pose_deadline)
                 except ObserverError as error:

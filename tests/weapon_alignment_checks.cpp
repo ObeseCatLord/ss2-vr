@@ -23,10 +23,10 @@ int main() {
         assert(!id1RenderedStretch(1,{1,bad,1},s));
         assert(!id1RenderedStretch(0,{1,1,bad},s));
     }
-    const WeaponAlignmentBinding retained{10,20,30,40,1,1,50,60,70,{1,1,1}};
+    const WeaponAlignmentBinding retained{10,20,30,40,1,1,50,60,70,{1,1,1},1};
     assert(retained==retained);
     auto changed=retained;
-    for(unsigned field=0;field<12;++field) {
+    for(unsigned field=0;field<13;++field) {
         changed=retained;
         switch(field) {
             case 0:++changed.owner;break;
@@ -41,6 +41,7 @@ int main() {
             case 9:changed.baseStretch.x=-1;break;
             case 10:changed.baseStretch.y=.8f;break;
             case 11:changed.baseStretch.z=1.1f;break;
+            case 12:changed.nativeId=13;break;
         }
         assert(changed!=retained);
     }
@@ -50,11 +51,17 @@ int main() {
     // The fixed reference uses the native model frame, before stretch. It is
     // not continuously inverted through animated bones.
     const Quat q=normalize(multiply(yaw(.7f),Quat{.12f,0,0,.99f}));
-    for(uint32_t selector : {0u,1u}) {
+    Vec3 reference;
+    for(uint32_t unsupported : {0u,2u,12u,14u,UINT32_MAX}) {
+        assert(!weaponAlignmentSupported(unsupported));
+        assert(!weaponModelHandleReference(unsupported,reference));
+        assert(dot(reference,reference)==0);
+    }
+    for(uint32_t nativeId : {1u,13u}) for(uint32_t selector : {0u,1u}) {
+        assert(weaponAlignmentSupported(nativeId) && weaponModelHandleReference(nativeId,reference));
         assert(id1RenderedStretch(selector,{1.1f,.9f,.8f},s));
-        const Vec3 scaled{s.x*Id1ModelHandleReference.x,s.y*Id1ModelHandleReference.y,
-                          s.z*Id1ModelHandleReference.z};
-        const Vec3 delta=modelAnchorDisplacement(q,s,Id1ModelHandleReference);
+        const Vec3 scaled{s.x*reference.x,s.y*reference.y,s.z*reference.z};
+        const Vec3 delta=modelAnchorDisplacement(q,s,reference);
         const Vec3 anchored=delta+rotate(q,scaled);
         assert(dot(anchored,anchored)<1e-12f);
         const Vec3 animatedLocalResidual{.0003f,-.0002f,.0005f};
