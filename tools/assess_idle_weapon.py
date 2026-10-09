@@ -52,7 +52,10 @@ def hexwords(value,count):
 def declaration_weights(rows):
     return declaration_layout(rows)[1]
 
-def validate_geometry(geometry,count,copy_layout=0):
+def validate_geometry(geometry,count,copy_layout=0,native_id=1):
+    limits={1:(1490,1332),13:(2904,2245)}
+    if native_id not in limits:raise ValueError('Unsupported geometry native selector')
+    max_vertices,max_triangles=limits[native_id]
     if set(geometry)!=set(range(count)):raise ValueError('Missing geometry headers')
     draw_records=set()
     for g in geometry.values():
@@ -67,7 +70,7 @@ def validate_geometry(geometry,count,copy_layout=0):
         draw_records.add(g['drawRecord'])
         layout=g['data']['layout:0'];buffers=g['data']['buffers:0'];draw=g['data']['draw:0'];streams=g['data']['streams:0']
         v,t=layout[:2]
-        if not 1<=v<=1490 or not 1<=t<=1332 or layout[3]!=0x85 or layout[6]!=0x87 or \
+        if not 1<=v<=max_vertices or not 1<=t<=max_triangles or layout[3]!=0x85 or layout[6]!=0x87 or \
            layout[9]!=0x80 or layout[12]!=0x80 or layout[4]>=255 or layout[7]>=255 or \
            layout[10]!=layout[4] or layout[13]!=layout[4] or draw!=[4,0,0,v,layout[5]//2,t] or layout[5]%2:
             raise ValueError('Unsupported declared geometry layout')
@@ -372,7 +375,7 @@ def assess(text,expected_source):
                     not 1<=r['contributors']<=16 or not 1<=r['matrices']<=64 or \
                     any(not r[k] for k in ('request','input','owner','weapon','model','generation','cfg','file')):
                 raise ValueError('Retained companion lacks original copied-state qualification')
-            validate_geometry(retained['geometry'],retained['count'],r['copyLayout'])
+            validate_geometry(retained['geometry'],retained['count'],r['copyLayout'],r['nativeId'])
             for g in retained['geometry'].values():validate_association(r,g)
         validate_stream_probe(r,retained_validated=retained is not None)
         if r['stage']!=4:rejected.append(r);continue
@@ -384,7 +387,7 @@ def assess(text,expected_source):
         wanted.update('canonical:'+str(i) for i in range(r['matrices']))
         if not r['contributors'] or not r['matrices'] or set(r['pose'])!=wanted or r['stretch'] is None or \
            set(r['animations'])!=set(range(r['contributors'])):raise ValueError('Truncated idle copy emission')
-        validate_geometry(r['geometry'],r['draws'],r['copyLayout'])
+        validate_geometry(r['geometry'],r['draws'],r['copyLayout'],r['nativeId'])
         for g in r['geometry'].values():validate_association(r,g)
         r['evidence_class']=('event-pose-and-position-draws-with-auxiliary-uv' if any(
             g['input_layout'] in (2,3,4) for g in r['geometry'].values()) else 'event-pose-and-consumed-draws') if r['draws'] else 'event-pose-only'

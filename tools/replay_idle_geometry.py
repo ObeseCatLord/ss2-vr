@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Replay private matched copied ID1 input offline, without launching any game."""
+"""Replay private matched copied selected stock input offline, without launching any game."""
 import argparse
 import hashlib
 import json
@@ -28,7 +28,7 @@ def channel_bytes(root,asset,row):
     channels={}
     for name in CHANNELS:
         r=row['channel_ranges'][name];size=r['size']
-        if not 0<size<=1490*12:raise ValueError('Candidate channel byte budget exceeded')
+        if not 0<size<=2904*12:raise ValueError('Candidate channel byte budget exceeded')
         path=private_path(root,row['channel_files'][name])
         if path.stat().st_size!=size:raise ValueError('Private channel length mismatch')
         data=path.read_bytes()
@@ -53,7 +53,7 @@ def evaluate_geometry(g,channels,evaluator,temporary,reference=None):
     for i in range(vertices):
         data+=channels['positions'][i*12:i*12+12]+channels['uv'][i*8:i*8+8]
         data+=channels['weights'][i*4:i*4+4]+channels['local_indices'][i*4:i*4+4]
-    if len(data)>65536:raise ValueError('Evaluator input budget exceeded')
+    if len(data)>131072:raise ValueError('Evaluator input budget exceeded')
     path=temporary/'copied-input.bin';path.write_bytes(data)
     p=subprocess.run([str(evaluator),str(path)],capture_output=True,text=True,timeout=10)
     if p.returncode or len(p.stdout)>2048:raise ValueError('Offline evaluator rejected input: '+p.stderr.strip()[:160])
@@ -79,6 +79,7 @@ def replay_draws(rows,observations,candidates,candidate_root,evaluator,temporary
         geometry=o['retained_copies']['geometry'] if retained else o['geometry']
         g=geometry.get(str(row['geometry_index']),geometry.get(row['geometry_index']))
         result['binding']={k:o[k] for k in ('request','input','owner','weapon','model','generation','eye','hand')}
+        result['binding']['nativeId']=o.get('nativeId',1)
         result['position_replay']=evaluate_geometry(g,channels,evaluator,temporary)
         result['reference_kind']='legacy-collapsed-matrix'
         try:

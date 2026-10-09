@@ -18,7 +18,7 @@ import struct
 ROOT = Path(__file__).resolve().parents[1]
 MAX_BYTES = 16 * 1024 * 1024
 MAX_OBJECTS, MAX_ASSETS, MAX_SURFACES = 4096, 16, 512
-MAX_VERTICES, MAX_TRIANGLES = 1490, 1332  # Existing idle collector domain.
+MAX_VERTICES, MAX_TRIANGLES = 2904, 2245  # Generic offline storage envelope; native admission remains per ID.
 CHANNELS = ('positions', 'indices', 'weights', 'local_indices', 'uv')
 FORMATS = dict(zip(CHANNELS, (133, 135, 128, 128, 132)))
 STRIDES = dict(zip(CHANNELS, (12, 6, 4, 4, 8)))

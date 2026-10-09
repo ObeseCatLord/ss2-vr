@@ -28,6 +28,15 @@ def fixture(program=PROGRAM,constants=None,points=None,clip=IDENTITY,weights=1,l
     return data+b''.join(struct.pack('<5f',*p)+bytes([255,0,0,0,0,0,0,0]) for p in points)
 
 class Checks(unittest.TestCase):
+    def test_larger_offline_envelope_and_overflow(self):
+        data=fixture(points=[(1.,2.,3.,.25,.75)]*2904)
+        self.assertGreater(len(data),65536)
+        result=json.loads(self.run_fixture(data).stdout)
+        self.assertTrue(result['position_replay_agrees_with_reference'])
+        self.assertFalse(result['gpu_execution']);self.assertFalse(result['alignment_accepted'])
+        self.assertNotEqual(self.run_fixture(fixture(points=[(1.,2.,3.,.25,.75)]*2905)).returncode,0)
+        self.assertNotEqual(self.run_fixture(data+b'x'*(131073-len(data))).returncode,0)
+
     def test_staged_local_reference_preserves_old_schemas(self):
         local=[1.,0.,0.,100.,0.,1.,0.,-10.,0.,0.,1.,2.]
         program=[0xfffe0101,31,0x80000005,0x900f0000,
@@ -212,6 +221,16 @@ class Checks(unittest.TestCase):
             row('program',0,PROGRAM)
             for i in range(4):row('constant',i,struct.unpack('<4I',struct.pack('<4f',*clip[i*4:i*4+4])))
             evidence=assess('\n'.join(lines),source)
+            import copy
+            legacy=copy.deepcopy(evidence)
+            for observed in legacy['copied_event_pose_observations']+legacy['rejected_or_missing_observations']:
+                observed.pop('nativeId',None);observed.pop('native_id_explicit',None)
+            legacy_result=replay(legacy,index,root,EVALUATOR,root)
+            self.assertEqual(legacy_result['draws'][0]['binding']['nativeId'],1)
+            missing_required=copy.deepcopy(legacy)
+            missing_required['copied_event_pose_observations'][0].pop('weapon')
+            with self.assertRaises(KeyError):replay(missing_required,index,root,EVALUATOR,root)
+
             result=replay(evidence,index,root,EVALUATOR,root)
             self.assertTrue(result['all_consumed_positions_agree_with_native_reference']);self.assertFalse(result['alignment_accepted'])
             self.assertEqual(result['draws'][0]['render_geometry']['triangle_indices'],[0,1,2])
@@ -327,6 +346,11 @@ class Checks(unittest.TestCase):
             ten_log='\n'.join(ten_lines)
             ten_evidence=assess(ten_log+'\n'+ten_log.replace('eye=0','eye=1'),source)
             self.assertEqual(ten_evidence['schema'],4)
+            explicit_sniper=replay(assess(ten_log.replace('schema=4','schema=4 nativeId=13'),source),index,root,EVALUATOR,root)
+            self.assertTrue(all(row['nativeId']==13 for row in explicit_sniper['draws']))
+            selected_bindings=[row['binding'] for row in explicit_sniper['draws'] if 'binding' in row]
+            self.assertTrue(selected_bindings);self.assertTrue(all(b['nativeId']==13 for b in selected_bindings))
+
             ten=replay(ten_evidence,pair_index,root,EVALUATOR,root)
             self.assertEqual(len(ten['draws']),20)
             self.assertEqual([(r['eye'],r['geometry_index']) for r in ten['draws']],
@@ -455,6 +479,18 @@ class Checks(unittest.TestCase):
                       'Lab idle retainedCopies '+base+' count=2 postOriginal=1 cleanupCertified=0 outerCurrent=0',
                       *[v for v in native if v.startswith('Lab idle projection')],*stored]
             history=replay(assess('\n'.join(retained),source),index,root,EVALUATOR,root)
+            legacy_retained=assess('\n'.join(retained),source)
+            for observed in legacy_retained['rejected_or_missing_observations']:
+                observed.pop('nativeId',None);observed.pop('native_id_explicit',None)
+            old_history=replay(legacy_retained,index,root,EVALUATOR,root)
+            self.assertTrue(all(row['nativeId']==1 for row in old_history['retained_diagnostic_draws']))
+            selected_bindings=[row['binding'] for row in old_history['retained_diagnostic_draws'] if 'binding' in row]
+            self.assertTrue(selected_bindings);self.assertTrue(all(b['nativeId']==1 for b in selected_bindings))
+            sniper_history=replay(assess('\n'.join(retained).replace('schema=3','schema=4 nativeId=13'),source),index,root,EVALUATOR,root)
+            self.assertTrue(all(row['nativeId']==13 for row in sniper_history['retained_diagnostic_draws']))
+            selected_bindings=[row['binding'] for row in sniper_history['retained_diagnostic_draws'] if 'binding' in row]
+            self.assertTrue(selected_bindings);self.assertTrue(all(b['nativeId']==13 for b in selected_bindings))
+
             self.assertTrue(history['retained_diagnostic_draws'][0]['position_replay']['position_replay_agrees_with_reference'])
             self.assertFalse(history['all_consumed_positions_agree_with_native_reference'])
             self.assertFalse(history['copied_geometry_coverage_complete']);self.assertFalse(history['alignment_accepted'])

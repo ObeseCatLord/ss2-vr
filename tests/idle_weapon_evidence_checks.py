@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 import unittest
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
-from assess_idle_weapon import assess
+from assess_idle_weapon import assess,validate_geometry
 from match_idle_geometry import match
 
 SOURCE='a'*64
@@ -29,6 +29,26 @@ def geometry_fixture():
     return text,row,header,data
 
 class Checks(unittest.TestCase):
+    def test_selected_geometry_capacity(self):
+        import copy
+        text,_,_,_=geometry_fixture()
+        g=assess(text,SOURCE)['copied_event_pose_observations'][0]['geometry'][0]
+        large=copy.deepcopy(g);d=large['data']
+        d['layout:0']=[2904,2245,0,133,0,0,135,0,34848,128,0,46464,128,0]
+        d['buffers:0']=[81312,0,1,100,0,13470,0,1,101,0]
+        d['draw:0']=[4,0,0,2904,0,2245]
+        d['streams:0']=[1,0,12,1,1,46464,4,1,1,34848,4,1,1,58080,8,1,2,0]
+        validate_geometry({0:large},1,native_id=13)
+        for id in (1,0,2,14):
+            with self.assertRaises(ValueError):validate_geometry({0:large},1,native_id=id)
+        for field,value in ((0,2905),(1,2246)):
+            bad=copy.deepcopy(large);bad['data']['layout:0'][field]=value
+            with self.assertRaises(ValueError):validate_geometry({0:bad},1,native_id=13)
+        for buffer in (0,5):
+            bad=copy.deepcopy(large);bad['data']['buffers:0'][buffer]-=1
+            with self.assertRaises(ValueError):validate_geometry({0:bad},1,native_id=13)
+
+
     def test_native_weapon_selection_is_explicit(self):
         result=assess(VALID,SOURCE)
         self.assertEqual(result['copied_event_pose_observations'][0]['nativeId'],1)

@@ -28,14 +28,14 @@ int main(int argc,char **argv) {
     try {
         if(argc!=2)throw std::runtime_error("one-private-input-required");
         std::ifstream f(argv[1],std::ios::binary|std::ios::ate);
-        const auto size=f.tellg();if(!f || size<0 || size>65536)throw std::runtime_error("input-budget");
+        const auto size=f.tellg();if(!f || size<0 || size>131072)throw std::runtime_error("input-budget");
         std::vector<uint8_t> bytes(static_cast<size_t>(size));f.seekg(0);
         if(!f.read(reinterpret_cast<char*>(bytes.data()),std::streamsize(bytes.size())))throw std::runtime_error("input-read");
         Reader input{bytes};
         if(input.take<std::array<char,8>>()!=std::array<char,8>{'S','S','2','V','I','R','P','1'})throw std::runtime_error("input-magic");
         const auto schema=input.take<uint32_t>(),words=input.take<uint32_t>(),count=input.take<uint32_t>(),
                    vertices=input.take<uint32_t>(),weights=input.take<uint32_t>();
-        if((schema!=1 && schema!=2 && schema!=3) || words<2 || words>512 || !count || count>256 || !vertices || vertices>IdleGeometryVertices || weights>1)
+        if((schema!=1 && schema!=2 && schema!=3) || words<2 || words>512 || !count || count>256 || !vertices || vertices>IdleGeometryStorageVertices || weights>1)
             throw std::runtime_error("input-bounds");
         const auto layout=schema>=2?input.take<uint32_t>():0;
         if(layout>4 || (layout!=0 && !weights))throw std::runtime_error("input-layout");
@@ -55,7 +55,7 @@ int main(int argc,char **argv) {
         // bytes can turn a partial assessment into success.
         struct Vertex {Vec3 p;std::array<float,2> uv;};
         static_assert(sizeof(Vertex)==20);
-        std::array<Vertex,IdleGeometryVertices> source{};
+        std::array<Vertex,IdleGeometryStorageVertices> source{};
         for(unsigned i=0;i<vertices;++i) {
             source[i]=input.take<Vertex>();
             const auto influence=input.take<std::array<uint8_t,8>>();

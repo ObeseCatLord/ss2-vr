@@ -1,16 +1,23 @@
 #pragma once
 #include "scope_buffer_layout.hpp"
+#include "idle_probe_selection.hpp"
 namespace ss2vr {
 constexpr uint32_t IdleGeometryVertices=1490,IdleGeometryTriangles=1332;
-// Explicit weighted ID1 diagnostic layout, not a claim that every native LOD uses it.
+constexpr uint32_t IdleGeometryStorageVertices=2904,IdleGeometryStorageTriangles=2245;
+struct IdleGeometryLimits {uint32_t vertices=0,triangles=0;};
+inline IdleGeometryLimits idleGeometryLimits(int nativeId) {
+    return nativeId==1?IdleGeometryLimits{IdleGeometryVertices,IdleGeometryTriangles}:
+        nativeId==13?IdleGeometryLimits{IdleGeometryStorageVertices,IdleGeometryStorageTriangles}:IdleGeometryLimits{};
+}
+// Selected stock diagnostic domains, not a claim about every native LOD.
 inline bool idleBufferRanges(const ScopeBufferInputs &in,
-                             std::span<const ScopeDeclarationElement> declaration,ScopeCopyRanges &out,uint32_t *passedChecks=nullptr) {
-    out={};const auto &s=in.surface;
+                             std::span<const ScopeDeclarationElement> declaration,ScopeCopyRanges &out,uint32_t *passedChecks=nullptr,int nativeId=1) {
+    out={};const auto &s=in.surface;const auto limits=idleGeometryLimits(nativeId);
     uint32_t passed=0;
     auto record=[&](unsigned bit,bool value) {if(value)passed|=1u<<bit;return value;};
     const bool basic[]={
-        record(0,s.vertices>0 && uint32_t(s.vertices)<=IdleGeometryVertices),
-        record(1,s.triangles>0 && uint32_t(s.triangles)<=IdleGeometryTriangles),
+        record(0,s.vertices>0 && uint32_t(s.vertices)<=limits.vertices),
+        record(1,s.triangles>0 && uint32_t(s.triangles)<=limits.triangles),
         record(2,!in.softwarePositions),record(3,in.draw.topology==4 && !in.draw.base && !in.draw.minimum),
         record(4,in.draw.vertices==uint32_t(s.vertices) && in.draw.primitives==uint32_t(s.triangles) && uint64_t(in.draw.start)*2==s.channels[1].offset),
         record(5,s.channels[0].format==0x85 && s.channels[1].format==0x87 && s.channels[2].format==0x80 && s.channels[3].format==0x80),

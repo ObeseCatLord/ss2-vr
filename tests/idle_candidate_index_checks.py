@@ -132,7 +132,7 @@ class Checks(unittest.TestCase):
         self.rejected(bad)
 
     def test_bad_counts_offsets_and_buffer_slots(self):
-        for field, values in [('2', (0, -1, True, 1333)), ('3', (0, -1, True, 1491))]:
+        for field, values in [('2', (0, -1, True, builder.MAX_TRIANGLES+1)), ('3', (0, -1, True, builder.MAX_VERTICES+1))]:
             for value in values:
                 bad = copy.deepcopy(self.decoded)
                 surface(bad)[field] = value

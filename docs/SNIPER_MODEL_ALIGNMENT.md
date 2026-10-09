@@ -116,3 +116,46 @@ IPC10/wire7.75Debug/75Release checks pass;32unchanged native/compiled gates plus
 in Release. Subsequent consumer24groups and verifier7groups pass normal/-O.
 This is the selector landing, not approval or verification of forthcoming capacity
 changes or an actual ID13 capture.
+
+## Capacity implementation superseding the preceding blocker
+
+The capacity blocker above is now closed in source. ID1 admission stays1490/1332;
+ID13 alone admits2904/2245, unknown IDs reject. Fixed idle storage covers the larger
+domain without changing production scope caps. The selected ID is copied before
+AddRef and passed through both input reads and the intervening range check.
+Completed and retained assessor limits are per-record; match/replay/missing rows
+retain the ID. Generic offline candidate storage and evaluator input are bounded
+at2904/2245 and128KiB, preserving formats1/2/3 and numeric rejection checks.
+
+Both inspected Black candidate exports succeed. Private normalized metadata
+removes only verified unused trailing-1table slots; present channels still reference
+slot0, original asset/buffer bytes and complete lengths/hashes are preserved.
+Normalization and five channel exports were independently reviewed. This one-off
+private derivation uses assertions and is not a reusable optimized-mode validator.
+Live-association, grasp and alignment flags remain false. Synthetic identity
+arithmetic checks all2899/2904vertices but does not establish native shader/world
+or GPU execution.
+
+The legacy replay KeyError was reproduced and fixed by defaulting only missing
+nativeId to1. Regressions cover completed/retained legacy and explicit13 labels,
+missing required binding fields, per-ID bounds, overflow/truncation, maximum
+vertex arithmetic and file overflow. Astra SOURCE GO; all9local turn tags confirm
+xhigh/Astra, independent backend unattested. All4products rebuilt on fingerprint
+`ec5541eabcf9365d802fc4b2ea8314015b2f0274286fc9f7570f9d663646753e`, IPC10/wire7.
+75Debug/75Release and36normal/optimized native/compiled gates pass; subsequent
+consumer25/replay10/candidate16groups pass normal/-O. No new native runtime.
+
+The source path can accommodate Black. It is not an already prepared user launch
+procedure: an actual unzoomed ID13 draw with unique native-content association and
+qualified replay remains necessary. The correction is still inactive. No new
+loader, IK, inventory/equip operation or alignment policy was installed.
+
+| Capacity review recommendation | Disposition |
+| --- | --- |
+| Separate per-ID admission from storage | Adopted; ID1 unchanged, ID13 bounded, unknown reject. |
+| Snapshot selected ID before COM and pass it through all range sites | Adopted. |
+| Preserve native forwarding/lifetime/program/scope fences | Adopted; unchanged gates and compiled checks pass. |
+| Preserve legacy IDs and reject mixed logs | Fixed and tested, including retained replay. |
+| Normalize only unreferenced metadata tail slots | Adopted privately; raw assets/buffers unchanged. |
+| Add another evaluator protocol/native-ID policy | Rejected; existing assessed-record policy and bounded arithmetic suffice. |
+| Claim activation from static/synthetic arithmetic | Rejected; actual draw association remains open. |

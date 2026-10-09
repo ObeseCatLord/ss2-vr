@@ -5,6 +5,31 @@ using namespace ss2vr;
 #error Geometry checks require assertions
 #endif
 int main() {
+    { // Larger storage does not widen ID1 or production scope admission.
+      ScopeBufferInputs sniper{
+        {2904,2245,{{{0,0x85,0},{0,0x87,0},{34848,0x80,0},{46464,0x80,0}}}},
+        {4,0,0,2904,0,2245},{1,0,12,1},{1,46464,4,1},{1,34848,4,1},{1,58080,8,1},
+        {81312,0,1,100,0},{13470,0,1,101,0},2,false};
+      const std::array<ScopeDeclarationElement,5> decl{{
+        {0,0,2,0,5,0},{5,0,8,0,5,5},{6,0,8,0,5,6},
+        {3,0,1,0,5,3},{255,0,17,0,0,0}}};
+      ScopeCopyRanges ranges;uint32_t checks=0;
+      assert(!idleBufferRanges(sniper,decl,ranges));
+      assert(idleBufferRanges(sniper,decl,ranges,&checks,13));
+      assert(checks==((1u<<20)-1) && ranges.slices[0].size==34848 && ranges.slices[1].size==13470);
+      for(int id:{-1,0,2,12,14,17})assert(!idleBufferRanges(sniper,decl,ranges,nullptr,id));
+      auto overflow=sniper;overflow.surface.vertices=2905;overflow.draw.vertices=2905;
+      assert(!idleBufferRanges(overflow,decl,ranges,&checks,13) && !(checks&1));
+      overflow=sniper;overflow.surface.triangles=2246;overflow.draw.primitives=2246;
+      assert(!idleBufferRanges(overflow,decl,ranges,&checks,13) && !(checks&2));
+      for(unsigned channel=0;channel<5;++channel) {
+        auto shortBuffer=sniper;
+        if(channel==1)shortBuffer.index.size=13469;
+        else shortBuffer.vertex.size=channel==0?34847:channel==2?46463:channel==3?58079:81311;
+        assert(!idleBufferRanges(shortBuffer,decl,ranges,nullptr,13));
+      }
+    }
+
     {const ScopeBufferInputs candidateAligned{
         {132,108,{{{14448,0x85,0},{9564,0x87,0},{58016,0x80,0},{58544,0x80,0}}}},
         {4,0,0,132,4782,108},{1,14448,12,1},{1,58544,4,1},{1,58016,4,1},{1,68960,8,1},

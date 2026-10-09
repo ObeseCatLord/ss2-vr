@@ -57,6 +57,7 @@ struct ProbeOwner {
     ScopeRasterObservation raster;
     IdleGeometryCopy idle;
     IdleWeaponTrace *idleTrace=nullptr;
+    int idleNativeId=-1; // Copied before AddRef; never selected again after COM callbacks.
     IdleWeaponTrace *submissionOwner=nullptr;
     unsigned submissionSlot=IdleSubmissionTrace::NoSlot;
     BoundInputs bindings[3]; // Slot2 only for passive ID1 post-forward observation.
@@ -65,10 +66,10 @@ struct ProbeOwner {
     IDirect3DVertexBuffer9 *lockedVertex = nullptr;
     IDirect3DIndexBuffer9 *lockedIndex = nullptr;
     void *mapped = nullptr;
-    std::array<uint8_t,IdleGeometryVertices*12> positions{};
-    std::array<uint8_t,IdleGeometryTriangles*6> indices{};
-    std::array<uint8_t,IdleGeometryVertices*4> weights{}, localIndices{};
-    std::array<uint8_t,IdleGeometryVertices*8> uv{};
+    std::array<uint8_t,IdleGeometryStorageVertices*12> positions{};
+    std::array<uint8_t,IdleGeometryStorageTriangles*6> indices{};
+    std::array<uint8_t,IdleGeometryStorageVertices*4> weights{}, localIndices{};
+    std::array<uint8_t,IdleGeometryStorageVertices*8> uv{};
     BCRYPT_ALG_HANDLE algorithm = nullptr;
     BCRYPT_HASH_HANDLE hash = nullptr;
     std::array<uint8_t,1024> hashObject{};
@@ -173,7 +174,7 @@ static void cleanup(bool aborted) noexcept {
     probe.sourceView = {}; probe.imageConstants = {};
     probe.transaction = probe.split = probe.imageChanged = probe.imageRestoreFailed = false;
     probe.cap = {}; probe.uvRows={}; probe.program={}; probe.colorProgram={};
-    probe.idleTrace=nullptr;
+    probe.idleTrace=nullptr;probe.idleNativeId=-1;
     probe.streamReentered=false;
     probe.busy = false;
 }
@@ -192,7 +193,7 @@ static bool identity(IUnknown *object,IUnknown *&out,HRESULT *observed=nullptr) 
     return SUCCEEDED(result) && out;
 }
 static bool boundInputs(IDirect3DDevice9 *d,BoundInputs &b,const ScopeIndexedDraw &draw,bool idle=false,
-                        IdleWeaponTrace::InputFailure *diagnostic=nullptr) {
+                        IdleWeaponTrace::InputFailure *diagnostic=nullptr,int idleNativeId=1) {
     b.values = {}; b.count = MAXD3DDECLLENGTH+1;
     HRESULT result=S_OK;
     auto fail=[&](uint32_t step,uint32_t index=0) {
@@ -255,7 +256,7 @@ static bool boundInputs(IDirect3DDevice9 *d,BoundInputs &b,const ScopeIndexedDra
     b.values.indexObject=reinterpret_cast<uintptr_t>(b.identity[4]);
     if(diagnostic){diagnostic->valid|=4;diagnostic->inputs=b.values;}
     ScopeCopyRanges ranges;
-    if(!(idle?idleBufferRanges(b.values,std::span(b.elements).first(b.count),ranges,diagnostic?&diagnostic->rangeChecks:nullptr):
+    if(!(idle?idleBufferRanges(b.values,std::span(b.elements).first(b.count),ranges,diagnostic?&diagnostic->rangeChecks:nullptr,idleNativeId):
               scopeBufferRanges(b.values,std::span(b.elements).first(b.count),ranges)))return fail(20);
     result=d->GetVertexShader(&b.shader);if(FAILED(result))return fail(21);
     if(!b.shader)return fail(22);
@@ -507,20 +508,20 @@ static bool collectIdleGeometry(IDirect3DDevice9 *d,const ScopeIndexedDraw &draw
     if(!nativeUiDeviceCurrent(d))return reject(IdleWeaponTrace::Rejection::CollectDevice);
     ScopeCopyRanges ranges;
     IdleWeaponTrace::InputFailure inputFailure{};
-    if(!boundInputs(d,probe.bindings[0],draw,true,&inputFailure)) {
+    if(!boundInputs(d,probe.bindings[0],draw,true,&inputFailure,probe.idleNativeId)) {
         const bool first=probe.idleTrace && probe.idleTrace->rejection==IdleWeaponTrace::Rejection::None;
         if(first)probe.idleTrace->inputFailure=inputFailure;
         reject(IdleWeaponTrace::Rejection::CollectInputs); // Original immediate rejection precedes all extra queries.
         if(first && IdleWeaponTrace::observedStreamFamily(inputFailure))beginIdleStreamProbe(d);
         return false;
     }
-    if(!idleBufferRanges(probe.bindings[0].values,std::span(probe.bindings[0].elements).first(probe.bindings[0].count),ranges))return reject(IdleWeaponTrace::Rejection::CollectRanges);
+    if(!idleBufferRanges(probe.bindings[0].values,std::span(probe.bindings[0].elements).first(probe.bindings[0].count),ranges,nullptr,probe.idleNativeId))return reject(IdleWeaponTrace::Rejection::CollectRanges);
     if(!boundProgram(true))return reject(IdleWeaponTrace::Rejection::CollectProgram);
     const std::array<std::span<uint8_t>,5> storage{probe.positions,probe.indices,probe.weights,probe.localIndices,probe.uv};
     for(unsigned i=0;i<5;++i)
         if(ranges.slices[i].size>storage[i].size() || !copySlice(i==1,ranges.slices[i],storage[i].first(ranges.slices[i].size)))return reject(IdleWeaponTrace::Rejection::CollectSlice);
     if(!hashIdleSlices(ranges))return reject(IdleWeaponTrace::Rejection::CollectHash);
-    if(!boundInputs(d,probe.bindings[1],draw,true))return reject(IdleWeaponTrace::Rejection::CollectRebind);
+    if(!boundInputs(d,probe.bindings[1],draw,true,nullptr,probe.idleNativeId))return reject(IdleWeaponTrace::Rejection::CollectRebind);
     if(!sameInputs(probe.bindings[0],probe.bindings[1]))return reject(IdleWeaponTrace::Rejection::CollectChanged);
     IdleRasterCopy now;IdleWeaponTrace *trace=nullptr;
     if(!currentIdleRaster(now,trace) || trace!=probe.idleTrace || now!=probe.idle.raster)return reject(IdleWeaponTrace::Rejection::CollectRaster);
@@ -633,7 +634,7 @@ static HRESULT probeScopeDraw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base
     // All owning state exists above NativeFinally; no stack-native pointer is
     // kept through any COM call, and no allocation/native callback occurs locked.
     probe.busy=true;
-    probe.cap={}; probe.raster={}; probe.idle={}; probe.idleTrace=nullptr; probe.uvRows={}; probe.program={}; probe.colorProgram={};
+    probe.cap={}; probe.raster={}; probe.idle={}; probe.idleTrace=nullptr;probe.idleNativeId=-1; probe.uvRows={}; probe.program={}; probe.colorProgram={};
     probe.generation=graphicsResourceGeneration();
     probe.programWords=0;
     probe.streamReentered=false;
@@ -649,6 +650,7 @@ static HRESULT probeScopeDraw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base
         // Establish the borrowed ID1 trace before the first retained COM call,
         // so reentry during AddRef also rejects the outer observation.
         const bool idleCandidate=!probe.raster.pose.valid && currentIdleRaster(probe.idle.raster,probe.idleTrace);
+        probe.idleNativeId=idleCandidate?probe.idleTrace->nativeId:-1;
         probe.device = d; d->AddRef();
         if (admitted) probe.transaction = scopeGpuTransactionBegin(d);
         if (admitted) {

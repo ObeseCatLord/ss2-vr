@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Match copied ID1 channels to a private candidate index; no game launch."""
+"""Match copied selected stock channels to a private candidate index; no game launch."""
 import argparse
 import json
 from pathlib import Path
@@ -34,7 +34,7 @@ def match_draws(observations,candidates,retained=False):
                         found.append({'candidate':name,'asset_sha256':asset['asset_sha256'],
                                       'mesh_object':c['mesh_object'],'lod':c['lod'],'channel_index':channel_index})
             rows.append({'request':observation['request'],'eye':observation['eye'],'hand':observation['hand'],
-                'geometry_index':int(index),'draw_record':g['drawRecord'],
+                'nativeId':observation.get('nativeId',1),'geometry_index':int(index),'draw_record':g['drawRecord'],
                 'result':('unique-position-and-auxiliary-channel-match' if input_layout in (2,3,4) else
                           'unique-consumed-channel-match') if len(found)==1 else 'unmatched' if not found else 'ambiguous',
                 'candidates':found})
@@ -49,9 +49,9 @@ def match(evidence,candidates):
         raise ValueError('Expected strict schema3/4 copied collector evidence')
     rows=match_draws(evidence['copied_event_pose_observations'],candidates)
     diagnostic=match_draws([o for o in evidence['rejected_or_missing_observations'] if 'retained_copies' in o],candidates,True)
-    missing=[{'request':o['request'],'eye':o['eye'],'hand':o['hand'],'stage':o['stage']}
+    missing=[{'request':o['request'],'eye':o['eye'],'hand':o['hand'],'stage':o['stage'],'nativeId':o.get('nativeId',1)}
              for o in evidence['rejected_or_missing_observations']]
-    missing.extend({'request':o['request'],'eye':o['eye'],'hand':o['hand'],'stage':o['stage']}
+    missing.extend({'request':o['request'],'eye':o['eye'],'hand':o['hand'],'stage':o['stage'],'nativeId':o.get('nativeId',1)}
                    for o in evidence['copied_event_pose_observations'] if not o['geometry'])
     return {'schema':1,'source_fingerprint':evidence['source_fingerprint'],'matches':rows,'retained_diagnostic_matches':diagnostic,
         'observations_without_geometry':missing,'copied_geometry_coverage_complete':bool(rows) and not missing,

@@ -1,5 +1,34 @@
 # Implementation status — 2026-10-09
 
+## Sniper collection capacity — source-ready, live association open
+
+The bounded capacity adapter is implemented: ID1 retains1490vertices/1332triangles;
+selected ID13 admits up to2904/2245; unknown IDs reject. Fixed scratch storage and
+offline128KiB arithmetic budgets cover both inspected Black variants. The selected
+ID is copied before AddRef and reused at all three range-admission sites. Scope
+production limits/getter order/currentness/program/ordinal/phase remain unchanged.
+
+Both private real-asset candidate exports now succeed after removing ONLY verified
+unreferenced trailing-1buffer-table slots from selected metadata. Asset/buffer
+bytes and hashes are unchanged.2899/2904vertices pass synthetic identity arithmetic;
+this is not native shader/world/GPU or live association proof. Historical missing-ID
+replay defaults only that field to1; other binding fields stay strict. Completed
+and retained explicit13/legacy1 paths, overflow/truncation and missing fields have
+regressions. Main caught/reproduced/fixed the legacy KeyError; Astra source GO.
+
+All4products rebuilt on ec5541eabcf9365d802fc4b2ea8314015b2f0274286fc9f7570f9d663646753e,
+IPC10/wire7;75Debug/75Release and36normal/optimized native/compiled gates pass.
+Targeted subsequent consumer25, replay10 and candidate16groups pass normal/-O.
+All9current local review tags are Astra/xhigh; backend unattested. No runtime or
+equip/switch/firing/movement/vehicle/HMD/network operation this landing.
+
+Next exact evidence: a qualifying unzoomed ID13 Black draw, unique copied-range/
+buffer-length/five-channel-hash association to either private candidate and
+qualified position replay. Prepare/review a concrete user-originated collection
+path; the neutral initial-Zap lab cannot provide that ID13 draw. ID13 correction
+remains inactive until association. Sniper muzzle coincidence/current bound,
+remaining weapons and physical driver controls are still open.
+
 ## Stock sniper reference and passive selector — capacity next
 
 Ten selected owned stock sniper archive objects were decoded/roundtripped without
