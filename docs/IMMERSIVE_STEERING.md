@@ -218,3 +218,14 @@ control frame and input semantics remain separate proofs before grasp admission.
 No wheel, pivot, axis, grip offset or control adapter is guessed or installed.
 Private geometry, images and reports remain local. No vehicle/runtime/input test
 ran. Local Astra/xhigh routing tags were independently checked; backend unattested.
+
+## FlyingSaucer animation follow-up
+
+The exact referenced animation set has now been inspected: 51 objects, 40 envelopes
+and 84 keys passed byte/record checks. Fly's Main/Seat keys are constant and match
+local bind transforms. Fire_Left/Fire_Right have constant Main keys and omit Seat.
+Only child Blades/Engine rotations vary. There is no handle-specific or morph
+channel in this set, nor an unopened external dependency within it. These static
+facts do not establish runtime selection, blending, missing-channel fallback or a
+live handle-to-seat frame. Independent handle actuation and native control mapping
+remain unproved. No vehicle or input probe ran; all curves/resources stay private.

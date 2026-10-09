@@ -1,4 +1,5 @@
 #pragma once
+#include "idle_projection_probe.hpp"
 #include "model_tree.hpp"
 #include "idle_geometry.hpp"
 #include <algorithm>
@@ -66,6 +67,18 @@ struct IdleRasterCopy {
     Matrix44 clip{};
     bool clipValid=false;
     IdleRasterFactors factors{}; // Deliberately excluded from operator== below.
+    uint32_t projectionModelAddress=0,projectionDrawAddress=0;
+    uint32_t projectionSequence=0; // Existing trace's value receipt, excluded too.
+    bool matchesProjection(const IdleProjectionPair &p) const noexcept {
+        if(!p.qualified() || !clipValid || !factors.valid() ||
+           p.after.modelRecord!=projectionModelAddress || p.after.drawRecord!=projectionDrawAddress)return false;
+        for(unsigned i=0;i<12;++i)
+            if(p.after.model[i]!=std::bit_cast<uint32_t>(factors.model.m[i]) ||
+               p.after.view[i]!=std::bit_cast<uint32_t>(factors.view.m[i]))return false;
+        for(unsigned i=0;i<16;++i)
+            if(p.after.projection[i]!=std::bit_cast<uint32_t>(factors.projection.m[i]))return false;
+        return true;
+    }
     bool operator==(const IdleRasterCopy &other) const noexcept {
         return binding==other.binding && rootConfig==other.rootConfig && renderConfig==other.renderConfig &&
             modelRecord==other.modelRecord && drawRecord==other.drawRecord && surface==other.surface &&
@@ -85,12 +98,24 @@ struct IdleGeometryCopy {
     unsigned declarationCount=0;
     unsigned words=0,constantCount=0;
     uint32_t factorChecks=0; // 1: pre-original bookend, 2: post-original bookend.
+    uint32_t projectionChecks=0;
     void factorBookend(const IdleRasterCopy &now,bool postOriginal) noexcept {
         const uint32_t bit=postOriginal?2u:1u;
         if(raster==now && raster.factors.same(now.factors))factorChecks|=bit;
         else factorChecks&=~bit;
+        if(raster==now && raster.projectionSequence && raster.projectionSequence==now.projectionSequence &&
+           raster.projectionModelAddress==now.projectionModelAddress &&
+           raster.projectionDrawAddress==now.projectionDrawAddress)projectionChecks|=bit;
+        else projectionChecks&=~bit;
     }
     bool factorsAvailable() const noexcept {return factorChecks==3 && raster.factors.valid();}
+    bool projectionAvailable(const IdleProjectionPair &pair) const noexcept {
+        if(projectionChecks!=3 || !factorsAvailable() || !raster.matchesProjection(pair) ||
+           pair.sequence!=raster.projectionSequence || constantCount<5)return false;
+        for(unsigned i=0;i<16;++i)
+            if(std::bit_cast<uint32_t>(constants[1+i/4][i%4])!=pair.after.cachedMVP[i])return false;
+        return true;
+    }
 };
 struct IdleWeaponTrace {
     static constexpr unsigned MaxContributors=16,MaxMatrices=64,MaxDraws=8;
@@ -140,6 +165,7 @@ struct IdleWeaponTrace {
         std::array<StreamSnapshot,2> snapshots{};
         std::array<uint32_t,IdleGeometryCopy::MaxProgramWords> program{};
     } streamProbe{};
+    IdleProjectionProbe projectionProbe{};
     // Select passive diagnostics from the immutable original rejection, never
     // either resampled declaration. Reuse the exact ID1 declaration predicates.
     static std::array<unsigned,3> passiveStreamNumbers(const InputFailure &d) noexcept {

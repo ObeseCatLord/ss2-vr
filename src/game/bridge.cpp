@@ -91,6 +91,7 @@ static bool matches(HMODULE module, const char *hash) {
     std::wstring path;
     return modulePath(module,path) && matchesFile(path,hash);
 }
+bool nativeModuleFingerprint(HMODULE module,const char *hash) {return matches(module,hash);}
 bool supported(bool headless) {
     struct Item {
         const wchar_t *file;

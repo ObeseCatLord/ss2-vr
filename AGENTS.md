@@ -8,6 +8,47 @@ This historical hold blocked public publication pending renewed confirmation. It
 
 ## Current PC continuation — start here
 
+## Current native precision/cache observation — source implemented
+
+Two reviewed whole-function hooks now observe the first native material's
+call-free matrix-production interval. The slots helper is sampled after its
+original and cleanup return; the fog callback is sampled before any owner lookup
+or original execution. The raw sampler uses only integer loads and one FNSTCW;
+compiled inspection finds no calls, SIMD, floating arithmetic or state writes.
+Existing invocation metadata owns one pending pair and at most eight completed
+value receipts. Entry guards reject reentry and unmatched boundaries; native
+finally cleanup retires only diagnostics. Originals and the native fog output
+pointer remain unchanged.
+
+The exact Shader module is fingerprinted and pinned through the existing hook
+transaction. Missing loaded Shader module is reported without late installation.
+No native cache recalculation, precision setting, reference replacement or
+admission/tolerance change occurs. Cache hits require unchanged cached words;
+post-flags must equal pre-flags OR 6. Earlier cache-producer provenance stays
+unknown. Geometry references the canonical receipt sequence and requires both
+existing raster bookends, matching independent M/V/P inputs and actual c1-c4
+words. Neither association nor cold/reuse flags certify grasp, GPU execution or
+an earlier producer. Retained rejected copies stay outside readiness.
+
+Astra source GO followed fixes for original-entry reentry, unmatched fog, cache-hit
+consistency and removal of redundant serial state. Seven reader groups pass
+normally and optimized. The new reader is included in the eleven-tool seal.
+The compiled verifier checks pinned native boundaries and instruction-level
+sampler/tail/prefix paths; its original-call and unwind checks explicitly certify
+static call-site presence, with forwarding behavior supported by source review.
+Parser/control-flow negative tests cover wrapped SIMD instructions, gaps,
+unreachable control reads, LOOP transfers and callbacks hidden by final jumps.
+Astra gave final gate source GO; no runtime of this implementation yet.
+
+All four products rebuilt on
+`ed4fc52a20cf22eaad7af8953ee7fbbc923fe87067b829fa8e1b8b3ca4a28d48`, IPC10/wire7.
+All 71 Debug and 71 Release groups and 32 normal/optimized native/compiled gates
+pass. Final corrected verifier checks pass for both x86 objects normally and
+optimized; its six negative-control groups and both CTest configurations were
+rechecked. Source/product changes were not needed for the verifier correction. Next: a fresh sealed private neutral capture of actual precision and cache
+production. V21 and every prior attempted fixture remain immutable. No shooting,
+vehicle, headset or network gameplay probe is part of this observation.
+
 V21 is archived: source7cd43a5/fpfa7caae, exact Jungle with123 native stereo
 pairs and clean native/owned/display shutdown; protected12 unchanged. Qualified
 ordinal handling recovered36 weapon copies including9 NoUV56 passes, all52 factors.

@@ -103,6 +103,11 @@ static ChildName getChildName = nullptr;
 static ChildOffset getChildOffset = nullptr;
 static ChildInstance getChildInstance = nullptr;
 static uintptr_t engineBase = 0;
+using ProjectionSlots = void(__cdecl *)(const int32_t *);
+using ProjectionFog = void *(__cdecl *)(void *);
+static ProjectionSlots originalProjectionSlots=nullptr;
+static ProjectionFog originalProjectionFog=nullptr;
+static uintptr_t projectionShaderBase=0;
 static std::atomic<bool> ready = false;
 static SRWLOCK bindingLock = SRWLOCK_INIT;
 static std::array<Binding, MaxBindings> bindings;
@@ -113,6 +118,62 @@ static std::atomic<DWORD> simulationThread = 0; // observations establish native
 static DWORD pairThread = 0;
 static thread_local bool frozenPair = false;
 static thread_local bool reentrant = false, modelInvalidated = false, presentationBusy = false;
+
+// All sampling is integer/raw-bit only. In particular, no model/raster query or
+// reference arithmetic occurs between native matrix production bookends.
+// Disable vectorisation and loop-to-memcpy conversion to keep this inspectable.
+__attribute__((noinline,target("general-regs-only"),optimize("no-tree-vectorize","no-tree-loop-distribute-patterns")))
+static void captureProjectionSnapshot(IdleProjectionSnapshot &out) noexcept {
+    uint16_t control;
+    __asm__ volatile("fnstcw %0":"=m"(control)::"memory");
+    out.control=control;
+    out.flags=*reinterpret_cast<const volatile uint32_t *>(engineBase+0x2e5bdc);
+    out.modelRecord=*reinterpret_cast<const volatile uint32_t *>(engineBase+0x2eab50);
+    out.drawRecord=*reinterpret_cast<const volatile uint32_t *>(engineBase+0x2eab48);
+    const auto *model=reinterpret_cast<const volatile uint32_t *>(engineBase+0x2e63d8);
+    const auto *view=reinterpret_cast<const volatile uint32_t *>(engineBase+0x2e6408);
+    const auto *projection=reinterpret_cast<const volatile uint32_t *>(engineBase+0x2e6438);
+    const auto *vp=reinterpret_cast<const volatile uint32_t *>(engineBase+0x2e64f0);
+    const auto *mvp=reinterpret_cast<const volatile uint32_t *>(engineBase+0x2e6530);
+    for(unsigned i=0;i<12;++i) {out.model[i]=model[i];out.view[i]=view[i];}
+    for(unsigned i=0;i<16;++i) {
+        out.projection[i]=projection[i];out.cachedVP[i]=vp[i];out.cachedMVP[i]=mvp[i];
+    }
+}
+static void __cdecl projectionSlots(const int32_t *slots) {
+    const auto caller=reinterpret_cast<uintptr_t>(__builtin_return_address(0));
+    auto *owner=ownsNativeThread()?idleProjectionOwner():nullptr;
+    const bool selected=owner && caller==projectionShaderBase+0xf4ff &&
+        reinterpret_cast<uintptr_t>(slots)==projectionShaderBase+0x2834c;
+    const bool entered=selected && owner->projectionProbe.enterHelper();
+    bool returned=false;
+    withNativeFinally([&] {originalProjectionSlots(slots);returned=true;},[&](bool aborted) noexcept {
+        if(entered)owner->projectionProbe.leaveHelper(aborted);
+    });
+    // Finish all owner lookups/finally callbacks BEFORE the pre-production
+    // sample. There is no callback or floating arithmetic from sample to return.
+    if(!entered || !returned || idleProjectionOwner()!=owner)return;
+    auto *sample=owner->projectionProbe.begin();
+    if(sample)captureProjectionSnapshot(*sample);
+}
+static void *__cdecl projectionFog(void *out) {
+    const auto caller=reinterpret_cast<uintptr_t>(__builtin_return_address(0));
+    const bool selected=caller==projectionShaderBase+0xfc8a;
+    // For the selected call this is the first observer operation after the
+    // native, call-free producer interval. No floating interpretation occurs.
+    IdleProjectionSnapshot sample;
+    if(selected)captureProjectionSnapshot(sample);
+    auto *owner=selected && ownsNativeThread()?idleProjectionOwner():nullptr;
+    const bool pending=owner && owner->projectionProbe.enterFog();
+    void *result=nullptr;
+    withNativeFinally([&] {
+        result=originalProjectionFog(out);
+        if(pending)owner->projectionProbe.end(sample,result==out && idleProjectionOwner()==owner);
+    },[&](bool aborted) noexcept {
+        if(pending)owner->projectionProbe.leaveFog(aborted);
+    });
+    return result; // Preserve the native hidden-output pointer return exactly.
+}
 
 static void producerAbort() noexcept {
     modelInvalidated=paletteInvalidated=true;
@@ -776,6 +837,7 @@ static bool readIdleRaster(void *instance,IdleRasterCopy &out,IdleRasterStorage 
     out.factors.paletteIndex=uint32_t(draw.first);out.factors.modelCopied=true;
     out.layout=scopeSurfaceLayout(reinterpret_cast<const uint8_t*>(surfacePointer));
     out.modelRecord=uint32_t(modelIndex);out.drawRecord=uint32_t(drawIndex);out.surface=uint32_t(surfacePointer);
+    out.projectionModelAddress=uint32_t(modelPointer);out.projectionDrawAddress=uint32_t(drawPointer);
     out.instance=uint32_t(reinterpret_cast<uintptr_t>(model.instance));out.bone=mapping.bone;
     std::memcpy(&out.surfaceName,reinterpret_cast<void*>(surfacePointer),4);
     std::memcpy(&out.boneName,bones[size_t(mapping.bone)].definition,4);
@@ -952,6 +1014,27 @@ bool initialize(HMODULE engine, HMODULE core, HMODULE sam, HookInstallerRva inst
         if(idleAnimationName==*invalidId ||
            !install(engine,0xbbf0,reinterpret_cast<void*>(animationEnd),
                     reinterpret_cast<void**>(&originalAnimationEnd)) || !originalAnimationEnd)return false;
+        const auto shaders=GetModuleHandleW(L"Shaders.dll");
+        if(shaders) {
+            HMODULE pinned=nullptr;
+            if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,
+                    reinterpret_cast<LPCWSTR>(shaders),&pinned) || pinned!=shaders ||
+               !nativeModuleFingerprint(shaders,"de7652d61f5af2ec8b218b902d09820b3ef76c1d796f23d66a31ea35374fd642") ||
+               !readableMemory(reinterpret_cast<void *>(engineBase+0x2e5bdc),4) ||
+               !readableMemory(reinterpret_cast<void *>(engineBase+0x2e63d8),0x198) ||
+               !readableMemory(reinterpret_cast<void *>(engineBase+0x2eab48),12) ||
+               reinterpret_cast<uintptr_t>(GetProcAddress(engine,"?shaGetFogFactors@SeriousEngine@@YA?AVVector4f@1@XZ"))!=engineBase+0x770b0)
+                return false;
+            const auto sb=reinterpret_cast<uintptr_t>(shaders);
+            const auto *table=reinterpret_cast<const int32_t *>(sb+0x2834c);
+            if(!readableMemory(table,12) || table[0]!=23 || table[1]!=7 || table[2]!=8)return false;
+            projectionShaderBase=sb;
+            if(!install(shaders,0x6920,reinterpret_cast<void *>(projectionSlots),
+                       reinterpret_cast<void **>(&originalProjectionSlots)) || !originalProjectionSlots ||
+               !install(engine,0x770b0,reinterpret_cast<void *>(projectionFog),
+                       reinterpret_cast<void **>(&originalProjectionFog)) || !originalProjectionFog)return false;
+            log("Lab native projection bookends installed source=1 slotsReturn=f4ff fogReturn=fc8a");
+        } else log("Lab native projection bookends unavailable: Shaders.dll not loaded; no late hook installation");
     }
     ready.store(true, std::memory_order_release);
     return true;
@@ -1085,6 +1168,10 @@ bool copyIdleRaster(void *instance,IdleRasterCopy &out) {
         storage.reset();if(aborted)observed=false;
     });
     return observed;
+}
+bool idleProjectionConfigured() noexcept {
+    return ready.load(std::memory_order_acquire) && projectionShaderBase &&
+        originalProjectionSlots && originalProjectionFog;
 }
 ScopeRasterStatus copyScopeRaster(void *instance, Matrix34 &affine, ScopeSurfaceLayout &layout) {
     return readScopeRaster(instance,affine,layout);

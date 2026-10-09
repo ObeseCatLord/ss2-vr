@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import struct
 from idle_stream_evidence import consume as consume_stream_probe, validate as validate_stream_probe, declaration_layout, OBSERVED, NO_UV56
+from idle_projection_evidence import consume as consume_projection_probe, validate as validate_projection_probe, validate_association
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -155,6 +156,10 @@ def assess(text,expected_source):
             if current is None:raise ValueError('Stream probe without native record')
             consume_stream_probe(current,kind,f)
             continue
+        if kind.startswith('projection'):
+            if current is None:raise ValueError('Native projection probe without draw record')
+            consume_projection_probe(current,kind,f,integer,hexwords)
+            continue
         if kind.startswith('input'):
             if current is None or current['stage']!=3 or current.get('rejection',{}).get('reason')!=32:
                 raise ValueError('Input failure without matching CollectInputs rejection')
@@ -226,12 +231,12 @@ def assess(text,expected_source):
                         target[index]={k:integer(f[k],0,255 if k in ('format','buffer') else (1<<32)-1) for k in names}
                 else:raise ValueError('Unknown input diagnostic')
             continue
-        retained=kind in ('retainedGeometry','retainedGeometryData','retainedGeometryFactors')
+        retained=kind in ('retainedGeometry','retainedGeometryData','retainedGeometryFactors','retainedGeometryProjection')
         if retained:
             if current is None or current['stage']!=3 or 'retained_copies' not in current:
                 raise ValueError('Retained payload without rejected companion')
             kind={'retainedGeometry':'geometry','retainedGeometryData':'geometryData',
-                  'retainedGeometryFactors':'geometryFactors'}[kind]
+                  'retainedGeometryFactors':'geometryFactors','retainedGeometryProjection':'geometryProjection'}[kind]
         elif current is None or current['stage']!=4:
             raise ValueError('Data without complete native-copy record')
         geometry=current['retained_copies']['geometry'] if retained else current['geometry']
@@ -273,6 +278,18 @@ def assess(text,expected_source):
             geometry[index]['factors']={'palette_index':integer(f['palette'],0,32767),'bookends':3,
                 'post_original_return':True,'cleanup_certified':False,'outer_current':False,
                 'diagnostic_only':True,'reference_replaced':False}
+        elif kind=='geometryProjection':
+            if set(f)!={'request','eye','hand','index','sequence','modelAddress','drawAddress',
+                        'bookends','postOriginal','cleanupCertified','outerCurrent'}:
+                raise ValueError('Projection association schema mismatch')
+            index=integer(f['index'],0,7)
+            if index not in geometry or 'projection_association' in geometry[index] or 'factors' not in geometry[index]:
+                raise ValueError('Projection association before factors or duplicate')
+            if (integer(f['bookends']),integer(f['postOriginal']),integer(f['cleanupCertified']),integer(f['outerCurrent']))!=(3,1,0,0):
+                raise ValueError('Unsupported projection association provenance')
+            geometry[index]['projection_association']={'sequence':integer(f['sequence'],1,8),
+                'model_address':integer(f['modelAddress'],1,0xffffffff),'draw_address':integer(f['drawAddress'],1,0xffffffff),
+                'bookends':3,'post_original_return':True}
         elif kind=='geometryData':
             if set(f)!={'request','eye','hand','index','kind','chunk','values'}:raise ValueError('Geometry data schema mismatch')
             index=integer(f['index'],0,7)
@@ -304,6 +321,7 @@ def assess(text,expected_source):
     if not records:raise ValueError('No idle observations')
     completed=[];rejected=[]
     for r in records:
+        validate_projection_probe(r)
         failure=r.get('input_failure')
         if failure:
             if failure['valid']&2 and set(failure['declaration_rows'])!=set(range(failure['declaration'])):
@@ -333,6 +351,7 @@ def assess(text,expected_source):
                     any(not r[k] for k in ('request','input','owner','weapon','model','generation','cfg','file')):
                 raise ValueError('Retained companion lacks original copied-state qualification')
             validate_geometry(retained['geometry'],retained['count'],r['copyLayout'])
+            for g in retained['geometry'].values():validate_association(r,g)
         validate_stream_probe(r,retained_validated=retained is not None)
         if r['stage']!=4:rejected.append(r);continue
         if any(r[k]<=0 for k in ('request','input','owner','weapon','model','generation','cfg')):
@@ -344,6 +363,7 @@ def assess(text,expected_source):
         if not r['contributors'] or not r['matrices'] or set(r['pose'])!=wanted or r['stretch'] is None or \
            set(r['animations'])!=set(range(r['contributors'])):raise ValueError('Truncated idle copy emission')
         validate_geometry(r['geometry'],r['draws'],r['copyLayout'])
+        for g in r['geometry'].values():validate_association(r,g)
         r['evidence_class']=('event-pose-and-position-draws-with-auxiliary-uv' if any(
             g['input_layout']==2 for g in r['geometry'].values()) else 'event-pose-and-consumed-draws') if r['draws'] else 'event-pose-only'
         r['geometry_observed']=bool(r['draws'])

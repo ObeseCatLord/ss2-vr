@@ -1,0 +1,53 @@
+"""Instruction-level negative controls for observer-window verification."""
+from pathlib import Path
+import struct
+import sys
+import unittest
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
+from verify_idle_projection_probe_abi import decode,verify_sample,sample_prefix,instructions
+
+class Checks(unittest.TestCase):
+    def test_pure_word_sampler(self):
+        result=verify_sample(decode(bytes.fromhex('d9 3c 24 8b 01 c3'),0x1000))
+        self.assertEqual(result['calls'],0);self.assertEqual(result['control_reads'],1)
+    def test_fp_changes_calls_traps_and_resampling_fail(self):
+        prefix=bytes.fromhex('d9 3c 24')
+        for extra in ('d9 2c 24','d8 c1','0f 58 c1','ff d0','cc','0f 0b','d9 3c 24','75 fb'):
+            with self.subTest(extra=extra),self.assertRaises(ValueError):
+                verify_sample(decode(prefix+bytes.fromhex(extra)+b'\xc3',0x1000))
+        with self.assertRaises(ValueError):verify_sample(decode(bytes.fromhex('90 c3'),0x1000))
+        with self.assertRaises(ValueError):verify_sample(decode(prefix+bytes.fromhex('c2 04 00'),0x1000))
+        with self.assertRaises(ValueError):verify_sample(decode(prefix+b'\xe9'+struct.pack('<i',0x2000-0x1008),0x1000))
+    def test_unselected_callback_path_is_separate(self):
+        # Selected path jumps over an unrelated callback and reaches the sample.
+        code=bytes.fromhex('83 f8 00 74 03 ff d0 c3')+b'\xe8'+struct.pack('<i',0x2000-0x100d)+b'\xc3'
+        self.assertGreater(sample_prefix(decode(code,0x1000),0x2000),0)
+        # Replace the unrelated return: it now falls through to the sample, so
+        # the callback would occur in an observed prefix and must be rejected.
+        bad=code[:7]+b'\x90'+code[8:]
+        with self.assertRaises(ValueError):sample_prefix(decode(bad,0x1000),0x2000)
+    def test_parser_rejects_wrapped_or_gapped_instructions(self):
+        wrapped='''1000: d9 3c 24       fnstcw WORD PTR [esp]
+1003: f3 0f 10 84 24 00 00   movss xmm0,DWORD PTR [esp]
+100a: 00 00
+100c: c3             ret
+'''
+        with self.assertRaises(ValueError):instructions(wrapped)
+        full=wrapped.replace('24 00 00   movss','24 00 00 00 00   movss').replace('100a: 00 00\n','')
+        with self.assertRaises(ValueError):verify_sample(instructions(full))
+        with self.assertRaises(ValueError):instructions('1000: d9 3c 24 fnstcw WORD PTR [esp]\n1004: c3 ret\n')
+    def test_unreachable_control_read_and_loop_escape_reject(self):
+        with self.assertRaises(ValueError):verify_sample(decode(bytes.fromhex('c3 d9 3c 24 c3'),0x1000))
+        with self.assertRaises(ValueError):verify_sample(decode(bytes.fromhex('d9 3c 24 e2 7f c3'),0x1000))
+        # LOOP can also expose a callback path in the fog prefix.
+        code=bytes.fromhex('e2 02 ff d0')+b'\xe8'+struct.pack('<i',0x2000-0x1009)+b'\xc3'
+        with self.assertRaises(ValueError):sample_prefix(decode(code,0x1000),0x2000)
+    def test_final_jump_cannot_hide_callback_to_sample(self):
+        # JE selects a callback at the end, whose final JMP returns to SAMPLE.
+        # The other path samples then returns normally.
+        code=bytes.fromhex('83 f8 00 74 06')+b'\xe8'+struct.pack('<i',0x2000-0x100a)+b'\xc3\xff\xd0'+b'\xe9'+struct.pack('<i',0x1005-0x1012)
+        with self.assertRaises(ValueError):sample_prefix(decode(code,0x1000),0x2000)
+        safe=bytes.fromhex('83 f8 00 74 03 ff d0 c3')+b'\xe8'+struct.pack('<i',0x2000-0x100d)+b'\xc3\x90\x90'
+        self.assertGreater(sample_prefix(decode(safe,0x1000),0x2000),0)
+
+if __name__=='__main__':unittest.main()

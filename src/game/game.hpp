@@ -13,6 +13,7 @@ bool attach(bool headless = false);
 void nativeInputFailed() noexcept;
 bool nativeInputHealthy() noexcept;
 bool supported(bool headless = false);
+bool nativeModuleFingerprint(HMODULE,const char *);
 // Explicit private-lab opt-in only. Install before the native online initializer;
 // normal game/Steam behavior is untouched when the opt-in is absent.
 void installLabOnlineIsolation();

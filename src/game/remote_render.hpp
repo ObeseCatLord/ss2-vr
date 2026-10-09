@@ -17,6 +17,7 @@ void noteSimulationThread();
 bool checkNativeThread();
 // Passive observers decline foreign/unknown ownership without poisoning it.
 bool ownsNativeThread();
+bool idleProjectionConfigured() noexcept;
 bool copyIdleRaster(void *instance,IdleRasterCopy &out);
 ScopeRasterStatus copyScopeRaster(void *instance, Matrix34 &affine, ScopeSurfaceLayout &layout);
 

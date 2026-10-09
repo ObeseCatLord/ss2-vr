@@ -4004,6 +4004,13 @@ static bool currentWeaponDraw(ScopeDrawBinding &out,int wantedId) {
     return true;
 }
 bool currentScopeDraw(ScopeDrawBinding &out) {return currentWeaponDraw(out,13);}
+IdleWeaponTrace *idleProjectionOwner() noexcept {
+    if(!physicalWeapon || !physicalWeapon->ordinaryCommand || !physicalWeapon->idle ||
+       physicalWeapon->hand<0 || physicalWeapon->hand>1 || eyeIndex<0 || eyeIndex>1)
+        return nullptr;
+    auto *trace=physicalWeapon->idle;
+    return trace->admitted && trace->stage==IdleWeaponTrace::Stage::Palette && trace->poseCopied ? trace : nullptr;
+}
 bool currentIdleDraw(ScopeDrawBinding &out,IdleDrawIdentity &identity,IdleWeaponTrace *&trace) {
     out={};identity={};trace=nullptr;
     if (!physicalWeapon || !physicalWeapon->idle || !physicalWeapon->ordinaryCommand ||
@@ -4024,6 +4031,16 @@ static bool copyBoundIdleRaster(const ScopeDrawBinding &binding,const IdleDrawId
     if(!out.clipValid){trace->reject(IdleWeaponTrace::Rejection::RasterClip);return false;}
     out.factors.view=physicalWeapon->pass.world.view;out.factors.projection=executedUiProjection;
     out.factors.cameraCopied=true;
+    // Optional producer evidence never replaces the reference or admission.
+    if(!trace->projectionProbe.blocked) {
+        for(unsigned n=trace->projectionProbe.count;n>0;--n) {
+            const auto &p=trace->projectionProbe.pairs[n-1];
+            if(!p.qualified() || p.after.modelRecord!=out.projectionModelAddress ||
+               p.after.drawRecord!=out.projectionDrawAddress)continue;
+            if(out.matchesProjection(p))out.projectionSequence=p.sequence;
+            break; // Only the latest corresponding producer; no passing-choice search.
+        }
+    }
     return true;
 }
 bool currentIdleRaster(IdleRasterCopy &out,IdleWeaponTrace *&trace) {
@@ -4120,6 +4137,27 @@ static void emitIdleWeaponTrace(const IdleWeaponTrace &trace) {
             log("Lab idle streamProgram request=%llu eye=%u hand=%u chunk=%u values=%s",b.request,b.eye,b.hand,chunk,values);
         }
     }
+    log("Lab idle projectionSummary request=%llu eye=%u hand=%u configured=%u count=%u invalidations=%u blocked=%u pending=%u",
+        b.request,b.eye,b.hand,unsigned(remote_render::idleProjectionConfigured()),trace.projectionProbe.count,
+        trace.projectionProbe.invalidations,unsigned(trace.projectionProbe.blocked),unsigned(trace.projectionProbe.pending));
+    for(unsigned n=0;n<trace.projectionProbe.count && n<IdleProjectionProbe::MaxPairs;++n) {
+        const auto &p=trace.projectionProbe.pairs[n];
+        log("Lab idle projectionPair request=%llu eye=%u hand=%u sequence=%u source=1 complete=%u controlBefore=%u controlAfter=%u flagsBefore=%u flagsAfter=%u modelBefore=%u modelAfter=%u drawBefore=%u drawAfter=%u cleanupCertified=0 outerCurrent=0",
+            b.request,b.eye,b.hand,p.sequence,unsigned(p.complete),p.before.control,p.after.control,
+            p.before.flags,p.after.flags,p.before.modelRecord,p.after.modelRecord,p.before.drawRecord,p.after.drawRecord);
+        auto raw=[&](unsigned phase,const char *kind,std::span<const uint32_t> values) {
+            char text[16*9]{};unsigned cursor=0;
+            for(auto value:values)cursor+=unsigned(std::snprintf(text+cursor,sizeof(text)-cursor,"%s%08x",cursor?",":"",value));
+            log("Lab idle projectionData request=%llu eye=%u hand=%u sequence=%u phase=%u kind=%s values=%s",
+                b.request,b.eye,b.hand,p.sequence,phase,kind,text);
+        };
+        const IdleProjectionSnapshot *phases[]{&p.before,&p.after};
+        for(unsigned phase=0;phase<2;++phase) {
+            const auto &s=*phases[phase];
+            raw(phase,"model",s.model);raw(phase,"view",s.view);raw(phase,"projection",s.projection);
+            raw(phase,"cachedVP",s.cachedVP);raw(phase,"cachedMVP",s.cachedMVP);
+        }
+    }
     const bool retained=trace.retainedDrawCopiesAvailable();
     if(trace.stage!=IdleWeaponTrace::Stage::Complete && !retained)return;
     if(retained)log("Lab idle retainedCopies request=%llu eye=%u hand=%u count=%u postOriginal=1 cleanupCertified=0 outerCurrent=0",
@@ -4168,6 +4206,12 @@ static void emitIdleWeaponTrace(const IdleWeaponTrace &trace) {
                 std::memcpy(raw.data(),values.data(),values.size_bytes());
                 words(kind,0,std::span(raw).first(values.size()));
             });
+        }
+        if(r.projectionSequence && r.projectionSequence<=trace.projectionProbe.count &&
+           g.projectionAvailable(trace.projectionProbe.pairs[r.projectionSequence-1])) {
+            log("Lab idle %s request=%llu eye=%u hand=%u index=%u sequence=%u modelAddress=%u drawAddress=%u bookends=3 postOriginal=1 cleanupCertified=0 outerCurrent=0",
+                retained?"retainedGeometryProjection":"geometryProjection",b.request,b.eye,b.hand,n,
+                r.projectionSequence,r.projectionModelAddress,r.projectionDrawAddress);
         }
         const std::array<uint32_t,14> layout{uint32_t(r.layout.vertices),uint32_t(r.layout.triangles),
             r.layout.channels[0].offset,r.layout.channels[0].format,r.layout.channels[0].buffer,
@@ -4557,10 +4601,12 @@ static void renderTrackedWeapon(void *w, Matrix34 m, bool sniper, uintptr_t call
         eyeScopePoses.finishDraw(unsigned(hand), invocation.scopePose,
                                  invocation.pass.complete() && !invocation.scopePoseAmbiguous);
     if(idleStorage) {
+        idleStorage->projectionProbe.retire();
         idleStorage->finish(invocation.pass.complete() && !weaponPairFault,generation==graphicsResourceGeneration());
         emitIdleWeaponTrace(*idleStorage);
     }
     }, [&](bool aborted) noexcept {
+        if(invocation.idle)invocation.idle->projectionProbe.retire();
         if (!aborted && physical && generation == graphicsResourceGeneration())
             finishPhysicalWeapon(invocation, generation);
         physicalWeapon = !aborted && generation == graphicsResourceGeneration() ? previous : nullptr;

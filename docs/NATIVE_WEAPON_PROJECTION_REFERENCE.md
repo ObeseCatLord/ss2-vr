@@ -37,8 +37,9 @@ Observe actual precision/rounding at the native producer, the producer versus ca
 hit, independent current operands, and the existing draw identity. A cache hit needs
 provenance to the earlier producer; recomputing the current material's cold path
 is insufficient. Cached/uploaded output must not become the independent reference.
-Astra is reviewing a stable callable observation seam before any implementation;
-no mid-block patch, forced cache recalculation or floating-state change is adopted.
+The two reviewed whole-function observation hooks are now implemented; see
+IDLE_EVENT_COLLECTOR.md for the exact source/build and verification limits. No
+mid-block patch, forced cache recalculation or floating-state change is adopted.
 
 Once proven, prefer a narrow reference adapter matching the actual operation order,
 precision and stores while keeping the local palette separate. Preserve admission,
