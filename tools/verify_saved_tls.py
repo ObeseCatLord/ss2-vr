@@ -108,6 +108,14 @@ class State:
             self.write(args[0],value,relocations,state_offset)
         elif mnemonic in ('test','cmp','nop','xchg'):
             require(mnemonic!='xchg' or args==['ax','ax'],'unsupported exchange')
+        elif mnemonic=='lock':
+            # Owner retirement is disjoint global storage, not a TLS/stack
+            # store. CMPXCHG can replace EAX on failure; forget its prior value.
+            # This saved-byte proof does not certify the owner's CAS semantics.
+            require(re.fullmatch(r'cmpxchg DWORD PTR ds:0x[a-f0-9]+,e(?:ax|bx|cx|dx|si|di|bp)',rest[0]) and
+                    len(relocations)==1 and 'dir32\t.bss' in relocations[0],
+                    'unproved compare-exchange destination')
+            self.set_register('eax',UNKNOWN)
         else:raise ValueError('Saved TLS proof: unsupported instruction '+op)
 
 def verify_saved_tls(entry_body,finish_body,state_offset):

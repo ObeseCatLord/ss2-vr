@@ -2,7 +2,7 @@
 from pathlib import Path
 import sys,unittest
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
-from verify_saved_tls import verify_saved_tls,State,pointer,SAVED,TEB,INDEX
+from verify_saved_tls import verify_saved_tls,State,pointer,SAVED,TEB,INDEX,UNKNOWN
 
 def assembly(rows):
     result=[]
@@ -31,6 +31,17 @@ def finish(duplicated):
                     (load if duplicated else [])+tls+[('jmp 0','DISP32\tss2vr::game::nativeUiFault(char const*)')])
 
 class Checks(unittest.TestCase):
+    def test_global_owner_cas_forgets_eax_and_rejects_tls_or_unbound_storage(self):
+        state=State({'eax':pointer('tls',0),'edx':SAVED})
+        state.step('lock cmpxchg DWORD PTR ds:0xc,edx',['100: dir32\t.bss'],5)
+        self.assertEqual(state.register('eax'),UNKNOWN)
+        for op,relocs in (
+            ('lock cmpxchg DWORD PTR [eax+0x5],edx',['100: secrel32\t.tls$']),
+            ('lock cmpxchg DWORD PTR ds:0xc,edx',[]),
+            ('lock cmpxchg DWORD PTR ds:0xc,edx',['100: dir32\t.data']),
+        ):
+            with self.subTest(op=op,relocs=relocs),self.assertRaises(ValueError):
+                state.step(op,relocs,5)
     def test_overlapping_store_truncation_displaced_index_and_prefixed_lea_fail_closed(self):
         state=State({'eax':pointer('tls',0),'dl':SAVED})
         state.step('mov BYTE PTR [eax+0x5],dl',['secrel32\t.tls$'],5)

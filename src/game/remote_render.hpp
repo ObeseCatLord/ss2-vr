@@ -29,11 +29,17 @@ ScopeRasterStatus copyScopeRaster(void *instance, Matrix34 &affine, ScopeSurface
 void observePlayer(void *player);
 void invalidatePlayer(void *player);
 
-// The stereo caller freezes the presentation bank before its left eye and
-// scopes this flag around each eye. Desktop draws read the latest bank.
-void freezePair();
+// One exact native world invocation owns the existing bank. Stereo keeps its
+// token through UI publication/cleanup; mono keeps it through its original draw.
+uint32_t freezePair();
 void useFrozenPair(bool enabled);
+uint32_t beginMonoPresentation();
+void retirePresentation(uint32_t owner) noexcept;
+bool suppressNestedPresentation() noexcept;
+bool presentationSuppressionCurrent() noexcept;
+void invalidatePresentationForReset(bool activeDraw) noexcept;
+void restorePresentationSuppression(bool previous) noexcept;
 // Caller owns IPC slot and snapshot lock; validates remote identity through Ready.
-bool commitPair(Slot &slot, const Request &request, bool localEligible);
+bool commitPair(Slot &slot, const Request &request, bool localEligible, uint32_t owner);
 
 } // namespace ss2vr::game::remote_render

@@ -213,6 +213,25 @@ int main() {
     frame.weapon[0]++;
     check(!laserEligible(samples[0], frame, 0), "Weapon instance replacement invalidates the beam");
     frame.weapon[0]--;
+    frame.wheel[0] = true;
+    frozen = freezeLaserPair(samples, frame);
+    check(!frozen[0].valid && frozen[1].valid,
+          "Left weapon wheel hides only its own laser, retaining independent right aim");
+    frame.wheel[0] = false;
+    frame.handValid[1] = false;
+    frozen = freezeLaserPair(samples, frame);
+    check(frozen[0].valid && !frozen[1].valid,
+          "Right controller loss never borrows the left hand's valid beam");
+    frame.handValid[1] = true;
+    samples[0].end.x = std::numeric_limits<float>::quiet_NaN();
+    frozen = freezeLaserPair(samples, frame);
+    check(!frozen[0].valid && frozen[1].valid,
+          "Invalid collision endpoint rejects only the affected hand");
+    samples[0].end.x = 0;
+    frame.requestSequence = 1;
+    check(!laserEligible(samples[0], frame, 0) && !laserEligible(samples[1], frame, 1),
+          "A replacement native world request cannot reuse either previous laser");
+    frame.requestSequence = 0;
     frame.body.p.x = .04f;
     check(!laserEligible(samples[0], frame, 0), "Body movement beyond the cache tolerance hides the beam");
     Request leanRequest;

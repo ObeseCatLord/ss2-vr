@@ -114,7 +114,11 @@ static SRWLOCK bindingLock = SRWLOCK_INIT;
 static std::array<Binding, MaxBindings> bindings;
 static std::array<FrozenBinding, MaxBindings> frozen;
 static std::atomic<bool> pairInvalid = false;
-static std::atomic<bool> pairActive = false; // bindingLock protects the transaction bank.
+static_assert(std::atomic<uint32_t>::is_always_lock_free);
+static std::atomic<uint32_t> pairOwner = 0; // bindingLock protects the transaction bank.
+static uint32_t nextPairOwner = 0; // Same lock; exhaustion never reuses a token.
+static constinit thread_local uint32_t currentFrozenOwner = 0;
+static constinit thread_local bool presentationSuppressed = false;
 static std::atomic<DWORD> simulationThread = 0; // observations establish native object ownership.
 static DWORD pairThread = 0;
 static thread_local bool frozenPair = false;
@@ -180,8 +184,7 @@ static void producerAbort() noexcept {
     modelInvalidated=paletteInvalidated=true;
     // A native-only bank is normally a valid fallback. An interrupted producer
     // is different: retire the whole pair, including a bank with no remotes.
-    pairActive.store(false,std::memory_order_release);
-    pairInvalid.store(true,std::memory_order_release);
+    invalidateFrozenPresentationOwner(pairOwner,pairInvalid,currentFrozenOwner,currentFrozenOwner);
     nativeUiFault();
 }
 
@@ -295,7 +298,8 @@ static bool validatePair(const multiplayer::PresentationReadGuard &guard) {
     bool admitted = false;
     for (const auto &entry : frozen)
         admitted |= entry.bodyValid;
-    if (!eligiblePresentationPair(pairActive.load(std::memory_order_acquire),
+    if (!eligiblePresentationPair(frozenPresentationOwnerMatches(pairOwner.load(std::memory_order_acquire),
+                                                               currentFrozenOwner,currentFrozenOwner),
                                   pairThread == GetCurrentThreadId(), admitted,
                                   pairInvalid.load(std::memory_order_acquire), [] { return checkNativeThread(); }))
         return false;
@@ -308,7 +312,8 @@ static bool validatePair(const multiplayer::PresentationReadGuard &guard) {
             return false;
         }
     }
-    return pairActive.load(std::memory_order_acquire)&&
+    return frozenPresentationOwnerMatches(pairOwner.load(std::memory_order_acquire),
+                                          currentFrozenOwner,currentFrozenOwner)&&
         (!admitted||!pairInvalid.load(std::memory_order_acquire));
 }
 
@@ -460,6 +465,7 @@ static void postModelPassBody(const multiplayer::PresentationReadGuard& presenta
 }
 
 static void postModelPass() {
+    if (presentationSuppressed) return;
     // Storage lives above the foreign unwind frame and is explicitly retired.
     std::optional<ModelPassStorage> storage(std::in_place);
     withPresentationBindings([&](const auto& guard) {postModelPassBody(guard,*storage);},
@@ -628,7 +634,7 @@ static void postPaletteBody(const multiplayer::PresentationReadGuard& presentati
 static void postPalette() {
     // Head writes are restricted to the admitted frozen native render extent.
     // Ordinary desktop draws do not enter binding reads or recapture an anchor.
-    if (!frozenPair) return;
+    if (!frozenPair || presentationSuppressed) return;
     std::optional<HeadPassStorage> storage(std::in_place);
     withPresentationBindings([&](const auto& guard) {postPaletteBody(guard,*storage);},
                              [&](bool) noexcept {storage.reset();});
@@ -966,7 +972,7 @@ static void clearBinding(uint32_t handle) {
             binding = {};
     // Keep the immutable bank until commit; invalidity survives desktop restore.
     for (const auto &entry : frozen)
-        if (pairActive && entry.bodyValid && (!handle || entry.binding.playerHandle == handle))
+        if (pairOwner.load(std::memory_order_acquire) && entry.bodyValid && (!handle || entry.binding.playerHandle == handle))
             pairInvalid.store(true, std::memory_order_release);
     ReleaseSRWLockExclusive(&bindingLock);
 }
@@ -1130,7 +1136,7 @@ void observePlayer(void *player) {
             }
     if (destination) {
         for (const auto &entry : frozen)
-            if (pairActive && entry.bodyValid && entry.binding.playerHandle == next.playerHandle &&
+            if (pairOwner.load(std::memory_order_acquire) && entry.bodyValid && entry.binding.playerHandle == next.playerHandle &&
                 !compatibleBinding(entry.binding, next))
                 pairInvalid.store(true, std::memory_order_release);
         *destination = next;
@@ -1207,12 +1213,19 @@ void invalidatePlayer(void *player) {
     clearBinding(pointerHandle(player));
 }
 
-void freezePair() {
+uint32_t freezePair() {
+    uint32_t issued=0;
+    if(currentFrozenOwner || pairOwner.load(std::memory_order_acquire) || presentationBusy ||
+       presentationSuppressed || !ownsNativeThread())return 0;
     withPresentationBindings<true>([&](const auto& guard) {
+        if(currentFrozenOwner || pairOwner.load(std::memory_order_acquire))return;
+        issued=nextFrozenPresentationOwner(nextPairOwner);
+        if(!issued)return;
+        currentFrozenOwner=issued;
         frozen = {};
         pairThread = GetCurrentThreadId();
-        pairActive = true;
         pairInvalid.store(false, std::memory_order_release);
+        pairOwner.store(issued,std::memory_order_release);
         // Native model/handle access stays on the established simulation thread.
         // A bank with no admissible remote players is a valid native-only pair.
         if (ready.load(std::memory_order_acquire) && checkNativeThread()) {
@@ -1237,21 +1250,57 @@ void freezePair() {
             }
         }
     },[&](bool aborted) noexcept {
-        if(aborted) pairActive.store(false,std::memory_order_release);
+        if(aborted)retireFrozenPresentationOwner(pairOwner,pairInvalid,currentFrozenOwner,frozenPair,issued);
     });
+    if(frozenPresentationOwnerMatches(pairOwner.load(std::memory_order_acquire),currentFrozenOwner,issued))return issued;
+    retireFrozenPresentationOwner(pairOwner,pairInvalid,currentFrozenOwner,frozenPair,issued);
+    return 0;
 }
 
-bool commitPair(Slot &slot, const Request &request, bool localEligible) {
+bool commitPair(Slot &slot, const Request &request, bool localEligible, uint32_t owner) {
     // Both remote locks remain held through Ready; local caller holds snapshotLock.
     bool committed=false;
     withPresentationBindings([&](const auto& guard) {
-        committed=commitNativeFrame(slot,request,localEligible&&validatePair(guard));
-    },[&](bool) noexcept {pairActive.store(false,std::memory_order_release);});
+        committed=commitNativeFrame(slot,request,localEligible &&
+            frozenPresentationOwnerMatches(pairOwner.load(std::memory_order_acquire),currentFrozenOwner,owner) &&
+            validatePair(guard));
+    },[&](bool) noexcept {
+        invalidateFrozenPresentationOwner(pairOwner,pairInvalid,currentFrozenOwner,owner);
+    });
     return committed;
 }
 
 void useFrozenPair(bool enabled) {
     frozenPair = enabled;
+}
+uint32_t beginMonoPresentation() {
+    if(!headTrackingEnabled || !hooksReady.load(std::memory_order_acquire) ||
+       !ready.load(std::memory_order_acquire) || !ownsNativeThread())return 0;
+    const uint32_t owner=freezePair();
+    if(owner)frozenPair=true;
+    return owner;
+}
+void retirePresentation(uint32_t owner) noexcept {
+    retireFrozenPresentationOwner(pairOwner,pairInvalid,currentFrozenOwner,frozenPair,owner);
+}
+bool suppressNestedPresentation() noexcept {
+    const bool previous=presentationSuppressed;
+    presentationSuppressed=true;
+    invalidateFrozenPresentationOwner(pairOwner,pairInvalid,currentFrozenOwner,currentFrozenOwner);
+    return previous;
+}
+void restorePresentationSuppression(bool previous) noexcept {
+    presentationSuppressed=previous;
+}
+bool presentationSuppressionCurrent() noexcept {
+    return presentationSuppressed;
+}
+void invalidatePresentationForReset(bool activeDraw) noexcept {
+    // A reset may return to a suspended original world draw. Keep BOTH
+    // adapters suppressed until that draw's outer finally restores its scope.
+    // A reset outside a draw has no such finally and must not latch suppression.
+    presentationSuppressed=frozenPresentationResetSuppressed(presentationSuppressed,activeDraw,currentFrozenOwner);
+    invalidateFrozenPresentationOwner(pairOwner,pairInvalid,currentFrozenOwner,currentFrozenOwner);
 }
 
 } // namespace ss2vr::game::remote_render

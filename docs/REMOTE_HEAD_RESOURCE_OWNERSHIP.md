@@ -1,5 +1,31 @@
 # Remote head: finite native resource-lifetime gate
 
+## 2026-10-09 — admitted mono world extent added
+
+The later source change extends the same pre-producer frozen bank to one outer
+native mono world draw, retaining the typed stock resource exclusion and existing
+identity/thread/palette checks below. It adds no retain, worker lock, anchor getter
+after head-palette production or replacement animation system. Explicit head-option
+disablement remains supported. Stereo's desktop rebuild stays native-headed.
+
+Exact saturating32-bit bank tokens replace activity-only ownership. Tokens are
+issued under the existing binding lock and published before borrowed getters;
+freeze failure retires its token locally. Stereo's existing UI frame owns cleanup
+through publication/reset; mono's original-render wrapper owns its cleanup.
+Scalar lock-free CAS retirement invalidates before release, and wrong/foreign
+tokens do nothing. Nested rendering declines capture before stereo dispatch and
+suppresses both adapters. Nested abort faults rather than tears down its parent.
+Reset suppression remains latched across nested returns until outer cleanup;
+outside-draw reset does not latch suppression. See [mixed-mode disposition and
+verification](MIXED_DESKTOP_VR.md).
+
+Astra/xhigh Source/tool GO, local tags verified, backend unattested. Portable
+production owner/cleanup selectors and composed continuation cases pass; compiled
+checks cover scalar retirement, saved TLS and finite original-render callback/
+receiver binding. No native unwind, multiplayer appearance or hardware acceptance
+is inferred. The historical stereo-only record below remains evidence for its
+original snapshot, not a current prohibition on the reviewed mono extent.
+
 This record extends NATIVE_HEAD_ANIMATION_AUDIT.md and REMOTE_RENDER_UNWIND.md; it
 does not replace native animation, storage or scheduling. Astra/xhigh conducted
 bounded read-only inspection of the pinned Engine/Core/Sam2Game. Main verified

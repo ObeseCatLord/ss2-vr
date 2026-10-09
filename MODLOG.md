@@ -1603,3 +1603,30 @@ IPC10/wire7;81Debug/81Release groups, corrected control/getter gates normal/-O,
 dispatch/remote cleanup and artifact checks pass. No runtime tests/install changes.
 Native non-scoped laser coverage, mono remote heads, physical controls, remaining
 implementation and comprehensive user-operated acceptance are still open.
+
+## 2026-10-09 — mono remote-head presentation and non-scoped native laser coverage
+
+Connected one outer native mono world draw to the existing preproducer frozen
+head bank. Exact saturating32-bit tokens replace activity-only ownership; failed
+stereo publication retires through existing frame cleanup. Nested render is
+native once-only and suppresses both adapters; parent teardown and composed reset
+restoration defects found by Astra are fixed. Suppression stays through nested
+returns until the outer finally; outside-draw resets do not latch it. No new
+animation, resource retain, worker lock or transport policy. Stereo desktop rebuild
+remains native-headed. Native actor appearance/network acceptance remain pending.
+
+Verified native shooting dispatch for15 non-sniper classes plus sniper, preserving
+attachment/dual subdispatch; inspected ray reducers select the nearest eligible
+intersection. Existing beam route/bounds retained. Added independent hand-loss,
+wheel, invalid endpoint and replacement-request checks. No firing or grasp/alignment
+completion inferred; established alignment is still IDs1/13-only.
+
+Astra/xhigh bounded source/tool GO, local tags verified/backend unattested.
+All products fingerprint63eebe666f9deb0c2c2dbe07111af634c4ad25e897f91c4da37acf9ab251db41,
+IPC10/wire7;81Debug/81Release checks pass. Finite compiled guards bind actual final
+finally callbacks and incoming thiscall receiver; mutations reject callback
+overwrites, wrong addends, closure/partial-register corruption and original-target
+changes. Owner cleanup is scalar lock-free32-bit code; CAS comparison semantics
+remain production-policy/source checks. Corrected an older linked-weapon symbol
+selector that mistook a lambda helper for its outer callback. No runtime/install
+changes; physical vehicle controls, broader alignment and full acceptance remain.

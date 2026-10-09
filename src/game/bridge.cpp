@@ -13,6 +13,7 @@
 #include "common/scope_capture_command.hpp"
 #include "shaders/scope_image_opaque.hpp"
 #include "scope_observer.hpp"
+#include "remote_render.hpp"
 #include <MinHook.h>
 #include <atomic>
 #include <bcrypt.h>
@@ -374,10 +375,11 @@ static std::atomic<bool> scopeSourcesHalted{false};
 thread_local IDirect3DSurface9 *desktopTarget = nullptr;
 thread_local IDirect3DSurface9 *desktopDepth = nullptr;
 thread_local Request renderRequest;
-extern bool beginStereo(void *, const Request &);
+extern bool beginStereo(void *, const Request &, uint32_t &);
+extern bool nativeWorldRenderActive() noexcept;
 extern bool headFramePrepared(void *,const Request &) noexcept;
 extern float frozenWorldVisibility();
-extern bool commitStereo(void *, const Request &, Slot &);
+extern bool commitStereo(void *, const Request &, Slot &, uint32_t);
 extern void beginEye(void *, const Request &, int);
 extern void endEye();
 static bool sameSurface(IDirect3DSurface9 *a, IDirect3DSurface9 *b) {
@@ -430,6 +432,7 @@ struct NativeUiFrame {
     std::vector<uint8_t> pixels[2];
     void *player = nullptr;
     uint64_t generation = 0;
+    uint32_t remoteOwner = 0;
     int slot = -1;
     bool restore = false, ui = false, fault = false, world = false;
     bool overlay = false, overlaySeen = false, complete = false, fade = false;
@@ -1570,6 +1573,8 @@ static bool restoreUiFrame() noexcept {
     return ok;
 }
 static void releaseUiFrame() noexcept {
+    remote_render::retirePresentation(uiFrame.remoteOwner);
+    uiFrame.remoteOwner=0;
     retireNativeUiLock(uiFrame.locked,
         [](IDirect3DSurface9 *surface) {
             if (FAILED(surface->UnlockRect())) return false;
@@ -1712,7 +1717,7 @@ static bool publishUiFrame(uint32_t presentation) {
             for (unsigned i=0;i<2;++i) memcpy(slot.pixels[i],uiFrame.pixels[i].data(),uiFrame.pixels[i].size());
             slot.presentation=presentation;
             slot.presentationReserved=0;
-            accepted=commitStereo(uiFrame.player,uiFrame.request,slot);
+            accepted=commitStereo(uiFrame.player,uiFrame.request,slot,uiFrame.remoteOwner);
             if (accepted) SetEvent(channel.ready);
             else slot.state=SlotState::Empty;
         }
@@ -1794,6 +1799,7 @@ struct ScopeCaptureFrame {
 // first checks the process-lifetime halt and cannot reach released resources.
 static thread_local ScopeCaptureFrame scopeCaptureFrame;
 static void retireNativeFrameForReset() noexcept {
+    remote_render::invalidatePresentationForReset(nativeWorldRenderActive());
     // Release-only retirement; suspended callbacks must not restore old state.
     uiHalted = true;
     uiFrame.restore = false;
@@ -2067,7 +2073,7 @@ void stereo(void *puppet,void(__thiscall *original)(void *),EyePostRender postRe
             log("Native world target admission ok=%u ui=%u source=%ux%u viewport=%ux%u",
                 ok,uiFrame.ui,cd.Width,cd.Height,vp.Width,vp.Height);
         }
-        if(ok) ok=beginStereo(puppet,request);
+        if(ok) ok=beginStereo(puppet,request,uiFrame.remoteOwner);
         if (!ok) {
             static unsigned beginDiagnostics = 0;
             if (beginDiagnostics < 4) { ++beginDiagnostics; log("Native world pair admission rejected"); }

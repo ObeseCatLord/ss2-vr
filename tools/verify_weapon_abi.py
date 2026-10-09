@@ -15,9 +15,15 @@ p=ROOT/'build-game'/artifact
 nm=subprocess.check_output(['i686-w64-mingw32-nm',str(p)],text=True)
 entries={}
 for function,needle,size in [('weaponRender','L12weaponRender',48),('sniperRender','L12sniperRender',48),('weaponAbs','L9weaponAbs',8),('weaponFrustum','L13weaponFrustum',0),('weaponMatrixInverse','L19weaponMatrixInverse',0),('weaponDepthRange','L16weaponDepthRange',0),('sniperAlternativePressed','L24sniperAlternativePressed',0),('mountedLookClamp','L16mountedLookClamp',4),('renderThirdPerson','L17renderThirdPerson',0)]:
- rows=[line.split() for line in nm.splitlines() if needle in line and ' t ' in line and '.cold' not in line]
+ # A lambda/helper mangled name can contain its enclosing hook's name. Select
+ # the actual namespace-level callback entry, never a substring in that helper.
+ rows=[line.split() for line in nm.splitlines() if ' t ' in line and
+       re.match(r'ZN5ss2vr4game'+re.escape(needle)+r'E',line.split()[2].lstrip('@_')) and
+       '.' not in line.split()[2]]
  if not rows:
-  rows=[line.split() for line in nm.splitlines() if function in line and ' t ' in line and '.cold' not in line]
+  rows=[line.split() for line in nm.splitlines() if ' t ' in line and
+        re.match(r'ZN5ss2vr4gameL[0-9]+'+re.escape(function)+r'E',line.split()[2].lstrip('@_')) and
+        '.' not in line.split()[2]]
  require(len(rows)==1, (function,rows))
  address=int(rows[0][0],16)
  # Next defined text symbol bounds compiler-generated function, then inspect

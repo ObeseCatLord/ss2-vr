@@ -1,5 +1,31 @@
 # Implementation status — 2026-10-09
 
+## Non-scoped native laser coverage established; mono remote heads connected
+
+The native audit established the original shooting getter for15 non-sniper weapon
+classes and the separate sniper getter, preserving native attachment and dual
+matrix subdispatch. The inspected collision route supplies the nearest eligible
+straight-ray hit. No extra getter, physics change or relaxed alignment bound is
+indicated. Main spot-checked hashes, exports and all16 vslots. Per-hand wheel/loss,
+invalid endpoint and request-replacement regressions pass. Visual calibration and
+all-weapon grasp alignment remain user acceptance; see LASER_NATIVE_COVERAGE.md.
+
+Remote heads now use the existing frozen bank during an admitted outer mono world
+draw. Exact bank tokens retire abandoned stereo publication and mono ownership;
+nested/reset continuation suppresses both adapters until outer cleanup. Original
+rendering stays once-only per native draw. Astra/xhigh Source/tool GO after fixes
+to parent teardown, composed reset restoration and compiled callback binding;
+current local tags verified, backend unattested. See MIXED_DESKTOP_VR.md and
+REMOTE_HEAD_RESOURCE_OWNERSHIP.md. No native/gameplay/network probe was run.
+
+All four products rebuilt with fingerprint
+63eebe666f9deb0c2c2dbe07111af634c4ad25e897f91c4da37acf9ab251db41,
+IPC10/wire7;81Debug/81Release groups pass. Actual callback/receiver/cleanup gates,
+mutated-byte controls and matching product/layout checks remain separate from
+runtime acceptance. Mixed desktop/VR native input ownership was fixed in the
+previous source checkpoint. Vehicle grasp/resource/frame association, broader
+weapon alignment and full user/device/multiplayer acceptance remain open.
+
 ## Mixed desktop input fixed in source; native laser coverage review active
 
 The existing peer admission now separates transport capability from positively

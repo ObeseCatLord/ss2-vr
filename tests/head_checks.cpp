@@ -16,6 +16,82 @@ static void near(Vec3 a, Vec3 b) {
     assert(std::abs(a.x-b.x)<.0003f && std::abs(a.y-b.y)<.0003f && std::abs(a.z-b.z)<.0003f);
 }
 int main() {
+    {
+        std::atomic<uint32_t> owner{1};
+        std::atomic<bool> invalid{false};
+        uint32_t local=1;
+        bool enabled=true;
+        // A failed stereo publication can release this bank without any new
+        // native getter; its later cleanup may be repeated safely.
+        invalidateFrozenPresentationOwner(owner,invalid,local,1);
+        assert(owner.load()==0 && invalid.load() && local==1 && enabled);
+        retireFrozenPresentationOwner(owner,invalid,local,enabled,1);
+        assert(owner.load()==0 && !local && !enabled);
+        uint32_t serial=1;
+        const auto mono=nextFrozenPresentationOwner(serial);
+        assert(mono==2);
+        owner.store(mono);invalid.store(false);local=mono;enabled=true;
+        assert(frozenPresentationOwnerMatches(owner.load(),local,mono));
+        // Old/foreign/declined cleanup must neither release nor invalidate mono.
+        retireFrozenPresentationOwner(owner,invalid,local,enabled,1);
+        invalidateFrozenPresentationOwner(owner,invalid,0,mono);
+        invalidateFrozenPresentationOwner(owner,invalid,1,1);
+        retireFrozenPresentationOwner(owner,invalid,local,enabled,0);
+        assert(owner.load()==mono && !invalid.load() && local==mono && enabled);
+        // Nested producer suppression invalidates/releases only its inherited
+        // bank and holds the token until the outer cleanup, including unwind.
+        invalidateFrozenPresentationOwner(owner,invalid,local,mono);
+        assert(owner.load()==0 && invalid.load() && local==mono && enabled);
+        retireFrozenPresentationOwner(owner,invalid,local,enabled,mono);
+        retireFrozenPresentationOwner(owner,invalid,local,enabled,mono);
+        assert(!local && !enabled && owner.load()==0);
+        owner.store(3);invalid.store(false);local=2;enabled=true;
+        retireFrozenPresentationOwner(owner,invalid,local,enabled,2);
+        assert(owner.load()==3 && !invalid.load() && !local && !enabled);
+        serial=UINT32_MAX-1;
+        assert(nextFrozenPresentationOwner(serial)==UINT32_MAX);
+        assert(nextFrozenPresentationOwner(serial)==0 && serial==UINT32_MAX);
+        assert(!frozenPresentationOwnerMatches(0,0,0) &&
+               !frozenPresentationOwnerMatches(1,1,2));
+        owner.store(4);invalid.store(false);local=4;enabled=true;
+        const bool previousSuppression=false;
+        bool suppressed=true; // Nested detour suppresses before its original.
+        invalidateFrozenPresentationOwner(owner,invalid,local,local);
+        assert(!nativeRenderOwnsOuterScope(1) && !nativeRenderOwnsOuterScope(UINT32_MAX));
+        // Child cleanup restores only suppression/depth; the enclosing token
+        // and frozen mode remain, but validation rejects before any body read.
+        if(nativeRenderOwnsOuterScope(1))suppressed=previousSuppression;
+        bool bodyRead=false;
+        assert(!eligiblePresentationPair(frozenPresentationOwnerMatches(owner.load(),local,local),
+                                        true,true,invalid.load(),[&]{bodyRead=true;return true;}));
+        assert(!bodyRead && local==4 && enabled && suppressed);
+        assert(nativeRenderOwnsOuterScope(0));
+        retireFrozenPresentationOwner(owner,invalid,local,enabled,4);
+        owner.store(5);invalid.store(false);local=5;enabled=true;
+        suppressed=frozenPresentationResetSuppressed(false,true,local);
+        invalidateFrozenPresentationOwner(owner,invalid,local,local);
+        enabled=false; // Reset's endEye may clear frozen mode; suppression wins.
+        assert(suppressed && local==5 && owner.load()==0 && invalid.load());
+        retireFrozenPresentationOwner(owner,invalid,local,enabled,5);
+        suppressed=previousSuppression; // Outer draw cleanup restores its scope.
+        assert(!suppressed && !local && !enabled);
+        assert(!frozenPresentationResetSuppressed(false,false,6) &&
+               !frozenPresentationResetSuppressed(false,true,0) &&
+               frozenPresentationResetSuppressed(true,false,0));
+        owner.store(7);invalid.store(false);local=7;enabled=true;
+        suppressed=true; // Outer -> nested draw.
+        invalidateFrozenPresentationOwner(owner,invalid,local,local);
+        suppressed=frozenPresentationResetSuppressed(suppressed,true,local);
+        enabled=false; // Nested reset ends eye state.
+        if(nativeRenderOwnsOuterScope(1))suppressed=false; // Nested return cannot restore.
+        assert(suppressed && local==7 && !enabled && owner.load()==0);
+        bodyRead=false;
+        if(!suppressed)bodyRead=true; // Both production adapter entry guards.
+        assert(!bodyRead); // Outer continuation remains suppressed.
+        retireFrozenPresentationOwner(owner,invalid,local,enabled,7);
+        if(nativeRenderOwnsOuterScope(0))suppressed=false;
+        assert(!suppressed && !local && !enabled);
+    }
     std::vector<PaletteBone> bones{{0,-1,0,false},{1,0,11,true},{1,1,12,true},
                                   {1,2,13,true},{2,2,14,true},{2,0,12,true}};
     std::vector<PaletteMap> maps{{0,-1},{0,1},{0,2},{1,2},{1,3},{2,4},{2,5}};

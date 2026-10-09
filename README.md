@@ -54,7 +54,8 @@ Use the stock game's first-person view and the exact binaries listed in [install
 Desktop participants in mixed multiplayer do not need a headset. Every participant
 and the server need matching mod products. A mod handshake does not take over
 desktop controls; accepted tracked poses establish VR gameplay ownership. Mixed
-gameplay acceptance and mono remote-head presentation remain open. See
+gameplay acceptance remains open; admitted mono remote-head rendering is connected
+in source. See
 [mixed desktop/VR status](docs/MIXED_DESKTOP_VR.md).
 
 Set **USE COMBO WEAPONS → YES** in the stock single-player or cooperative settings. Independent identical weapons require the game's combo capability and valid native dual state; its fallback mode couples the guns. Patch resources permit custom combinations, but archive filenames alone do not prove the loaded setting. See [native combo evidence](docs/NATIVE_COMBO_CAPABILITY_AUDIT.md).

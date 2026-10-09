@@ -43,7 +43,7 @@ def verify(obj):
         return int(found[0], 16)
 
     for name in ['palettePass()', 'modelPass()', 'animationEnd(void*)', 'freezePair()',
-                 'commitPair(ss2vr::Slot&, ss2vr::Request const&, bool)']:
+                 'commitPair(ss2vr::Slot&, ss2vr::Request const&, bool, unsigned int)']:
         entry = one('ss2vr::game::remote_render::', name)
         require(entry.count('DISP32\tss2vrNativeFinally') == 1,
                 'Entry must retain one native unwind extent: ' + name)
@@ -86,9 +86,10 @@ def verify(obj):
         require(not any(re.match(r'f[a-z]', i) or re.search(r'\b(?:xmm|ymm|zmm)[0-9]', i) or
                         re.match(r'call (?:DWORD PTR|(?:eax|ebx|ecx|edx|esi|edi|ebp|esp)$)', i) for i in instructions),
                 'Cleanup must not use FP or indirect native callbacks: ' + name)
-        require(f'mov BYTE PTR ds:{hex(offset("pairActive"))},0x0' in instructions and
+        require(any(re.fullmatch(r'lock cmpxchg DWORD PTR ds:'+hex(offset('pairOwner'))+r',[a-z]{3}',i)
+                    for i in instructions) and
                 f'mov BYTE PTR ds:{hex(offset("pairInvalid"))},0x1' in instructions,
-                'Abort must retire even an empty remote bank: ' + name)
+                'Abort lost scalar exact-owner CAS retirement: ' + name)
         if name in ['freezePair()', 'commitPair(', 'postModelPass()', 'postPalette()']:
             unlock = 'ReleaseSRWLockExclusive@4' if name == 'freezePair()' else 'ReleaseSRWLockShared@4'
             require(unlock in calls and
@@ -123,11 +124,33 @@ def verify(obj):
     idle_cold=[b for n,b in bodies.items() if 'copyIdleRaster(' in n and '::Context::run(void*) [clone .cold]' in n]
     require(len(idle_cold)==1 and '__cxa_begin_catch' in idle_cold[0] and '__cxa_end_catch' in idle_cold[0],
             'Idle raster allocation failure must be contained locally')
+    # These helpers are callable from foreign-unwind cleanup. Their exact
+    # ownership semantics are covered by production-policy/source checks; this
+    # compiled gate verifies no hidden lock library, lazy TLS or FP/callback.
+    for name in ('retirePresentation(unsigned int)', 'suppressNestedPresentation()',
+                 'restorePresentationSuppression(bool)', 'presentationSuppressionCurrent()',
+                 'invalidatePresentationForReset(bool)'):
+        helper=one('ss2vr::game::remote_render::',name)
+        require(not re.findall(r'DISP32\s+',helper) and
+                not any(re.match(r'call\b|f[a-z]',i) or re.search(r'\b(?:xmm|ymm|zmm)[0-9]',i)
+                        for i in code(helper)), 'Owner retirement/suppression is not scalar: '+name)
+        addresses={int(a,16) for a in re.findall(r'^\s*([0-9a-f]+):\s',helper,re.M)}
+        for instruction in code(helper):
+            if re.match(r'(?:j[a-z]+|loop(?:e|ne)?)\b',instruction):
+                target=re.fullmatch(r'\S+ ([0-9a-f]+)',instruction)
+                require(target and int(target[1],16) in addresses,
+                        'Owner helper branch escaped inspected body')
+        if name not in ('restorePresentationSuppression(bool)','presentationSuppressionCurrent()'):
+            require(any(re.fullmatch(r'lock cmpxchg DWORD PTR ds:'+hex(offset('pairOwner'))+r',[a-z]{3}',i)
+                        for i in code(helper)), 'Missing lock-free x86 owner CAS: '+name)
     return {'object_sha256': hashlib.sha256(obj.read_bytes()).hexdigest(),
             'explicit_native_cleanup_boundaries': len(cleanup_names)+1, 'idle_scratch_vectors_retired':8,
             'scratch_and_lock_retirement': True,
             'ui_fault_object_sha256': hashlib.sha256(bridge.read_bytes()).hexdigest(),
             'ui_fault_cleanup_scalar': True, 'ui_fault_variants_checked': len(fault_bodies),
+            'owner_helpers_scalar_no_callbacks':True,
+            'owner_cas_width_bits':32,
+            'owner_comparison_semantics':'production portable policy plus source review; not a compiled path proof',
             'runtime_executed': False}
 
 

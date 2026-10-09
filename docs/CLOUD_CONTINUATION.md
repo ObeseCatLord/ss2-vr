@@ -1,5 +1,29 @@
 # Latest exact noUV passive source checkpoint
 
+## Current integration boundary — mixed mono heads and non-scoped laser coverage
+
+Native audit verified15non-sniper shooting vslots, sniper dispatch and nearest
+eligible ray selection; main spot-checked pinned hashes/exports/tables. Existing
+per-hand route retained with asymmetric wheel/loss/invalid endpoint/request tests;
+no generic grasp correction or reach widening. See LASER_NATIVE_COVERAGE.md.
+
+Mono remote-head source now reuses the preproducer frozen bank under exact
+saturating32-bit ownership. Frozen capture/commit/UI cleanup retire exact tokens;
+declined or foreign cleanup cannot revoke another bank. Nested dispatch is native
+once-only and suppresses both adapters; nested abort never tears down its parent.
+Reset suppression stays latched through nested returns until outer restoration.
+Stereo desktop rebuild remains native-headed; RemoteHeadTracking=0 still disables.
+Astra/xhigh final Source/tool GO; local tags verified/backend unattested.
+
+Products fingerprint63eebe666f9deb0c2c2dbe07111af634c4ad25e897f91c4da37acf9ab251db41,
+IPC10/wire7;81Debug/81Release pass. Finite callback/receiver, scalar owner cleanup,
+saved-TLS and mutation gates are offline only; actual native MP/hardware remains
+user acceptance. Source ownership P0 from previous checkpoint remains connected.
+No game/input/firing/network/headset launch. Preserve private/original data and
+ID2 runtime-approval state; full physical cockpit controls and all-weapon alignment
+still need their actual association gates, not inferred geometry or more unrelated
+collectors. Full goal remains active/incomplete.
+
 ## Current source checkpoint — mixed desktop controls and getter diagnostic
 
 Desktop mod capability no longer claims XR gameplay ownership. Successful

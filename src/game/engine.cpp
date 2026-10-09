@@ -2,6 +2,7 @@
 #include "common/lab_preparation.hpp"
 #include "common/ride_control_observation.hpp"
 #include "common/ride_model_join.hpp"
+#include "common/presentation_identity.hpp"
 #include "common/ui.hpp"
 #include "common/build_contract.hpp"
 #include "common/rig_revision.hpp"
@@ -3131,7 +3132,8 @@ bool headFramePrepared(void* player,const Request& request) noexcept {
     ReleaseSRWLockShared(&laserLock);
     return attempted;
 }
-bool beginStereo(void *p, const Request &request) {
+bool beginStereo(void *p, const Request &request, uint32_t &remoteOwner) {
+    remoteOwner=0;
     weaponPairFault = false;
     eyeWorldVisibility = 1;
     eyeHeadClearance={};headVolumeDrawSafe=true;pairHeadNearBits=0;
@@ -3160,11 +3162,12 @@ bool beginStereo(void *p, const Request &request) {
             ReleaseSRWLockShared(&laserLock);
             eyeWorldVisibility = clear ? 1.f : 0.f;
         }
-        remote_render::freezePair();
+        remoteOwner=remote_render::freezePair();
+        ready=remoteOwner!=0;
     }
     return ready && rigPublication.usable(eyeSnapshot.rigRevision);
 }
-bool commitStereo(void *p,const Request &request,Slot &slot) {
+bool commitStereo(void *p,const Request &request,Slot &slot,uint32_t remoteOwner) {
     // Same existing snapshot lock, now explicitly retired on native unwind too.
     bool committed=false,held=false,counted=false;
     withNativeFinally([&] {
@@ -3175,7 +3178,7 @@ bool commitStereo(void *p,const Request &request,Slot &slot) {
             eyeSnapshot.rigRevision==current.rigRevision &&
             fresh(current.input) && trackingEligible(p) && nativeRiderCurrent(p,current.rider) && !weaponPairFault && headVolumeDrawSafe;
         if(eligible)slot.headClearance=eyeHeadClearance;
-        committed=remote_render::commitPair(slot,request,eligible);
+        committed=remote_render::commitPair(slot,request,eligible,remoteOwner);
     },[&](bool aborted) noexcept {
         if(aborted) nativeUiFault();
         if(held) ReleaseSRWLockShared(&snapshotLock);
@@ -5225,9 +5228,26 @@ static void __cdecl nativeFill(uint32_t color) {
         else if(aborted) nativeUiFault();
     });
 }
+static constinit thread_local uint32_t nativeWorldRenderDepth=0;
+bool nativeWorldRenderActive() noexcept {return nativeWorldRenderDepth!=0;}
+static void __thiscall presentedRender(void *p) {
+    uint32_t owner=0;
+    withNativeFinally([&] {
+        if(eyeIndex<0 && nativeRenderExtentCurrent())owner=remote_render::beginMonoPresentation();
+        originalRender(p);
+    },[&](bool) noexcept {remote_render::retirePresentation(owner);});
+}
 static void __fastcall render(void *p,void *) {
     const auto caller=reinterpret_cast<uintptr_t>(__builtin_return_address(0));
+    const auto previousDepth=nativeWorldRenderDepth;
+    nativeWorldRenderDepth=previousDepth==UINT32_MAX ? previousDepth : previousDepth+1;
+    const bool previousSuppression=remote_render::presentationSuppressionCurrent();
     withNativeFinally([&] {
+        if(previousDepth) {
+            remote_render::suppressNestedPresentation();
+            originalRender(p); // Nested draws remain native; never begin another bank/eye pair.
+            return;
+        }
         auto s=copySnapshot();
         // Preserve the original short-circuit order: retired render extents must
         // never acquire a native player/rider getter merely for diagnostics.
@@ -5241,9 +5261,19 @@ static void __fastcall render(void *p,void *) {
                 extent,samePlayer,eligible,session,currentInput,s.ui.gameplay,caller==markerParentReturn);
         }
         if(extent && samePlayer && eligible && session && currentInput && s.ui.gameplay)
-            stereo(p,originalRender,caller==markerParentReturn ? nativeMarkerPostlude : nullptr);
-        else originalRender(p);
-    },[&](bool aborted) noexcept { if(aborted) nativeUiEndOwner(true); });
+            stereo(p,presentedRender,caller==markerParentReturn ? nativeMarkerPostlude : nullptr);
+        else presentedRender(p);
+    },[&](bool aborted) noexcept {
+        if(aborted) {
+            if(nativeRenderOwnsOuterScope(previousDepth))nativeUiEndOwner(true);
+            else nativeUiFault(); // Nested unwind never tears down its enclosing owner.
+        }
+        // Invalidation/reset stays latched through every nested exit. Only the
+        // outer draw owns restoration of this whole presentation scope.
+        if(nativeRenderOwnsOuterScope(previousDepth))
+            remote_render::restorePresentationSuppression(previousSuppression);
+        nativeWorldRenderDepth=previousDepth;
+    });
 }
 // Native command query adapter: no fabricated CInputDevice object or command-data writes.
 using CommandFloat = float(__thiscall *)(void *, uint32_t);
