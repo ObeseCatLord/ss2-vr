@@ -62,3 +62,35 @@ not automatically define our controller attachment. See the
 and [hand-interaction grip definition](https://registry.khronos.org/OpenXR/specs/1.1-khr/pdf/xrspec.pdf#page=515).
 Native animation/recoil/stretch, muzzle conversion, scope placement and remote
 attachment offsets must stay coherent under any static asset correction.
+
+## Own Poly Bump consumer reference
+
+A bounded source2 adapter selects the pinned Poly Bump PC24/nearest operation
+order from the copied draw's own paired observer, before comparing any output.
+ID13 requires that association; missing/foreign keys, unsupported consumer mode
+or factor/cache/upload disagreement reject without a first-material fallback.
+The selected API row's native model/draw keys must equal the pair's keys.
+Source1 and qualified cold-reference precedence remain unchanged.
+
+The result retains uploaded-transform-corroboration and records arithmetic_source
+and own_consumer_control_word separately. Observing consumer control127 does not
+certify the earlier cache producer's mode or write continuity. Both native producer
+and producer PC/RC flags remain false. Cache and upload words are comparisons,
+not operands. Signed-zero disagreement and unsupported arithmetic reject; this
+is not unrestricted x87 emulation. No tolerance or admission changes.
+
+The existing immutable sniper trace supplies seven own Black draws, each matching
+2,904 vertices under the unchanged replay tolerance (maximum clip error
+2.23153e-7). All are first-eye/right-hand observations. Whole API geometry coverage,
+world/GPU precision, physical grasp, alignment and both-eye acceptance remain
+unverified. No new runtime was needed for this offline result.
+
+Astra/xhigh recommended the minimal adapter and rejected global cache tracking
+for this conditional claim. Local turn tags verified; backend unattested. Source
+review and selector-negative checks are recorded in the current status.
+
+Final Astra source GO followed one adopted MUSTFIX: ID13 now declines the earlier
+source1 cold path, so cold precedence cannot bypass its own-source2 requirement.
+A replay-level negative with a superficially passing legacy evaluator rejects;
+ID1 cold qualification remains intact. Fifteen reference groups pass normal/-O,
+and targeted Debug/Release consumers pass.

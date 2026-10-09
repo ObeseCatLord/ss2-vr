@@ -23,6 +23,17 @@ MVP_ORDER=((2,0,1),(0,2,1),(0,2,1),(0,2,1),
            (2,1,0),(2,0,1),(0,2,1),(0,2,1),
            (2,0,1),(2,0,1),(0,2,1),(0,2,1))
 
+# Pinned Poly Bump instruction order, selected by the own source2 bookends,
+# never by which arithmetic happens to agree with an uploaded result.
+POLY_VP_ORDER=((2,1,0),(2,0,1),(2,0,1),(2,0,1),
+               (2,1,0),(2,0,1),(2,0,1),(2,0,1),
+               (2,0,1),(2,0,1),(2,0,1),(2,0,1),
+               (2,1,0),(2,0,1),(2,0,1),(2,0,1))
+POLY_MVP_ORDER=((1,0,2),(1,0,2),(1,0,2),(1,0,2),
+                (0,1,2),(1,2,0),(1,2,0),(1,2,0),
+                (1,0,2),(1,2,0),(1,2,0),(1,2,0),
+                (0,1,2),(1,2,0),(1,2,0),(1,2,0))
+
 class UnsupportedNativeArithmetic(ValueError):
     """Well-formed diagnostic outside the independently reproduced arithmetic."""
 
@@ -131,11 +142,18 @@ def first_material_matrices(model,view,projection):
     _,rwords=_multiply_affine(Q,M,MVP_ORDER)
     return qwords,rwords
 
+def poly_bump_matrices(model,view,projection):
+    """Bounded PC24/nearest reference; raw signed-zero mismatches reject."""
+    M=finite_words(model,12);V=finite_words(view,12);P=finite_words(projection,16)
+    Q,qwords=_multiply_affine(P,V,POLY_VP_ORDER)
+    _,rwords=_multiply_affine(Q,M,POLY_MVP_ORDER)
+    return qwords,rwords
+
 def uploaded_transform_reference(record,geometry,channels,index):
     """Compute from this copy's M/V/P/L; uploads corroborate, never seed.
 
-    Only the observed schema4 ordinal producer/program is supported. This is
-    not a PC/RC observation or a certificate for any earlier cache producer.
+    Only the observed schema4 program and owned API association are supported.
+    The consumer's mode is distinct from an earlier cache producer's mode.
     The caller has already assessed the log and uniquely matched its channels.
     """
     if record.get('schema')!=4:return None
@@ -161,14 +179,41 @@ def uploaded_transform_reference(record,geometry,channels,index):
     if geometry['constants']<24:unknown('uploaded-transform-constants-incomplete')
     model=d['factorModel:0'];view=d['factorView:0'];projection=d['factorProjection:0'];local=d['factorLocal:0']
     finite_words(local,12)
-    try:_,r=first_material_matrices(model,view,projection)
+    arithmetic=first_material_matrices;arithmetic_source='first-material-conditional-pc24-nearest'
+    consumer_control=None;pair=None
+    a=geometry.get('projection_association')
+    if a is None and (record.get('nativeId')==13 or any(
+            p['source']==2 for p in record.get('projection_probe',{}).get('pairs',{}).values())):
+        unknown('uploaded-transform-poly-own-association-missing')
+    if a is not None:
+        validate(record);validate_association(record,geometry)
+        pair=record['projection_probe']['pairs'][a['sequence']]
+        if record.get('nativeId')==13 and pair['source']!=2:
+            unknown('uploaded-transform-poly-own-source-missing')
+        if pair['source']==2:
+            if (pair['controlBefore'],pair['controlAfter'])!=(127,127):
+                unknown('uploaded-transform-poly-consumer-mode-unsupported')
+            row=record['submissions']['rows'].get(association['api_index'],
+                record['submissions']['rows'].get(str(association['api_index'])))
+            if row['metadata']['keys'][:2]!=[pair['modelAfter'],pair['drawAfter']]:
+                unknown('uploaded-transform-poly-api-pair-identity-disagreement')
+            arithmetic=poly_bump_matrices
+            arithmetic_source='poly-bump-own-consumer-pc24-nearest'
+            consumer_control=127
+        elif pair['source']!=1:
+            unknown('uploaded-transform-projection-source-unsupported')
+    try:q,r=arithmetic(model,view,projection)
     except UnsupportedNativeArithmetic as error:
         raise UnsupportedUploadedTransform(str(error),association) from error
+    if consumer_control is not None and (q!=pair['data']['1:cachedVP'] or r!=pair['data']['1:cachedMVP']):
+        unknown('uploaded-transform-poly-cache-word-disagreement')
     if r!=[v for i in range(1,5) for v in d['constant:'+str(i)]]:
         unknown('uploaded-transform-mvp-word-disagreement')
     if local!=[v for i in range(21,24) for v in d['constant:'+str(i)]]:
         unknown('uploaded-transform-local-word-disagreement')
     return {'kind':'uploaded-transform-corroboration','matrix':r,'local':list(local),'api_association':association,
+            'arithmetic_source':arithmetic_source,'own_consumer_control_word':consumer_control,
+            'own_consumer_mode_observed':consumer_control is not None,
             'uploads_used_as_inputs':False,'cache_outputs_used_as_inputs':False,
             'native_producer_verified':False,'pc_rc_observed':False,'diagnostic_only':True,
             'positive_grasp_verified':False,'alignment_accepted':False}
@@ -180,6 +225,9 @@ def native_reference(record,geometry):
     claiming a broader arithmetic implementation. Cached words are comparisons
     only. A matching reference does not promote rejected history or prove grasp.
     """
+    # ID13's observed program needs its own Poly Bump consumer. A foreign
+    # source1 cold pair cannot bypass that guard via cold-reference precedence.
+    if record.get('nativeId')==13:return None
     association=geometry.get('projection_association')
     if association is None:return None
     validate(record);validate_association(record,geometry)

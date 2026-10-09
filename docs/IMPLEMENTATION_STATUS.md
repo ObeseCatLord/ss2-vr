@@ -1,5 +1,46 @@
 # Implementation status — 2026-10-09
 
+## Sniper transform reference unblocked — both-eye capture next
+
+The own source2 conditional adapter now reproduces seven completed Black draws,
+2,904 vertices each, at unchanged tolerance (maximum clip error2.23153e-7). It
+selects arithmetic from the actual own consumer/source/mode and verifies native
+API model/draw identity; missing/foreign/unknown evidence rejects. The reference
+kind remains uploaded-transform-corroboration. Producer ownership/mode, whole API
+coverage, world/GPU precision, physical grasp and alignment remain unverified.
+All seven records are first-eye/right-hand; no both-eye acceptance is claimed.
+
+The PID-domain correction is separately reviewed and tested: Windows IPC PID is
+compared to prior Windows PID, while Linux incarnation ownership is independently
+checked. Targeted Debug/Release checks and15reference groups normal/-O pass.
+Astra/xhigh design recommendation accepted; local tags verified, backend unattested.
+Final source GO follows a replay-level cold-source bypass regression. A fresh
+sealed neutral fixture passed check-only preflight. Native products remain
+9c8602b54d253f08531195dacfeb06e34d6eb477b0e5270ec9b58c87dcb171e0.
+ID13 correction remains off; full implementation and user gameplay tests remain.
+
+## Native sniper fixture created — harness identity check corrected
+
+The fresh corrected run created a native sniper save (1,842,870bytes) and preload
+companion (97,517bytes) after owned idle ID13 observation. Exact file hashes stay
+in the private receipt. The isolated fixture is explicitly cheated; reload is
+unverified. The run reached exact Jungle bytes and12native baseline stereo pairs,
+then stopped on a harness PID-domain mistake: Windows PID was compared with Linux
+/proc PID. Actual Windows PID remained unchanged. The source now compares Windows
+identifiers and independently checks Linux ownership;27normal/-Ogroups pass.
+
+Native/process/display shutdown was clean;12protected files unchanged. No firing,
+movement, zoom or desktop input/focus occurred. No new per-eye image was requested
+before the identity check stopped the harness. Attempted fixture remains immutable.
+
+The native Poly Bump observer produced14actual source2 pairs in7completed Black
+observations: PC24/nearest, Scope flags8->14 and own Black reuse14->14. Black's own
+pair matches its own factor/constant data and native draw key. Prior Scope/Black
+sample endpoints have equal operands/cache words, but this is not a write-continuity
+certificate. Exact arithmetic/reference decision remains under bounded Astra
+review; ID13 alignment is still off. Save creation succeeded independently of that
+remaining position-qualification gate. Full implementation remains unfinished.
+
 ## Next private sniper capture — reviewed source, corrected save path
 
 The native save argument now uses its verified game-relative filename, retaining

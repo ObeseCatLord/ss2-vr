@@ -602,6 +602,13 @@ def sniper_preparation_receipt(log,lab):
     return {'schema':1,'native_id':13,'owner':owners[0],'native_stages':stages,'files':files,
             'private_cheated_fixture':True,'save_reload_verified':False,'alignment_accepted':False}
 
+def same_owned_native_game(expected_pid,state,owned):
+    # Observer/IPC identifiers are Windows PIDs. /proc ownership is a separate
+    # Linux incarnation check; Wine does not make those numeric domains equal.
+    actual=state.get('game_pid')
+    return type(expected_pid) is int and 0<expected_pid<=0xffffffff and \
+        type(actual) is int and actual==expected_pid and still_owned(owned)
+
 def validate(cfg):
     validate_idle_probe(cfg)
     private=Path(cfg['private_root']).resolve(strict=True)
@@ -1271,6 +1278,7 @@ def run(cfg):
             manifest['camera_comparison_acceptance']=False
             return run_dir
         if cfg.get('prepare_sniper_fixture'):
+            preparation_native_pid=state['game_pid']
             preparation_deadline=min(deadline,time.monotonic()+35)
             while True:
                 native_path=lab/'Bin/SS2VR.log'
@@ -1280,7 +1288,8 @@ def run(cfg):
                 if 'Lab sniper preparation complete' in native:
                     manifest['sniper_preparation']=sniper_preparation_receipt(native,lab)
                     state=observer(cfg,env,'status',token,timeout=remaining(deadline),deadline=deadline)
-                    if state['game_pid']!=owned_game['pid']:raise RuntimeError('Prepared sniper process changed')
+                    if not same_owned_native_game(preparation_native_pid,state,owned_game):
+                        raise RuntimeError('Prepared sniper process changed')
                     if state.get('current_weapon',[None,None])[1]==13:break
                 if time.monotonic()>=preparation_deadline:raise TimeoutError('Native private sniper preparation did not complete')
                 if not still_owned(owned_game):raise RuntimeError('Owned game exited during private sniper preparation')

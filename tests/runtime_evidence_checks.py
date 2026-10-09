@@ -4,16 +4,28 @@ import unittest
 import hashlib
 import json
 import tempfile
+from unittest.mock import patch
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 from assess_runtime import (complete_pairs_for_pose,first_person_depth_probe,dual_topologies,
     DualPhaseEvidence,require_dual_capture,dual_weapon_events,successful_dual_fire)
-from runtime_lab import (native_grip_resource_receipts,validate_idle_probe,validate_idle_preparation,idle_probe_weapon,validate_sniper_destination,sniper_preparation_receipt,
+from runtime_lab import (native_grip_resource_receipts,validate_idle_probe,validate_idle_preparation,idle_probe_weapon,validate_sniper_destination,sniper_preparation_receipt,same_owned_native_game,
                          idle_configuration_digest,IDLE_FIXED_FILES,IDLE_TOOLS)
 
 HEAD={'p':[0,0,0],'q':[0,0,0,1]}
 
 class IdleProbeSelectionChecks(unittest.TestCase):
+    def test_native_windows_pid_is_independent_of_linux_ownership(self):
+        owned={'pid':100000,'start':'stable-linux-incarnation','argv':[b'owned-private-game']}
+        with patch('runtime_lab.still_owned',return_value=True) as check:
+            self.assertTrue(same_owned_native_game(328,{'game_pid':328},owned))
+            check.assert_called_with(owned)
+            for expected,state in ((328,{'game_pid':329}),(0,{'game_pid':0}),
+                                   (True,{'game_pid':1}),(1,{'game_pid':True})):
+                self.assertFalse(same_owned_native_game(expected,state,owned))
+        with patch('runtime_lab.still_owned',return_value=False):
+            self.assertFalse(same_owned_native_game(328,{'game_pid':328},owned))
+
     def test_stationary_pinned_collection_and_mode_separation(self):
         cfg={'idle_weapon_probe':True,'expected_product_source':'a'*64,
              'baseline_head':[0,1.6,0,0,0,0],

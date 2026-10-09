@@ -7,7 +7,7 @@ import sys
 import unittest
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
-from idle_native_reference import first_material_matrices, native_reference, uploaded_transform_reference, uploaded_api_association, round24, UnsupportedNativeArithmetic, UnsupportedUploadedTransform, UPLOADED_DECLARATION
+from idle_native_reference import first_material_matrices, poly_bump_matrices, native_reference, uploaded_transform_reference, uploaded_api_association, round24, UnsupportedNativeArithmetic, UnsupportedUploadedTransform, UPLOADED_DECLARATION
 from idle_projection_evidence_checks import fixture, M, P, SOURCE
 from assess_idle_weapon import assess
 
@@ -48,6 +48,68 @@ def uploaded_fixture():
     return record,record['geometry'][0],channels,digest,log
 
 class Checks(unittest.TestCase):
+    def test_poly_own_pair_selects_without_search_or_producer_claim(self):
+        r,g,channels,digest,_=uploaded_fixture()
+        r['nativeId']=13
+        original=assess(fixture(),SOURCE)['copied_event_pose_observations'][0]
+        r['projection_probe']=copy.deepcopy(original['projection_probe'])
+        g['projection_association']=copy.deepcopy(original['geometry'][0]['projection_association'])
+        pair=r['projection_probe']['pairs'][1]
+        pair.update(source=2,flagsBefore=14,flagsAfter=14)
+        with patch('idle_native_reference.UPLOADED_PROGRAM_HASH',digest):
+            ref=uploaded_transform_reference(r,g,channels,0)
+            self.assertEqual(ref['arithmetic_source'],'poly-bump-own-consumer-pc24-nearest')
+            self.assertTrue(ref['own_consumer_mode_observed'])
+            self.assertEqual(ref['own_consumer_control_word'],127)
+            self.assertFalse(ref['native_producer_verified']);self.assertFalse(ref['pc_rc_observed'])
+            for change in ('mode','api-model','api-draw','missing-pair','missing-association','wrong-source','foreign-factor','cache','unknown-source'):
+                bad=copy.deepcopy(r);p=bad['projection_probe']['pairs'][1]
+                if change=='mode':p.update(controlBefore=383,controlAfter=383)
+                elif change=='api-model':bad['submissions']['rows'][0]['metadata']['keys'][0]+=1
+                elif change=='api-draw':bad['submissions']['rows'][0]['metadata']['keys'][1]+=1
+                elif change=='missing-pair':bad['projection_probe']['pairs']={}
+                elif change=='missing-association':bad['geometry'][0].pop('projection_association')
+                elif change=='wrong-source':p['source']=1
+                elif change=='foreign-factor':bad['geometry'][0]['data']['factorModel:0'][0]^=1
+                elif change=='cache':
+                    p['data']['0:cachedVP'][0]^=1;p['data']['1:cachedVP'][0]^=1
+                else:p['source']=3
+                with self.subTest(change=change),self.assertRaises(ValueError):
+                    uploaded_transform_reference(bad,bad['geometry'][0],channels,0)
+            # Numeric agreement under the old identity fixture cannot bypass an
+            # unknown consumer mode, a missing own pair or mismatching API key.
+
+    def test_poly_fixed_order_differs_and_preserves_store_boundaries(self):
+        view=words([2**24,2**24,0,0,1,1,0,0,-2**24,-2**24,1,0])
+        projection=words([1,1,1,0,0,1,0,0,1,1,1,0,0,0,0,1])
+        q,_=poly_bump_matrices(M,view,projection)
+        self.assertEqual(q[0],0x3f800000) # (-large+1)+large is exactly representable.
+        self.assertEqual(q[1],0x3f800000) # (-large+large)+1; first-material yields zero.
+        self.assertNotEqual(q,first_material_matrices(M,view,projection)[0])
+        tiny=P.copy();tiny[0]=1;half=M.copy();half[0]=0x3f000000
+        self.assertEqual(poly_bump_matrices(M,half,tiny)[0][0],0)
+
+    def test_id13_cold_source1_cannot_bypass_own_poly_guard_in_replay(self):
+        from replay_idle_geometry import replay_draws
+        r,g,channels,digest,_=uploaded_fixture();r['nativeId']=13
+        cold=assess(fixture(),SOURCE)['copied_event_pose_observations'][0]
+        r['projection_probe']=copy.deepcopy(cold['projection_probe'])
+        g['projection_association']=copy.deepcopy(cold['geometry'][0]['projection_association'])
+        self.assertIsNone(native_reference(r,g))
+        self.assertIsNotNone(native_reference(cold,cold['geometry'][0]))
+        candidates={'synthetic.mesh':{'asset_sha256':'0'*64,'candidate_channels':[
+            {'channel_sha256':{k:hashlib.sha256(v).hexdigest() for k,v in channels.items()}}]}}
+        row={k:r[k] for k in ('request','eye','hand')}
+        row.update(geometry_index=0,result='unique-consumed-channel-match',
+                   candidates=[{'candidate':'synthetic.mesh','channel_index':0}])
+        with patch('idle_native_reference.UPLOADED_PROGRAM_HASH',digest), \
+             patch('replay_idle_geometry.channel_bytes',return_value=channels), \
+             patch('replay_idle_geometry.evaluate_geometry',return_value={'position_replay_agrees_with_reference':True}):
+            out=replay_draws([row],[r],candidates,Path('.'),Path('.'),Path('.'))[0]
+        self.assertEqual(out['reference_kind'],'uploaded-transform-uncorroborated')
+        self.assertFalse(out['position_replay']['position_replay_agrees_with_reference'])
+        self.assertEqual(out['position_replay']['reason'],'uploaded-transform-poly-own-source-missing')
+
     def test_sparse_api_association_and_mvp_fence(self):
         record,g,channels,digest,_=uploaded_fixture()
         own=record['submissions']['rows'][0];extra=copy.deepcopy(own)
