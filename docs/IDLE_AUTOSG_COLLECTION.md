@@ -69,6 +69,8 @@ Local model/effort tags were verified; independent backend identity is unatteste
 All79Debug/79Release groups pass. All four products rebuild with matching IPC10/
 wire7 contracts. Twenty compiled gates pass normally/under Python optimization,
 including selection argument/receiver staging, four-argument callee-pop repair,
-cdecl save argument and target-specific zoom dispatch. The compiled gate covers
+cdecl save argument and target-specific zoom dispatch. Astra found and the final
+checker corrected two false-positive cases: altered class-mismatch dispatch and
+a clobbered zoom receiver. Their actual-byte regression controls now reject. The compiled gate covers
 those finite emitted boundaries; it does not replace native lifetime source review.
 No ID2 runtime, firing, vehicle, network or physical-headset test is claimed.
