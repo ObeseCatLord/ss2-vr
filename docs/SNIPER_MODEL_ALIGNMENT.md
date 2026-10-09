@@ -159,3 +159,27 @@ loader, IK, inventory/equip operation or alignment policy was installed.
 | Normalize only unreferenced metadata tail slots | Adopted privately; raw assets/buffers unchanged. |
 | Add another evaluator protocol/native-ID policy | Rejected; existing assessed-record policy and bounded arithmetic suffice. |
 | Claim activation from static/synthetic arithmetic | Rejected; actual draw association remains open. |
+
+## Actual native gun association and independent eye observation
+
+Native single-player preparation created an isolated sniper save and preload.
+Seven immutable first-eye/right-hand Black draws uniquely match the patch
+variant's complete consumed channels and buffer ranges. Their own Poly Bump
+source2 pairs/API rows independently corroborate all copied positions under the
+unchanged tolerance; this is conditional uploaded-transform evidence, not GPU
+precision, world provenance or earlier cache-producer continuity.
+
+The other eye renders qualified native draws but can bypass original animation
+query evaluation through a native cache hit. The collector rejects missing event
+evidence. Source review did not establish a safe transferable cache incarnation.
+The smallest next lab experiment alternates the temporal first eye by request
+sequence, keeping every camera/target/depth/projection/readback slot indexed by
+its actual physical eye. Both passes and original bodies remain intact. Scope
+preview's eye0 convention remains unchanged. No cache invalidation, borrowed
+event, forced evaluation or animation-name relaxation is introduced.
+
+The option requires a sealed neutral ID13 configuration and native private-display
+ID13 environment plus installed lab isolation. Default production order stays
+left then right. Real own-event records for both eyes are still required; cache
+hits or exhausted32attempts may produce an inconclusive capture. It does not
+certify cached-eye continuity within a single request. Correction remains inactive.

@@ -66,6 +66,17 @@ class IdleProbeSelectionChecks(unittest.TestCase):
                        {'native_dual_probe':'zap-initial-inventory'}):
             with self.subTest(change=change),self.assertRaises(ValueError):validate_idle_probe({**cfg,**change})
 
+    def test_alternate_eye_order_requires_neutral_id13(self):
+        cfg={'idle_weapon_probe':True,'idle_native_id':13,'idle_alternate_world_eyes':True,
+             'expected_product_source':'a'*64,'baseline_head':[0,1.6,0,0,0,0],
+             'pose_steps':[{'name':'baseline','head':[0,1.6,0,0,0,0]}]}
+        validate_idle_probe(cfg)
+        for change in ({'idle_native_id':1},{'idle_weapon_probe':False},
+                       {'idle_alternate_world_eyes':1},{'idle_alternate_world_eyes':None},
+                       {'native_dual_probe':'zap-initial-inventory'},
+                       {'pose_steps':[{'name':'turn','head':[0,1.6,0,1,0,0]}]}):
+            with self.subTest(change=change),self.assertRaises(ValueError):validate_idle_probe({**cfg,**change})
+
     def test_sniper_save_destination_collision_and_redirection(self):
         with tempfile.TemporaryDirectory() as d:
             lab=Path(d)/'game';lab.mkdir();destination=lab/'Temp/SS2VR'

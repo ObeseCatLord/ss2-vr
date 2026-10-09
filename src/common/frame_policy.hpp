@@ -7,6 +7,12 @@
 namespace ss2vr {
 constexpr uint64_t FrameAgeMs = 150, UiAgeMs = 250;
 constexpr uint32_t ExhaustedEpoch = std::numeric_limits<uint32_t>::max();
+// Private observation only: physical eye identity always indexes its own
+// camera/target/projection/readback. Never swap the request or output arrays.
+constexpr int labWorldEyeForPass(unsigned pass,uint64_t request,bool alternate) {
+    if(pass>=2)return -1;
+    return alternate && (request&1) ? 1-int(pass) : int(pass);
+}
 inline bool validTrackingEpoch(uint32_t epoch) {
     return epoch && epoch != ExhaustedEpoch;
 }

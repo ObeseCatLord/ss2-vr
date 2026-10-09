@@ -2077,7 +2077,22 @@ void stereo(void *puppet,void(__thiscall *original)(void *),EyePostRender postRe
         if(traceDepth) traceStereoDepth(d,request,-1,"entry");
         if (ok) ok = renderScopeSources(puppet,original,request);
         if (generation != graphicsResourceGeneration()) { original(puppet); return; }
-        for(int i=0;i<2 && ok;++i) {
+        static const bool labAlternateEyes=[] {
+            wchar_t enabled[2]{},privateDisplay[2]{},weapon[3]{};
+            return GetEnvironmentVariableW(L"SS2VR_LAB_ALTERNATE_EYES",enabled,2)==1 && enabled[0]==L'1' &&
+                GetEnvironmentVariableW(L"SS2VR_LAB_PRIVATE_DISPLAY",privateDisplay,2)==1 && privateDisplay[0]==L'1' &&
+                GetEnvironmentVariableW(L"SS2VR_LAB_IDLE_WEAPON",weapon,3)==2 && weapon[0]==L'1' && weapon[1]==L'3';
+        }();
+        const bool alternateEyes=labAlternateEyes && labOnlineIsolationInstalled();
+        static unsigned orderReceipts=0;
+        if(alternateEyes && orderReceipts<32) {
+            ++orderReceipts;
+            log("Lab world eye order request=%llu first=%d second=%d",
+                static_cast<unsigned long long>(request.sequence),
+                labWorldEyeForPass(0,request.sequence,true),labWorldEyeForPass(1,request.sequence,true));
+        }
+        for(unsigned pass=0;pass<2 && ok;++pass) {
+            const int i=labWorldEyeForPass(pass,request.sequence,alternateEyes);
             activeEye=i; eyeInvalid=false; renderRequest=request;
             beginEye(puppet,request,i);
             D3DVIEWPORT9 ev{0,0,width,height,0,1};

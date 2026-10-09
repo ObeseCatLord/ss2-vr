@@ -10,6 +10,21 @@ static void check(bool value, const char *message) {
     }
 }
 int main() {
+    for(uint64_t request : {uint64_t{0},uint64_t{1},uint64_t{2},UINT64_MAX}) {
+        for(bool enabled : {false,true}) {
+            const int a=labWorldEyeForPass(0,request,enabled),b=labWorldEyeForPass(1,request,enabled);
+            check(a>=0 && a<2 && b==1-a,"World passes must consume both distinct physical eye slots");
+            check(a==int(enabled && (request&1)),"Only sealed alternate mode can change temporal order");
+            const int cameras[2]{11,22},targets[2]{101,202},projections[2]{1001,2002};
+            int copied[2]{};
+            for(unsigned pass=0;pass<2;++pass) {
+                const int i=labWorldEyeForPass(pass,request,enabled);
+                copied[i]=cameras[i]+targets[i]+projections[i];
+            }
+            check(copied[0]==1113 && copied[1]==2226,"Temporal reordering cannot swap camera/target/projection identity");
+        }
+    }
+    check(labWorldEyeForPass(2,1,true)==-1,"Unknown world pass must not alias an eye");
     TrackingEpochs epochs;
     auto first = epochs.advance(), respawn = epochs.advance();
     check(first && respawn > first, "Snapshot reset/respawn cannot reuse the process epoch");

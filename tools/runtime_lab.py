@@ -498,6 +498,10 @@ def idle_probe_weapon(cfg):
     return selected
 
 def validate_idle_probe(cfg):
+    alternate=cfg.get('idle_alternate_world_eyes',False)
+    if type(alternate) is not bool:raise ValueError('Idle eye order must be an explicit boolean')
+    if alternate and idle_probe_weapon(cfg)!=13:
+        raise ValueError('Alternate world eyes requires the exact neutral ID13 collector')
     preparation=cfg.get('prepare_sniper_fixture',False)
     if type(preparation) is not bool:raise ValueError('Sniper preparation must be an explicit boolean')
     if preparation and idle_probe_weapon(cfg)!=13:
@@ -1005,6 +1009,8 @@ def run(cfg):
     env.pop('SS2VR_LAB_IDLE_WEAPON',None)
     selected_idle_weapon=idle_probe_weapon(cfg)
     if selected_idle_weapon is not None:env['SS2VR_LAB_IDLE_WEAPON']=str(selected_idle_weapon)
+    env.pop('SS2VR_LAB_ALTERNATE_EYES',None)
+    if cfg.get('idle_alternate_world_eyes'):env['SS2VR_LAB_ALTERNATE_EYES']='1'
     env.pop('SS2VR_LAB_PREPARE_SNIPER',None)
     if cfg.get('prepare_sniper_fixture'):env['SS2VR_LAB_PREPARE_SNIPER']='1'
     env.pop('SS2VR_LAB_GRIP_RESOURCES',None)

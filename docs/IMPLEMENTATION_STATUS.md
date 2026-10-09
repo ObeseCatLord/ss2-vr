@@ -1,5 +1,21 @@
 # Implementation status — 2026-10-09
 
+## Reviewed neutral eye-order experiment prepared
+
+A sealed lab-only option alternates temporal first-eye order by request parity
+while preserving physical-eye camera/depth/target/projection/postlude/readback
+indices and both original passes. Production order remains unchanged. Scope
+preview retains its existing eye0 convention. Each eye must supply its own native
+Idle event and complete geometry/reference association; no cache receipt is
+transferred, recalculation forced, tolerance widened or animation gate relaxed.
+Skipped requests and the32attempt budget can leave evidence inconclusive.
+
+Astra source GO, local three-turn Astra/xhigh tags verified; backend unattested.
+28runtime groups normal/-O and77Debug/77Release checks pass. All4products rebuilt
+onad11383 (full fingerprint in private package/artifact receipt), IPC10/wire7.
+A fresh independently copied/sealed fixture passed check-only preflight; no native
+run yet. The phase-failure diagnostic is included. Alignment remains inactive.
+
 ## Fresh neutral capture — guarded stop, second-eye evidence gap identified
 
 The fresh run on sourceaee8f6c/native fingerprint9c8602b reached the pinned Jungle
