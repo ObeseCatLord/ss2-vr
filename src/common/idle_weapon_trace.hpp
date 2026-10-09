@@ -83,6 +83,39 @@ struct IdleWeaponTrace {
         std::array<uint32_t,4> header{};
         bool copied=false;
     } animationNameFailure{};
+    struct StreamSnapshot {
+        enum Status : uint32_t { Missing, Copied, Failed, Interrupted };
+        uint32_t status=Missing,step=0,index=0,caps=0,declarationCount=0;
+        int32_t hresult=0;
+        uint32_t declarationObject=0,indexObject=0,shaderObject=0;
+        std::array<ScopeStreamInput,3> streams{}; // Actual 0/7/8, roles unresolved.
+        std::array<ScopeDeclarationElement,65> declaration{};
+        std::array<std::array<uint32_t,4>,256> constants{};
+    };
+    struct StreamProbe {
+        enum Flag : uint32_t { BeforeCopied=1,BeforeCurrent=2,ForwardCalled=4,ForwardReturned=8,ForwardSucceeded=16,
+            AfterCopied=32,SameInputs=64,AfterCurrent=128,CleanupCurrent=256 };
+        bool selected=false;
+        uint32_t attempts=0,flags=0,words=0,invalidations=0;
+        int32_t forwardResult=0;
+        std::array<StreamSnapshot,2> snapshots{};
+        std::array<uint32_t,IdleGeometryCopy::MaxProgramWords> program{};
+    } streamProbe{};
+    static bool observedStreamFamily(const InputFailure &d) noexcept {
+        constexpr std::array<ScopeDeclarationElement,6> observed{{
+            {0,0,2,0,5,0},{2,0,1,0,5,2},{3,0,1,0,5,3},
+            {7,0,8,0,5,7},{8,0,8,0,5,8},{255,0,17,0,0,0}}};
+        return d.step==20 && d.valid==15 && d.declarationCount==observed.size() &&
+            std::equal(observed.begin(),observed.end(),d.declaration.begin());
+    }
+    static bool sameStreamSnapshots(const StreamSnapshot &a,const StreamSnapshot &b) noexcept {
+        return a.status==StreamSnapshot::Copied && b.status==StreamSnapshot::Copied &&
+            a.caps && a.caps<=256 && a.caps==b.caps && a.declarationCount &&
+            a.declarationCount<=65 && a.declarationCount==b.declarationCount &&
+            a.declarationObject && a.declarationObject==b.declarationObject &&
+            a.indexObject && a.indexObject==b.indexObject && a.shaderObject && a.shaderObject==b.shaderObject &&
+            a.streams==b.streams && a.declaration==b.declaration && a.constants==b.constants;
+    }
     static constexpr uint32_t checks(std::initializer_list<bool> values) noexcept {
         uint32_t result=0,bit=1;for(bool value:values){if(value)result|=bit;bit<<=1;}return result;
     }

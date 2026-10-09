@@ -45,6 +45,17 @@ int main(int argc,char **argv) {
     for (unsigned i=0;i<3;++i) for (unsigned j=0;j<4;++j) constants[21+i][j]=affine.m[i*4+j];
     assert(scopeCapPosition(program,constants,cap,false,expected));
     assert(scopeCapPosition(program,constants,cap,true,expected));
+    {auto unknown=program;
+     unknown.insert(unknown.begin()+1,{31,0x80070005,0x900f0007,31,0x80080005,0x900f0008});
+     unknown.insert(unknown.end()-1,{1,0xc00f0000,0x90e40007});
+     std::array<float,4> clip{};
+     assert(scopeUvProgram(unknown));
+     assert(!scope_position::position(unknown,constants,{0,0,0},{0,0},true,clip));
+     assert(!scopeCapPosition(unknown,constants,cap,true,expected));
+     unknown[unknown.size()-2]=0x90e40008;
+     assert(scopeUvProgram(unknown));
+     assert(!scope_position::position(unknown,constants,{0,0,0},{0,0},true,clip));
+     assert(!scopeCapPosition(unknown,constants,cap,true,expected));} // Declared but unproved 7/8 never receive invented seeds.
     for (size_t size=0;size<program.size();++size)
         assert(!scopeCapPosition(std::span(program).first(size),constants,cap,true,expected));
     constants[21][3]+=.01f;

@@ -57,7 +57,8 @@ struct ProbeOwner {
     ScopeRasterObservation raster;
     IdleGeometryCopy idle;
     IdleWeaponTrace *idleTrace=nullptr;
-    BoundInputs bindings[2];
+    BoundInputs bindings[3]; // Slot2 only for passive ID1 post-forward observation.
+    bool streamReentered=false;
     ScopeLockLedger lock;
     IDirect3DVertexBuffer9 *lockedVertex = nullptr;
     IDirect3DIndexBuffer9 *lockedIndex = nullptr;
@@ -147,6 +148,14 @@ static void cleanup(bool aborted) noexcept {
     if (probe.transaction) {
         // Current performs identity comparisons only, never dereferences device.
         const bool afterRelease=scopeGpuTransactionCurrent(device);
+        if(probe.idleTrace && probe.idleTrace->streamProbe.selected) {
+            auto &receipt=probe.idleTrace->streamProbe;
+            receipt.invalidations=IdleWeaponTrace::checks({probe.streamReentered,aborted,
+                probe.generation!=graphicsResourceGeneration(),!current,!afterRelease});
+            if(!aborted && !retired && !probe.streamReentered && current && afterRelease &&
+               probe.generation==graphicsResourceGeneration())receipt.flags|=IdleWeaponTrace::StreamProbe::CleanupCurrent;
+            else receipt.flags&=~IdleWeaponTrace::StreamProbe::CleanupCurrent;
+        }
         if(probe.idleTrace && (retired || !current || !afterRelease))probe.idleTrace->reject(IdleWeaponTrace::Rejection::GpuRetired,IdleWeaponTrace::checks({!retired,current,afterRelease}));
         if (!retired && probe.split && (!current || !afterRelease)) scopeGpuFault();
         scopeGpuTransactionEnd();
@@ -155,6 +164,7 @@ static void cleanup(bool aborted) noexcept {
     probe.transaction = probe.split = probe.imageChanged = probe.imageRestoreFailed = false;
     probe.cap = {}; probe.uvRows={}; probe.program={}; probe.colorProgram={};
     probe.idleTrace=nullptr;
+    probe.streamReentered=false;
     probe.busy = false;
 }
 static bool identity(IUnknown *object,IUnknown *&out,HRESULT *observed=nullptr) {
@@ -222,6 +232,98 @@ static bool boundInputs(IDirect3DDevice9 *d,BoundInputs &b,const ScopeIndexedDra
     result=d->GetVertexShaderConstantF(8,b.uvRows[0].data(),2);if(FAILED(result))return fail(24);
     for(const auto &row:b.uvRows)for(float value:row)if(!std::isfinite(value))return fail(25);
     return true;
+}
+// Passive actual 0/7/8 observations. These slots are deliberately not labelled
+// weights/local indices and are never passed to geometry admission or replay.
+// Failed/abnormal outputs remain owned by the existing ProbeOwner cleanup;
+// only an entirely normal snapshot exposes copied scalar outputs.
+static bool sampleIdleStreams(IDirect3DDevice9 *d,BoundInputs &b,unsigned phase) {
+    auto &receipt=probe.idleTrace->streamProbe;
+    auto &out=receipt.snapshots[phase];
+    out={};out.status=IdleWeaponTrace::StreamSnapshot::Interrupted;
+    receipt.attempts=phase+1;
+    b.values={};b.elements={};b.constants={};b.count=MAXD3DDECLLENGTH+1;
+    HRESULT result=S_OK;
+    auto at=[&](uint32_t step,uint32_t index=0) {out.step=step;out.index=index;};
+    auto fail=[&] {
+        const auto step=out.step,index=out.index;out={};
+        out.status=IdleWeaponTrace::StreamSnapshot::Failed;out.step=step;out.index=index;out.hresult=int32_t(result);
+        return false;
+    };
+    D3DCAPS9 caps{};
+    at(1);result=d->GetDeviceCaps(&caps);if(FAILED(result))return fail();
+    at(2);if(!caps.MaxVertexShaderConst || caps.MaxVertexShaderConst>256)return fail();
+    b.constantCount=caps.MaxVertexShaderConst;
+    at(3);result=d->GetVertexShaderConstantF(0,b.constants[0].data(),b.constantCount);if(FAILED(result))return fail();
+    at(4);result=d->GetVertexDeclaration(&b.declaration);if(FAILED(result))return fail();
+    at(5);if(!b.declaration)return fail();
+    D3DVERTEXELEMENT9 elements[MAXD3DDECLLENGTH+1]{};
+    at(6);result=b.declaration->GetDeclaration(elements,&b.count);if(FAILED(result))return fail();
+    at(7);if(!b.count || b.count>std::size(elements))return fail();
+    at(8);if(!identity(b.declaration,b.identity[5],&result))return fail();
+    for(UINT i=0;i<b.count;++i) {
+        const auto e=elements[i];b.elements[i]={e.Stream,e.Offset,e.Type,e.Method,e.Usage,e.UsageIndex};
+    }
+    constexpr UINT numbers[]{0,7,8};
+    std::array<ScopeStreamInput,3> streams{};
+    for(unsigned i=0;i<3;++i) {
+        auto &v=streams[i];
+        at(9,numbers[i]);result=d->GetStreamSource(numbers[i],&b.vertex[i],&v.offset,&v.stride);if(FAILED(result))return fail();
+        at(10,numbers[i]);if(!b.vertex[i])return fail();
+        at(11,numbers[i]);result=d->GetStreamSourceFreq(numbers[i],&v.frequency);if(FAILED(result))return fail();
+        at(12,numbers[i]);if(!identity(b.vertex[i],b.identity[i],&result))return fail();
+        v.object=reinterpret_cast<uintptr_t>(b.identity[i]);
+    }
+    at(13);result=d->GetIndices(&b.index);if(FAILED(result))return fail();
+    at(14);if(!b.index)return fail();
+    at(15);if(!identity(b.index,b.identity[4],&result))return fail();
+    at(16);result=d->GetVertexShader(&b.shader);if(FAILED(result))return fail();
+    at(17);if(!b.shader)return fail();
+    at(18);if(!identity(b.shader,b.identity[6],&result))return fail();
+    if(!phase) {
+        UINT bytes=0;
+        at(19);result=b.shader->GetFunction(nullptr,&bytes);if(FAILED(result))return fail();
+        at(20);if(bytes<8 || bytes%4 || bytes>sizeof(receipt.program))return fail();
+        const UINT expected=bytes;
+        at(21);result=b.shader->GetFunction(receipt.program.data(),&bytes);
+        if(FAILED(result) || bytes!=expected)return fail();
+        receipt.words=bytes/4;
+    }
+    out.status=IdleWeaponTrace::StreamSnapshot::Copied;out.step=out.index=0;out.hresult=0;
+    out.caps=b.constantCount;out.declarationCount=b.count;out.declaration=b.elements;out.streams=streams;
+    out.declarationObject=uint32_t(reinterpret_cast<uintptr_t>(b.identity[5]));
+    out.indexObject=uint32_t(reinterpret_cast<uintptr_t>(b.identity[4]));
+    out.shaderObject=uint32_t(reinterpret_cast<uintptr_t>(b.identity[6]));
+    for(unsigned i=0;i<b.constantCount;++i)for(unsigned j=0;j<4;++j)
+        out.constants[i][j]=std::bit_cast<uint32_t>(b.constants[i][j]);
+    return true;
+}
+static bool idleStreamOwnerCurrent(IDirect3DDevice9 *d) {
+    return !probe.streamReentered && nativeUiDeviceCurrent(d) && probe.generation==graphicsResourceGeneration() &&
+        scopeGpuTransactionCurrent(d) && idleRejectedRasterCurrent(probe.idle.raster,probe.idleTrace);
+}
+static void beginIdleStreamProbe(IDirect3DDevice9 *d) {
+    auto &receipt=probe.idleTrace->streamProbe;receipt.selected=true;
+    if(!idleStreamOwnerCurrent(d) || !sampleIdleStreams(d,probe.bindings[1],0))return;
+    receipt.flags|=IdleWeaponTrace::StreamProbe::BeforeCopied;
+    const auto &a=probe.bindings[0];const auto &b=probe.bindings[1];
+    const auto &snapshot=receipt.snapshots[0];
+    if(a.count==b.count && a.elements==b.elements && a.identity[5]==b.identity[5] &&
+       a.identity[4]==b.identity[4] && a.values.positions==snapshot.streams[0] &&
+       a.constantCount==b.constantCount && !std::memcmp(a.constants.data(),b.constants.data(),a.constantCount*4*sizeof(float)) &&
+       idleStreamOwnerCurrent(d))receipt.flags|=IdleWeaponTrace::StreamProbe::BeforeCurrent;
+}
+static void finishIdleStreamProbe(IDirect3DDevice9 *d,HRESULT result) {
+    auto &receipt=probe.idleTrace->streamProbe;
+    receipt.flags|=IdleWeaponTrace::StreamProbe::ForwardReturned;receipt.forwardResult=int32_t(result);
+    if(FAILED(result))return;
+    receipt.flags|=IdleWeaponTrace::StreamProbe::ForwardSucceeded;
+    if(!(receipt.flags&IdleWeaponTrace::StreamProbe::BeforeCurrent) || !idleStreamOwnerCurrent(d) ||
+       !sampleIdleStreams(d,probe.bindings[2],1))return;
+    receipt.flags|=IdleWeaponTrace::StreamProbe::AfterCopied;
+    if(IdleWeaponTrace::sameStreamSnapshots(receipt.snapshots[0],receipt.snapshots[1]))
+        receipt.flags|=IdleWeaponTrace::StreamProbe::SameInputs;
+    if(idleStreamOwnerCurrent(d))receipt.flags|=IdleWeaponTrace::StreamProbe::AfterCurrent;
 }
 // Shader objects expose no bytecode mutator; same canonical identity in the
 // second snapshot pins the program admitted here. All calls precede VB locks.
@@ -370,8 +472,11 @@ static bool collectIdleGeometry(IDirect3DDevice9 *d,const ScopeIndexedDraw &draw
     ScopeCopyRanges ranges;
     IdleWeaponTrace::InputFailure inputFailure{};
     if(!boundInputs(d,probe.bindings[0],draw,true,&inputFailure)) {
-        if(probe.idleTrace && probe.idleTrace->rejection==IdleWeaponTrace::Rejection::None)probe.idleTrace->inputFailure=inputFailure;
-        return reject(IdleWeaponTrace::Rejection::CollectInputs);
+        const bool first=probe.idleTrace && probe.idleTrace->rejection==IdleWeaponTrace::Rejection::None;
+        if(first)probe.idleTrace->inputFailure=inputFailure;
+        reject(IdleWeaponTrace::Rejection::CollectInputs); // Original immediate rejection precedes all extra queries.
+        if(first && IdleWeaponTrace::observedStreamFamily(inputFailure))beginIdleStreamProbe(d);
+        return false;
     }
     if(!idleBufferRanges(probe.bindings[0].values,std::span(probe.bindings[0].elements).first(probe.bindings[0].count),ranges))return reject(IdleWeaponTrace::Rejection::CollectRanges);
     if(!boundProgram(true))return reject(IdleWeaponTrace::Rejection::CollectProgram);
@@ -485,6 +590,7 @@ static HRESULT probeScopeDraw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base
     if (!scopeGpuForwardingAllowed()) return D3DERR_INVALIDCALL;
     const auto gfx=reinterpret_cast<uintptr_t>(GetModuleHandleW(L"GfxD3D.dll"));
     if(probe.busy && probe.idleTrace)probe.idleTrace->reject(IdleWeaponTrace::Rejection::GpuReentry);
+    if(probe.busy && probe.idleTrace && probe.idleTrace->streamProbe.selected)probe.streamReentered=true;
     if (probe.busy || !gfx || caller != gfx+0xa011) return forward(d,type,base,minimum,vertices,start,primitives);
     // All owning state exists above NativeFinally; no stack-native pointer is
     // kept through any COM call, and no allocation/native callback occurs locked.
@@ -492,6 +598,7 @@ static HRESULT probeScopeDraw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base
     probe.cap={}; probe.raster={}; probe.idle={}; probe.idleTrace=nullptr; probe.uvRows={}; probe.program={}; probe.colorProgram={};
     probe.generation=graphicsResourceGeneration();
     probe.programWords=0;
+    probe.streamReentered=false;
     HRESULT result=D3DERR_INVALIDCALL;
     withNativeFinally([&] {
         bool colorCandidate=false;
@@ -565,7 +672,12 @@ static HRESULT probeScopeDraw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base
         }
         if(probe.idleTrace && !idleAdmitted)probe.idleTrace->reject(IdleWeaponTrace::Rejection::GpuAdmission,IdleWeaponTrace::checks({idleCandidate,probe.transaction!=0}));
         if (!scopeGpuForwardingAllowed()) return;
-        if (!probe.split) result=forward(d,type,base,minimum,vertices,start,primitives);
+        if (!probe.split) {
+            if(probe.idleTrace && probe.idleTrace->streamProbe.selected)
+                probe.idleTrace->streamProbe.flags|=IdleWeaponTrace::StreamProbe::ForwardCalled;
+            result=forward(d,type,base,minimum,vertices,start,primitives);
+        }
+        if(!probe.split && probe.idleTrace && probe.idleTrace->streamProbe.selected)finishIdleStreamProbe(d,result);
         if(probe.idleTrace && idleAdmitted) {
             IdleRasterCopy now;IdleWeaponTrace *trace=nullptr;
             const bool current=currentIdleRaster(now,trace) && trace==probe.idleTrace && now==probe.idle.raster &&

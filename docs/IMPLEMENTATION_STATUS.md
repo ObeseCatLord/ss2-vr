@@ -1,5 +1,36 @@
 # Implementation status — 2026-10-08
 
+## Current passive native stream diagnostic — source GO
+
+The exact ID1 step20/declaration rejection now preserves the original failure,
+then observes actual0/7/8 bindings and the bounded vertex program around the single
+original draw. There are no buffer locks or state/binding writes. Native partial
+outputs stay in the existing typed owner; incomplete calls expose only status/
+operation/qualified HRESULT. A shared boolean-only raster check cannot admit
+geometry. Reentry/abort/epoch/cleanup invalidation survives retirement.
+
+Astra native and corrected-reader source GO follow the bounded design review.
+Eleven normal/optimized reader groups cover original-history/attempt causality,
+partial/interrupted output qualification, exact copied-input equality, malformed
+and incomplete data, retirement and no geometry promotion. The corrected reader
+is rechecked through Debug/Release CTest. All68Debug/68Release and28normal/optimized
+native/compiled checks pass; all four products rebuilt on `66274aef6f59a7e6d8559c320077f214e41bed5ad386a5f03ebcfc6a936523b8`.
+No runtime or deployment has used these products. Fresh sealed preparation is next,
+under existing bounded private neutral authority. Roles/grasp/alignment/cache and
+full-mod acceptance remain unverified. Existing Scope13 and position replay stay
+unchanged; declared7/8 position dependencies remain unknown until proved.
+
+Product hashes:
+- `d3d9.dll`: `3bbf8d59d97b09c0640333a9415954be9abe00285b2bd16e4698902172642f79`
+- `ss2vr_host.exe`: `d1e244233dd366b03b21b6a9e3c5478b9582f70dd95164bd1066268c6d29dfdb`
+- `libopenxr_loader.dll`: `bb011caa82528c541a73967ce6408f82198ff4fd0358b38b54884719d863bd1d`
+- `SS2VRServer.dll`: `5b4556363165971bf632036a19be4e9fa37c45512be589f0ec9e9e05274e2d2d`
+
+See docs/IDLE_EVENT_COLLECTOR.md for review dispositions and the exact optional
+receipt schema/flags. The new imported reader is included in source-tool seals.
+Earlier entries below are historical identities and evidence limits.
+
+
 ## Current rejected-animation diagnostic source checkpoint
 
 The first rejected contributor now preserves its already copied animation header

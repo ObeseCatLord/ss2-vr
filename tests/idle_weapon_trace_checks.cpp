@@ -6,6 +6,24 @@ using namespace ss2vr;
 #error Idle diagnostic checks need active assertions
 #endif
 int main() {
+    {IdleWeaponTrace::InputFailure d;d.step=20;d.valid=15;d.declarationCount=6;
+     d.declaration[0]={0,0,2,0,5,0};d.declaration[1]={2,0,1,0,5,2};d.declaration[2]={3,0,1,0,5,3};
+     d.declaration[3]={7,0,8,0,5,7};d.declaration[4]={8,0,8,0,5,8};d.declaration[5]={255,0,17,0,0,0};
+     assert(IdleWeaponTrace::observedStreamFamily(d));
+     for(unsigned i=0;i<6;++i){auto changed=d;changed.declaration[i].stream++;
+        assert(!IdleWeaponTrace::observedStreamFamily(changed));}
+     for(unsigned i=0;i<3;++i){auto changed=d;if(i==0)changed.step=19;else if(i==1)changed.valid=11;else changed.declarationCount=65;
+        assert(!IdleWeaponTrace::observedStreamFamily(changed));}}
+    {IdleWeaponTrace::StreamSnapshot a;a.status=IdleWeaponTrace::StreamSnapshot::Copied;a.caps=256;
+     a.declarationCount=6;a.declarationObject=1;a.indexObject=2;a.shaderObject=3;
+     a.streams={ScopeStreamInput{4,0,12,1},ScopeStreamInput{4,48384,4,1},ScopeStreamInput{4,49256,4,1}};
+     assert(IdleWeaponTrace::sameStreamSnapshots(a,a));
+     for(unsigned i=0;i<9;++i){auto b=a;
+        switch(i){case 0:b.status=IdleWeaponTrace::StreamSnapshot::Interrupted;break;
+            case 1:b.streams[1].offset++;break;case 2:b.streams[2].object++;break;
+            case 3:b.declarationObject++;break;case 4:b.indexObject++;break;case 5:b.shaderObject++;break;
+            case 6:b.constants[0][0]++;break;case 7:b.declaration[0].usage++;break;case 8:b.caps=0;break;}
+        assert(!IdleWeaponTrace::sameStreamSnapshots(a,b));}}
     {IdleWeaponTrace t;t.admitted=true;t.placementObserved=true;t.stage=IdleWeaponTrace::Stage::Event;
      t.noteRejection(IdleWeaponTrace::Rejection::RasterPrerequisites,1);
      assert(t.stage==IdleWeaponTrace::Stage::Event); // Recording adds no retirement policy.

@@ -4014,13 +4014,8 @@ bool currentIdleDraw(ScopeDrawBinding &out,IdleDrawIdentity &identity,IdleWeapon
     trace=physicalWeapon->idle;
     return true;
 }
-bool currentIdleRaster(IdleRasterCopy &out,IdleWeaponTrace *&trace) {
-    out={};trace=nullptr;ScopeDrawBinding binding;IdleDrawIdentity identity;
-    if(!currentIdleDraw(binding,identity,trace))return false;
-    trace->callbacks|=IdleWeaponTrace::RasterSeen;
-    if(trace->stage!=IdleWeaponTrace::Stage::Palette || !trace->poseCopied) {
-        trace->noteRejection(IdleWeaponTrace::Rejection::RasterPrerequisites,IdleWeaponTrace::checks({trace->stage==IdleWeaponTrace::Stage::Palette,trace->poseCopied}));return false;
-    }
+static bool copyBoundIdleRaster(const ScopeDrawBinding &binding,const IdleDrawIdentity &identity,
+                                IdleWeaponTrace *trace,IdleRasterCopy &out) {
     if(!remote_render::copyIdleRaster(binding.modelInstance,out) || out.rootConfig!=trace->config) {
         trace->reject(IdleWeaponTrace::Rejection::RasterMapping);return false;
     }
@@ -4028,6 +4023,23 @@ bool currentIdleRaster(IdleRasterCopy &out,IdleWeaponTrace *&trace) {
     out.clipValid=executedUiProjectionValid && scopeCapClip(executedUiProjection,physicalWeapon->pass.world.view,out.affine,out.clip);
     if(!out.clipValid){trace->reject(IdleWeaponTrace::Rejection::RasterClip);return false;}
     return true;
+}
+bool currentIdleRaster(IdleRasterCopy &out,IdleWeaponTrace *&trace) {
+    out={};trace=nullptr;ScopeDrawBinding binding;IdleDrawIdentity identity;
+    if(!currentIdleDraw(binding,identity,trace))return false;
+    trace->callbacks|=IdleWeaponTrace::RasterSeen;
+    if(trace->stage!=IdleWeaponTrace::Stage::Palette || !trace->poseCopied) {
+        trace->noteRejection(IdleWeaponTrace::Rejection::RasterPrerequisites,IdleWeaponTrace::checks({trace->stage==IdleWeaponTrace::Stage::Palette,trace->poseCopied}));return false;
+    }
+    return copyBoundIdleRaster(binding,identity,trace,out);
+}
+bool idleRejectedRasterCurrent(const IdleRasterCopy &expected,const IdleWeaponTrace *wanted) {
+    ScopeDrawBinding binding;IdleDrawIdentity identity;IdleWeaponTrace *trace=nullptr;
+    if(!currentIdleDraw(binding,identity,trace) || trace!=wanted || identity!=expected.binding ||
+       trace->stage!=IdleWeaponTrace::Stage::Rejected || trace->rejection!=IdleWeaponTrace::Rejection::CollectInputs ||
+       !trace->poseCopied || !IdleWeaponTrace::observedStreamFamily(trace->inputFailure))return false;
+    IdleRasterCopy now;
+    return copyBoundIdleRaster(binding,identity,trace,now) && now==expected;
 }
 static bool idleWeaponDiagnosticsEnabled() {
     static const bool enabled=[] {wchar_t value[2]{};
@@ -4069,6 +4081,41 @@ static void emitIdleWeaponTrace(const IdleWeaponTrace &trace) {
                 b.request,b.eye,b.hand,v.surface.vertices,v.surface.triangles);
             for(unsigned i=0;i<4;++i)log("Lab idle inputChannel request=%llu eye=%u hand=%u index=%u offset=%u format=%u buffer=%u",
                 b.request,b.eye,b.hand,i,v.surface.channels[i].offset,v.surface.channels[i].format,v.surface.channels[i].buffer);
+        }
+    }
+    if(trace.rejection==IdleWeaponTrace::Rejection::CollectInputs && trace.streamProbe.selected) {
+        const auto &p=trace.streamProbe;
+        log("Lab idle streamProbe request=%llu eye=%u hand=%u attempts=%u flags=%u words=%u invalidations=%u forwardResult=%d",
+            b.request,b.eye,b.hand,p.attempts,p.flags,p.words,p.invalidations,p.forwardResult);
+        for(unsigned phase=0;phase<p.attempts && phase<2;++phase) {
+            const auto &s=p.snapshots[phase];
+            log("Lab idle streamSnapshot request=%llu eye=%u hand=%u phase=%u status=%u step=%u index=%u hr=%d",
+                b.request,b.eye,b.hand,phase,s.status,s.step,s.index,s.hresult);
+            if(s.status!=IdleWeaponTrace::StreamSnapshot::Copied)continue;
+            log("Lab idle streamBinding request=%llu eye=%u hand=%u phase=%u caps=%u declaration=%u declarationObject=%u indexObject=%u shaderObject=%u",
+                b.request,b.eye,b.hand,phase,s.caps,s.declarationCount,s.declarationObject,s.indexObject,s.shaderObject);
+            constexpr unsigned numbers[]{0,7,8};
+            for(unsigned i=0;i<3;++i) {
+                const auto &v=s.streams[i];
+                log("Lab idle streamInput request=%llu eye=%u hand=%u phase=%u index=%u object=%u offset=%u stride=%u frequency=%u",
+                    b.request,b.eye,b.hand,phase,numbers[i],unsigned(v.object),v.offset,v.stride,v.frequency);
+            }
+            for(unsigned i=0;i<s.declarationCount && i<65;++i) {
+                const auto &e=s.declaration[i];
+                log("Lab idle streamDeclaration request=%llu eye=%u hand=%u phase=%u index=%u values=%u,%u,%u,%u,%u,%u",
+                    b.request,b.eye,b.hand,phase,i,unsigned(e.stream),unsigned(e.offset),unsigned(e.type),unsigned(e.method),unsigned(e.usage),unsigned(e.usageIndex));
+            }
+            for(unsigned i=0;i<s.caps && i<256;++i) {
+                const auto &v=s.constants[i];
+                log("Lab idle streamConstant request=%llu eye=%u hand=%u phase=%u index=%u values=%08x,%08x,%08x,%08x",
+                    b.request,b.eye,b.hand,phase,i,v[0],v[1],v[2],v[3]);
+            }
+        }
+        for(unsigned chunk=0;chunk<p.words && chunk<IdleGeometryCopy::MaxProgramWords;chunk+=32) {
+            char values[32*9]{};size_t used=0;
+            for(unsigned i=chunk;i<p.words && i<chunk+32 && i<IdleGeometryCopy::MaxProgramWords;++i)
+                used+=size_t(std::snprintf(values+used,sizeof(values)-used,"%s%08x",i==chunk?"":",",p.program[i]));
+            log("Lab idle streamProgram request=%llu eye=%u hand=%u chunk=%u values=%s",b.request,b.eye,b.hand,chunk,values);
         }
     }
     if(trace.stage!=IdleWeaponTrace::Stage::Complete)return;

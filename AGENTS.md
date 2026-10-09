@@ -9,13 +9,15 @@ This historical hold blocked public publication pending renewed confirmation. It
 ## Current PC continuation — start here
 
 Latest rebuilt products: source fingerprint
-`4038bdcf2d72645b12dfbcdc3df3808733a8976175f541ed4bc7f8883eddb483`, IPC10/wire7. Bounded
-rejected-animation-name companion preserves already copied pre-End scalars only;
-Astra native/corrected-reader GO, all67Debug/67Release and28normal/-O compiled/native
-gates pass. No runtime/deployment yet. Current passive7/8 actualbinding/program
-observation has Astra design GO, implementation next; no fixedsemantic remap.
-See docs/IDLE_EVENT_COLLECTOR.md. All geometry/grasp/Idle/cache/Scope13 gates retained.
-Prior diagnostic and integration entries are historical identities/evidence.
+`66274aef6f59a7e6d8559c320077f214e41bed5ad386a5f03ebcfc6a936523b8`, IPC10/wire7. Passive
+ID1 actual0/7/8 binding/program observation is source implemented with original
+rejection/no locks/no GPU state writes; existingtyped COMowner/cleanup preserved.
+Astra design/native/corrected-reader GO. All68Debug/68Release and28normal/-O
+native/compiled gates pass;11reader groups normal/-O andbothCTestrecheck. Fresh
+sealed private preparation/handoff review is next before any bounded neutral run.
+No runtime/deployment yet. Roles/geometry/grasp/cache/Idle/Scope13 gates unchanged;
+no fixed7/8 remap or guessed alignment. See docs/IDLE_EVENT_COLLECTOR.md.
+Prior product/status entries below retain historical evidence, not active guides.
 
 ### Current repeated neutral SS2 capture authority
 The user explicitly answered "Allow necessary private neutral captures" to the

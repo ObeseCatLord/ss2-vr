@@ -7,6 +7,7 @@ import math
 from pathlib import Path
 import re
 import struct
+from idle_stream_evidence import consume as consume_stream_probe, validate as validate_stream_probe
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -119,6 +120,10 @@ def assess(text,expected_source):
                     not current['rejection']['state']&1 or current['rejection']['state']&40 or current['rejection']['checks']:
                 raise ValueError('Unqualified animation name failure')
             current['animation_name_failure']={'index':index,'expected':expected,'header':header}
+            continue
+        if kind.startswith('stream'):
+            if current is None:raise ValueError('Stream probe without native record')
+            consume_stream_probe(current,kind,f)
             continue
         if kind.startswith('input'):
             if current is None or current['stage']!=3 or current.get('rejection',{}).get('reason')!=32:
@@ -255,6 +260,7 @@ def assess(text,expected_source):
             if failure['valid']&4 and (failure['binding'] is None or failure['surface'] is None or
                 set(failure['streams'])!=set(range(4)) or set(failure['channels'])!=set(range(4))):
                 raise ValueError('Truncated input binding diagnostic')
+        validate_stream_probe(r)
         if r['stage']!=4:rejected.append(r);continue
         if any(r[k]<=0 for k in ('request','input','owner','weapon','model','generation','cfg')):
             raise ValueError('Missing complete native-copy identity')

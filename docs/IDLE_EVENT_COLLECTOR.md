@@ -354,7 +354,60 @@ silently substituted. Actual7/8 objects/offsets and vertex program are still mis
 | Separate qualified API copies from actual draw attribution | Adopted; diagnostic never promotes geometry/grasp |
 
 Astra/xhigh gave bounded design GO, with latest local model/effort metadata verified;
-backend attestation unavailable. This design is not yet implemented or runnable.
+backend attestation unavailable. The source implementation is built and source-reviewed; a fresh sealed private
+preparation is required before runtime.
 No additional capture, shader/buffer remap, native state write or geometry admission
 is authorized by the review itself. Existing repeated private neutral capture
 permission remains the user authority for a later fresh reviewed preparation.
+
+## Passive stream observation implementation — scoped source GO
+
+An exact selected ID1 step20 rejection with the observed six-row declaration now
+enters a passive observation. The original rejection happens immediately; no
+geometry gate is removed. The existing COM owner samples streams0/7/8, declaration,
+index identity, constants and actual immutable vertex shader before and after the
+single original forwarded draw. Slot2 extends the same owner/retirement loop;
+Scope13 continues to use slots0/1. No buffer locks or binding/state writes occur.
+
+Partial/failed/interrupted snapshots emit status, active operation/stream index
+and a HRESULT qualified only on normal return. They emit no partial scalar arrays.
+Complete snapshots retain bounded copied declaration/constants/stream identities;
+shader bytecode is at most512words. Raw constant bits may contain unused nonfinite
+values; this does not admit them as geometry. A boolean-only rejected-raster check
+shares the original checked reconstruction and cannot produce admitted geometry.
+
+Flags: before API copy1, original/current comparison2, forward entered4, forward
+returned8, successful HRESULT16, after API copy32, matching snapshots64, after
+owner/current128, cleanup/current256. Invalidation bits: reentry1, native abort2,
+resource epoch4, cleanup current-before-device-release8/current-after-release16.
+Matching endpoints do not exclude ABA or certify GPU execution/lifetime. These
+are rejected-draw diagnostics; stream roles, geometry/grasp/alignment stay false.
+
+Optional schema3 companions include header, up to2snapshots, bounded complete
+arrays and first-snapshot program chunks. The strict reader enforces selectors,
+normal/failed/interrupted qualification, widths, exact payload inventory, flag
+causality, recomputed snapshot equality and cleanup contradictions. The new imported
+reader module is included in the private preparation's source-tool seal. All old
+attempts remain immutable and cannot be resealed with the new source.
+
+All products rebuilt on source fingerprint
+`66274aef6f59a7e6d8559c320077f214e41bed5ad386a5f03ebcfc6a936523b8`.
+All68Debug/68Release and28normal/optimized native/compiled checks pass. Eleven new
+reader groups pass normally/optimized; existing nine reader and22preparation groups
+also pass. Declared7/8 dependencies are syntactically valid but remain unknown in
+position replay, checked through direct evaluation and both compiled configurations.
+No runtime/preparation/deployment has used these products. Astra native source GO and corrected-reader GO permit source preparation; actual
+roles/association/geometry remain unverified. The reader correction requires
+post-attempt prerequisites independently of copied status, abort qualification
+for interrupted calls, the original admitted/Event/Palette/finish history, and
+bidirectional equality. Its counterexamples and legitimate partials pass normally,
+with optimized Python and through both CTest configurations. Latest local reviewer
+metadata verifies Astra/xhigh; backend attestation remains unavailable.
+
+| Passive source review finding | Disposition |
+| --- | --- |
+| Post attempts could omit before-current or successful-forward prerequisites | Corrected for every attempted status, not just successful copies |
+| Interrupted sampling could claim clean cleanup | Require native-abort invalidation and no cleanup-current flag |
+| Original Event/Palette history could be impossible | Qualify original identity, contributor count, exact state/raw-grip and callback history only for new companion |
+| Equal copied inputs could omit SameInputs | Recompute equality bidirectionally; changed inputs and false-negative equality reject |
+| Partial-output representation complexity | Keep only status/operation/HRESULT for incomplete calls; no second output-validity machine |
