@@ -4,7 +4,7 @@ import sys
 import unittest
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 from assess_idle_weapon import assess
-from idle_stream_evidence import OBSERVED,NO_UV56,diagnostic_stream_numbers
+from idle_stream_evidence import OBSERVED,NO_UV56,OBSERVED_MULTI_UV,diagnostic_stream_numbers,declaration_layout
 
 SOURCE='a'*64
 BASE='request=100 eye=0 hand=1'
@@ -44,9 +44,53 @@ def fixture(declaration=OBSERVED):
                 lines[n]=line.replace('object=0 offset=0 stride=0 frequency=0','object=1 offset=48384 stride=4 frequency=1')
             elif 'streamInput' in line:
                 lines[n]=line.replace('index=7 object=1 offset=48384','index=5 object=1 offset=49256').replace('index=8 object=1 offset=49256','index=6 object=1 offset=48384')
+    elif declaration==OBSERVED_MULTI_UV:
+        expanded=[]
+        for line in lines:
+            line=line.replace('declaration=6','declaration=8')
+            if 'inputDeclaration' in line or 'streamDeclaration' in line:
+                index=int(line.split(' index=')[1].split()[0])
+                prefix=line.split(' index=')[0]
+                if index==3:
+                    for extra in (3,4):
+                        expanded.append(prefix+' index='+str(extra)+' values='+','.join(map(str,OBSERVED_MULTI_UV[extra])))
+                new_index=index+2 if index>=3 else index
+                line=prefix+' index='+str(new_index)+' values='+','.join(map(str,OBSERVED_MULTI_UV[new_index]))
+            expanded.append(line)
+        lines=expanded
     return '\n'.join(lines)
 
 class Checks(unittest.TestCase):
+    def test_multi_uv_passive_only_and_exact_original_selector(self):
+        text=fixture(OBSERVED_MULTI_UV).replace('rangeChecks=6015','rangeChecks=6143 layout=0');result=assess(text,SOURCE)
+        record=result['rejected_or_missing_observations'][0]
+        self.assertEqual(diagnostic_stream_numbers(record['input_failure']),(0,7,8))
+        self.assertEqual(set(record['stream_probe']['snapshots'][0]['streams']),{0,7,8})
+        self.assertEqual(record['stream_probe']['flags'],511)
+        self.assertFalse(result['copied_event_pose_observations'])
+        for field in ('geometry_admitted','roles_inferred','alignment_accepted'):
+            self.assertIs(record['stream_probe'][field],False)
+        with self.assertRaises(ValueError):declaration_layout(OBSERVED_MULTI_UV)
+        for index in range(8):
+            for field in range(6):
+                rows=copy.deepcopy(OBSERVED_MULTI_UV);rows[index][field]+=1
+                with self.subTest(index=index,field=field),self.assertRaises(ValueError):
+                    diagnostic_stream_numbers({'declaration':8,'declaration_rows':dict(enumerate(rows))})
+        for count in (7,9):
+            with self.assertRaises(ValueError):diagnostic_stream_numbers({'declaration':count,'declaration_rows':dict(enumerate(OBSERVED_MULTI_UV))})
+        for foreign in (4,5):
+            with self.assertRaises(ValueError):assess(text.replace('streamInput '+BASE+' phase=0 index=7','streamInput '+BASE+' phase=0 index='+str(foreign)),SOURCE)
+    def test_multi_uv_resampling_cannot_reselect_or_inherit_equality(self):
+        text=fixture(OBSERVED_MULTI_UV).replace('flags=511','flags=447')
+        rows=[line for line in text.splitlines() if not ('streamDeclaration '+BASE+' phase=1' in line)]
+        rows=[line.replace('phase=1 caps=2 declaration=8','phase=1 caps=2 declaration=5') for line in rows]
+        rows+=['Lab idle streamDeclaration '+BASE+' phase=1 index='+str(i)+' values='+','.join(map(str,e)) for i,e in enumerate(NO_UV56)]
+        changed='\n'.join(rows)
+        r=assess(changed,SOURCE)['rejected_or_missing_observations'][0]
+        self.assertEqual(set(r['stream_probe']['snapshots'][1]['streams']),{0,7,8})
+        self.assertFalse(r['stream_probe']['flags']&64)
+        with self.assertRaises(ValueError):assess(changed.replace('phase=1 index=7 object','phase=1 index=5 object'),SOURCE)
+        with self.assertRaises(ValueError):assess(changed.replace('flags=447','flags=511'),SOURCE)
     def test_exact_no_uv_selection_and_original_binding_agreement(self):
         text=fixture(NO_UV56);result=assess(text,SOURCE)
         record=result['rejected_or_missing_observations'][0]

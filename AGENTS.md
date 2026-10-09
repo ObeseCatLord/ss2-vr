@@ -8,6 +8,19 @@ This historical hold blocked public publication pending renewed confirmation. It
 
 ## Current PC continuation — start here
 
+V21 is archived: source7cd43a5/fpfa7caae, exact Jungle with123 native stereo
+pairs and clean native/owned/display shutdown; protected12 unchanged. Qualified
+ordinal handling recovered36 weapon copies including9 NoUV56 passes, all52 factors.
+BOTH unchanged old and independent doublePVML references mismatch; no hand/grasp/
+winning second-eye cache/release acceptance. Later exact8row material declaration
+is unsupported. Passive-only 0/7/8 extension is implemented, Astra source GO;
+extra4/5 remain unknown and production grammar/reference/tolerance unchanged.
+All4 products rebuilt on a64ddfb9c254c1693d1b5ed8d4472553609cc03a864a994b5cab4908459c4743;
+68Debug,67Release+remaining predicate recheck and28normal/O gates pass.
+Current Astra scopes are narrow native matrix-upload arithmetic and unopened
+FlyingSaucer console geometry. No guessed offset, tolerance relaxation, cross-eye
+cache reuse or firing/vehicle/HMD/network probes. Earlier V20 notes below are historical.
+
 V20 (source6c08326/fp4d1c805, run20261009T000027) reached exact Jungle with122native
 projection pairs and clean native/owned/display shutdown; protected12unchanged.
 Seven retained first copies, allright/eye0, uniquelymatch allfiveweaponmesh3 hashes

@@ -7,6 +7,25 @@ using namespace ss2vr;
 #error Idle diagnostic checks need active assertions
 #endif
 int main() {
+    {IdleWeaponTrace::InputFailure d;d.step=20;d.valid=15;d.declarationCount=8;
+     const std::array<ScopeDeclarationElement,8> rows{{
+        {0,0,2,0,5,0},{2,0,1,0,5,2},{3,0,1,0,5,3},{4,0,1,0,5,4},
+        {5,0,1,0,5,5},{7,0,8,0,5,7},{8,0,8,0,5,8},{255,0,17,0,0,0}}};
+     std::copy(rows.begin(),rows.end(),d.declaration.begin());
+     const std::array<unsigned,3> expected{0,7,8};
+     assert(IdleWeaponTrace::passiveStreamNumbers(d)==expected);
+     assert(!observed78Declaration(rows) && !noUV56Declaration(rows));
+     for(unsigned i=0;i<rows.size();++i) {
+        for(unsigned field=0;field<6;++field) {
+           auto bad=d;auto &e=bad.declaration[i];
+           switch(field) {case 0:++e.stream;break;case 1:++e.offset;break;
+             case 2:++e.type;break;case 3:++e.method;break;case 4:++e.usage;break;case 5:++e.usageIndex;break;}
+           assert(!IdleWeaponTrace::observedStreamFamily(bad));
+        }
+     }
+     for(unsigned i=0;i<3;++i) {auto bad=d;
+        if(i==0)bad.step=19;else if(i==1)bad.valid=11;else bad.declarationCount=7;
+        assert(!IdleWeaponTrace::observedStreamFamily(bad));}}
     {IdleWeaponTrace::InputFailure d;d.step=20;d.valid=15;d.declarationCount=6;
      d.declaration[0]={0,0,2,0,5,0};d.declaration[1]={2,0,1,0,5,2};d.declaration[2]={3,0,1,0,5,3};
      d.declaration[3]={7,0,8,0,5,7};d.declaration[4]={8,0,8,0,5,8};d.declaration[5]={255,0,17,0,0,0};

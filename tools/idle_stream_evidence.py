@@ -5,12 +5,15 @@ OBSERVED=[[0,0,2,0,5,0],[2,0,1,0,5,2],[3,0,1,0,5,3],
           [7,0,8,0,5,7],[8,0,8,0,5,8],[255,0,17,0,0,0]]
 NO_UV56=[[0,0,2,0,5,0],[1,0,2,0,5,1],[5,0,8,0,5,5],
          [6,0,8,0,5,6],[255,0,17,0,0,0]]
+# Passive observation only; extra inputs remain unobserved/unknown. Never
+# include this declaration in declaration_layout's production grammar.
+OBSERVED_MULTI_UV=OBSERVED[:3]+[[4,0,1,0,5,4],[5,0,1,0,5,5]]+OBSERVED[3:]
 
 def diagnostic_stream_numbers(failure):
     count=failure.get('declaration',0)
-    if count not in (5,6):raise ValueError('Unsupported passive declaration count')
+    if count not in (5,6,8):raise ValueError('Unsupported passive declaration count')
     rows=[failure.get('declaration_rows',{}).get(i) for i in range(count)]
-    if rows==OBSERVED:return (0,7,8)
+    if rows==OBSERVED or rows==OBSERVED_MULTI_UV:return (0,7,8)
     if rows==NO_UV56:return (0,5,6)
     raise ValueError('Unsupported passive original declaration')
 

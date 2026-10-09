@@ -8,8 +8,9 @@ multiplayer with mod users remain required; teleport is excluded.
 Current implementation closure: native scopes, complete admitted flat overlays,
 remote-head frozen-pair rendering and default-off controlling-local roomscale are
 connected. The unique-saw adapter now includes local/authority/observer roles and
-wire7 retention with bounded Astra Source GO. First/copy state still needs a real
-native release then quiet; positive driver-control geometry is not established.
+wire7 retention with bounded Astra Source GO. Fresh receiver-fenced quiet permits
+a real first gesture press while initial native history stays unknown; actual
+stops require later quiet. Positive driver-control geometry is not established.
 The user performs primary VR, vehicle, shooting and multiplayer gameplay tests.
 Build/offline/source acceptance does not certify those tests. See current status
 and the comprehensive USER_VR_TEST.md preparation procedure.

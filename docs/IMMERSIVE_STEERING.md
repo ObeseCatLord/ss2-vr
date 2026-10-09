@@ -193,3 +193,28 @@ No pivot/axis/radius/seat association or physical grab control is justified by
 these bytes. A positive actual wheel/vehicle identity remains necessary. Private
 resource data, previews and reports stay local; no game/input/vehicle test ran.
 Local Astra/xhigh turn tags were verified, with backend routing unattested.
+
+## FlyingSaucer immediate geometry inspection — 2026-10-09
+
+Astra inspected the exact stock FlyingSaucer model, its Console destruction-debris
+model and the directly referencing HoverSaucer operator-seat parameters. Main read
+the full report, independently checked all three member sizes/CRCs/hashes and
+inspected the decoded cockpit/seat preview. Across the three resources, 128 objects
+and all four mesh LODs passed structural, finite-value, index and bounds checks.
+This does not establish runtime resource precedence or current rider identity.
+
+Two mirrored L-shaped handles are visible immediately in front of the authored
+operator seat. Each has 35 vertices and 30 triangles. Their one-hot palette entry
+resolves to Main, without an independent handle bone. The seat selects its own
+Seat palette entry; authored operator/seat references agree. Console's external
+model is destruction debris, not a live attached driver control. These are actual
+alternative control candidates, not a driver-wheel or actuation-axis certificate.
+
+All intact immediate geometry is embedded and inspected. Twenty-five dependencies
+remain unopened, including the animation set, three other debris models and
+materials/effects/projectiles. The next narrow inspection is the exact referenced
+animation set's Main/Seat effects. Native actuation, live seat/model attachment,
+control frame and input semantics remain separate proofs before grasp admission.
+No wheel, pivot, axis, grip offset or control adapter is guessed or installed.
+Private geometry, images and reports remain local. No vehicle/runtime/input test
+ran. Local Astra/xhigh routing tags were independently checked; backend unattested.

@@ -1,5 +1,14 @@
 # Full-project source closure review — 2026-10-08
 
+Current continuation: the previously blocked idle observation is now runnable
+under the user's repeated private-neutral capture authority. V21 reached Jungle
+with 123 native stereo pairs and clean shutdown. It recovered 36 individually
+qualified weapon copies, including nine NoUV56 invocations. These remain rejected
+history: both independent and original clip references mismatch, later material
+inputs are unsupported, and the hand asset/second-eye winning event/grasp are not
+accepted. This supersedes the historical non-runnable idle-plan statement below,
+not the full-project NO-GO. See IMPLEMENTATION_STATUS.md for current identities.
+
 An explicitly limited development candidate is defensible; full implementation
 closure is not yet established. The user performs primary VR, vehicle, shooting
 and multiplayer gameplay tests. No game/runtime/input/firing probe ran during
@@ -49,9 +58,9 @@ no individual firing or other runtime probe ran. See
 The bounded follow-up did not establish an automatic same-saw release during
 equip/BringUp/copy recovery or deferred tool application. No additional callback
 census or synthetic release was adopted. The proposed user-operated idle
-observation also remains gated; see [its exact blocker](IDLE_OBSERVATION_GATE.md).
-The private plan records candidate/settings/scene identities and conditional
-collection criteria, rather than a runnable-looking incomplete diagnostic.
+observation was gated at this review; see [the historical blocker](IDLE_OBSERVATION_GATE.md).
+The later collector and neutral observations described above supersede that launch
+status. Their private captures still do not certify grasp or actual native release.
 
 Physical driver-grab steering remains unimplemented. Positive actual control rim,
 axis and driver-seat ownership are still needed. Existing seated tracking/aim,

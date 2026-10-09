@@ -1,5 +1,45 @@
 # Event-time ID1 collection — source implemented
 
+## Latest V21 native evidence and passive source GO
+
+V21 ran committed source `7cd43a56c371aaecc5dbeeebc829f4001c0dafbe`, fingerprint
+`fa7caae5fd24deb6819519a7cf8519a57576fc404b8ae228ab513d5796654b1f`.
+The private run reached the exact Jungle scene with 123 native stereo projection
+pairs. Native shutdown, empty native/wrapper cleanup, display retirement and
+preservation of all twelve protected files passed. The fixture is archived and
+must not be rerun or resealed.
+
+The ordinal adapter recovered 36 individually qualified copies from nine rejected
+traces: ordinals 0/1 share native record 0, and 2/3 share record 1. All five channels
+uniquely match weapon mesh3, covering its 218- and 972-vertex surfaces. Nine ordinal-1
+copies use the actual NoUV56 declaration. All copies carry independently qualified
+M/L/V/P factors. Both unchanged original and fixed double P*V*M*L references fail
+unchanged limits: maximum absolute errors 2.54009961e-5 and 2.13800334e-5. These are
+rejected historical copies, not accepted grasp, GPU, hand or winning-cache evidence.
+Do not select a passing grouping, derive a reference from the constants under test,
+or widen tolerance. Astra is tracing the narrow native matrix-upload route.
+
+Whole collection remains 0 accepted / 32 rejected: 18 Palette6, 9 CollectInputs32,
+5 AnimationName19. The later rejected material has an exact eight-row declaration:
+FLOAT3 stream0; FLOAT2 streams2/3/4/5; UBYTE4N streams7/8; END. The new source slice
+selects only the existing passive 0/7/8 observations for this exact original
+failure. Extra streams4/5 remain unknown; production declaration grammar, position
+replay, admission, forwarding and native owners are unchanged. No new native API
+or buffer-copy operation is added. Astra gave source GO; no runtime of this slice.
+
+All four products rebuilt on fingerprint
+`a64ddfb9c254c1693d1b5ed8d4472553609cc03a864a994b5cab4908459c4743`, IPC10/wire7.
+All 68 Debug groups pass. Release passed 67 groups initially; the remaining
+predicate check passed on recheck with the existing Python dependency environment.
+All 28 normal/optimized native/compiled gates and 16 passive reader groups in both
+Python modes pass. Missing Capstone in the first Release invocation was an
+invocation-environment error; no dependency installation was needed.
+
+The original source owner retains integration/runtime/publication. Independent
+Astra investigations cover native matrix-upload arithmetic and the previously
+unopened FlyingSaucer console geometry only. No firing, driving, HMD or network
+probe ran. Full implementation and user-operated acceptance remain open.
+
 ## Qualified-copy ordinals — scoped source GO
 
 The V20 neutral capture recovered seven first copies with52 independent factors;
