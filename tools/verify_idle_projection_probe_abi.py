@@ -110,6 +110,17 @@ def unique(b,suffix):
     require(len(found)==1,'Missing/ambiguous compiled '+suffix)
     return found[0]
 
+def verify_producer_interval(code,begin,end):
+    require(code and code[0].address==begin and code[-1].address+code[-1].size==end,
+            'Native producer boundary split')
+    require(not any(i.mnemonic in ('call','ret','retf','fldcw','fninit','finit','ldmxcsr','fxrstor','xrstor') for i in code),
+            'Native producer interval gained call/return/control-state write')
+    for i in code:
+        if i.group(capstone.CS_GRP_JUMP):
+            require(re.fullmatch(r'(?:0|0x[0-9a-f]+)',i.op_str) is not None and begin<=int(i.op_str,0)<end,
+                    'Native producer branch escapes bookends')
+    return len(code)
+
 def native(game):
     result={}
     for name,pin in PINS.items():
@@ -125,20 +136,24 @@ def native(game):
             else:
                 helper=decode(pe.get_data(0x6920,0x5a),base+0x6920)
                 require(helper[-1].mnemonic=='ret' and not helper[-1].op_str,'Slots helper no longer cdecl')
-                call=decode(pe.get_data(0xf4fa,5),base+0xf4fa)
-                require(len(call)==1 and call[0].mnemonic=='call' and call[0].op_str==hex(base+0x6920),'Wrong slots return boundary')
-                table=pe.get_data(0x2834c,12)
-                require(table==b'\x17\0\0\0\x07\0\0\0\x08\0\0\0','Wrong slots table')
                 imports={(s.name or b'').decode():s.address for d in pe.DIRECTORY_ENTRY_IMPORT for s in d.imports}
                 fog=imports.get('?shaGetFogFactors@SeriousEngine@@YA?AVVector4f@1@XZ')
-                call=decode(pe.get_data(0xfc84,6),base+0xfc84)
-                require(fog and len(call)==1 and call[0].mnemonic=='call' and
-                        call[0].op_str=='dword ptr ['+hex(fog)+']','Wrong fog return boundary')
-                code=decode(pe.get_data(0xf4ff,0xfc84-0xf4ff),base+0xf4ff)
-                require(code[-1].address+code[-1].size==base+0xfc84,'Native producer boundary split')
-                require(not any(i.mnemonic in ('call','fldcw','fninit','finit','ldmxcsr','fxrstor','xrstor') for i in code),
-                        'Native producer interval gained call/control-state write')
-                result['producer_instructions']=len(code)
+                result['sources']={}
+                for source,slots_call,slots_return,table_rva,words,fog_call in (
+                    (1,0xf4fa,0xf4ff,0x2834c,(23,7,8),0xfc84),
+                    (2,0x8566,0x856b,0x27ccc,(21,5,6),0x8ca1)):
+                    call=decode(pe.get_data(slots_call,5),base+slots_call)
+                    require(len(call)==1 and call[0].mnemonic=='call' and call[0].op_str==hex(base+0x6920),
+                            'Wrong slots return boundary')
+                    require(pe.get_data(table_rva,12)==b''.join(w.to_bytes(4,'little') for w in words),'Wrong slots table')
+                    call=decode(pe.get_data(fog_call,6),base+fog_call)
+                    require(fog and len(call)==1 and call[0].mnemonic=='call' and
+                            call[0].op_str=='dword ptr ['+hex(fog)+']','Wrong fog return boundary')
+                    code=decode(pe.get_data(slots_return,fog_call-slots_return),base+slots_return)
+                    count=verify_producer_interval(code,base+slots_return,base+fog_call)
+                    result['sources'][source]={'producer_instructions':count,'slots_return':slots_return,
+                        'slots_table':table_rva,'fog_return':fog_call+6}
+                result['producer_instructions']=result['sources'][1]['producer_instructions']
     return result
 
 def verify(game,obj):

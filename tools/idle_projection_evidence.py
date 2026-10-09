@@ -22,7 +22,7 @@ def consume(record,kind,f,integer,hexwords):
                'modelBefore','modelAfter','drawBefore','drawAfter','cleanupCertified','outerCurrent'}
         if set(f)!=BASE|names or sequence in p['pairs']:raise ValueError('Projection pair schema/duplicate')
         v={k:integer(f[k],0,65535 if k.startswith('control') else 0xffffffff) for k in names}
-        if v['source']!=1 or v['complete']!=1 or v['cleanupCertified'] or v['outerCurrent'] or \
+        if v['source'] not in (1,2) or v['complete']!=1 or v['cleanupCertified'] or v['outerCurrent'] or \
            v['controlBefore']!=v['controlAfter'] or v['flagsAfter']!=(v['flagsBefore']|6) or \
            not v['modelBefore'] or v['modelBefore']!=v['modelAfter'] or \
            not v['drawBefore'] or v['drawBefore']!=v['drawAfter']:

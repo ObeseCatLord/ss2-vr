@@ -1,5 +1,48 @@
 # Implementation status — 2026-10-09
 
+## Next private sniper capture — reviewed source, corrected save path
+
+The native save argument now uses its verified game-relative filename, retaining
+absolute destination/collision checks and a fresh cwd ownership check. The copied
+Black-to-own-API association adapter is source-reviewed and retains exact MVP-word
+rejection and false whole-API coverage for surplus geometry.
+
+A diagnostic-only paired Poly Bump source2 observer is implemented, restricted to
+ID13. It records raw producer mode/cache/operand evidence through the existing
+integer sampler; source1 behavior and source1-only arithmetic qualification stay
+unchanged. Unknown/crossed sources, wrong caller/table and capacity reject.
+Astra source/compiled GO, local tags verified, backend unattested. All4products
+rebuilt on9c8602b54d253f08531195dacfeb06e34d6eb477b0e5270ec9b58c87dcb171e0,
+IPC10/wire7;77Debug/77Release and36normal/-O native/compiled gates pass.
+Reference12/parser9/verifier8groups pass normal/-O. Fresh sealed capture is prepared;
+corrected native save creation and actual source2 evidence have not yet run.
+See SNIPER_PROJECTION_DIAGNOSTICS.md. Full feature completion remains open.
+
+## Private sniper runtime — grant/equip observed, save and replay gates open
+
+One fresh neutral simulated run on sourcea32523c/fingerprint916191bb reached the
+pinned Jungle stream (10,562,049bytes, original position0, exact configured SHA)
+and13complete native baseline stereo pairs. Native Give All and selection issued
+once for the same local pawn; the adapter observed an owned right-hand unzoomed
+idle ID13 before invoking save. Native save reported Could not open file for the
+absolute Windows destination; no save/preload was created, so preparation stopped.
+This is a save-path failure after scene/equip, not a startup or stereo failure.
+
+Normal native/owned-process/display shutdown was observed, no survivors or cleanup
+errors, and12protected files stayed unchanged. No firing, movement, zoom or desktop
+input/focus occurred. Baseline image capture was not reached after the preparation
+failure, so no new per-eye image or head-motion acceptance is claimed.
+
+Offline postprocessing of that immutable run gives2complete/20rejected ID13
+observations. Two first-eye right-hand Black copies uniquely match the patch
+candidate's complete buffer lengths/ranges and five consumed-channel hashes.
+Qualified position replay is still false:2native API attempts accompany1copied
+geometry, and the existing consumer's whole-coverage/index guard rejects it.
+Exact draw-to-own-API-row association needs review; no fence was relaxed and ID13
+alignment remains inactive. A separate narrow save-path review will determine the
+minimal native filename repair before any fresh capture. The attempted fixture
+is preserved and must never be rerun/resealed. Full mod completion remains open.
+
 ## Native private sniper preparation — source GO, actual probe next
 
 A one-shot private adapter now uses the verified stock cheat data argument,

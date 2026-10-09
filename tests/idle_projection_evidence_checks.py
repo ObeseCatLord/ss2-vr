@@ -35,6 +35,14 @@ def fixture(retained=False,flags=0):
     return '\n'.join([*lines,*producer(flags),*extras])
 
 class Checks(unittest.TestCase):
+    def test_poly_bump_source_is_diagnostic_only(self):
+        from idle_native_reference import native_reference
+        text=fixture().replace('source=1 complete=1','source=2 complete=1')
+        record=assess(text,SOURCE)['copied_event_pose_observations'][0]
+        pair=record['projection_probe']['pairs'][1]
+        self.assertEqual(pair['source'],2)
+        self.assertTrue(pair['diagnostic_only']);self.assertFalse(record['projection_probe']['alignment_accepted'])
+        self.assertIsNone(native_reference(record,record['geometry'][0]))
     def test_schema4_associations_cover_last_two_indices_without_weakening_keys(self):
         lines=fixture().splitlines()
         geometry=[line for line in lines if line.startswith('Lab idle geometry')]
@@ -82,7 +90,7 @@ class Checks(unittest.TestCase):
         summary=next(v for v in rows if 'projectionSummary ' in v)
         for bad in (text+'\n'+pair,text+'\n'+summary,text.replace('configured=1 count=1','configured=0 count=1'),
                     text.replace('pending=0','pending=1'),text.replace('blocked=0','blocked=1'),
-                    text.replace('sequence=1 source=1','sequence=2 source=1'),text.replace('source=1 complete=1','source=2 complete=1'),
+                    text.replace('sequence=1 source=1','sequence=2 source=1'),text.replace('source=1 complete=1','source=3 complete=1'),
                     text.replace('controlAfter=127','controlAfter=383'),text.replace('flagsAfter=6','flagsAfter=2'),
                     text.replace('modelAfter=1000','modelAfter=1001'),text.replace('drawAfter=2000','drawAfter=2001'),
                     text.replace('kind=cachedVP','kind=unknown'),text.replace('projectionPair '+BASE,'projectionPair request=100 eye=0 hand=0'),

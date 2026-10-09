@@ -4407,8 +4407,8 @@ static void emitIdleWeaponTrace(const IdleWeaponTrace &trace) {
         trace.projectionProbe.invalidations,unsigned(trace.projectionProbe.blocked),unsigned(trace.projectionProbe.pending));
     for(unsigned n=0;n<trace.projectionProbe.count && n<IdleProjectionProbe::MaxPairs;++n) {
         const auto &p=trace.projectionProbe.pairs[n];
-        log("Lab idle projectionPair request=%llu eye=%u hand=%u sequence=%u source=1 complete=%u controlBefore=%u controlAfter=%u flagsBefore=%u flagsAfter=%u modelBefore=%u modelAfter=%u drawBefore=%u drawAfter=%u cleanupCertified=0 outerCurrent=0",
-            b.request,b.eye,b.hand,p.sequence,unsigned(p.complete),p.before.control,p.after.control,
+        log("Lab idle projectionPair request=%llu eye=%u hand=%u sequence=%u source=%u complete=%u controlBefore=%u controlAfter=%u flagsBefore=%u flagsAfter=%u modelBefore=%u modelAfter=%u drawBefore=%u drawAfter=%u cleanupCertified=0 outerCurrent=0",
+            b.request,b.eye,b.hand,p.sequence,p.source,unsigned(p.complete),p.before.control,p.after.control,
             p.before.flags,p.after.flags,p.before.modelRecord,p.after.modelRecord,p.before.drawRecord,p.after.drawRecord);
         auto raw=[&](unsigned phase,const char *kind,std::span<const uint32_t> values) {
             char text[16*9]{};unsigned cursor=0;
@@ -6089,9 +6089,16 @@ static __attribute__((noinline)) void runPostSimulationSniper(SimulationInterval
             std::snprintf(preload,sizeof(preload),"%s.preload",labSniper.savePath);
             if(GetFileAttributesA(labSniper.savePath)!=INVALID_FILE_ATTRIBUTES ||
                GetFileAttributesA(preload)!=INVALID_FILE_ATTRIBUTES) {fail("save-collision");return;}
+            char directory[768]{},expected[1024]{};
+            const DWORD cwd=GetCurrentDirectoryA(sizeof(directory),directory);
+            if(!cwd || cwd>=sizeof(directory)) {fail("save-directory");return;}
+            std::snprintf(expected,sizeof(expected),"%s\\Temp\\SS2VR\\sniper-id13.sav",directory);
+            if(_stricmp(expected,labSniper.savePath)) {fail("save-directory-owner");return;}
             if(!phaseCurrent()) {fail("save-phase");return;}
             labSniper.stage=LabSniperStage::SaveIssued;labSniper.issuedTick=simulationRevision;
-            labSaveSniper(labSniper.savePath);
+            // Core's resource writer prefixes its engine root. An ordinary
+            // absolute Windows path would receive that root a second time.
+            labSaveSniper("Temp/SS2VR/sniper-id13.sav");
             // Save can temporarily switch worlds. Borrow nothing across it.
             log("Lab sniper preparation issued stage=save owner=%u",labSniper.player);
             return;

@@ -87,3 +87,12 @@ backend unattested. Final all-product source fingerprint is
 `916191bbff247c09e3a38bddfa29cf391aa3d96328c0efd41bfed9882dde277d`.
 The earlier unattempted package remains preserved; use a fresh sealed fixture
 with this build for the next probe.
+
+The first actual preparation reached owned idle ID13, but save creation failed:
+Core prefixes its engine root to ordinary filenames, including Windows absolute
+paths. The native save argument is corrected to `Temp/SS2VR/sniper-id13.sav`, with
+an immediate owned-cwd recheck. Absolute collision/output checks and later hashes
+are retained. Astra verified Core's conversion/write chain and native quicksave's
+relative-filename precedent. Actual corrected save creation remains the next probe.
+See [projection diagnostics](SNIPER_PROJECTION_DIAGNOSTICS.md) for the separately
+observed gun-content association and remaining arithmetic evidence gate.

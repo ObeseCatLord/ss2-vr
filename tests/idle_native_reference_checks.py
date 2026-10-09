@@ -7,7 +7,7 @@ import sys
 import unittest
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
-from idle_native_reference import first_material_matrices, native_reference, uploaded_transform_reference, round24, UnsupportedNativeArithmetic, UnsupportedUploadedTransform, UPLOADED_DECLARATION
+from idle_native_reference import first_material_matrices, native_reference, uploaded_transform_reference, uploaded_api_association, round24, UnsupportedNativeArithmetic, UnsupportedUploadedTransform, UPLOADED_DECLARATION
 from idle_projection_evidence_checks import fixture, M, P, SOURCE
 from assess_idle_weapon import assess
 
@@ -48,6 +48,74 @@ def uploaded_fixture():
     return record,record['geometry'][0],channels,digest,log
 
 class Checks(unittest.TestCase):
+    def test_sparse_api_association_and_mvp_fence(self):
+        record,g,channels,digest,_=uploaded_fixture()
+        own=record['submissions']['rows'][0];extra=copy.deepcopy(own)
+        extra['metadata']['keys'][3]=9;extra['draw'][3]=1
+        own['ordinal']=2
+        record['submissions'].update(attempts=2,count=2,rows={0:extra,1:own})
+        association=uploaded_api_association(record,g,0)
+        self.assertEqual(association['api_index'],1);self.assertEqual(association['api_ordinal'],2)
+        self.assertFalse(association['api_geometry_coverage_complete'])
+        with patch('idle_native_reference.UPLOADED_PROGRAM_HASH',digest):
+            self.assertEqual(uploaded_transform_reference(record,g,channels,0)['api_association'],association)
+            bad=copy.deepcopy(record);bad['geometry'][0]['data']['constant:2'][2]^=1
+            with self.assertRaisesRegex(UnsupportedUploadedTransform,'mvp-word-disagreement') as caught:
+                uploaded_transform_reference(bad,bad['geometry'][0],channels,0)
+            self.assertEqual(caught.exception.api_association,association)
+        for case in ('missing','duplicate','foreign-root','unqualified','incomplete-copy','overflow','wrong-ordinal','not-returned'):
+            r=copy.deepcopy(record)
+            if case=='missing':del r['submissions']['rows'][1]
+            elif case=='duplicate':
+                r['submissions']['rows'][0]=copy.deepcopy(r['submissions']['rows'][1]);r['submissions']['rows'][0]['ordinal']=1
+            elif case=='foreign-root':r['submissions']['rows'][0]['metadata']['root'][0]+=1
+            elif case=='unqualified':r['submissions']['rows'][0]['flags']=7
+            elif case=='incomplete-copy':r['geometry']={}
+            elif case=='overflow':r['submissions']['overflow']=1
+            elif case=='wrong-ordinal':r['submissions']['rows'][1]['ordinal']=1
+            else:r['submissions']['outerReturned']=0
+            with self.subTest(case=case),self.assertRaises(UnsupportedUploadedTransform):uploaded_api_association(r,g,0)
+        json_record=__import__('json').loads(__import__('json').dumps(record))
+        self.assertEqual(uploaded_api_association(json_record,json_record['geometry']['0'],0),association)
+
+    def test_api_mapping_preserves_repeated_ordinals_and_rejects_sparse_reuse_or_reordering(self):
+        r,g,_,_,_=uploaded_fixture();own=r['submissions']['rows'][0]
+        r['geometry'][1]=copy.deepcopy(g);r['draws']=2
+        r['submissions'].update(attempts=2,count=2)
+        r['submissions']['rows'][1]=copy.deepcopy(own);r['submissions']['rows'][1]['ordinal']=2
+        for index in (0,1):
+            a=uploaded_api_association(r,r['geometry'][index],index)
+            self.assertEqual(a['api_index'],index);self.assertTrue(a['api_geometry_coverage_complete'])
+        extra=copy.deepcopy(own);extra['metadata']['keys'][3]=10;extra['ordinal']=3
+        r['submissions'].update(attempts=3,count=3);r['submissions']['rows'][2]=extra
+        # Two copies sharing a sole row cannot be reused in the sparse path.
+        r['submissions']['rows'][1]['metadata']['keys'][3]=11
+        with self.assertRaisesRegex(UnsupportedUploadedTransform,'ordered-injective'):
+            uploaded_api_association(r,g,0)
+        r['geometry'][1]['drawRecord']=11
+        self.assertEqual(uploaded_api_association(r,r['geometry'][1],1)['api_index'],1)
+        r['geometry'][0],r['geometry'][1]=r['geometry'][1],r['geometry'][0]
+        with self.assertRaisesRegex(UnsupportedUploadedTransform,'ordered-injective'):
+            uploaded_api_association(r,r['geometry'][0],0)
+
+    def test_sparse_replay_does_not_promote_whole_api_coverage(self):
+        from replay_idle_geometry import replay
+        evidence={'source_fingerprint':SOURCE,'copied_event_pose_observations':[{'draws':1,'submissions':{'attempts':2}}],
+                  'rejected_or_missing_observations':[]}
+        matching={'matches':[],'retained_diagnostic_matches':[],
+                  'observations_without_geometry':[],'copied_geometry_coverage_complete':True}
+        # Unknown program can return the historical legacy verdict without an
+        # association. Whole coverage must still reject surplus native draws.
+        row={'reference_kind':'legacy-collapsed-matrix',
+             'position_replay':{'position_replay_agrees_with_reference':True}}
+        with patch('replay_idle_geometry.match',return_value=matching), \
+             patch('replay_idle_geometry.replay_draws',side_effect=[[row],[]]):
+            result=replay(evidence,{},Path('.'),Path('.'),Path('.'))
+        self.assertTrue(result['all_copied_consumed_positions_agree_with_native_reference'])
+        for field in ('all_consumed_positions_agree_with_native_reference','api_geometry_coverage_complete',
+                      'gpu_execution','native_execution','positive_grasp_verified','alignment_accepted'):
+            self.assertFalse(result[field])
+
     def test_uploaded_copy_is_independent_and_bounded(self):
         record,g,channels,digest,log=uploaded_fixture()
         with patch('idle_native_reference.UPLOADED_PROGRAM_HASH',digest):
@@ -129,6 +197,8 @@ class Checks(unittest.TestCase):
             overflow=replay_draws(rows[:1],[bad],candidates,Path('.'),Path('.'),Path('.'))[0]
             self.assertEqual(overflow['reference_kind'],'uploaded-transform-uncorroborated')
             self.assertEqual(overflow['position_replay']['reason'],'unsupported-matrix-store')
+            self.assertEqual(overflow['api_association']['api_index'],0)
+            self.assertEqual(overflow['api_association']['api_ordinal'],1)
 
     def test_measurement_retains_uploaded_and_world_provenance(self):
         from measure_idle_reference import measure

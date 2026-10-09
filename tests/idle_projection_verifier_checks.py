@@ -4,9 +4,15 @@ import struct
 import sys
 import unittest
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
-from verify_idle_projection_probe_abi import decode,verify_sample,sample_prefix,instructions
+from verify_idle_projection_probe_abi import decode,verify_sample,sample_prefix,instructions,verify_producer_interval
 
 class Checks(unittest.TestCase):
+    def test_native_bookend_interval_rejects_calls_returns_control_changes_and_escape(self):
+        self.assertEqual(verify_producer_interval(decode(bytes.fromhex('90 d8 c1'),0x1000),0x1000,0x1003),2)
+        for raw in ('ff d0','c3','d9 2c 24','db e3','0f ae 14 24','eb 7f'):
+            code=bytes.fromhex(raw)
+            with self.subTest(raw=raw),self.assertRaises(ValueError):
+                verify_producer_interval(decode(code,0x1000),0x1000,0x1000+len(code))
     def test_shared_collector_opt_in_contract(self):
         from verify_idle_collector_abi import verify_opt_in_source,ROOT
         remote=(ROOT/'src/game/remote_render.cpp').read_text()

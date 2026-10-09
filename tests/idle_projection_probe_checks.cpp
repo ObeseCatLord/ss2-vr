@@ -1,4 +1,5 @@
 #include "common/idle_weapon_trace.hpp"
+#include "common/idle_projection_source.hpp"
 #include <cassert>
 #include <limits>
 using namespace ss2vr;
@@ -12,6 +13,35 @@ static IdleProjectionSnapshot sample(uint32_t flags=0) {
     return s;
 }
 int main() {
+    constexpr uintptr_t base=0x10000000;
+    assert(idleProjectionSlotsSource(base,base+0xf4ff,base+0x2834c)==1);
+    assert(idleProjectionSlotsSource(base,base+0x856b,base+0x27ccc)==2);
+    for(auto offset:{0xf4ffu,0x856bu}) {
+        assert(!idleProjectionSlotsSource(base,base+offset+1,base+0x27ccc));
+        assert(!idleProjectionSlotsSource(base,base+offset,base+0x27ccd));
+    }
+    assert(!idleProjectionSlotsSource(base,base+0xf4ff,base+0x27ccc));
+    assert(!idleProjectionSlotsSource(base,base+0x856b,base+0x2834c));
+    assert(!idleProjectionSlotsSource(0,0x856b,0x27ccc));
+    assert(!idleProjectionSlotsSource(std::numeric_limits<uintptr_t>::max(),0,0));
+    assert(idleProjectionFogSource(base,base+0xfc8a)==1);
+    assert(idleProjectionFogSource(base,base+0x8ca7)==2);
+    assert(!idleProjectionFogSource(base,base+0x8ca8));
+    assert(!idleProjectionFogSource(0,0x8ca7));
+    assert(!idleProjectionFogSource(std::numeric_limits<uintptr_t>::max(),0));
+    for(unsigned source:{1u,2u}) {
+        IdleProjectionProbe q;*q.begin(source)=sample();assert(q.enterFog(source));
+        q.end(sample(6),true);q.leaveFog(false);
+        assert(q.count==1 && q.pairs[0].source==source && q.pairs[0].qualified());
+        auto bad=q.pairs[0];bad.source=3;assert(!bad.qualified());
+        IdleProjectionProbe crossed;*crossed.begin(source)=sample();
+        assert(!crossed.enterFog(3-source) && crossed.blocked && !crossed.count);
+    }
+    for(unsigned source:{0u,3u,0xffffffffu}) {
+        IdleProjectionProbe q;assert(!q.begin(source) && q.blocked && !q.pending);
+    }
+    {IdleProjectionProbe q;q.pending=true;q.count=IdleProjectionProbe::MaxPairs;
+     assert(!q.enterFog(2) && q.blocked);}
     {IdleProjectionProbe p;assert(p.enterHelper());assert(!p.enterHelper());
      assert(p.helperActive && p.blocked);p.leaveHelper(false);assert(!p.helperActive && !p.begin());}
     {IdleProjectionProbe p;assert(p.enterHelper());p.leaveHelper(true);assert(p.blocked);}

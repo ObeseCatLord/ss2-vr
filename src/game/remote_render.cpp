@@ -1,6 +1,7 @@
 #include "native_memory.hpp"
 #include "native_finally.hpp"
 #include "remote_render.hpp"
+#include "common/idle_projection_source.hpp"
 
 #include "common/model_tree.hpp"
 #include "common/head_palette.hpp"
@@ -143,8 +144,8 @@ static void captureProjectionSnapshot(IdleProjectionSnapshot &out) noexcept {
 static void __cdecl projectionSlots(const int32_t *slots) {
     const auto caller=reinterpret_cast<uintptr_t>(__builtin_return_address(0));
     auto *owner=ownsNativeThread()?idleProjectionOwner():nullptr;
-    const bool selected=owner && caller==projectionShaderBase+0xf4ff &&
-        reinterpret_cast<uintptr_t>(slots)==projectionShaderBase+0x2834c;
+    const uint32_t source=idleProjectionSlotsSource(projectionShaderBase,caller,reinterpret_cast<uintptr_t>(slots));
+    const bool selected=owner && source && (source==1 || owner->nativeId==13);
     const bool entered=selected && owner->projectionProbe.enterHelper();
     bool returned=false;
     withNativeFinally([&] {originalProjectionSlots(slots);returned=true;},[&](bool aborted) noexcept {
@@ -153,18 +154,18 @@ static void __cdecl projectionSlots(const int32_t *slots) {
     // Finish all owner lookups/finally callbacks BEFORE the pre-production
     // sample. There is no callback or floating arithmetic from sample to return.
     if(!entered || !returned || idleProjectionOwner()!=owner)return;
-    auto *sample=owner->projectionProbe.begin();
+    auto *sample=owner->projectionProbe.begin(source);
     if(sample)captureProjectionSnapshot(*sample);
 }
 static void *__cdecl projectionFog(void *out) {
     const auto caller=reinterpret_cast<uintptr_t>(__builtin_return_address(0));
-    const bool selected=caller==projectionShaderBase+0xfc8a;
+    const uint32_t source=idleProjectionFogSource(projectionShaderBase,caller);
     // For the selected call this is the first observer operation after the
     // native, call-free producer interval. No floating interpretation occurs.
     IdleProjectionSnapshot sample;
-    if(selected)captureProjectionSnapshot(sample);
-    auto *owner=selected && ownsNativeThread()?idleProjectionOwner():nullptr;
-    const bool pending=owner && owner->projectionProbe.enterFog();
+    if(source)captureProjectionSnapshot(sample);
+    auto *owner=source && ownsNativeThread()?idleProjectionOwner():nullptr;
+    const bool pending=owner && (source==1 || owner->nativeId==13) && owner->projectionProbe.enterFog(source);
     void *result=nullptr;
     withNativeFinally([&] {
         result=originalProjectionFog(out);
@@ -1028,12 +1029,14 @@ bool initialize(HMODULE engine, HMODULE core, HMODULE sam, HookInstallerRva inst
             const auto sb=reinterpret_cast<uintptr_t>(shaders);
             const auto *table=reinterpret_cast<const int32_t *>(sb+0x2834c);
             if(!readableMemory(table,12) || table[0]!=23 || table[1]!=7 || table[2]!=8)return false;
+            const auto *polyTable=reinterpret_cast<const int32_t *>(sb+0x27ccc);
+            if(!readableMemory(polyTable,12) || polyTable[0]!=21 || polyTable[1]!=5 || polyTable[2]!=6)return false;
             projectionShaderBase=sb;
             if(!install(shaders,0x6920,reinterpret_cast<void *>(projectionSlots),
                        reinterpret_cast<void **>(&originalProjectionSlots)) || !originalProjectionSlots ||
                !install(engine,0x770b0,reinterpret_cast<void *>(projectionFog),
                        reinterpret_cast<void **>(&originalProjectionFog)) || !originalProjectionFog)return false;
-            log("Lab native projection bookends installed source=1 slotsReturn=f4ff fogReturn=fc8a");
+            log("Lab native projection bookends installed source=1 slotsReturn=f4ff fogReturn=fc8a; source=2 slotsReturn=856b fogReturn=8ca7 ID13-only");
         } else log("Lab native projection bookends unavailable: Shaders.dll not loaded; no late hook installation");
     }
     ready.store(true, std::memory_order_release);

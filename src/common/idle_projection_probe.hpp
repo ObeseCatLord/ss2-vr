@@ -12,7 +12,7 @@ struct IdleProjectionSnapshot {
 };
 struct IdleProjectionPair {
     IdleProjectionSnapshot before{}, after{};
-    uint32_t sequence=0;
+    uint32_t sequence=0,source=1;
     bool complete=false;
     bool sameOperands() const noexcept {
         if(before.modelRecord!=after.modelRecord || before.drawRecord!=after.drawRecord)return false;
@@ -24,7 +24,7 @@ struct IdleProjectionPair {
     bool qualified() const noexcept {
         // Reserved precision encodings are reported raw, not interpreted. The
         // matching whole-function bookends establish actual production/reuse.
-        if(!(complete && sequence && before.modelRecord && before.drawRecord &&
+        if(!(complete && sequence && (source==1 || source==2) && before.modelRecord && before.drawRecord &&
             before.control<=0xffff && before.control==after.control &&
             sameOperands() && after.flags==(before.flags|6)))return false;
         for(unsigned i=0;i<16;++i) {
@@ -46,18 +46,19 @@ struct IdleProjectionProbe {
         helperActive=true;return true;
     }
     void leaveHelper(bool aborted) noexcept {helperActive=false;if(aborted)invalidate();}
-    bool enterFog() noexcept {
-        if(blocked || !pending || helperActive || fogActive) {invalidate();return false;}
+    bool enterFog(uint32_t source=1) noexcept {
+        if(blocked || !pending || helperActive || fogActive || count>=MaxPairs ||
+           (source!=1 && source!=2) || pairs[count].source!=source) {invalidate();return false;}
         fogActive=true;return true;
     }
     void leaveFog(bool aborted) noexcept {fogActive=false;if(aborted)invalidate();}
     // Reserve before measuring: nothing after the pre-production snapshot
     // needs allocation, callbacks, interpretation or an owner lookup.
-    IdleProjectionSnapshot *begin() noexcept {
-        if(pending || blocked || helperActive || fogActive || count>=MaxPairs) {
+    IdleProjectionSnapshot *begin(uint32_t source=1) noexcept {
+        if(pending || blocked || helperActive || fogActive || count>=MaxPairs || (source!=1 && source!=2)) {
             invalidate();return nullptr;
         }
-        pending=true;pairs[count].complete=false;pairs[count].sequence=count+1;
+        pending=true;pairs[count].complete=false;pairs[count].sequence=count+1;pairs[count].source=source;
         return &pairs[count].before;
     }
     void end(const IdleProjectionSnapshot &sample,bool originalCompleted) noexcept {

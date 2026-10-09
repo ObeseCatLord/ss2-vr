@@ -91,11 +91,14 @@ def replay_draws(rows,observations,candidates,candidate_root,evaluator,temporary
             result['position_replay']={'schema':1,'position_replay_agrees_with_reference':False,
                 'reason':str(error),'vertex':0,'gpu_execution':False,
                 'positive_grasp_verified':False,'alignment_accepted':False}
+            if isinstance(error,UnsupportedUploadedTransform) and error.api_association is not None:
+                result['api_association']=error.api_association
             reference=None
         if reference is not None:
             result['legacy_position_replay']=result['position_replay']
             result['native_reference']=reference
             result['reference_kind']=reference['kind']
+            if 'api_association' in reference:result['api_association']=reference['api_association']
             # Select by qualified evidence, never by which calculation passes.
             result['position_replay']=evaluate_geometry(g,channels,evaluator,temporary,reference)
         if result['position_replay']['position_replay_agrees_with_reference']:
@@ -124,11 +127,17 @@ def replay(evidence,candidates,candidate_root,evaluator,temporary):
     diagnostic=replay_draws(matching['retained_diagnostic_matches'],
         [o for o in evidence['rejected_or_missing_observations'] if 'retained_copies' in o],
         candidates,candidate_root,evaluator,temporary,True)
+    copied_agree=matching['copied_geometry_coverage_complete'] and all(
+        r['position_replay']['position_replay_agrees_with_reference'] for r in results)
+    partial_api=any(o.get('submissions',{}).get('attempts',0)>o['draws']
+                    for o in evidence['copied_event_pose_observations'])
     return {'schema':1,'source_fingerprint':evidence['source_fingerprint'],'draws':results,'retained_diagnostic_draws':diagnostic,
         'observations_without_geometry':matching['observations_without_geometry'],
         'copied_geometry_coverage_complete':matching['copied_geometry_coverage_complete'],
-        'all_consumed_positions_agree_with_native_reference':matching['copied_geometry_coverage_complete'] and all(
-            r['position_replay']['position_replay_agrees_with_reference'] for r in results),
+        'all_copied_consumed_positions_agree_with_native_reference':copied_agree,
+        'all_consumed_positions_agree_with_native_reference':copied_agree and not partial_api,
+        'api_geometry_coverage_complete':bool(results) and all(
+            r.get('api_association',{}).get('api_geometry_coverage_complete') is True for r in results),
         'gpu_execution':False,'native_execution':False,'historical_loaded_bytes_verified':False,
         'positive_grasp_verified':False,'alignment_accepted':False}
 

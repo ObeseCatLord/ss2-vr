@@ -28,6 +28,59 @@ class UnsupportedNativeArithmetic(ValueError):
 
 class UnsupportedUploadedTransform(UnsupportedNativeArithmetic):
     """Known program, but its own copied transforms are not corroborated."""
+    def __init__(self,reason,api_association=None):
+        super().__init__(reason)
+        self.api_association=api_association
+
+def uploaded_api_association(record,geometry,index):
+    """Join copied geometry to its own API row without choosing by arithmetic."""
+    def unknown(reason):raise UnsupportedUploadedTransform(reason)
+    if record.get('schema')!=4 or record.get('copyLayout')!=1 or record.get('stage')!=4:
+        unknown('uploaded-transform-owner-incomplete')
+    p=record.get('submissions')
+    if p is None or p['overflow'] or not p['outerReturned']:
+        unknown('uploaded-transform-api-coverage-unknown')
+    def matches(g,row):
+        m=row['metadata'];d=g['data']
+        keys=[g[k] for k in ('modelRecord','drawRecord','surface','instance','surfaceName','boneName','bone')]
+        return m is not None and m['keys'][2:]==keys and \
+            m['root']==[record[k] for k in ('cfg','file','resource')] and \
+            m['render']==[g[k] for k in ('cfg','file','resource')] and \
+            m['layout']==d['layout:0'] and row['draw']==d['draw:0']
+    def qualified(row,position):
+        return row is not None and (row['ordinal'],row['status'],row['flags'])==(position+1,8,15) and row['hresult']>=0
+    if p['attempts']==record['draws']:
+        # Preserve historical ordinal behavior, including repeated identities.
+        row=p['rows'].get(index,p['rows'].get(str(index)))
+        if not qualified(row,index):unknown('uploaded-transform-api-bookends-missing')
+        if not matches(geometry,row):unknown('uploaded-transform-copy-identity-disagreement')
+        return {'api_index':index,'api_ordinal':index+1,'association_kind':'equal-count-ordinal',
+                'api_geometry_coverage_complete':True}
+    if not 0<record['draws']<p['attempts']<=64 or p['count']!=p['attempts']:
+        unknown('uploaded-transform-api-coverage-unknown')
+    def ordered(values,count):
+        if set(values)!=set(range(count)) and set(values)!=set(map(str,range(count))):
+            unknown('uploaded-transform-api-table-incomplete')
+        return [values.get(i,values.get(str(i))) for i in range(count)]
+    rows=ordered(p['rows'],p['attempts'])
+    copies=ordered(record['geometry'],record['draws'])
+    if not 0<=index<len(copies) or copies[index]!=geometry:
+        unknown('uploaded-transform-copy-identity-disagreement')
+    for position,row in enumerate(rows):
+        if not qualified(row,position) or row['metadata'] is None:
+            unknown('uploaded-transform-api-bookends-missing')
+        if row['metadata']['root']!=[record[k] for k in ('cfg','file','resource')]:
+            unknown('uploaded-transform-api-foreign-root')
+    mapping=[]
+    for copy in copies:
+        candidates=[i for i,row in enumerate(rows) if matches(copy,row)]
+        if len(candidates)!=1:unknown('uploaded-transform-api-association-not-unique')
+        mapping.append(candidates[0])
+    if any(a>=b for a,b in zip(mapping,mapping[1:])):
+        unknown('uploaded-transform-api-association-not-ordered-injective')
+    selected=mapping[index]
+    return {'api_index':selected,'api_ordinal':selected+1,'association_kind':'surplus-unique-identity',
+            'api_geometry_coverage_complete':False}
 
 UPLOADED_PROGRAM_HASH='6118c85d5b3613bb50c9b82c62991e0246b012e55be02254e6e589e07d364497'
 UPLOADED_DECLARATION=((0,0,2,0,5,0),(1,0,2,0,5,1),(2,0,3,0,5,2),
@@ -90,7 +143,8 @@ def uploaded_transform_reference(record,geometry,channels,index):
     if geometry['words']!=320:return None
     program=[w for i in range(0,320,32) for w in d['program:'+str(i)]]
     if hashlib.sha256(struct.pack('<320I',*program)).hexdigest()!=UPLOADED_PROGRAM_HASH:return None
-    def unknown(reason):raise UnsupportedUploadedTransform(reason)
+    association=None
+    def unknown(reason):raise UnsupportedUploadedTransform(reason,association)
     if record['stage']!=4 or record['copyLayout']!=1:unknown('uploaded-transform-owner-incomplete')
     declaration=tuple(tuple(d['declaration:'+str(i)]) for i in range(geometry['declaration']))
     if declaration!=UPLOADED_DECLARATION or geometry['input_layout']!=0:
@@ -98,17 +152,7 @@ def uploaded_transform_reference(record,geometry,channels,index):
     f=geometry.get('factors')
     if f is None or (f['bookends'],f['post_original_return'],f['cleanup_certified'],f['outer_current'])!=(3,True,False,False):
         unknown('uploaded-transform-factor-bookends-missing')
-    submissions=record.get('submissions')
-    if submissions is None or submissions['overflow'] or not submissions['outerReturned'] or submissions['attempts']!=record['draws']:
-        unknown('uploaded-transform-api-coverage-unknown')
-    row=submissions['rows'].get(index,submissions['rows'].get(str(index)))
-    if row is None or (row['ordinal'],row['status'],row['flags'])!=(index+1,8,15) or row['hresult']<0:
-        unknown('uploaded-transform-api-bookends-missing')
-    m=row['metadata']
-    keys=[geometry[k] for k in ('modelRecord','drawRecord','surface','instance','surfaceName','boneName','bone')]
-    if m is None or m['keys'][2:]!=keys or m['root']!=[record[k] for k in ('cfg','file','resource')] or \
-            m['render']!=[geometry[k] for k in ('cfg','file','resource')] or m['layout']!=d['layout:0'] or row['draw']!=d['draw:0']:
-        unknown('uploaded-transform-copy-identity-disagreement')
+    association=uploaded_api_association(record,geometry,index)
     vertices=d['layout:0'][0]
     if len(channels['weights'])!=4*vertices or len(channels['local_indices'])!=4*vertices:
         raise ValueError('Uploaded transform influence byte inventory')
@@ -119,12 +163,12 @@ def uploaded_transform_reference(record,geometry,channels,index):
     finite_words(local,12)
     try:_,r=first_material_matrices(model,view,projection)
     except UnsupportedNativeArithmetic as error:
-        raise UnsupportedUploadedTransform(str(error)) from error
+        raise UnsupportedUploadedTransform(str(error),association) from error
     if r!=[v for i in range(1,5) for v in d['constant:'+str(i)]]:
         unknown('uploaded-transform-mvp-word-disagreement')
     if local!=[v for i in range(21,24) for v in d['constant:'+str(i)]]:
         unknown('uploaded-transform-local-word-disagreement')
-    return {'kind':'uploaded-transform-corroboration','matrix':r,'local':list(local),
+    return {'kind':'uploaded-transform-corroboration','matrix':r,'local':list(local),'api_association':association,
             'uploads_used_as_inputs':False,'cache_outputs_used_as_inputs':False,
             'native_producer_verified':False,'pc_rc_observed':False,'diagnostic_only':True,
             'positive_grasp_verified':False,'alignment_accepted':False}
