@@ -1,6 +1,7 @@
 #pragma once
 #include "scope_program.hpp"
 #include "scope_geometry.hpp"
+#include "scope_buffer_layout.hpp"
 #include <bit>
 
 namespace ss2vr {
@@ -17,8 +18,11 @@ inline Vector constant(const std::array<float,4> &v) noexcept {
     return {value(v[0]),value(v[1]),value(v[2]),value(v[3])};
 }
 inline bool position(std::span<const uint32_t> words,std::span<const std::array<float,4>> uploaded,
-                     Vec3 p,std::array<float,2> uv,bool weightsBound,std::array<float,4> &out) noexcept {
+                     Vec3 p,std::array<float,2> uv,bool weightsBound,std::array<float,4> &out,
+                     GeometryInputLayout layout=GeometryInputLayout::Legacy56) noexcept {
     using namespace scope_program;
+    if(layout!=GeometryInputLayout::Legacy56 && layout!=GeometryInputLayout::Observed78)return false;
+    if(layout==GeometryInputLayout::Observed78 && !weightsBound)return false;
     std::array<std::array<float,4>,256> constants{};
     std::array<bool,256> available{};
     for (size_t i=0;i<uploaded.size();++i) { constants[i]=uploaded[i]; available[i]=true; }
@@ -39,8 +43,9 @@ inline bool position(std::span<const uint32_t> words,std::span<const std::array<
     std::array<Vector,16> inputs{};
     inputs[0]=constant({p.x,p.y,p.z,1}); // Actual admitted FLOAT3 position.
     inputs[3]=constant({uv[0],uv[1],0,1}); // Actual admitted FLOAT2 diffuse UV.
-    inputs[5]=constant({0,0,0,0}); // Exact hashed stock local-palette indices.
-    if (weightsBound) inputs[6]=constant({1,0,0,0});
+    const unsigned local=layout==GeometryInputLayout::Observed78?7:5,weight=layout==GeometryInputLayout::Observed78?8:6;
+    inputs[local]=constant({0,0,0,0}); // Exact hashed first-local-palette indices, UBYTE4N.
+    if (weightsBound) inputs[weight]=constant({1,0,0,0}); // Exact 255/0/0/0 UBYTE4N weights.
     Scalar address;
     Vector clip{};
     const auto read = [&](uint32_t token) noexcept {

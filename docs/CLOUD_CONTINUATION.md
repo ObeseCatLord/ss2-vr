@@ -1,5 +1,45 @@
 # Cloud continuation — 2026-10-05
 
+## Current ID1 observed-layout adapter — source GO
+
+The private neutral V15 run reached the expected Jungle scene and103complete
+projection pairs. Thirteen complete passive receipts across both hands, first eye
+only, showed stream7 at the local-index descriptor offset and8 at weights, sharing
+canonical position-buffer identity with stride4/frequency1. All13copied the same
+202-word VS1.1 program. Native isolation shutdown/owned cleanup/protected12files
+passed. Geometry remained rejected; no cached-eye/grasp acceptance is inferred.
+
+Astra verified the actual shader's position dependencies and approved a narrow
+ID1 adapter. Source now selects exact observed7/8 declaration for ID1 getters,
+range validation and replay seeds. Legacy5/6 and Scope13 defaults remain intact.
+Mixed/aliased/missing declarations decline; original shader words, five channel
+hashes/exact influences, original draw/COMowners/nativefinally/current guards and
+unknown-position refusal remain mandatory. Private replay schema2 adds a bounded
+layout enum; schema1 retains legacy behavior. Failure receipts explicitly tag the
+selected layout, preserving older implicit-legacy logs.
+
+All four products rebuilt on `710534dfb75c9bb5ceac0653e5cc89daf8024a39b732526e1e751548c4dafbc1`.
+All68Debug/68Release and28normal/optimized native/compiled checks pass. Focused
+10reader/11passive-reader/6compiled-replay groups pass normally/optimized. An
+unchanged actual shader/constants compatibility experiment with5synthetic vertices
+produced known positions only for Observed78; it is not native geometry/reference
+proof. Astra source GO is scoped to this adapter, with latest local Astra/xhigh
+metadata verified and backend attestation unavailable. No new build runtime or
+deployment yet. Next finite proof is actual consumed-channel capture and unchanged-
+bytecode replay against the captured reference in a fresh sealed private fixture.
+
+Product hashes:
+- `d3d9.dll`: `6d7244438a9e2f018356472a5ad8821e64079be2f9042af684a05eed6f91584c`
+- `ss2vr_host.exe`: `116a56641ac9896efaeaa425744de8f7f8f3a088c4bcbc80c39884553aa13ceb`
+- `libopenxr_loader.dll`: `bb011caa82528c541a73967ce6408f82198ff4fd0358b38b54884719d863bd1d`
+- `SS2VRServer.dll`: `b0ce2236227c17c4540421a5eb147517a959bf2e1fb691f495749ce28541223a`
+
+Cached-eye winning-event retention, controller/anatomical grasp correspondence,
+physical release, driver controls and actual device/network/user acceptance remain
+open. No guessed offsets, role remap for Scope13 or native release priming.
+Earlier entries retain historical identities and evidence limits.
+
+
 ## Current passive native stream diagnostic — source GO
 
 The exact ID1 step20/declaration rejection now preserves the original failure,

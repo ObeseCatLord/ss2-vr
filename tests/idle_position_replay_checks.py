@@ -15,15 +15,29 @@ EVALUATOR=Path(sys.argv.pop(1)).resolve()
 IDENTITY=[1.,0.,0.,0.,0.,1.,0.,0.,0.,0.,1.,0.,0.,0.,0.,1.]
 PROGRAM=[0xfffe0101,31,0x80000005,0x900f0000,20,0xc00f0000,0x90e40000,0xa0e40000,0xffff]
 
-def fixture(program=PROGRAM,constants=None,points=None,clip=IDENTITY,weights=1):
+def fixture(program=PROGRAM,constants=None,points=None,clip=IDENTITY,weights=1,layout=None):
     constants=constants or [IDENTITY[i:i+4] for i in range(0,16,4)]
     points=points or [(1.,2.,3.,.25,.75)]
-    data=b'SS2VIRP1'+struct.pack('<5I',1,len(program),len(constants),len(points),weights)
+    data=b'SS2VIRP1'+struct.pack('<5I',1 if layout is None else 2,len(program),len(constants),len(points),weights)
+    if layout is not None:data+=struct.pack('<I',layout)
     data+=struct.pack('<16f',*clip)+struct.pack('<'+str(len(program))+'I',*program)
     data+=struct.pack('<'+str(len(constants)*4)+'f',*[v for row in constants for v in row])
     return data+b''.join(struct.pack('<5f',*p)+bytes([255,0,0,0,0,0,0,0]) for p in points)
 
 class Checks(unittest.TestCase):
+    def test_observed_input_layout_and_schema_compatibility(self):
+        p=[0xfffe0101,31,0x80000005,0x900f0000,31,0x80070005,0x900f0007,31,0x80080005,0x900f0008,
+           1,0x800f0000,0x90e40000,4,0x800f0000,0x90e40007,0x90e40008,0x80e40000,
+           20,0xc00f0000,0x80e40000,0xa0e40000,0xffff]
+        old=json.loads(self.run_fixture(fixture(program=p)).stdout)
+        self.assertEqual(old['reason'],'unknown-position-dependency')
+        new=json.loads(self.run_fixture(fixture(program=p,layout=1)).stdout)
+        self.assertTrue(new['position_replay_agrees_with_reference']);self.assertFalse(new['gpu_execution'])
+        self.assertTrue(json.loads(self.run_fixture(fixture(layout=0)).stdout)['position_replay_agrees_with_reference'])
+        for data in (fixture(program=p,layout=2),fixture(program=p,layout=1,weights=0)):
+            self.assertNotEqual(self.run_fixture(data).returncode,0)
+        data=bytearray(fixture(program=p,layout=1));data[-4]=1
+        self.assertEqual(json.loads(self.run_fixture(data).stdout)['reason'],'unsupported-influence')
     def run_fixture(self,data):
         with tempfile.TemporaryDirectory() as tmp:
             p=Path(tmp)/'input.bin';p.write_bytes(data)

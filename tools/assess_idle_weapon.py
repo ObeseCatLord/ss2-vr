@@ -7,7 +7,7 @@ import math
 from pathlib import Path
 import re
 import struct
-from idle_stream_evidence import consume as consume_stream_probe, validate as validate_stream_probe
+from idle_stream_evidence import consume as consume_stream_probe, validate as validate_stream_probe, declaration_layout, OBSERVED
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -45,27 +45,7 @@ def hexwords(value,count):
     return [int(v,16) for v in parts]
 
 def declaration_weights(rows):
-    seen=set();active=set()
-    for i,e in enumerate(rows):
-        stream,offset,kind,method,usage,index=e
-        if stream>65535 or offset>65535 or any(x>255 for x in e[2:]):raise ValueError('Declaration field exceeds native width')
-        if stream==255:
-            if i!=len(rows)-1 or e!=[255,0,17,0,0,0]:raise ValueError('Invalid declaration end')
-            break
-        if stream>15:raise ValueError('Unsupported declaration stream')
-        if usage==5 and index in (0,3,5,6) and stream!=index:raise ValueError('Aliased declaration semantic')
-        if stream not in (0,3,5,6):continue
-        if stream in seen:raise ValueError('Duplicate declaration input')
-        seen.add(stream)
-        if kind==17:
-            if stream!=6:raise ValueError('Missing required declaration input')
-            continue
-        if offset or method or usage!=5 or index!=stream or kind!={0:2,3:1,5:8,6:8}[stream]:
-            raise ValueError('Unsupported declaration input type')
-        active.add(stream)
-    else:raise ValueError('Missing declaration end')
-    if not {0,3,5}.issubset(active):raise ValueError('Missing required declaration stream')
-    return 6 in active
+    return declaration_layout(rows)[1]
 
 def assess(text,expected_source):
     if not re.fullmatch('[a-f0-9]{64}',expected_source):raise ValueError('Expected compiled source required')
@@ -131,20 +111,24 @@ def assess(text,expected_source):
             if any(integer(f[k])!=current[k] for k in ('request','eye','hand')):
                 raise ValueError('Interleaved/foreign input failure')
             if kind=='inputFailure':
-                if set(f)!={'request','eye','hand','step','index','hr','valid','caps','declaration','rangeChecks'} or 'input_failure' in current:
+                expected_fields={'request','eye','hand','step','index','hr','valid','caps','declaration','rangeChecks'}
+                if set(f) not in (expected_fields,expected_fields|{'layout'}) or 'input_failure' in current:
                     raise ValueError('Duplicate or malformed input failure')
                 failure={k:integer(f[k],-(1<<31),(1<<31)-1) if k=='hr' else integer(f[k],0,(1<<32)-1)
                          for k in ('step','index','hr','valid','caps','declaration','rangeChecks')}
-                if not 1<=failure['step']<=25 or failure['index']>6 or failure['valid']>15 or failure['rangeChecks']>=(1<<20) or \
+                if not 1<=failure['step']<=25 or failure['index']>8 or failure['valid']>15 or failure['rangeChecks']>=(1<<20) or \
                    ((failure['valid']&2) and (not failure['valid']&8 or not 1<=failure['declaration']<=65)) or \
                    ((failure['valid']&4) and failure['valid']!=15):
                     raise ValueError('Input failure validity/budget mismatch')
                 step=failure['step']
+                failure['layout']=integer(f['layout'],0,1) if 'layout' in f else 0
+                failure['layout_explicit']='layout' in f
+                if step<=7 and failure['layout']:raise ValueError('Input layout selected before declaration')
                 expected_valid=0 if step==1 else 1 if step<=6 else 9 if step==7 else 11 if step<=19 else 15
                 api_failures={1,3,4,6,8,10,12,14,16,21,24}
                 identity_failures={11,18,19,23}
                 if failure['valid']!=expected_valid or \
-                   (step in range(8,12) and failure['index'] not in (0,5,3,6)) or \
+                   (step in range(8,12) and failure['index'] not in (0,5,3,6,7,8)) or \
                    (step not in range(8,12) and failure['index']) or \
                    (step in api_failures and failure['hr']>=0) or \
                    (step not in api_failures|identity_failures and failure['hr']<0) or \
@@ -254,9 +238,16 @@ def assess(text,expected_source):
         if failure:
             if failure['valid']&2 and set(failure['declaration_rows'])!=set(range(failure['declaration'])):
                 raise ValueError('Truncated input declaration diagnostic')
-            if failure['step'] in range(8,12) and failure['index']==6 and not any(
-                row[0]==6 and row[2]!=17 for row in failure['declaration_rows'].values()):
-                raise ValueError('Optional stream failure without an active declaration input')
+            rows=[failure['declaration_rows'][i] for i in range(failure['declaration'])] if failure['valid']&2 else []
+            if failure['step'] in range(8,12):
+                observed=failure['layout']==1
+                if failure['index'] in (7,8) and not observed or observed and failure['index'] in (5,6):
+                    raise ValueError('Stream failure index does not match selected declaration family')
+                if failure['index']==6 and not any(row[0]==6 and row[2]!=17 for row in rows):
+                    raise ValueError('Optional stream failure without an active declaration input')
+            if failure['valid']&2 and (failure['layout']==1 and rows!=OBSERVED or
+                    failure['layout_explicit'] and (failure['layout']==1)!=(rows==OBSERVED)):
+                raise ValueError('Input failure layout contradicts qualified declaration')
             if failure['valid']&4 and (failure['binding'] is None or failure['surface'] is None or
                 set(failure['streams'])!=set(range(4)) or set(failure['channels'])!=set(range(4))):
                 raise ValueError('Truncated input binding diagnostic')
@@ -292,7 +283,8 @@ def assess(text,expected_source):
                streams[1:4]!=[layout[2],12,1] or streams[5:8]!=[layout[11],4,1] or streams[14:16]!=[8,1] or \
                (streams[8] and (streams[8]!=streams[0] or streams[9:12]!=[layout[8],4,1])):
                 raise ValueError('Unsupported stream identity/ranges')
-            weights=declaration_weights([g['data']['declaration:'+str(i)] for i in range(g['declaration'])])
+            input_layout,weights=declaration_layout([g['data']['declaration:'+str(i)] for i in range(g['declaration'])])
+            g['input_layout']=input_layout
             if bool(streams[8])!=weights:raise ValueError('Declaration/bound weight disagreement')
             ranges=[(layout[2],v*12,buffers[0]),(layout[5],t*6,buffers[5]),
                     (layout[8],v*4,buffers[0]),(layout[11],v*4,buffers[0]),(streams[13],v*8,buffers[0])]

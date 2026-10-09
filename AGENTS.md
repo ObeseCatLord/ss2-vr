@@ -9,15 +9,15 @@ This historical hold blocked public publication pending renewed confirmation. It
 ## Current PC continuation — start here
 
 Latest rebuilt products: source fingerprint
-`66274aef6f59a7e6d8559c320077f214e41bed5ad386a5f03ebcfc6a936523b8`, IPC10/wire7. Passive
-ID1 actual0/7/8 binding/program observation is source implemented with original
-rejection/no locks/no GPU state writes; existingtyped COMowner/cleanup preserved.
-Astra design/native/corrected-reader GO. All68Debug/68Release and28normal/-O
-native/compiled gates pass;11reader groups normal/-O andbothCTestrecheck. Fresh
-sealed private preparation/handoff review is next before any bounded neutral run.
-No runtime/deployment yet. Roles/geometry/grasp/cache/Idle/Scope13 gates unchanged;
-no fixed7/8 remap or guessed alignment. See docs/IDLE_EVENT_COLLECTOR.md.
-Prior product/status entries below retain historical evidence, not active guides.
+`710534dfb75c9bb5ceac0653e5cc89daf8024a39b732526e1e751548c4dafbc1`, IPC10/wire7. ActualV15
+passive data showed local7/weights8 and unchanged202wordshader; an ID1-only exact
+observed-family getter/range/replay adapter now has Astra scopedsourceGO. Legacy
+Scope13 5/6 and every hash/influence/owner/Idle/cache gate retained. All68Debug/
+68Release and28normal/-O gates pass; focusednormal/O checks pass. No runtime of
+this build yet. Freshsealedchannel/reference capture is next underexisting bounded
+neutral authority; prior fixtures archived. Do not rename actual shader registers
+for acceptance, infer winningcached-eye events or claim grasp/alignment complete.
+See docs/IDLE_EVENT_COLLECTOR.md; earlier status/product identities are historical.
 
 ### Current repeated neutral SS2 capture authority
 The user explicitly answered "Allow necessary private neutral captures" to the

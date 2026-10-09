@@ -24,7 +24,8 @@ inline bool idleBufferRanges(const ScopeBufferInputs &in,
     if(passedChecks)*passedChecks=passed;
     for(bool value:basic)if(!value)return false;
     bool weights=false;
-    if(!record(13,declaredGeometryInputs(declaration,weights)))return false;
+    GeometryInputLayout layout;
+    if(!record(13,idleGeometryInputs(declaration,layout,weights)))return false;
     if(passedChecks)*passedChecks=passed;
     if(!record(14,!weights || (in.weights.object==in.positions.object && in.weights.offset==s.channels[2].offset &&
                    in.weights.stride==4 && in.weights.frequency==1)))return false;

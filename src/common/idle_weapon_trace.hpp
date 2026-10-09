@@ -73,6 +73,7 @@ struct IdleWeaponTrace {
     struct InputFailure {
         uint32_t step=0,index=0,valid=0,caps=0,declarationCount=0,rangeChecks=0;
         int32_t hresult=0;
+        GeometryInputLayout layout=GeometryInputLayout::Legacy56;
         ScopeBufferInputs inputs{};
         std::array<ScopeDeclarationElement,65> declaration{};
     } inputFailure{};
@@ -102,11 +103,8 @@ struct IdleWeaponTrace {
         std::array<uint32_t,IdleGeometryCopy::MaxProgramWords> program{};
     } streamProbe{};
     static bool observedStreamFamily(const InputFailure &d) noexcept {
-        constexpr std::array<ScopeDeclarationElement,6> observed{{
-            {0,0,2,0,5,0},{2,0,1,0,5,2},{3,0,1,0,5,3},
-            {7,0,8,0,5,7},{8,0,8,0,5,8},{255,0,17,0,0,0}}};
-        return d.step==20 && d.valid==15 && d.declarationCount==observed.size() &&
-            std::equal(observed.begin(),observed.end(),d.declaration.begin());
+        return d.step==20 && d.valid==15 && d.declarationCount<=65 &&
+            observed78Declaration(std::span(d.declaration).first(d.declarationCount));
     }
     static bool sameStreamSnapshots(const StreamSnapshot &a,const StreamSnapshot &b) noexcept {
         return a.status==StreamSnapshot::Copied && b.status==StreamSnapshot::Copied &&

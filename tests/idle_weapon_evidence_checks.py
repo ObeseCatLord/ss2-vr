@@ -13,6 +13,20 @@ STRETCH='Lab idle stretch request=100 eye=1 hand=0 values=-1,1,1'
 VALID='\n'.join([DRAW,ANIM,*MATRICES,STRETCH])
 
 class Checks(unittest.TestCase):
+    def test_input_failure_indices_follow_explicit_or_historical_layout(self):
+        from idle_stream_evidence import OBSERVED
+        head=DRAW.replace('stage=4','stage=3')+'\nLab idle rejection request=100 eye=1 hand=0 reason=32 preceding=2 checks=0 state=63 callbacks=63\n'
+        failure='Lab idle inputFailure request=100 eye=1 hand=0 step=8 index=7 hr=-1 valid=11 caps=256 declaration=6 rangeChecks=0 layout=1'
+        rows='\n'.join('Lab idle inputDeclaration request=100 eye=1 hand=0 index='+str(i)+' values='+','.join(map(str,e)) for i,e in enumerate(OBSERVED))
+        text=head+failure+'\n'+rows
+        for index in (0,3,7,8):
+            self.assertFalse(assess(text.replace('index=7 hr=','index='+str(index)+' hr='),SOURCE)['copied_event_pose_observations'])
+        for bad in (text.replace('index=7 hr=','index=5 hr='),text.replace('index=7 hr=','index=6 hr='),
+                    text.replace(' layout=1',''),text.replace('layout=1','layout=0'),
+                    text.replace('layout=1','layout=2'),text.replace('values=7,0,8,0,5,7','values=7,0,8,0,5,5')):
+            with self.subTest(bad=bad),self.assertRaises(ValueError):assess(bad,SOURCE)
+        historical=text.replace(' layout=1','').replace('index=7 hr=','index=5 hr=')
+        self.assertEqual(assess(historical,SOURCE)['rejected_or_missing_observations'][0]['input_failure']['layout'],0)
     def test_rejected_animation_name_snapshot_is_qualified_and_never_a_winner(self):
         rejected=DRAW.replace('stage=4','stage=3').replace('contributors=1','contributors=2').replace('matrices=1','matrices=0')
         reason='Lab idle rejection request=100 eye=1 hand=0 reason=19 preceding=1 checks=0 state=23 callbacks=49'
@@ -93,6 +107,15 @@ class Checks(unittest.TestCase):
         result=assess(text,SOURCE)
         self.assertFalse(result['alignment_accepted'])
         self.assertEqual(result['copied_event_pose_observations'][0]['geometry'][0]['words'],2)
+        from idle_stream_evidence import OBSERVED
+        observed=text.replace('declaration=5','declaration=6')
+        old_rows=[row('declaration',i,e) for i,e in enumerate([[0,0,2,0,5,0],[5,0,8,0,5,5],[6,0,8,0,5,6],[3,0,1,0,5,3],[255,0,17,0,0,0]])]
+        for r in old_rows:observed=observed.replace(r+'\n','')
+        observed+='\n'+'\n'.join(row('declaration',i,e) for i,e in enumerate(OBSERVED))
+        self.assertEqual(assess(observed,SOURCE)['copied_event_pose_observations'][0]['geometry'][0]['input_layout'],1)
+        mixed=observed.replace('values=00000007,00000000,00000008,00000000,00000005,00000007',
+                               'values=00000005,00000000,00000008,00000000,00000005,00000005')
+        with self.assertRaises(ValueError):assess(mixed,SOURCE)
         channels=('positions','indices','weights','local_indices','uv')
         candidate={'hand':{'asset_sha256':'b'*64,'candidate_channels':[{
             'single_body_influence':True,'mesh_object':1,'lod':0,'vertices':317,'triangles':338,

@@ -5,6 +5,33 @@ OBSERVED=[[0,0,2,0,5,0],[2,0,1,0,5,2],[3,0,1,0,5,3],
           [7,0,8,0,5,7],[8,0,8,0,5,8],[255,0,17,0,0,0]]
 BASE={'request','eye','hand'}
 
+def declaration_layout(rows):
+    if rows==OBSERVED:return 1,True
+    if any(e[0] in (7,8) or (e[4]==5 and e[5] in (7,8)) for e in rows):
+        raise ValueError('Ambiguous/mixed observed input family')
+    seen=set();active=set()
+    for i,e in enumerate(rows):
+        stream,offset,kind,method,usage,index=e
+        if stream>65535 or offset>65535 or any(x>255 for x in e[2:]):raise ValueError('Declaration field exceeds native width')
+        if stream==255:
+            if i!=len(rows)-1 or e!=[255,0,17,0,0,0]:raise ValueError('Invalid declaration end')
+            break
+        if stream>15:raise ValueError('Unsupported declaration stream')
+        if usage==5 and index in (0,3,5,6) and stream!=index:raise ValueError('Aliased declaration semantic')
+        if stream not in (0,3,5,6):continue
+        if stream in seen:raise ValueError('Duplicate declaration input')
+        seen.add(stream)
+        if kind==17:
+            if stream!=6:raise ValueError('Missing required declaration input')
+            continue
+        if offset or method or usage!=5 or index!=stream or kind!={0:2,3:1,5:8,6:8}[stream]:
+            raise ValueError('Unsupported declaration input type')
+        active.add(stream)
+    else:raise ValueError('Missing declaration end')
+    if not {0,3,5}.issubset(active):raise ValueError('Missing required declaration stream')
+    return 0,6 in active
+
+
 def number(value,maximum=0xffffffff):
     if not re.fullmatch(r'\d+',value) or not 0<=int(value)<=maximum:raise ValueError('Invalid stream diagnostic integer')
     return int(value)

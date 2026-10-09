@@ -35,8 +35,10 @@ int main(int argc,char **argv) {
         if(input.take<std::array<char,8>>()!=std::array<char,8>{'S','S','2','V','I','R','P','1'})throw std::runtime_error("input-magic");
         const auto schema=input.take<uint32_t>(),words=input.take<uint32_t>(),count=input.take<uint32_t>(),
                    vertices=input.take<uint32_t>(),weights=input.take<uint32_t>();
-        if(schema!=1 || words<2 || words>512 || !count || count>256 || !vertices || vertices>IdleGeometryVertices || weights>1)
+        if((schema!=1 && schema!=2) || words<2 || words>512 || !count || count>256 || !vertices || vertices>IdleGeometryVertices || weights>1)
             throw std::runtime_error("input-bounds");
+        const auto layout=schema==2?input.take<uint32_t>():0;
+        if(layout>1 || (layout==1 && !weights))throw std::runtime_error("input-layout");
         const auto clip=input.take<Matrix44>();
         for(float v:clip.m)if(!std::isfinite(v))throw std::runtime_error("nonfinite-reference");
         std::array<uint32_t,512> program{};for(unsigned i=0;i<words;++i)program[i]=input.take<uint32_t>();
@@ -61,7 +63,8 @@ int main(int argc,char **argv) {
         double maximum=0;
         for(unsigned i=0;i<vertices;++i) {
             std::array<float,4> actual{};const auto &v=source[i];
-            if(!scope_position::position(std::span(program).first(words),std::span(constants).first(count),v.p,v.uv,weights!=0,actual))
+            if(!scope_position::position(std::span(program).first(words),std::span(constants).first(count),v.p,v.uv,weights!=0,actual,
+                                        GeometryInputLayout(layout)))
                 return result(false,"unknown-position-dependency",i);
             for(unsigned row=0;row<4;++row) {
                 const double expected=double(clip.m[row*4])*v.p.x+double(clip.m[row*4+1])*v.p.y+

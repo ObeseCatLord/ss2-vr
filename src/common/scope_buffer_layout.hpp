@@ -1,6 +1,7 @@
 #pragma once
 #include "scope_pose.hpp"
 #include "scope_geometry.hpp"
+#include <algorithm>
 
 namespace ss2vr {
 // Values copied from the actual bound inputs of one DIP. Object identities are
@@ -19,6 +20,13 @@ struct ScopeDeclarationElement {
     uint8_t type = 0, method = 0, usage = 0, usageIndex = 0;
     bool operator==(const ScopeDeclarationElement &) const = default;
 };
+enum class GeometryInputLayout : uint32_t { Legacy56, Observed78 };
+inline bool observed78Declaration(std::span<const ScopeDeclarationElement> declaration) {
+    constexpr std::array<ScopeDeclarationElement,6> observed{{
+        {0,0,2,0,5,0},{2,0,1,0,5,2},{3,0,1,0,5,3},
+        {7,0,8,0,5,7},{8,0,8,0,5,8},{255,0,17,0,0,0}}};
+    return declaration.size()==observed.size() && std::equal(observed.begin(),observed.end(),declaration.begin());
+}
 struct ScopeIndexedDraw {
     uint32_t topology = 0;
     int32_t base = 0;
@@ -48,9 +56,14 @@ inline bool scopeByteRange(uint32_t offset, uint32_t size, uint32_t capacity) {
     return size && uint64_t(offset) + size <= capacity;
 }
 // Shared declaration grammar only; ID-specific range/content admission stays separate.
-inline bool declaredGeometryInputs(std::span<const ScopeDeclarationElement> declaration,bool &weights) {
+inline bool declaredGeometryInputs(std::span<const ScopeDeclarationElement> declaration,bool &weights,
+                                  GeometryInputLayout layout=GeometryInputLayout::Legacy56) {
     weights=false;
     if(declaration.empty() || declaration.size()>65)return false;
+    if(layout!=GeometryInputLayout::Legacy56 && layout!=GeometryInputLayout::Observed78)return false;
+    if(layout==GeometryInputLayout::Observed78 && !observed78Declaration(declaration))return false;
+    const unsigned localStream=layout==GeometryInputLayout::Observed78?7:5;
+    const unsigned weightStream=layout==GeometryInputLayout::Observed78?8:6;
     bool position = false, local = false, uv = false, ended = false;
     std::array<bool,4> entries{};
     for (size_t i = 0; i < declaration.size(); ++i) {
@@ -65,25 +78,36 @@ inline bool declaredGeometryInputs(std::span<const ScopeDeclarationElement> decl
         if (e.stream > 15) return false;
         // A duplicate relevant semantic would make the shader's actual input
         // ambiguous, even when the expected stream itself has the right type.
-        if (e.usage == 5 && (e.usageIndex == 0 || e.usageIndex == 3 || e.usageIndex == 5 || e.usageIndex == 6) &&
+        if (e.usage == 5 && (e.usageIndex == 0 || e.usageIndex == 3 || e.usageIndex == localStream || e.usageIndex == weightStream) &&
             e.stream != e.usageIndex) return false;
-        if (e.stream != 0 && e.stream != 3 && e.stream != 5 && e.stream != 6) continue;
-        bool &entry = entries[e.stream == 0 ? 0 : e.stream == 5 ? 1 : e.stream == 6 ? 2 : 3];
+        if (e.stream != 0 && e.stream != 3 && e.stream != localStream && e.stream != weightStream) continue;
+        bool &entry = entries[e.stream == 0 ? 0 : e.stream == localStream ? 1 : e.stream == weightStream ? 2 : 3];
         if (entry) return false;
         entry = true;
         // Unused entries are permitted for absent stream 6 only. They do not
         // establish an active weight input; duplicate relevant entries decline.
-        bool &seen = e.stream == 0 ? position : e.stream == 5 ? local : e.stream == 6 ? weights : uv;
+        bool &seen = e.stream == 0 ? position : e.stream == localStream ? local : e.stream == weightStream ? weights : uv;
         if (e.type == 17) {
-            if (e.stream != 6) return false;
+            if (e.stream != weightStream) return false;
             continue;
         }
         if (seen || e.offset || e.method || e.usage != 5 || e.usageIndex != e.stream ||
             e.type != (e.stream == 0 ? 2 : e.stream == 3 ? 1 : 8)) return false;
         seen = true;
     }
-    if (!ended || !position || !local || !uv) return false;
+    if (!ended || !position || !local || !uv || (layout==GeometryInputLayout::Observed78 && !weights)) return false;
     return true;
+}
+// ID1 alone may select the actually witnessed 7-local/8-weight family. Mixed
+// or aliased families decline; Scope13 never calls this selector.
+inline bool idleGeometryInputs(std::span<const ScopeDeclarationElement> declaration,
+                               GeometryInputLayout &layout,bool &weights) {
+    layout=GeometryInputLayout::Legacy56;weights=false;
+    const bool mentions78=std::any_of(declaration.begin(),declaration.end(),[](const auto &e) {
+        return e.stream==7 || e.stream==8 || (e.usage==5 && (e.usageIndex==7 || e.usageIndex==8));
+    });
+    if(mentions78)layout=GeometryInputLayout::Observed78;
+    return declaredGeometryInputs(declaration,weights,layout);
 }
 // Metadata admission only. Actual context, COM ownership, unlock completion
 // and five content hashes are separate mandatory gates at the live boundary.

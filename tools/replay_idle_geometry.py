@@ -8,7 +8,7 @@ from pathlib import Path
 import struct
 import subprocess
 import tempfile
-from assess_idle_weapon import assess
+from assess_idle_weapon import assess, declaration_layout
 from match_idle_geometry import match,CHANNELS
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -40,7 +40,10 @@ def evaluate_geometry(g,channels,evaluator,temporary):
     program=[w for i in range(0,g['words'],32) for w in d['program:'+str(i)]]
     constants=[w for i in range(g['constants']) for w in d['constant:'+str(i)]]
     data=bytearray(b'SS2VIRP1')
-    data+=struct.pack('<5I',1,len(program),g['constants'],vertices,int(bool(d['streams:0'][8])))
+    layout,weights=declaration_layout([d['declaration:'+str(i)] for i in range(g['declaration'])])
+    if weights!=bool(d['streams:0'][8]):raise ValueError('Replay input family/binding mismatch')
+    data+=struct.pack('<5I',2 if layout else 1,len(program),g['constants'],vertices,int(weights))
+    if layout:data+=struct.pack('<I',layout)
     data+=struct.pack('<16I',*d['clip:0'])+struct.pack('<'+str(len(program))+'I',*program)
     data+=struct.pack('<'+str(len(constants))+'I',*constants)
     for i in range(vertices):

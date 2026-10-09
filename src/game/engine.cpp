@@ -4062,8 +4062,8 @@ static void emitIdleWeaponTrace(const IdleWeaponTrace &trace) {
     }
     if(trace.rejection==IdleWeaponTrace::Rejection::CollectInputs && trace.inputFailure.step) {
         const auto &d=trace.inputFailure;const auto &v=d.inputs;
-        log("Lab idle inputFailure request=%llu eye=%u hand=%u step=%u index=%u hr=%d valid=%u caps=%u declaration=%u rangeChecks=%u",
-            b.request,b.eye,b.hand,d.step,d.index,d.hresult,d.valid,d.caps,d.declarationCount,d.rangeChecks);
+        log("Lab idle inputFailure request=%llu eye=%u hand=%u step=%u index=%u hr=%d valid=%u caps=%u declaration=%u rangeChecks=%u layout=%u",
+            b.request,b.eye,b.hand,d.step,d.index,d.hresult,d.valid,d.caps,d.declarationCount,d.rangeChecks,unsigned(d.layout));
         if(d.valid&2)for(unsigned i=0;i<d.declarationCount;++i) {
             const auto &e=d.declaration[i];
             log("Lab idle inputDeclaration request=%llu eye=%u hand=%u index=%u values=%u,%u,%u,%u,%u,%u",

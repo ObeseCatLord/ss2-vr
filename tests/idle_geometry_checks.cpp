@@ -23,6 +23,20 @@ int main() {
      assert(diagnostic==((1u<<19)-1) && ranges.slices[0].size==0);}
     assert(idleBufferRanges(hand,decl,ranges));assert(ranges.slices[0].size==3804);
     assert(ranges.slices[1].size==2028 && ranges.slices[4].offset==15216);
+    {std::array<ScopeDeclarationElement,6> observed{{{0,0,2,0,5,0},{2,0,1,0,5,2},{3,0,1,0,5,3},
+        {7,0,8,0,5,7},{8,0,8,0,5,8},{255,0,17,0,0,0}}};
+     bool weights=false;GeometryInputLayout layout;
+     assert(!declaredGeometryInputs(observed,weights)); // Scope13's default remains legacy.
+     assert(idleGeometryInputs(observed,layout,weights) && layout==GeometryInputLayout::Observed78 && weights);
+     assert(idleBufferRanges(hand,observed,ranges) && ranges.weightsActive);
+     auto reversed=hand;std::swap(reversed.localIndices.offset,reversed.weights.offset);
+     assert(!idleBufferRanges(reversed,observed,ranges));
+     for(unsigned i=0;i<6;++i){auto bad=observed;bad[i].usageIndex++;
+        assert(!idleGeometryInputs(bad,layout,weights));}
+     auto bad=observed;bad[4].type=17;assert(!idleBufferRanges(hand,bad,ranges));
+     std::array<ScopeDeclarationElement,8> mixed{};
+     std::copy_n(observed.begin(),5,mixed.begin());mixed[5]=decl[1];mixed[6]=decl[2];mixed[7]=observed[5];
+     assert(!idleGeometryInputs(mixed,layout,weights));}
     for(unsigned variant=0;variant<18;++variant) {
         auto bad=hand;
         switch(variant) {
