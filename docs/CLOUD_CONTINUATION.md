@@ -1,5 +1,24 @@
 # Latest exact noUV passive source checkpoint
 
+## Auto Shotgun collection source path implemented
+
+Native ID2 now uses the existing isolated neutral grant/equip/save preparation,
+with exact AutoShotgun/base-idle readiness and separate save/receipt identity.
+Sniper-only zoom/attachment diagnostics stay ID13-only. Collector storage grows
+while ID1/13 admission limits remain unchanged. Both exact stock ID2 mesh
+variants pass selected-field/content extraction with rigid palette indices0/1/2.
+ID2 pose replay explicitly remains unsupported before any single-body fallback;
+production alignment is still ID1/13-only. See IDLE_AUTOSG_COLLECTION.md.
+
+Astra/xhigh scoped native and consumer source GO; local tags verified, backend
+unattested.79Debug/79Release and20compiled normal/-O gates pass; actual-object
+argument/receiver/stack/save/target mutations reject. Matching products use
+source fingerprintdfb44d3c52cb357dd081efa8bea2dab264fba396539b62b7c080aa3e66f198d8,
+IPC10/wire7. No ID2 runtime or firing/vehicle/network/headset probe occurred.
+Loaded/render association and actual multi-index pose arithmetic remain the next
+ID2 gate; physical driver controls and full user/device/MP acceptance remain open.
+
+
 ## Native diagnostic capture succeeds — both-eye reference retained
 
 The fresh private run completed collection with seven qualifying Black draws

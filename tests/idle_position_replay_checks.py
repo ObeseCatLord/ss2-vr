@@ -34,7 +34,8 @@ class Checks(unittest.TestCase):
         result=json.loads(self.run_fixture(data).stdout)
         self.assertTrue(result['position_replay_agrees_with_reference'])
         self.assertFalse(result['gpu_execution']);self.assertFalse(result['alignment_accepted'])
-        self.assertNotEqual(self.run_fixture(fixture(points=[(1.,2.,3.,.25,.75)]*2905)).returncode,0)
+        self.assertEqual(self.run_fixture(fixture(points=[(1.,2.,3.,.25,.75)]*3017)).returncode,0)
+        self.assertNotEqual(self.run_fixture(fixture(points=[(1.,2.,3.,.25,.75)]*3018)).returncode,0)
         self.assertNotEqual(self.run_fixture(data+b'x'*(131073-len(data))).returncode,0)
 
     def test_staged_local_reference_preserves_old_schemas(self):

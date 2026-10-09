@@ -217,6 +217,8 @@ static LabSelect labSelectSniper=nullptr;
 static void(__cdecl *labSaveSniper)(const char *)=nullptr;
 static uintptr_t labBrainGetter=0,labPuppetGetter=0;
 static bool labSniperConfigured=false;
+static const LabPreparationTarget *labPreparation=nullptr;
+static uintptr_t labAutoShotgunVtable=0;
 using LabSniperStage=LabPreparationStage;
 static struct : LabPreparationProgress {
     uint64_t deadline=0;
@@ -3538,7 +3540,7 @@ static Pose *shooting(void *w, Pose *out, PoseGet original, const Snapshot *snap
         const auto context = nested ? MuzzleContext{} : muzzleContext(w, s, snapshot != nullptr);
         if(nested && activeAttachmentObservation)activeAttachmentObservation->nested=true;
         const bool observeAttachment=snapshot && context.accepted && !nested && context.hand==1 &&
-            labSniperConfigured && labOnlineIsolationInstalled() &&
+            labSniperConfigured && labPreparation->sniperZoom && labOnlineIsolationInstalled() &&
             primaryField(w,0xb4)==13 && primaryField(w,0xb0)==1 && !primaryField(w,0xd4) &&
             !s.fire[0] && !s.fire[1] && s.input.trigger[0]==0 && s.input.trigger[1]==0 &&
             !s.input.zoomDownMask;
@@ -3700,7 +3702,7 @@ static Pose *shooting(void *w, Pose *out, PoseGet original, const Snapshot *snap
                 // getter is added and the existing clamp/output is unchanged.
                 static std::atomic<bool> muzzleWitnessReported{false};
                 if(snapshot && context.hand==1 && c.alignmentApplied && c.alignment.nativeId==13 &&
-                   labSniperConfigured && labOnlineIsolationInstalled() &&
+                   labSniperConfigured && labPreparation->sniperZoom && labOnlineIsolationInstalled() &&
                    primaryField(w,0xb0)==1 && !primaryField(w,0xd4) &&
                    !s.fire[0] && !s.fire[1] && s.input.trigger[0]==0 && s.input.trigger[1]==0 &&
                    !s.input.zoomDownMask && !muzzleWitnessReported.exchange(true,std::memory_order_relaxed)) {
@@ -4927,7 +4929,7 @@ static int __fastcall weaponAbs(void *w, void *, const Matrix34 &view, Matrix34 
         calibration[h] = {calibrated && finite(flatPose), s.handle[h], relative,
                           GetTickCount64(), calibrated ? rotate(relative.q, flatCharge) : Vec3{},
                           alignment,alignmentAfter,align};
-        if(labSniperConfigured && eyeIndex>=0 && eyeIndex<2 && labCalibrationSerial!=UINT64_MAX) {
+        if(labSniperConfigured && labPreparation->sniperZoom && eyeIndex>=0 && eyeIndex<2 && labCalibrationSerial!=UINT64_MAX) {
             auto &c=calibration[h];c.labSerial=++labCalibrationSerial;
             c.labRequest=eyeRequest.sequence;c.labInput=eyeRequest.input.sequence;c.labEye=eyeIndex;
             c.labNativeModel=flatModel;
@@ -6108,7 +6110,7 @@ static __attribute__((noinline)) void runPostSimulationSniper(SimulationInterval
     withNativeFinally([&] {
         auto fail=[&](const char *why) {
             labSniper.stage=LabSniperStage::Failed;
-            log("Lab sniper preparation failed reason=%s",why);
+            log("%s preparation failed reason=%s",labPreparation->receiptPrefix,why);
         };
         if(!labOnlineIsolationInstalled()) {fail("isolation");return;}
         validateLabOnlineIsolation(true);
@@ -6143,7 +6145,7 @@ static __attribute__((noinline)) void runPostSimulationSniper(SimulationInterval
             // action. Wait for the existing presentation transaction to retire.
             // Later pre-action/currentOwner phase failures still latch failure.
             if(presentationBusy)return;
-            log("Lab sniper phase failure check=%s stage=%u",phaseFailure,unsigned(labSniper.stage));
+            log("%s phase failure check=%s stage=%u",labPreparation->receiptPrefix,phaseFailure,unsigned(labSniper.stage));
             fail("simulation-phase");return;
         }
         const auto s=copySnapshot();
@@ -6208,32 +6210,38 @@ static __attribute__((noinline)) void runPostSimulationSniper(SimulationInterval
             if(!phaseCurrent()) {fail("grant-phase");return;}
             labSniper.stage=LabSniperStage::Granted;labSniper.issuedTick=simulationRevision;
             labGiveAll(game);
-            log("Lab sniper preparation issued stage=grant owner=%u",labSniper.player);
+            log("%s preparation issued stage=grant owner=%u",labPreparation->receiptPrefix,labSniper.player);
             return;
         }
         if(labSniper.stage==LabSniperStage::Granted) {
-            const bool inventory=inInventory(static_cast<uint8_t *>(s.player)+0x8f8,13)!=0;
+            const bool inventory=inInventory(static_cast<uint8_t *>(s.player)+0x8f8,labPreparation->nativeId)!=0;
             if(!currentOwner()) {fail("inventory-owner");return;}
-            if(!inventory) {fail("native-grant-excluded-sniper");return;}
+            if(!inventory) {fail(labPreparation->sniperZoom?"native-grant-excluded-sniper":"native-grant-excluded-autosg");return;}
             const bool change=canChange(s.player,1)!=0;
             if(!currentOwner()) {fail("selection-owner");return;}
             if(!change)return;
             if(!phaseCurrent()) {fail("selection-phase");return;}
             labSniper.stage=LabSniperStage::Selected;labSniper.issuedTick=simulationRevision;
-            labSelectSniper(s.player,13,1,0,0);
+            labSelectSniper(s.player,labPreparation->nativeId,1,0,0);
             // Selection may delete old weapon bindings. Reacquire next tick.
-            log("Lab sniper preparation issued stage=select owner=%u",labSniper.player);
+            log("%s preparation issued stage=select owner=%u",labPreparation->receiptPrefix,labSniper.player);
             return;
         }
         if(labSniper.stage==LabSniperStage::Selected || labSniper.stage==LabSniperStage::SaveIssued) {
             const uint32_t handle=nativeHandle(s.player,1);
             void *weapon=handle?resolve(handle):nullptr;
             if(!weapon || handle==nativeHandle(s.player,0) || primaryField(weapon,0x28)!=s.playerHandle ||
-               primaryField(weapon,0xb4)!=13 || primaryField(weapon,0xb0)!=1 ||
-               !nativeSniper(weapon) || primaryField(weapon,0xd4))return;
-            const bool zooming=nativeZoomFlag(weapon)!=0;
-            if(!currentOwner() || resolve(handle)!=weapon || nativeHandle(s.player,1)!=handle) {fail("sniper-owner");return;}
-            if(zooming)return;
+               primaryField(weapon,0xb4)!=uint32_t(labPreparation->nativeId) || primaryField(weapon,0xb0)!=1)return;
+            if(labPreparation->sniperZoom) {
+                if(!nativeSniper(weapon) || primaryField(weapon,0xd4))return;
+                const bool zooming=nativeZoomFlag(weapon)!=0;
+                if(!currentOwner() || resolve(handle)!=weapon || nativeHandle(s.player,1)!=handle) {fail("sniper-owner");return;}
+                if(zooming)return;
+            } else {
+                // AutoSG inherits base idle state; +d4 is not a sniper zoom field.
+                if(primaryField(weapon,0)!=labAutoShotgunVtable)return;
+                if(!currentOwner() || resolve(handle)!=weapon || nativeHandle(s.player,1)!=handle) {fail("autosg-owner");return;}
+            }
         }
         if(labSniper.stage==LabSniperStage::Selected) {
             char preload[1100]{};
@@ -6243,15 +6251,15 @@ static __attribute__((noinline)) void runPostSimulationSniper(SimulationInterval
             char directory[768]{},expected[1024]{};
             const DWORD cwd=GetCurrentDirectoryA(sizeof(directory),directory);
             if(!cwd || cwd>=sizeof(directory)) {fail("save-directory");return;}
-            std::snprintf(expected,sizeof(expected),"%s\\Temp\\SS2VR\\sniper-id13.sav",directory);
+            std::snprintf(expected,sizeof(expected),"%s\\Temp\\SS2VR\\%s",directory,labPreparation->saveBasename);
             if(_stricmp(expected,labSniper.savePath)) {fail("save-directory-owner");return;}
             if(!phaseCurrent()) {fail("save-phase");return;}
             labSniper.stage=LabSniperStage::SaveIssued;labSniper.issuedTick=simulationRevision;
             // Core's resource writer prefixes its engine root. An ordinary
             // absolute Windows path would receive that root a second time.
-            labSaveSniper("Temp/SS2VR/sniper-id13.sav");
+            labSaveSniper(labPreparation->resourcePath);
             // Save can temporarily switch worlds. Borrow nothing across it.
-            log("Lab sniper preparation issued stage=save owner=%u",labSniper.player);
+            log("%s preparation issued stage=save owner=%u",labPreparation->receiptPrefix,labSniper.player);
             return;
         }
         if(labSniper.stage==LabSniperStage::SaveIssued) {
@@ -6260,7 +6268,7 @@ static __attribute__((noinline)) void runPostSimulationSniper(SimulationInterval
                 fail("native-save-missing");return;
             }
             labSniper.stage=LabSniperStage::Complete;
-            log("Lab sniper preparation complete owner=%u nativeId=13 path=%s",labSniper.player,labSniper.savePath);
+            log("%s preparation complete owner=%u nativeId=%d path=%s",labPreparation->receiptPrefix,labSniper.player,labPreparation->nativeId,labSniper.savePath);
         }
     },[&](bool aborted) noexcept {
         const bool healthy=nativeInputHealthy();
@@ -6344,9 +6352,18 @@ bool attach(bool headless) {
     roomscaleConfigured=false;
     meleeConfigured=false;
     labSniperConfigured=false;
-    wchar_t prepareSniper[2]{};
-    if(GetEnvironmentVariableW(L"SS2VR_LAB_PREPARE_SNIPER",prepareSniper,2)==1 && prepareSniper[0]==L'1') {
-        if(headless || !labOnlineIsolationInstalled() || selectedIdleProbeWeapon()!=13)return false;
+    labPreparation=nullptr;labAutoShotgunVtable=0;
+    wchar_t prepareSniper[3]{},prepareIdle[3]{};
+    const DWORD legacyLength=GetEnvironmentVariableW(L"SS2VR_LAB_PREPARE_SNIPER",prepareSniper,3);
+    const DWORD idleLength=GetEnvironmentVariableW(L"SS2VR_LAB_PREPARE_IDLE",prepareIdle,3);
+    if(legacyLength>=3 || idleLength>=3)return false;
+    const int preparationId=labPreparationSelection(std::wstring_view(prepareSniper,legacyLength),
+        std::wstring_view(prepareIdle,idleLength),selectedIdleProbeWeapon());
+    if(preparationId<0)return false;
+    if(preparationId) {
+        if(headless || !labOnlineIsolationInstalled())return false;
+        labPreparation=labPreparationTarget(preparationId);
+        if(!labPreparation)return false;
         char directory[768]{},executable[1024]{};
         const DWORD cwd=GetCurrentDirectoryA(sizeof(directory),directory);
         const DWORD exe=GetModuleFileNameA(nullptr,executable,sizeof(executable));
@@ -6354,12 +6371,13 @@ bool attach(bool headless) {
         char *tail=std::strrchr(executable,'\\');if(!tail)return false;*tail=0;
         tail=std::strrchr(executable,'\\');if(!tail)return false;*tail=0;
         if(_stricmp(directory,executable))return false; // Launcher owns lab cwd, not user's game.
-        std::snprintf(labSniper.savePath,sizeof(labSniper.savePath),"%s\\Temp\\SS2VR\\sniper-id13.sav",directory);
+        std::snprintf(labSniper.savePath,sizeof(labSniper.savePath),"%s\\Temp\\SS2VR\\%s",directory,labPreparation->saveBasename);
         labGiveAll=reinterpret_cast<VoidThis>(reinterpret_cast<uintptr_t>(g)+0xd5b70);
         labSelectSniper=reinterpret_cast<LabSelect>(reinterpret_cast<uintptr_t>(g)+0x102340);
         labSaveSniper=reinterpret_cast<decltype(labSaveSniper)>(reinterpret_cast<uintptr_t>(g)+0x22f00);
         labBrainGetter=reinterpret_cast<uintptr_t>(g)+0xd41b0;
         labPuppetGetter=reinterpret_cast<uintptr_t>(g)+0xd41e0;
+        labAutoShotgunVtable=reinterpret_cast<uintptr_t>(g)+0x2ccc78;
         labSniperConfigured=true;
     }
     roomscaleEngineBase=reinterpret_cast<uintptr_t>(e);
@@ -6553,7 +6571,7 @@ bool attach(bool headless) {
     }
 #define H(module, name, fn, orig)                                                                            \
     ok = hook(module, name, reinterpret_cast<void *>(fn), reinterpret_cast<void **>(&orig)) && ok
-    if(!headless && labSniperConfigured)
+    if(!headless && labSniperConfigured && labPreparation->sniperZoom)
         H(e,"?mdlGetAttachmentAbsolutePlacement@SeriousEngine@@YAHPAVCModelInstance@1@VIDENT@1@AAVMatrix34f@1@@Z",
           observedAttachment,originalObservedAttachment);
     if (headless) {

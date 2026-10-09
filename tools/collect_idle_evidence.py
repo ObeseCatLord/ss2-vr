@@ -40,7 +40,7 @@ def collect(log, candidates, private_root, output, expected_source, native_id, e
     output = output.absolute()
     if output.exists() or output.is_symlink() or not output.parent.resolve(strict=True).is_relative_to(private_root):
         raise ValueError('Choose a fresh output directory in the private root')
-    if native_id not in (1, 13):
+    if native_id not in (1, 2, 13):
         raise ValueError('Unsupported native weapon selector')
     log_bytes = snapshot(log)
     index_bytes = snapshot(candidates)
@@ -102,7 +102,7 @@ if __name__ == '__main__':
     for name in ('log', 'candidates', 'private-root', 'output', 'evaluator'):
         parser.add_argument('--' + name, type=Path, required=True)
     parser.add_argument('--expected-source', required=True)
-    parser.add_argument('--native-id', type=int, choices=(1, 13), required=True)
+    parser.add_argument('--native-id', type=int, choices=(1, 2, 13), required=True)
     parser.add_argument('--evaluator-sha256', required=True)
     args = parser.parse_args()
     summary = collect(args.log, args.candidates, args.private_root, args.output,

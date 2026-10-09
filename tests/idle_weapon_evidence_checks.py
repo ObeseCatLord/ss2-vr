@@ -29,6 +29,56 @@ def geometry_fixture():
     return text,row,header,data
 
 class Checks(unittest.TestCase):
+    def test_id2_content_match_does_not_run_single_body_pose_fallback(self):
+        import struct
+        from pathlib import Path
+        from unittest.mock import patch
+        from replay_idle_geometry import replay_draws
+        text,_,_,_=geometry_fixture()
+        evidence=assess(text.replace('schema=3','schema=4 copyLayout=1 nativeId=2'),SOURCE)
+        observations=evidence['copied_event_pose_observations']
+        hashes={name:struct.pack('<8I',*([i+1]*8)).hex() for i,name in enumerate(
+            ('positions','indices','weights','local_indices','uv'))}
+        channel={'mesh_object':2,'lod':0,'vertices':317,'triangles':338,
+            'whole_vertex_buffer_bytes':17752,'whole_index_buffer_bytes':2028,
+            'single_body_influence':False,'rigid_palette_id2':True,'channel_sha256':hashes,
+            'channel_ranges':{name:{'offset':off,'size':size,'format':fmt,'buffer':0} for name,off,size,fmt in (
+                ('positions',0,3804,133),('indices',0,2028,135),('weights',12680,1268,128),
+                ('local_indices',13948,1268,128),('uv',15216,2536,132))}}
+        candidates={'autosg':{'asset_sha256':'b'*64,'candidate_native_id':2,'candidate_channels':[channel]}}
+        matched=match(evidence,candidates)['matches']
+        self.assertEqual(matched[0]['result'],'unique-consumed-channel-match')
+        with patch('replay_idle_geometry.channel_bytes',return_value={}), \
+             patch('replay_idle_geometry.evaluate_geometry',side_effect=AssertionError('Unsupported replay executed')), \
+             patch('replay_idle_geometry.native_reference',side_effect=AssertionError('Wrong reference fallback')), \
+             patch('replay_idle_geometry.uploaded_transform_reference',side_effect=AssertionError('Wrong uploaded fallback')):
+            results=replay_draws(matched,observations,candidates,Path('/unused'),Path('/unused'),Path('/unused'))
+        self.assertFalse(results[0]['position_replay']['position_replay_agrees_with_reference'])
+        self.assertEqual(results[0]['reference_kind'],'autosg-palette-arithmetic-unsupported')
+        self.assertNotIn('render_geometry',results[0])
+        candidates['autosg']['candidate_native_id']=13
+        self.assertEqual(match(evidence,candidates)['matches'][0]['result'],'unmatched')
+        candidates['autosg']['candidate_native_id']=2;channel['single_body_influence']=True
+        self.assertEqual(match(evidence,candidates)['matches'][0]['result'],'unmatched')
+
+    def test_id2_exact_geometry_capacity_and_truncation(self):
+        import copy
+        text,_,_,_=geometry_fixture()
+        large=copy.deepcopy(assess(text,SOURCE)['copied_event_pose_observations'][0]['geometry'][0])
+        d=large['data'];d['layout:0']=[3017,2673,0,133,0,0,135,0,36204,128,0,48272,128,0]
+        d['buffers:0']=[84476,0,1,100,0,16038,0,1,101,0]
+        d['draw:0']=[4,0,0,3017,0,2673]
+        d['streams:0']=[1,0,12,1,1,48272,4,1,1,36204,4,1,1,60340,8,1,2,0]
+        validate_geometry({0:large},1,native_id=2)
+        for id in (1,13):
+            with self.assertRaises(ValueError):validate_geometry({0:large},1,native_id=id)
+        for field,value in ((0,3018),(1,2674)):
+            bad=copy.deepcopy(large);bad['data']['layout:0'][field]=value
+            with self.assertRaises(ValueError):validate_geometry({0:bad},1,native_id=2)
+        for buffer in (0,5):
+            bad=copy.deepcopy(large);bad['data']['buffers:0'][buffer]-=1
+            with self.assertRaises(ValueError):validate_geometry({0:bad},1,native_id=2)
+
     def test_selected_geometry_capacity(self):
         import copy
         text,_,_,_=geometry_fixture()
@@ -39,7 +89,7 @@ class Checks(unittest.TestCase):
         d['draw:0']=[4,0,0,2904,0,2245]
         d['streams:0']=[1,0,12,1,1,46464,4,1,1,34848,4,1,1,58080,8,1,2,0]
         validate_geometry({0:large},1,native_id=13)
-        for id in (1,0,2,14):
+        for id in (1,0,3,14):
             with self.assertRaises(ValueError):validate_geometry({0:large},1,native_id=id)
         for field,value in ((0,2905),(1,2246)):
             bad=copy.deepcopy(large);bad['data']['layout:0'][field]=value
@@ -82,7 +132,8 @@ class Checks(unittest.TestCase):
         result=assess(sniper,SOURCE)
         self.assertEqual(result['copied_event_pose_observations'][0]['nativeId'],13)
         self.assertTrue(result['copied_event_pose_observations'][0]['native_id_explicit'])
-        for bad in (sniper.replace('nativeId=13','nativeId=2'),sniper.replace('nativeId=13','nativeId=-1'),
+        self.assertEqual(assess(sniper.replace('nativeId=13','nativeId=2'),SOURCE)['copied_event_pose_observations'][0]['nativeId'],2)
+        for bad in (sniper.replace('nativeId=13','nativeId=3'),sniper.replace('nativeId=13','nativeId=-1'),
                     VALID.replace('schema=3','schema=3 nativeId=13')):
             with self.assertRaises(ValueError):assess(bad,SOURCE)
 

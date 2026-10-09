@@ -43,8 +43,8 @@ def verify_opt_in_source(remote,engine,policy):
             'returnselected;' in selector,'Changed bounded shared opt-in selector')
     pure=compact(body(policy,'inline int idleProbeWeaponId('))
     supported=compact(body(policy,'inline bool idleProbeWeaponSupported('))
-    require(pure=='returnvalue==L"1"?1:value==L"13"?13:-1;' and
-            supported=='returnid==1||id==13;','Opt-in selector admits unsupported IDs')
+    require(pure=='returnvalue==L"1"?1:value==L"2"?2:value==L"13"?13:-1;' and
+            supported=='returnid==1||id==2||id==13;','Opt-in selector admits unsupported IDs')
 
 def verify(game,obj):
     path=game/'Bin/Engine.dll'

@@ -27,7 +27,10 @@ def match_draws(observations,candidates,retained=False):
             for name,asset in candidates.items():
                 if not re.fullmatch('[a-f0-9]{64}',asset['asset_sha256']):raise ValueError('Missing candidate asset fingerprint')
                 for channel_index,c in enumerate(asset['candidate_channels']):
-                    if c.get('single_body_influence') is not True:continue
+                    if observation.get('nativeId',1)==2:
+                        if asset.get('candidate_native_id')!=2 or c.get('rigid_palette_id2') is not True or \
+                           c.get('single_body_influence') is not False:continue
+                    elif c.get('single_body_influence') is not True:continue
                     if c['vertices']==layout[0] and c['triangles']==layout[1] and \
                        c['whole_vertex_buffer_bytes']==buffers[0] and c['whole_index_buffer_bytes']==buffers[5] and \
                        c['channel_ranges']==ranges and c['channel_sha256']==hashes:

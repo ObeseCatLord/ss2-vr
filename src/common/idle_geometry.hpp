@@ -3,11 +3,12 @@
 #include "idle_probe_selection.hpp"
 namespace ss2vr {
 constexpr uint32_t IdleGeometryVertices=1490,IdleGeometryTriangles=1332;
-constexpr uint32_t IdleGeometryStorageVertices=2904,IdleGeometryStorageTriangles=2245;
+constexpr uint32_t IdleGeometryStorageVertices=3017,IdleGeometryStorageTriangles=2673;
 struct IdleGeometryLimits {uint32_t vertices=0,triangles=0;};
 inline IdleGeometryLimits idleGeometryLimits(int nativeId) {
     return nativeId==1?IdleGeometryLimits{IdleGeometryVertices,IdleGeometryTriangles}:
-        nativeId==13?IdleGeometryLimits{IdleGeometryStorageVertices,IdleGeometryStorageTriangles}:IdleGeometryLimits{};
+        nativeId==2?IdleGeometryLimits{3017,2673}:
+        nativeId==13?IdleGeometryLimits{2904,2245}:IdleGeometryLimits{};
 }
 // Selected stock diagnostic domains, not a claim about every native LOD.
 inline bool idleBufferRanges(const ScopeBufferInputs &in,

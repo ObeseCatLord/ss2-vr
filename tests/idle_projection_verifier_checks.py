@@ -26,7 +26,7 @@ class Checks(unittest.TestCase):
             (remote,engine.replace('n<3?idleProbeWeaponId','n<4?idleProbeWeaponId'),policy),
             (remote,engine.replace('SS2VR_LAB_IDLE_WEAPON','SS2VR_UNGUARDED'),policy),
             (remote,engine,policy.replace('13:-1','13:1')),
-            (remote,engine,policy.replace('id==1 || id==13','id==1 || id==13 || id==2'))]
+            (remote,engine,policy.replace('id==1 || id==2 || id==13','id==1 || id==2 || id==13 || id==3'))]
         for args in controls:
             with self.subTest(control=args!= (remote,engine,policy)),self.assertRaises(ValueError):
                 verify_opt_in_source(*args)

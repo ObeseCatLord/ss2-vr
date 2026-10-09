@@ -172,6 +172,27 @@ class Checks(unittest.TestCase):
             surface(bad)['18'] = value
             self.rejected(bad)
 
+    def test_id2_rigid_palette_requires_explicit_selector(self):
+        bad=copy.deepcopy(self.decoded);surf=surface(bad);surf['18']=[4,5,6]
+        off=surf['11']['3'];bad['objects']['2']['data']['2'][off:off+12]=[0,0,0,0,1,0,0,0,2,0,0,0]
+        raw=json.dumps(bad).encode()
+        with self.assertRaises(ValueError):builder.index_asset(b'decoy asset',raw,'fixture')
+        row,_=builder.index_asset(b'decoy asset',raw,'fixture',2)
+        channel,=row['candidate_channels']
+        self.assertEqual(row['candidate_native_id'],2)
+        self.assertFalse(channel['single_body_influence']);self.assertTrue(channel['rigid_palette_id2'])
+        for offset,value in ((0,3),(1,1),(4,3),(11,1)):
+            invalid=copy.deepcopy(bad);invalid['objects']['2']['data']['2'][off+offset]=value
+            with self.assertRaises(ValueError):builder.index_asset(b'decoy asset',json.dumps(invalid).encode(),'fixture',2)
+
+    def test_unused_null_buffer_slot_preserves_indices_and_cannot_be_consumed(self):
+        metadata=copy.deepcopy(self.decoded)
+        for field in ('12','13'):metadata['objects']['1']['data'][field].append({'1':{'ref':-1}})
+        row,_=builder.index_asset(b'decoy asset',json.dumps(metadata).encode(),'fixture',2)
+        self.assertEqual(len(row['candidate_channels']),1)
+        for field in ('6','7','10','11'):
+            bad=copy.deepcopy(metadata);surface(bad)[field]['2']=1
+            with self.assertRaises(ValueError):builder.index_asset(b'decoy asset',json.dumps(bad).encode(),'fixture',2)
     def test_typed_bytes_and_metadata_budgets(self):
         for value in (-1, 256, True, 1.0, '0'):
             bad = copy.deepcopy(self.decoded)

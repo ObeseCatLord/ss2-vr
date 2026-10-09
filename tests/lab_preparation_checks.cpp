@@ -6,6 +6,22 @@
 #endif
 using namespace ss2vr;
 int main() {
+    assert(labPreparationSelection(L"",L"",1)==0);
+    assert(labPreparationSelection(L"1",L"",13)==13);
+    for(int id:{2,13}) {
+        const auto *target=labPreparationTarget(id);
+        assert(target && target->nativeId==id && target->sniperZoom==(id==13));
+        const auto selector=id==2?L"2":L"13";
+        assert(labPreparationSelection(L"",selector,id)==id);
+        assert(labPreparationSelection(L"1",selector,id)==-1);
+        assert(labPreparationSelection(L"",selector,1)==-1);
+    }
+    for(int id:{-1,0,1,3,12,14})assert(!labPreparationTarget(id));
+    assert(labPreparationSelection(L"1",L"",2)==-1);
+    for(auto invalid:{L"1",L"02",L"13 ",L"*",L"2,13"})
+        assert(labPreparationSelection(L"",invalid,2)==-1);
+    for(auto invalid:{L"0",L"2",L"01",L"1 "})
+        assert(labPreparationSelection(invalid,L"",13)==-1);
     for(bool nativeAbort : {false,true}) {
         LabPreparationProgress preparation;
         unsigned grant=0,select=0;

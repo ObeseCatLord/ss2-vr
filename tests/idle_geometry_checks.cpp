@@ -17,7 +17,7 @@ int main() {
       assert(!idleBufferRanges(sniper,decl,ranges));
       assert(idleBufferRanges(sniper,decl,ranges,&checks,13));
       assert(checks==((1u<<20)-1) && ranges.slices[0].size==34848 && ranges.slices[1].size==13470);
-      for(int id:{-1,0,2,12,14,17})assert(!idleBufferRanges(sniper,decl,ranges,nullptr,id));
+      for(int id:{-1,0,3,12,14,17})assert(!idleBufferRanges(sniper,decl,ranges,nullptr,id));
       auto overflow=sniper;overflow.surface.vertices=2905;overflow.draw.vertices=2905;
       assert(!idleBufferRanges(overflow,decl,ranges,&checks,13) && !(checks&1));
       overflow=sniper;overflow.surface.triangles=2246;overflow.draw.primitives=2246;
@@ -27,6 +27,23 @@ int main() {
         if(channel==1)shortBuffer.index.size=13469;
         else shortBuffer.vertex.size=channel==0?34847:channel==2?46463:channel==3?58079:81311;
         assert(!idleBufferRanges(shortBuffer,decl,ranges,nullptr,13));
+      }
+      ScopeBufferInputs autosg{
+        {3017,2673,{{{0,0x85,0},{0,0x87,0},{36204,0x80,0},{48272,0x80,0}}}},
+        {4,0,0,3017,0,2673},{1,0,12,1},{1,48272,4,1},{1,36204,4,1},{1,60340,8,1},
+        {84476,0,1,100,0},{16038,0,1,101,0},2,false};
+      assert(idleBufferRanges(autosg,decl,ranges,&checks,2) && checks==((1u<<20)-1));
+      assert(ranges.slices[0].size==36204 && ranges.slices[1].size==16038);
+      for(int id:{1,13})assert(!idleBufferRanges(autosg,decl,ranges,nullptr,id));
+      auto excess=autosg;excess.surface.vertices++;excess.draw.vertices++;
+      assert(!idleBufferRanges(excess,decl,ranges,&checks,2) && !(checks&1));
+      excess=autosg;excess.surface.triangles++;excess.draw.primitives++;
+      assert(!idleBufferRanges(excess,decl,ranges,&checks,2) && !(checks&2));
+      for(unsigned channel=0;channel<5;++channel) {
+        auto shortBuffer=autosg;
+        if(channel==1)shortBuffer.index.size=16037;
+        else shortBuffer.vertex.size=channel==0?36203:channel==2?48271:channel==3?60339:84475;
+        assert(!idleBufferRanges(shortBuffer,decl,ranges,nullptr,2));
       }
     }
 

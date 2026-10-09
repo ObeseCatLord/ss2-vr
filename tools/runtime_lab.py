@@ -493,19 +493,35 @@ def idle_probe_weapon(cfg):
         if 'idle_native_id' in cfg:raise ValueError('Idle weapon ID requires enabled neutral collection')
         return None
     selected=cfg.get('idle_native_id',1)
-    if type(selected) is not int or selected not in (1,13):
-        raise ValueError('Idle collection supports only exact native IDs1 and13')
+    if type(selected) is not int or selected not in (1,2,13):
+        raise ValueError('Idle collection supports only exact native IDs1,2 and13')
     return selected
+
+def preparation_weapon(cfg):
+    legacy=cfg.get('prepare_sniper_fixture',False)
+    idle=cfg.get('prepare_idle_fixture',False)
+    if type(legacy) is not bool or type(idle) is not bool:
+        raise ValueError('Fixture preparation must be an explicit boolean')
+    if legacy and idle:raise ValueError('Conflicting preparation opt-ins')
+    selected=idle_probe_weapon(cfg)
+    if legacy and selected!=13:raise ValueError('Sniper preparation requires the exact neutral ID13 collector')
+    if idle and selected not in (2,13):raise ValueError('Idle preparation requires exact neutral ID2 or ID13')
+    return selected if legacy or idle else None
+
+PREPARATION_TARGETS={2:('autosg-id2.sav','Lab autosg','idle_fixture_preparation'),
+                     13:('sniper-id13.sav','Lab sniper','sniper_preparation')}
+
+def preparation_target(native_id):
+    if type(native_id) is not int or native_id not in PREPARATION_TARGETS:
+        raise ValueError('Unsupported preparation target')
+    return PREPARATION_TARGETS[native_id]
 
 def validate_idle_probe(cfg):
     alternate=cfg.get('idle_alternate_world_eyes',False)
     if type(alternate) is not bool:raise ValueError('Idle eye order must be an explicit boolean')
     if alternate and idle_probe_weapon(cfg)!=13:
         raise ValueError('Alternate world eyes requires the exact neutral ID13 collector')
-    preparation=cfg.get('prepare_sniper_fixture',False)
-    if type(preparation) is not bool:raise ValueError('Sniper preparation must be an explicit boolean')
-    if preparation and idle_probe_weapon(cfg)!=13:
-        raise ValueError('Sniper preparation requires the exact neutral ID13 collector')
+    preparation_weapon(cfg)
     if idle_probe_weapon(cfg) is None:return
     if cfg.get('renderer_mode','vr')!='vr' or not isinstance(cfg.get('expected_product_source'),str) or \
        not re.fullmatch('[a-f0-9]{64}',cfg['expected_product_source']):
@@ -576,35 +592,43 @@ def validate_idle_preparation(cfg,private,lab,prefix):
     if set(record.get('source_tools',{}))!=set(IDLE_TOOLS):raise ValueError('Idle tool inventory differs')
     for name,expected in record['source_tools'].items():checked_file(ROOT/'tools'/name,expected)
 
-def validate_sniper_destination(lab):
+def validate_fixture_destination(lab,native_id):
+    basename,_,_=preparation_target(native_id)
     destination=lab/'Temp/SS2VR'
     if destination.is_symlink() or not destination.is_dir() or not destination.resolve(strict=True).is_relative_to(lab.resolve()):
-        raise ValueError('Sniper preparation requires its owned private save directory')
+        raise ValueError('Fixture preparation requires its owned private save directory')
     if any((destination/name).exists() or (destination/name).is_symlink() for name in
-           ('sniper-id13.sav','sniper-id13.sav.preload')):
-        raise ValueError('Sniper preparation cannot overwrite an existing fixture')
+           (basename,basename+'.preload')):
+        raise ValueError('Fixture preparation cannot overwrite an existing fixture')
 
-def sniper_preparation_receipt(log,lab):
-    if 'Lab sniper preparation failed' in log:
-        raise ValueError('Native sniper preparation rejected its fixture')
-    events=list(re.finditer(r'Lab sniper preparation (?:issued stage=(grant|select|save) owner=(\d+)|complete owner=(\d+) nativeId=13 path=([^\r\n]+))',log))
+def fixture_preparation_receipt(log,lab,native_id):
+    basename,prefix,_=preparation_target(native_id)
+    if prefix+' preparation failed' in log:
+        raise ValueError('Native fixture preparation rejected its fixture')
+    events=list(re.finditer(re.escape(prefix)+r' preparation (?:issued stage=(grant|select|save) owner=(\d+)|complete owner=(\d+) nativeId='+str(native_id)+r' path=([^\r\n]+))',log))
     stages=[m[1] or 'complete' for m in events]
     owners=[int(m[2] or m[3]) for m in events]
     if stages!=['grant','select','save','complete'] or len(set(owners))!=1 or not 0<owners[0]<=0xffffffff:
-        raise ValueError('Native sniper preparation lacks one coherent completion sequence')
-    expected='Z:'+str(lab.resolve()).replace('/','\\')+'\\Temp\\SS2VR\\sniper-id13.sav'
+        raise ValueError('Native fixture preparation lacks one coherent completion sequence')
+    expected='Z:'+str(lab.resolve()).replace('/','\\')+'\\Temp\\SS2VR\\'+basename
     if events[-1][4].casefold()!=expected.casefold():
         raise ValueError('Native save destination differs from the owned lab')
     files={}
-    for name in ('sniper-id13.sav','sniper-id13.sav.preload'):
+    for name in (basename,basename+'.preload'):
         path=lab/'Temp/SS2VR'/name
         if name.endswith('.preload') and not path.exists() and not path.is_symlink():continue
         if path.is_symlink() or not path.is_file() or not path.resolve(strict=True).is_relative_to(lab.resolve()):
-            raise ValueError('Native sniper save is missing or redirected')
-        if not 0<path.stat().st_size<=32*1024*1024:raise ValueError('Native sniper save exceeds its evidence budget')
+            raise ValueError('Native fixture save is missing or redirected')
+        if not 0<path.stat().st_size<=32*1024*1024:raise ValueError('Native fixture save exceeds its evidence budget')
         files[str(path.relative_to(lab))]={'bytes':path.stat().st_size,'sha256':digest(path)}
-    return {'schema':1,'native_id':13,'owner':owners[0],'native_stages':stages,'files':files,
+    return {'schema':1,'native_id':native_id,'owner':owners[0],'native_stages':stages,'files':files,
             'private_cheated_fixture':True,'save_reload_verified':False,'alignment_accepted':False}
+
+def validate_sniper_destination(lab):
+    return validate_fixture_destination(lab,13)
+
+def sniper_preparation_receipt(log,lab):
+    return fixture_preparation_receipt(log,lab,13)
 
 def same_owned_native_game(expected_pid,state,owned):
     # Observer/IPC identifiers are Windows PIDs. /proc ownership is a separate
@@ -645,9 +669,9 @@ def validate(cfg):
     for name, expected in receipt['files'].items(): checked_file(lab/name,expected)
     startup=cfg['startup']
     expected_arguments=['+mod','SeriousSam2','+sam_bBootSequence','0','+sam_bSkipMovies','1','+level',cfg['scene']['entry']]
-    if cfg.get('prepare_sniper_fixture'):
+    if preparation_weapon(cfg) is not None:
         expected_arguments[6:6]=['+sam_iEnableCheats','1']
-        validate_sniper_destination(lab)
+        validate_fixture_destination(lab,preparation_weapon(cfg))
     zero_mouse_arguments=expected_arguments[:6]+['+inp_fMouseSensitivity','0']+expected_arguments[6:]
     if startup['arguments'] not in (expected_arguments,zero_mouse_arguments):
         raise ValueError('Only the verified stock local +level startup is admitted')
@@ -1011,8 +1035,10 @@ def run(cfg):
     if selected_idle_weapon is not None:env['SS2VR_LAB_IDLE_WEAPON']=str(selected_idle_weapon)
     env.pop('SS2VR_LAB_ALTERNATE_EYES',None)
     if cfg.get('idle_alternate_world_eyes'):env['SS2VR_LAB_ALTERNATE_EYES']='1'
+    env.pop('SS2VR_LAB_PREPARE_IDLE',None)
     env.pop('SS2VR_LAB_PREPARE_SNIPER',None)
     if cfg.get('prepare_sniper_fixture'):env['SS2VR_LAB_PREPARE_SNIPER']='1'
+    elif cfg.get('prepare_idle_fixture'):env['SS2VR_LAB_PREPARE_IDLE']=str(preparation_weapon(cfg))
     env.pop('SS2VR_LAB_GRIP_RESOURCES',None)
     if cfg.get('grip_resource_probe'):env['SS2VR_LAB_GRIP_RESOURCES']='1'
     if stock:env['SS2VR_LAB_STOCK_RENDER']='1'
@@ -1283,22 +1309,24 @@ def run(cfg):
             manifest['result']='stock_image_captured_camera_unverified'
             manifest['camera_comparison_acceptance']=False
             return run_dir
-        if cfg.get('prepare_sniper_fixture'):
+        preparation_id=preparation_weapon(cfg)
+        if preparation_id is not None:
+            _,preparation_prefix,preparation_key=preparation_target(preparation_id)
             preparation_native_pid=state['game_pid']
             preparation_deadline=min(deadline,time.monotonic()+35)
             while True:
                 native_path=lab/'Bin/SS2VR.log'
                 if native_path.stat().st_size>16*1024*1024:raise ValueError('Preparation log exceeds its evidence budget')
                 native=native_path.read_text(errors='strict')
-                if 'Lab sniper preparation failed' in native:raise RuntimeError('Native private sniper preparation failed; preserve logs')
-                if 'Lab sniper preparation complete' in native:
-                    manifest['sniper_preparation']=sniper_preparation_receipt(native,lab)
+                if preparation_prefix+' preparation failed' in native:raise RuntimeError('Native private fixture preparation failed; preserve logs')
+                if preparation_prefix+' preparation complete' in native:
+                    manifest[preparation_key]=fixture_preparation_receipt(native,lab,preparation_id)
                     state=observer(cfg,env,'status',token,timeout=remaining(deadline),deadline=deadline)
                     if not same_owned_native_game(preparation_native_pid,state,owned_game):
-                        raise RuntimeError('Prepared sniper process changed')
-                    if state.get('current_weapon',[None,None])[1]==13:break
-                if time.monotonic()>=preparation_deadline:raise TimeoutError('Native private sniper preparation did not complete')
-                if not still_owned(owned_game):raise RuntimeError('Owned game exited during private sniper preparation')
+                        raise RuntimeError('Prepared fixture process changed')
+                    if state.get('current_weapon',[None,None])[1]==preparation_id:break
+                if time.monotonic()>=preparation_deadline:raise TimeoutError('Native private fixture preparation did not complete')
+                if not still_owned(owned_game):raise RuntimeError('Owned game exited during private fixture preparation')
                 time.sleep(.1)
         baseline=cfg['expected_baseline_head'];baseline_packet=cfg['baseline_head']
         for step in cfg['pose_steps']:

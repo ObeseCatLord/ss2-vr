@@ -53,7 +53,7 @@ def declaration_weights(rows):
     return declaration_layout(rows)[1]
 
 def validate_geometry(geometry,count,copy_layout=0,native_id=1):
-    limits={1:(1490,1332),13:(2904,2245)}
+    limits={1:(1490,1332),2:(3017,2673),13:(2904,2245)}
     if native_id not in limits:raise ValueError('Unsupported geometry native selector')
     max_vertices,max_triangles=limits[native_id]
     if set(geometry)!=set(range(count)):raise ValueError('Missing geometry headers')
@@ -106,7 +106,7 @@ def assess(text,expected_source):
             if 'copyLayout' in f and current['copyLayout']!=1:raise ValueError('Unknown copy ordinal layout')
             current['native_id_explicit']='nativeId' in f
             current.setdefault('nativeId',1) # Historical collector admitted only ID1.
-            if current['nativeId'] not in (1,13) or (current['nativeId']==13 and current['schema']!=4):
+            if current['nativeId'] not in (1,2,13) or (current['nativeId']!=1 and current['schema']!=4):
                 raise ValueError('Unsupported idle native weapon selection')
             if producer_native_id is not None and producer_native_id!=current['nativeId']:
                 raise ValueError('Mixed native weapon selectors')

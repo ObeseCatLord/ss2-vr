@@ -28,7 +28,7 @@ def channel_bytes(root,asset,row):
     channels={}
     for name in CHANNELS:
         r=row['channel_ranges'][name];size=r['size']
-        if not 0<size<=2904*12:raise ValueError('Candidate channel byte budget exceeded')
+        if not 0<size<=3017*12:raise ValueError('Candidate channel byte budget exceeded')
         path=private_path(root,row['channel_files'][name])
         if path.stat().st_size!=size:raise ValueError('Private channel length mismatch')
         data=path.read_bytes()
@@ -80,6 +80,14 @@ def replay_draws(rows,observations,candidates,candidate_root,evaluator,temporary
         g=geometry.get(str(row['geometry_index']),geometry.get(row['geometry_index']))
         result['binding']={k:o[k] for k in ('request','input','owner','weapon','model','generation','eye','hand')}
         result['binding']['nativeId']=o.get('nativeId',1)
+        if o.get('nativeId',1)==2:
+            # Content/range hashes are usable; consumed bone-index arithmetic is
+            # not yet supported. Never borrow the single-body reference fallback.
+            result['reference_kind']='autosg-palette-arithmetic-unsupported'
+            result['position_replay']={'schema':1,'position_replay_agrees_with_reference':False,
+                'reason':'ID2 consumed-index/palette transform evidence is not implemented',
+                'vertex':0,'gpu_execution':False,'positive_grasp_verified':False,'alignment_accepted':False}
+            results.append(result);continue
         result['position_replay']=evaluate_geometry(g,channels,evaluator,temporary)
         result['reference_kind']='legacy-collapsed-matrix'
         try:

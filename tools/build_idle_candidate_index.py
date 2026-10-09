@@ -18,7 +18,7 @@ import struct
 ROOT = Path(__file__).resolve().parents[1]
 MAX_BYTES = 16 * 1024 * 1024
 MAX_OBJECTS, MAX_ASSETS, MAX_SURFACES = 4096, 16, 512
-MAX_VERTICES, MAX_TRIANGLES = 2904, 2245  # Generic offline storage envelope; native admission remains per ID.
+MAX_VERTICES, MAX_TRIANGLES = 3017, 2673  # Generic offline storage envelope; native admission remains per ID.
 CHANNELS = ('positions', 'indices', 'weights', 'local_indices', 'uv')
 FORMATS = dict(zip(CHANNELS, (133, 135, 128, 128, 132)))
 STRIDES = dict(zip(CHANNELS, (12, 6, 4, 4, 8)))
@@ -87,7 +87,9 @@ def descriptor(value, label):
     return {'format': fmt, 'buffer': buffer, 'offset': offset}
 
 
-def index_asset(asset_bytes, metadata_bytes, prefix):
+def index_asset(asset_bytes, metadata_bytes, prefix, native_id=1):
+    if type(native_id) is not int or native_id not in (1,2,13):
+        raise ValueError('Unsupported candidate native selector')
     decoded = mapping(json.loads(metadata_bytes, object_pairs_hook=no_duplicates,
                                  parse_constant=reject_constant), 'decoded metadata')
     objects = mapping(decoded['objects'], 'objects')
@@ -109,7 +111,10 @@ def index_asset(asset_bytes, metadata_bytes, prefix):
         table = []
         for entry in sequence(value, 64, 'mesh buffer table'):
             ref = integer(mapping(mapping(entry, 'buffer entry')['1'], 'buffer reference')['ref'],
-                          0xffffffff, 'buffer reference')
+                          0xffffffff, 'buffer reference',-1)
+            if ref==-1:
+                table.append(None) # Serialized null slot; no channel may consume it.
+                continue
             key = str(ref)
             if key not in objects or objects[key]['type'] != 'GFXHANDLE':
                 raise ValueError('Buffer reference does not identify a decoded GFXHANDLE')
@@ -165,14 +170,21 @@ def index_asset(asset_bytes, metadata_bytes, prefix):
                         count = triangles if name == 'indices' else vertices
                         size, offset = count * STRIDES[name], d['offset']
                         raw = table[d['buffer']]
+                        if raw is None:raise ValueError('Candidate channel selects a null buffer slot')
                         if offset > len(raw) or size > len(raw) - offset:
                             raise ValueError('Candidate channel exceeds decoded buffer range')
                         channels[name] = raw[offset:offset + size]
                         ranges[name] = {'offset': offset, 'size': size,
                                         'format': d['format'], 'buffer': d['buffer']}
-                    if ('weights' in channels and channels['weights'] != bytes((255, 0, 0, 0)) * vertices) or \
-                            ('local_indices' in channels and channels['local_indices'] != bytes(vertices * 4)):
-                        raise ValueError('Candidate is not exact single first-local-palette influence')
+                    if 'weights' in channels and channels['weights'] != bytes((255, 0, 0, 0)) * vertices:
+                        raise ValueError('Candidate is not exact rigid palette influence')
+                    if 'local_indices' in channels:
+                        if native_id==2:
+                            indices=list(struct.iter_unpack('<4B',channels['local_indices']))
+                            if any(i[0]>2 or any(i[1:]) or i[0]>=len(palette) for i in indices):
+                                raise ValueError('Unsupported ID2 local palette influence')
+                        elif channels['local_indices'] != bytes(vertices * 4):
+                            raise ValueError('Candidate is not exact single first-local-palette influence')
                     xyz = list(struct.iter_unpack('<3f', channels.get('positions', b'')))
                     uv_values = struct.iter_unpack('<2f', channels.get('uv', b''))
                     if any(not math.isfinite(v) for p in xyz for v in p) or \
@@ -210,10 +222,11 @@ def index_asset(asset_bytes, metadata_bytes, prefix):
                                  'index_offset': declarations['indices']['offset'],
                                  'palette_file_local_idents': palette,
                                  'channel_ranges': ranges, 'channel_sha256': channel_hashes,
-                                 'channel_files': channel_files, 'single_body_influence': True,
+                                 'channel_files': channel_files, 'single_body_influence': native_id!=2,
+                                 'rigid_palette_id2': native_id==2,
                                  'bounds': [[min(p[c] for p in xyz), max(p[c] for p in xyz)]
                                             for c in range(3)]})
-    return {'asset_sha256': hashlib.sha256(asset_bytes).hexdigest(),
+    return {'candidate_native_id':native_id,'asset_sha256': hashlib.sha256(asset_bytes).hexdigest(),
             'metadata_sha256': hashlib.sha256(metadata_bytes).hexdigest(),
             'candidate_channels': rows, 'unsupported_candidates': unsupported,
             'live_association': False, 'effective_pose': False, 'grasp_reference': False,
@@ -221,7 +234,7 @@ def index_asset(asset_bytes, metadata_bytes, prefix):
             'positive_grasp_verified': False, 'alignment_accepted': False}, files
 
 
-def build_index(inputs, output):
+def build_index(inputs, output, native_id=1):
     output = Path(output)
     if output.exists() or output.is_symlink():
         raise ValueError('Refuse existing candidate index output')
@@ -241,7 +254,7 @@ def build_index(inputs, output):
             raise ValueError('Duplicate candidate asset input')
         # Ordinal disambiguates equal basenames in separate private directories.
         slug = re.sub(r'[^A-Za-z0-9._-]', '_', asset.name)[:96]
-        row, exported = index_asset(read_bounded(asset), read_bounded(metadata), f'asset{ordinal}.{slug}')
+        row, exported = index_asset(read_bounded(asset), read_bounded(metadata), f'asset{ordinal}.{slug}',native_id)
         if sum(map(len, files.values())) + sum(map(len, exported.values())) > MAX_BYTES:
             raise ValueError('Candidate output byte budget exceeded')
         result[name] = row
@@ -299,9 +312,10 @@ def main():
                         metavar=('ASSET', 'DECODED_JSON'))
     parser.add_argument('--output', type=Path, required=True,
                         help='Fresh index JSON; parent is the existing private candidate root')
+    parser.add_argument('--native-id',type=int,choices=(1,2,13),default=1)
     args = parser.parse_args()
     try:
-        result = build_index(args.asset, args.output)
+        result = build_index(args.asset, args.output,args.native_id)
         print(json.dumps({'assets': len(result), 'candidates': sum(len(r['candidate_channels']) for r in result.values()),
                           'live_association': False, 'positive_grasp_verified': False, 'alignment_accepted': False}))
     except (ValueError, KeyError, TypeError, OSError, struct.error, RecursionError, RuntimeError) as error:

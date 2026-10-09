@@ -10,6 +10,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 from assess_runtime import (complete_pairs_for_pose,first_person_depth_probe,dual_topologies,
     DualPhaseEvidence,require_dual_capture,dual_weapon_events,successful_dual_fire)
 from runtime_lab import (native_grip_resource_receipts,validate_idle_probe,validate_idle_preparation,idle_probe_weapon,validate_sniper_destination,sniper_preparation_receipt,same_owned_native_game,
+                         preparation_weapon,validate_fixture_destination,fixture_preparation_receipt,
                          idle_configuration_digest,IDLE_FIXED_FILES,IDLE_TOOLS)
 
 HEAD={'p':[0,0,0],'q':[0,0,0,1]}
@@ -44,11 +45,11 @@ class IdleProbeSelectionChecks(unittest.TestCase):
              'pose_steps':[{'name':'baseline','head':[0,1.6,0,0,0,0]}]}
         self.assertEqual(idle_probe_weapon(cfg),1)
         self.assertIsNone(idle_probe_weapon({}))
-        for selected in (1,13):
+        for selected in (1,2,13):
             with self.subTest(selected=selected):
                 validate_idle_probe({**cfg,'idle_native_id':selected})
                 self.assertEqual(idle_probe_weapon({**cfg,'idle_native_id':selected}),selected)
-        for selected in (True,False,0,2,14,13.0,'13',None):
+        for selected in (True,False,0,3,14,13.0,'13',None):
             with self.subTest(selected=selected),self.assertRaises(ValueError):
                 validate_idle_probe({**cfg,'idle_native_id':selected})
         for enabled in (False,None):
@@ -76,6 +77,39 @@ class IdleProbeSelectionChecks(unittest.TestCase):
                        {'native_dual_probe':'zap-initial-inventory'},
                        {'pose_steps':[{'name':'turn','head':[0,1.6,0,1,0,0]}]}):
             with self.subTest(change=change),self.assertRaises(ValueError):validate_idle_probe({**cfg,**change})
+
+    def test_generic_preparation_selector_and_legacy_conflict(self):
+        cfg={'idle_weapon_probe':True,'idle_native_id':2,'prepare_idle_fixture':True,
+             'expected_product_source':'a'*64,'baseline_head':[0,1.6,0,0,0,0],
+             'pose_steps':[{'name':'baseline','head':[0,1.6,0,0,0,0]}]}
+        for id in (2,13):
+            selected={**cfg,'idle_native_id':id}
+            validate_idle_probe(selected);self.assertEqual(preparation_weapon(selected),id)
+        for change in ({'idle_native_id':1},{'idle_weapon_probe':False},{'prepare_idle_fixture':1},
+                       {'prepare_idle_fixture':None},{'prepare_sniper_fixture':True},
+                       {'native_dual_probe':'zap-initial-inventory'}):
+            with self.subTest(change=change),self.assertRaises(ValueError):validate_idle_probe({**cfg,**change})
+
+    def test_autosg_receipt_cannot_borrow_sniper_target_or_owner(self):
+        with tempfile.TemporaryDirectory() as d:
+            lab=Path(d)/'game';destination=lab/'Temp/SS2VR';destination.mkdir(parents=True)
+            validate_fixture_destination(lab,2)
+            path=destination/'autosg-id2.sav';path.write_bytes(b'private synthetic save')
+            with self.assertRaises(ValueError):validate_fixture_destination(lab,2)
+            validate_sniper_destination(lab) # Different target; never overwrite either.
+            win='Z:'+str(lab).replace('/','\\')+'\\Temp\\SS2VR\\autosg-id2.sav'
+            log=''.join('Lab autosg preparation issued stage='+stage+' owner=12\n' for stage in ('grant','select','save'))
+            log+='Lab autosg preparation complete owner=12 nativeId=2 path='+win+'\n'
+            report=fixture_preparation_receipt(log,lab,2)
+            self.assertEqual(report['native_id'],2)
+            self.assertFalse(report['alignment_accepted']);self.assertFalse(report['save_reload_verified'])
+            for bad in (log.replace('nativeId=2','nativeId=13'),log.replace('autosg-id2.sav','sniper-id13.sav'),
+                        log.replace('stage=select owner=12','stage=select owner=13'),log+log,
+                        log+'Lab autosg preparation failed reason=owner\n'):
+                with self.subTest(log=bad),self.assertRaises(ValueError):fixture_preparation_receipt(bad,lab,2)
+            with self.assertRaises(ValueError):sniper_preparation_receipt(log,lab)
+            path.unlink();path.symlink_to(destination/'missing')
+            with self.assertRaises(ValueError):fixture_preparation_receipt(log,lab,2)
 
     def test_sniper_save_destination_collision_and_redirection(self):
         with tempfile.TemporaryDirectory() as d:

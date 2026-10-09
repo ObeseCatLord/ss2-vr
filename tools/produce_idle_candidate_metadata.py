@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Produce selected idle mesh metadata from two exact, owned BMF asset pins.
+"""Produce selected idle mesh metadata from exact, owned BMF asset pins.
 
 This is a selected-field reader, not a general BMF decoder. No native loaded
 resource, rendered instance, historical run, grasp or alignment is certified.
@@ -25,7 +25,7 @@ def encode(value):
 def load_policy():
     policy = json.loads(POLICY.read_bytes(), object_pairs_hook=no_duplicates,
                         parse_constant=reject_constant)
-    if policy['schema'] != 1 or len(policy['layouts']) != 2:
+    if policy['schema'] != 1 or len(policy['layouts']) != 4:
         raise ValueError('Invalid bundled metadata policy')
     return policy['layouts']
 
@@ -193,7 +193,7 @@ def produce(raw, layouts=None):
         if body[1] - body[0] != count * 4:
             raise ValueError('Wrong selected reference array extent')
         refs = reader.unpack('<' + 'i' * count, body[0], span) if count else ()
-        if any(ref not in buffer_ids for ref in refs):
+        if any(ref!=-1 and ref not in buffer_ids for ref in refs):
             raise ValueError('Selected reference does not identify an admitted GFXHANDLE')
         return [{'1': {'ref': ref}} for ref in refs]
 
@@ -219,7 +219,7 @@ def produce(raw, layouts=None):
 
     data = objects[str(mesh['object'])]['data']
     data['12'], data['13'] = references(mesh['index_references']), references(mesh['vertex_references'])
-    if {r['1']['ref'] for r in data['12'] + data['13']} != buffer_ids:
+    if {r['1']['ref'] for r in data['12'] + data['13'] if r['1']['ref']!=-1} != buffer_ids:
         raise ValueError('Selected buffers differ from mesh reference union')
     data['5'] = []
     for lod in array_children(mesh, 'lods_span', 'lods', b'STAR', 16, mesh['span']):
@@ -262,7 +262,7 @@ def produce(raw, layouts=None):
     if len(encoded) > MAX_BYTES:
         raise ValueError('Selected metadata byte budget exceeded')
     # Reuse the delivered geometry validator, preserving its evidence flags.
-    index_asset(raw, encoded, 'selected')
+    index_asset(raw, encoded, 'selected',layout.get('native_id',1))
     return result
 
 
