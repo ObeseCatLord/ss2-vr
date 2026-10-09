@@ -141,6 +141,29 @@ def assess(text,expected_source):
             current['rejection']={'reason':reason,'preceding':preceding,'checks':integer(f['checks'],0,32767),
                                   'state':integer(f['state'],0,63),'callbacks':integer(f['callbacks'],0,63)}
             continue
+        if kind=='paletteOwnershipFailure':
+            names={'schema','source','request','input','generation','owner','weapon','model','eye','hand',
+                   'cfg','file','resource','instance','evaluated','linked','cacheOwner','count','evaluatedMatches','ownerMatches'}
+            if current is None or current['stage']!=3 or 'palette_ownership_failure' in current or set(f)!=names or \
+                    f['schema']!='1' or f['source']!=expected_source or current.get('rejection',{}).get('reason')!=6 or \
+                    current['rejection']['preceding']!=1 or current['rejection']['checks']!=111:
+                raise ValueError('Palette ownership failure without matching own-event rejection')
+            if any(integer(f[k])!=current[k] for k in ('request','input','generation','owner','weapon','model','eye','hand','cfg','file')) or \
+                    integer(f['resource'],-(1<<31),(1<<31)-1)!=current['resource']:
+                raise ValueError('Interleaved/foreign palette ownership evidence')
+            copied={k:integer(f[k],0,(1<<32)-1) for k in ('instance','evaluated','linked','cacheOwner')}
+            copied['count']=integer(f['count'],1,64)
+            for name in ('evaluatedMatches','ownerMatches'):copied[name]=integer(f[name],0,1)
+            if not copied['instance'] or not copied['evaluated'] or \
+                    copied['evaluatedMatches']!=int(copied['evaluated']==copied['linked']) or \
+                    copied['ownerMatches']!=int(copied['cacheOwner']==copied['instance']) or \
+                    (copied['evaluatedMatches'] and copied['ownerMatches']) or \
+                    current['draws'] or current['matrices'] or not 0<current['contributors']<=16 or \
+                    current['rejection']['state']&33!=33 or current['rejection']['state']&8 or \
+                    current['rejection']['callbacks']&0x23!=0x23:
+                raise ValueError('Unqualified palette ownership failure')
+            current['palette_ownership_failure']=copied
+            continue
         if kind=='animationNameFailure':
             if current is None or current['stage']!=3 or current.get('rejection',{}).get('reason')!=19 or \
                     current['rejection']['preceding']!=1 or 'animation_name_failure' in current or \

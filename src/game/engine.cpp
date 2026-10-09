@@ -4440,6 +4440,13 @@ static void emitIdleWeaponTrace(const IdleWeaponTrace &trace) {
             l.channels[2].offset,l.channels[2].format,l.channels[2].buffer,
             l.channels[3].offset,l.channels[3].format,l.channels[3].buffer);
     }
+    if(trace.rejection==IdleWeaponTrace::Rejection::Palette && trace.paletteOwnershipFailure.copied) {
+        const auto &p=trace.paletteOwnershipFailure;
+        log("Lab idle paletteOwnershipFailure schema=1 source=%.*s request=%llu input=%llu generation=%u owner=%u weapon=%u model=%u eye=%u hand=%u cfg=%u file=%u resource=%d instance=%u evaluated=%u linked=%u cacheOwner=%u count=%d evaluatedMatches=%u ownerMatches=%u",
+            64,ss2vrBuildContract.sourceFingerprint.data(),b.request,b.input,b.generation,b.owner,b.weapon,b.model,
+            b.eye,b.hand,trace.config.configuration,trace.config.file,trace.config.resource,
+            p.instance,p.evaluated,p.linked,p.owner,p.count,unsigned(p.evaluated==p.linked),unsigned(p.owner==p.instance));
+    }
     if(trace.rejection==IdleWeaponTrace::Rejection::QueryAnimationName && trace.animationNameFailure.copied) {
         const auto &n=trace.animationNameFailure;
         log("Lab idle animationNameFailure request=%llu eye=%u hand=%u index=%u expected=%08x header=%08x,%08x,%08x,%08x",

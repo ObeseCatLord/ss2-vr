@@ -1,5 +1,22 @@
 # Mod journal
 
+## 2026-10-09 — isolate native palette ownership failures
+
+Corrected capture accounting: V40/V41 each have14name and18palette rejections.
+Added a first ownership-only failure receipt using operands already read at the
+existing palette boundary. No native lookup/read/evaluation or qualification
+predicate changes; the32attempt quota stays intact. Strict consumer validates
+source/current identity, own-event callbacks, impossible pose state and both
+comparisons, retaining rejection-only status. Astra/xhigh native/parser source GO,
+79Debug/79Release and16compiled normal/-O gates pass. Private-display errors now
+retain their original collector reason without changing admission or cleanup.
+
+New bounded Fighter_Final asset inspection identifies two cockpit handgrips, no
+independent actuator/pivot or certified driver wheel. Main independently verified
+four owned resources. Physical steering remains unimplemented; no offsets or
+native physics changes are guessed. No vehicle/firing/headset probe occurred.
+
+
 ## 2026-10-09 — preserve admitted native sniper reach
 
 ID13 local/authority retargeting now retains the existing admitted vector instead

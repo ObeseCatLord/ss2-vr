@@ -183,6 +183,34 @@ int main() {
     {IdleWeaponTrace t;assert(t.admit(id));assert(t.event(id,cfg,true,1));t.reject();assert(!t.palette(id,cfg,true,1));}
     for(int count:{-1,0,65}) {IdleWeaponTrace t;copiedEvent(t);assert(!t.palette(id,cfg,true,count));}
     {IdleWeaponTrace t;copiedEvent(t);assert(t.palette(id,cfg,true,64));}
+    for(unsigned miss=1;miss<4;++miss) {
+        IdleWeaponTrace t;copiedEvent(t);
+        const uint32_t evaluated=100,linked=miss&1?101:100,owner=miss&2?201:200,instance=200;
+        t.notePaletteOwnershipFailure(id,cfg,evaluated,linked,owner,instance,1);
+        assert(t.paletteOwnershipFailure.copied);
+        assert(!t.palette(id,cfg,evaluated==linked && owner==instance,1));
+        assert(t.rejection==IdleWeaponTrace::Rejection::Palette && t.rejectionChecks==111);
+        assert(t.paletteOwnershipFailure.evaluated==100 && t.paletteOwnershipFailure.linked==linked &&
+               t.paletteOwnershipFailure.owner==owner && t.paletteOwnershipFailure.instance==200);
+        t.notePaletteOwnershipFailure(id,cfg,300,300,400,400,1);t.reject();
+        assert(t.paletteOwnershipFailure.evaluated==100 && !t.finish(true,true));
+    }
+    for(unsigned invalid=0;invalid<6;++invalid) {
+        IdleWeaponTrace t;copiedEvent(t);auto changed=id;auto changedConfig=cfg;
+        int count=1;uint32_t instance=200;
+        switch(invalid) {
+            case 0:changed.model++;break;
+            case 1:changedConfig.resource++;break;
+            case 2:count=0;break;
+            case 3:count=65;break;
+            case 4:instance=0;break;
+            case 5:t.reject();break;
+        }
+        t.notePaletteOwnershipFailure(changed,changedConfig,100,101,201,instance,count);
+        assert(!t.paletteOwnershipFailure.copied);
+    }
+    {IdleWeaponTrace t;copiedEvent(t);t.notePaletteOwnershipFailure(id,cfg,100,100,200,200,1);
+     assert(!t.paletteOwnershipFailure.copied && t.palette(id,cfg,true,1));}
     {IdleWeaponTrace t;copiedEvent(t);assert(!t.palette(id,cfg,false,1));}
     {auto changed=id;changed.model++;IdleWeaponTrace t;copiedEvent(t);assert(!t.palette(changed,cfg,true,1));}
     {auto changed=cfg;changed.resource++;IdleWeaponTrace t;copiedEvent(t);assert(!t.palette(id,changed,true,1));}

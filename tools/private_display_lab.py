@@ -196,7 +196,10 @@ def launch(cfg_path, cfg, display_only=False, prerequisite_only=False):
            (display_only and outcome.get('display_only') is not True) or \
            (prerequisite_only and outcome.get('prerequisite_only') is not True) or \
            (not display_only and not prerequisite_only and outcome.get('data_ready_for_review') is not True):
-            raise RuntimeError('Collector did not complete; preserve logs, do not repeat')
+            reason=outcome.get('error')
+            detail=(' '.join(reason.split())[:512] if isinstance(reason,str) and reason.strip() else
+                    'required completion/readiness receipt is missing')
+            raise RuntimeError('Collector did not complete: '+detail+'; preserve logs, do not repeat')
     except BaseException as error:
         report['error']=str(error)
         raise

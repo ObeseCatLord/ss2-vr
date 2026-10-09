@@ -49,6 +49,31 @@ class Checks(unittest.TestCase):
             with self.assertRaises(ValueError):validate_geometry({0:bad},1,native_id=13)
 
 
+    def test_palette_ownership_failure_is_diagnostic_only(self):
+        header=DRAW.replace('stage=4','stage=3').replace('matrices=1','matrices=0')
+        rejection='Lab idle rejection request=100 eye=1 hand=0 reason=6 preceding=1 checks=111 state=55 callbacks=55'
+        receipt=f'Lab idle paletteOwnershipFailure schema=1 source={SOURCE} request=100 input=90 generation=4 owner=1 weapon=2 model=3 eye=1 hand=0 cfg=20 file=30 resource=5 instance=200 evaluated=100 linked=101 cacheOwner=200 count=1 evaluatedMatches=0 ownerMatches=1'
+        text='\n'.join((header,rejection,receipt))
+        result=assess(text,SOURCE)
+        self.assertEqual(result['copied_event_pose_observations'],[])
+        failure=result['rejected_or_missing_observations'][0]['palette_ownership_failure']
+        self.assertEqual(failure['evaluated'],100)
+        self.assertFalse(result['alignment_accepted'])
+        for bad in (text+'\n'+receipt,text.replace('request=100 input=90 generation=4 owner=1 weapon=2 model=3 eye=1 hand=0 cfg=20 file=30 resource=5 instance=200',
+                    'request=101 input=90 generation=4 owner=1 weapon=2 model=3 eye=1 hand=0 cfg=20 file=30 resource=5 instance=200'),
+                    text.replace('cacheOwner=200','cacheOwner=201'),text.replace('linked=101','linked=100'),
+                    text.replace('count=1 evaluatedMatches','count=65 evaluatedMatches'),
+                    text.replace('reason=6','reason=19'),text.replace('checks=111','checks=127'),
+                    text.replace('source='+SOURCE+' request=100 input=90 generation=4 owner=1 weapon=2 model=3 eye=1 hand=0 cfg=20 file=30 resource=5 instance=200',
+                                 'source='+'b'*64+' request=100 input=90 generation=4 owner=1 weapon=2 model=3 eye=1 hand=0 cfg=20 file=30 resource=5 instance=200')):
+            with self.subTest(bad=bad),self.assertRaises(ValueError):assess(bad,SOURCE)
+        for flags in (0,55 & ~1,55 & ~2,55 & ~32):
+            with self.subTest(callbacks=flags),self.assertRaises(ValueError):assess(text.replace('callbacks=55','callbacks='+str(flags)),SOURCE)
+        with self.assertRaises(ValueError):assess(text.replace('state=55','state=63'),SOURCE)
+        for field in ('eye=1','hand=0','input=90','generation=4','cfg=20','file=30','resource=5'):
+            invalid=receipt.replace(field,field.split('=')[0]+'=99')
+            with self.subTest(field=field),self.assertRaises(ValueError):assess('\n'.join((header,rejection,invalid)),SOURCE)
+
     def test_native_weapon_selection_is_explicit(self):
         result=assess(VALID,SOURCE)
         self.assertEqual(result['copied_event_pose_observations'][0]['nativeId'],1)

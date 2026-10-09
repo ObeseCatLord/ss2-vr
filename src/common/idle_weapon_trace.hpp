@@ -208,6 +208,11 @@ struct IdleWeaponTrace {
         std::array<uint32_t,4> header{};
         bool copied=false;
     } animationNameFailure{};
+    struct PaletteOwnershipFailure {
+        uint32_t evaluated=0,linked=0,owner=0,instance=0;
+        int32_t count=0;
+        bool copied=false;
+    } paletteOwnershipFailure{};
     struct StreamSnapshot {
         enum Status : uint32_t { Missing, Copied, Failed, Interrupted };
         uint32_t status=Missing,step=0,index=0,caps=0,declarationCount=0;
@@ -311,6 +316,18 @@ struct IdleWeaponTrace {
             reject(Rejection::Event,checks({admitted,binding==identity,stage==Stage::Empty,callerQueueCurrent,count>0,count>0 && unsigned(count)<=MaxContributors}));return false;
         }
         config=resource;contributors=unsigned(count);stage=Stage::Event;return true;
+    }
+    // Values already read by the existing palette borrow. Record only the
+    // first ownership-only failure, after own-event/name/config admission. This
+    // receipt neither changes rejection nor makes a cache usable.
+    void notePaletteOwnershipFailure(const IdleDrawIdentity &identity,const IdleConfigIdentity &resource,
+                                     uint32_t evaluated,uint32_t linked,uint32_t owner,
+                                     uint32_t instance,int32_t count) noexcept {
+        if(paletteOwnershipFailure.copied || rejection!=Rejection::None || stage!=Stage::Event ||
+           binding!=identity || config!=resource || animationsCopied!=contributors ||
+           !instance || count<=0 || unsigned(count)>MaxMatrices ||
+           (evaluated==linked && owner==instance))return;
+        paletteOwnershipFailure={evaluated,linked,owner,instance,count,true};
     }
     bool palette(const IdleDrawIdentity &identity,const IdleConfigIdentity &resource,
                  bool evaluatedCurrent,int count) noexcept {

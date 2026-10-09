@@ -1,5 +1,24 @@
 # Implementation status — 2026-10-09
 
+## Palette ownership diagnosis — corrected capture accounting
+
+Astra inspected the actual retained V39/V40/V41 records. V40 and V41 each have
+14animation-name rejections and18palette rejections, rather than32name failures.
+V39 also contains that same failing name header, alongside ten qualifying draws.
+The existing native Idle lookup/ABI is supported by those successful observations;
+no name-offset, alternate IDENT or attachment-hook cause is established.
+
+All18palette rejections passed the name gate and failed the combined equality
+`evaluated == linked && cacheOwner == selectedInstance`. Existing logs do not say
+which equality failed. The32attempt quota is charged before qualification and
+stays unchanged. A value-only first-failure receipt now records operands already
+read at the existing palette boundary. It preserves every rejection/admission
+predicate, adds no native getter/read/evaluation and certifies no usable palette.
+Astra/xhigh native/parser source GO and79Debug/79Release checks plus16compiled
+normal/-O gates pass. A fresh neutral receipt remains pending. The last native
+sniper reach correction remains verified; full implementation remains open.
+
+
 ## Sniper reach correction confirmed in neutral native runtime
 
 A fresh isolated run reports an accepted ID13 `reachPreserved=1` witness with

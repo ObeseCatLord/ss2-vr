@@ -909,6 +909,8 @@ static void observeIdlePalette() {
     std::memcpy(&owner,reinterpret_cast<void*>(evaluated+0x18),4);
     std::memcpy(&matrices,reinterpret_cast<void*>(evaluated+0x20),4);
     std::memcpy(&count,reinterpret_cast<void*>(evaluated+0x24),4);
+    trace->notePaletteOwnershipFailure(identity,config,evaluated,linked,owner,
+                                      uint32_t(reinterpret_cast<uintptr_t>(binding.modelInstance)),count);
     if(!trace->palette(identity,config,evaluated==linked && owner==reinterpret_cast<uintptr_t>(binding.modelInstance),count))return;
     if(!readableMemory(reinterpret_cast<void*>(matrices),size_t(count)*sizeof(Matrix34))) {trace->reject(IdleWeaponTrace::Rejection::PaletteMatrices);return;}
     Vec3 stretch;std::memcpy(&stretch,binding.modelInstance,sizeof(Vec3));

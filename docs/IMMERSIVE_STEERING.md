@@ -229,3 +229,27 @@ channel in this set, nor an unopened external dependency within it. These static
 facts do not establish runtime selection, blending, missing-channel fallback or a
 live handle-to-seat frame. Independent handle actuation and native control mapping
 remain unproved. No vehicle or input probe ran; all curves/resources stay private.
+
+## Fighter_Final bounded cockpit inspection — 2026-10-09
+
+Astra/xhigh inspected the exact stock HoverFighter/Fighter_Final model and its
+three directly referencing operator-seat puppets. Main read the full report,
+independently verified all four member sizes/CRCs/hashes, and inspected the cockpit
+preview.130serialized objects, all three embedded mesh LODs,222,732buffer bytes,
+exact bounds and all31LOD0components passed the bounded checks.
+
+Two mirrored L-shaped cockpit handgrips sit ahead of the authored Seat. Each has
+25vertices/30triangles and uses the sole Main skin palette, with no independent
+handle bone or morph. The Seat attachment contributes no model geometry. Embedded
+Loading changes the authored Main/Seat relationship under local replacement
+interpretation; a fixed bind-pose handle-to-seat frame is not established for
+runtime. These are geometry-positive handles, not a certified steering wheel or
+actuator axis.23referenced resources remain unopened; none is a missing intact
+mesh/skeleton/animation dependency. Runtime scheduling/blending, resource
+precedence, current rider/model ownership and native hovercraft input semantics
+remain unproved. No pivot/grip offset, wheel or grab adapter is installed.
+
+This does not reopen the completed car/saucer inventories. Keep joystick/native
+aim/physics/ClientAction unchanged. Private geometry/resources/previews remain
+local; no vehicle or input test ran. Local Astra/xhigh routing was verified;
+independent backend attestation was unavailable.
