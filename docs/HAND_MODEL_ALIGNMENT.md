@@ -6,8 +6,12 @@ V27 now uniquely matches nine actual native hand channel sets to the rendered
 ID1 assembly, both hands in eye0, with complete native event/pose traces. The
 reviewed uploaded-transform adapter reproduces all317positions per copy under
 unchanged clip tolerance; it does not certify world export or physical grip.
-OpenXR's grip position targets the palm centroid when holding a tubular object,
-so the existing palmar surface annotation remains a candidate. See
+OpenXR distinguishes tracked-hand grip position from motion-controller grip
+position: the latter is a fixed point centred within the controller's grip,
+generally aligned with the neutral palm. A palmar surface annotation alone does
+not locate that point in the native gun/hand assembly. See the
+[standard pose definitions](https://registry.khronos.org/OpenXR/specs/1.1-khr/pdf/xrspec.pdf#page=110)
+and
 [reference evidence and next alignment boundary](IDLE_UPLOADED_TRANSFORM_REFERENCE.md).
 
 The current placement code already preserves the observed audited native base
@@ -88,7 +92,7 @@ not a numerical calibration approval.
 | FP model references the native R_Hand mesh, Zapgun skeleton and animation resource | Record the native authored hand path; this is not a new hand mesh or IK system |
 | Arm→Palm→Body skeleton chain and hand/gun Body palette references | Positive authored skeleton evidence; Palm is not certified as the controller grasp frame |
 | No named Grip attachment; existing Barrel01/PlasmaSmoke children belong to Body | Do not invent a grip socket from the muzzle/effect references |
-| Hand mesh bounds do not contain Palm rest origin | Reject blindly inverting the Palm rest pose as a grip correction |
+| Historical claim: hand mesh bounds do not contain Palm rest origin | Superseded: the comparison did not establish a common coordinate space or the named Palm rest/bind transform. It cannot certify anatomical exclusion or a grip correction |
 | Native instance scale and hand reflection remain in the render path | Preserve them; no arbitrary scale multiplier |
 | Current tracked placement drops native root translation | Investigate the exact dynamic charge residual separately, without treating it as physical grip calibration |
 | Shared gripOffset also feeds remote placement | No FP-only correction in the shared network pose producer |
@@ -99,3 +103,20 @@ placement consistently while preserving native animation/recoil/stretch. No
 continual inverse animated-bone transform, runtime asset parser or ID13 scope
 change is justified by this ID1 evidence. Primary in-VR gameplay testing remains
 with the user.
+
+## V27 anatomy review correction
+
+Astra/xhigh rechecked the matched hand channels and complete local pose traces.
+The copied Local matrix agrees with canonical matrix3; its transform relative to
+canonical matrix2 is stable across the nine samples. That does not establish a
+named Palm rest/bind frame or whether the canonical matrices include inverse-bind
+transforms. The older raw-mesh-bounds comparison above is therefore unsupported.
+Do not invert an animated Palm frame or use its origin as a controller anchor.
+
+The hand is an open surface, so a volume centroid would require invented caps and
+anatomical region selection. Existing surface markers do not define a handle
+centre. The next bounded review uses the matched gun and hand together to define
+an explicit virtual weapon-handle convention, with a declared reference pose.
+No numerical correction is approved by these anatomy observations alone.
+Native instance stretch is applied after Local, including the left-hand X
+reflection; any static reference point must follow that ordering exactly once.

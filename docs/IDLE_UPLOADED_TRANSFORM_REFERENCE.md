@@ -51,9 +51,14 @@ product. Native products are unchanged; aggregate checks are in status docs.
 Astra/xhigh local turn metadata was verified across design/source/correction
 reviews; independent backend attestation was unavailable.
 
-The next alignment decision must use a palm-centroid target. OpenXR defines grip
-position in relation to the palm while making a fist/holding a tubular object;
-a palmar surface patch is not automatically that centroid. See the
-[Khronos interaction-profile conventions](https://registry.khronos.org/OpenXR/specs/1.1-khr/html/xrspec.html).
+The next alignment decision must declare an asset reference point and its
+coordinate space. OpenXR's standard grip definition places a motion-controller
+origin within the controller's grip, generally aligned with the neutral palm.
+Tracked-hand grip and grip_surface have separate palm-surface definitions; the
+hand-interaction extension's fist/tube description does not prescribe a volume
+centroid estimator for this native mesh. A palmar surface patch therefore does
+not automatically define our controller attachment. See the
+[Khronos standard pose definitions](https://registry.khronos.org/OpenXR/specs/1.1-khr/pdf/xrspec.pdf#page=110)
+and [hand-interaction grip definition](https://registry.khronos.org/OpenXR/specs/1.1-khr/pdf/xrspec.pdf#page=515).
 Native animation/recoil/stretch, muzzle conversion, scope placement and remote
 attachment offsets must stay coherent under any static asset correction.

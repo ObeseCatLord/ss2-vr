@@ -1,5 +1,19 @@
 # Implementation status — 2026-10-09
 
+## Current alignment decision — anatomy review
+
+Native world stereo remains working in the simulated lab; the latest neutral
+run captured111projection pairs and distinct world-eye images. Earlier controlled
+runs verified native camera response to head translation and rotation. Hardware
+acceptance is separate. The current source task is weapon/hand grip alignment.
+
+Astra/xhigh accepted the nine-copy hand content/local-transform evidence, but
+rejected the old raw-bounds/Palm comparison and surface-marker-as-grip inference.
+No numerical alignment is installed. The bounded next review uses the matched
+gun and hand together to define a virtual handle-centre convention/reference
+pose. See [corrected alignment gate](HAND_MODEL_ALIGNMENT.md). The older
+palm-centroid next-step wording below is superseded by that explicit convention.
+
 ## V27 actual hand content and uploaded-transform reference
 
 The ten-copy build f6370d8/fingerprint28126fc reached pinned Jungle with111native

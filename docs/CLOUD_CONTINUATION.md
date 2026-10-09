@@ -1,5 +1,18 @@
 # Latest exact noUV passive source checkpoint
 
+## Current continuation — virtual grip reference
+
+World stereo works in the simulated lab; this is now weapon/hand placement work.
+Astra/xhigh accepted the nine-copy content/local-transform evidence but rejected
+the old raw-bounds/Palm comparison and surface-marker-as-grip inference. No
+numerical alignment is installed. The next bounded review uses the matched gun
+and hand together to define an explicit virtual handle-centre convention and
+reference pose, preserving native animation/stretch and muzzle/laser coherence.
+Do not restart the collector, guess a centroid or redo completed content proof.
+See [corrected alignment gate](HAND_MODEL_ALIGNMENT.md); its current convention
+supersedes the historical palm-centroid next-step wording below. All native and
+runtime jobs are stopped; only the bounded read-only geometry review is active.
+
 ## V27 actual hand content and uploaded-transform reference
 
 The ten-copy build f6370d8/fingerprint28126fc reached pinned Jungle with111native
