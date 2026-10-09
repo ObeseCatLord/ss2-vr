@@ -320,6 +320,7 @@ thread_local int eyeIndex = -1;
 static thread_local unsigned nativeWeaponRenderDepth=0;
 static thread_local unsigned nativeShotDepth = 0;
 static uint32_t weaponConfigurationVtable=0;
+static thread_local const WeaponRenderRoute *weaponRenderRoute=nullptr;
 static uint32_t primaryField(const void *object,unsigned offset) noexcept;
 static RigRevision rigPublication;
 static thread_local unsigned snapshotNativeReadDepth=0;
@@ -4748,6 +4749,9 @@ static int __fastcall weaponAbs(void *w, void *, const Matrix34 &view, Matrix34 
     Vec3 charge;
     bool invalidCharge = false;
     const int result = nativePlacementWithCharge(w, view, out, charge, invalidCharge);
+    if(nativeDesktopSniperPlacement(weaponRenderRoute,reinterpret_cast<uintptr_t>(w),eyeIndex,
+                                   weaponPlacementReturn && caller==weaponPlacementReturn))
+        return result; // Unmanaged original desktop delegation owns this placement.
     auto reject = [&]() {
         if (physical) {
             physicalWeapon->pass.placed(false);
@@ -4865,6 +4869,9 @@ static int __fastcall weaponAbs(void *w, void *, const Matrix34 &view, Matrix34 
 static void renderTrackedWeapon(void *w, Matrix34 m, bool sniper, uintptr_t caller) {
     const unsigned previousRenderDepth=nativeWeaponRenderDepth;
     if(previousRenderDepth!=UINT_MAX)++nativeWeaponRenderDepth;
+    const WeaponRenderRoute *previousRoute=nullptr;
+    WeaponRenderRoute route{reinterpret_cast<uintptr_t>(w),nativeWeaponRenderDepth,sniper,eyeIndex==-1,false,nullptr};
+    bool routePublished=false;
     const auto generation = graphicsResourceGeneration();
     auto *previous = physicalWeapon;
     if (previous) { previous->pass.failed = true; weaponPairFault = true;
@@ -4874,6 +4881,10 @@ static void renderTrackedWeapon(void *w, Matrix34 m, bool sniper, uintptr_t call
     std::optional<IdleWeaponTrace> idleStorage;
     bool physical = false;
     withNativeFinally([&] {
+    previousRoute=weaponRenderRoute;
+    route.parent=previousRoute;
+    weaponRenderRoute=&route;
+    routePublished=true;
     const auto s = eyeIndex >= 0 ? eyeSnapshot : copySnapshot();
     const int hand = handOf(w, s);
     if (eyeIndex >= 0 && hand >= 0)
@@ -4907,10 +4918,12 @@ static void renderTrackedWeapon(void *w, Matrix34 m, bool sniper, uintptr_t call
     }
     // Establish a suppression barrier even for unowned/nested/desktop calls.
     physicalWeapon = physical ? &invocation : nullptr;
+    route.originalActive=true;
     if (sniper && !(eyeIndex >= 0 && hand >= 0))
         originalSniperRender(w, m);
     else
         originalWeaponRender(w, m);
+    route.originalActive=false;
     if (physical && generation == graphicsResourceGeneration())
         eyeScopePoses.finishDraw(unsigned(hand), invocation.scopePose,
                                  invocation.pass.complete() && !invocation.scopePoseAmbiguous);
@@ -4922,6 +4935,7 @@ static void renderTrackedWeapon(void *w, Matrix34 m, bool sniper, uintptr_t call
         emitIdleWeaponTrace(*idleStorage);
     }
     }, [&](bool aborted) noexcept {
+        if(routePublished)weaponRenderRoute=previousRoute;
         nativeWeaponRenderDepth=previousRenderDepth;
         retireIdleSubmissionOwner(invocation.idle);
         if(invocation.idle)invocation.idle->projectionProbe.retire();

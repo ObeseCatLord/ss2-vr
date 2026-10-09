@@ -1,5 +1,26 @@
 # Implementation status — 2026-10-09
 
+## Native stereo capture succeeds — desktop sniper delegation fix pending
+
+The private aligned-sniper run completed collection and safe shutdown:147matched
+native/OpenXR pairs, two1280x720 game-world eye images, ten qualified Black draws
+spanning both eyes, native save/preload creation, no cleanup errors/survivors,
+12protected files unchanged. Both native sniper models render. Static patch
+correlations show near ground22px and17px disparity, scope80px, background tree0px;
+these are selected-image candidates, not whole-scene depth/device/head-motion
+acceptance. Trigger values were zero. No firing or movement probe occurred.
+
+The passive muzzle witness was absent because a subsequent unmanaged desktop
+sniper->base render invalidates valid XR calibration at depth2/reason3. Astra
+matched publication/invalidation/query tuples at39/44ms; successful publication
+already proves flat placement succeeded. A narrow stack-owned route now preserves
+that positively identified native desktop delegation's original return without
+VR adaptation or calibration mutation. Physical XR and unknown routes retain
+strict borrow/ownership/failure checks. Astra final source GO; all4products
+rebuilt on3d4d8ab6387eb0ec4cb387903c27a668b746edb838d9e1b3c53b11ce4fddebe3,
+77Debug/77Release and4compiled muzzle gates normal/-O pass. A fresh sealed
+fixture passed preflight/artifact verification; no new run yet.
+
 ## Live sniper alignment integrated — passive muzzle witness next
 
 The latest private capture completed native grant/select/save and supplied twelve

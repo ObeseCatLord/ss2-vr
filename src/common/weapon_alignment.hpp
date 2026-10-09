@@ -25,6 +25,22 @@ inline bool weaponModelHandleReference(uint32_t nativeId,Vec3 &out) {
 inline bool alignmentBorrowPhase(unsigned renderDepth, bool placement) {
     return renderDepth == (placement ? 1u : 0u);
 }
+// Stack-owned wrapper provenance, not a cached native object or new ownership
+// policy. A desktop sniper's original render delegates to the original base.
+struct WeaponRenderRoute {
+    uintptr_t weapon=0;
+    unsigned depth=0;
+    bool sniper=false,desktop=false,originalActive=false;
+    const WeaponRenderRoute *parent=nullptr;
+};
+inline bool nativeDesktopSniperPlacement(const WeaponRenderRoute *route,uintptr_t weapon,
+                                         int eye,bool nativePlacementCaller) {
+    if(!route || !route->parent || !weapon || eye!=-1 || !nativePlacementCaller)return false;
+    const auto &parent=*route->parent;
+    return route->weapon==weapon && parent.weapon==weapon && route->depth==2 && parent.depth==1 &&
+        !route->sniper && parent.sniper && route->desktop && parent.desktop &&
+        route->originalActive && parent.originalActive;
+}
 inline bool id1RenderedStretch(uint32_t selector, Vec3 base, Vec3 &out) {
     if (!std::isfinite(base.x) || !std::isfinite(base.y) || !std::isfinite(base.z)) return false;
     out = base;

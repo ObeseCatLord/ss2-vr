@@ -3,6 +3,31 @@
 #include <limits>
 using namespace ss2vr;
 int main() {
+    WeaponRenderRoute parent{20,1,true,true,true,nullptr};
+    WeaponRenderRoute child{20,2,false,true,true,&parent};
+    assert(nativeDesktopSniperPlacement(&child,20,-1,true));
+    for(int eye : {-2,0,1})assert(!nativeDesktopSniperPlacement(&child,20,eye,true));
+    assert(!nativeDesktopSniperPlacement(nullptr,20,-1,true));
+    assert(!nativeDesktopSniperPlacement(&child,21,-1,true));
+    assert(!nativeDesktopSniperPlacement(&child,20,-1,false));
+    for(unsigned change=0;change<10;++change) {
+        auto p=parent,c=child;c.parent=&p;
+        switch(change) {
+            case 0:c.parent=nullptr;break;
+            case 1:++p.weapon;break;
+            case 2:++c.weapon;break;
+            case 3:p.depth=2;break;
+            case 4:c.depth=3;break;
+            case 5:p.sniper=false;break;
+            case 6:c.sniper=true;break;
+            case 7:p.desktop=false;break;
+            case 8:c.originalActive=false;break;
+            case 9:p.originalActive=false;break;
+        }
+        assert(!nativeDesktopSniperPlacement(&c,20,-1,true));
+    }
+    child.desktop=false;
+    assert(!nativeDesktopSniperPlacement(&child,20,-1,true));
     assert(alignmentBorrowPhase(1,true) && alignmentBorrowPhase(0,false));
     for(unsigned depth : {0u,1u,2u,UINT32_MAX}) {
         if(depth!=1)assert(!alignmentBorrowPhase(depth,true));
