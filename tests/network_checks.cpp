@@ -2,6 +2,7 @@
 #include "common/observer_gesture_intents.hpp"
 #include "common/controls.hpp"
 #include "common/intent_boundary.hpp"
+#include "common/native_primary_projection.hpp"
 #include <cstdlib>
 #include <iostream>
 #include <limits>
@@ -838,7 +839,108 @@ static void gestureIntervalChecks() {
               "aborted interval discards G but retains the exact existing transport token");
     }
 }
+static void mixedGameplayOwnershipChecks() {
+    OrderedPosePolicy peer;
+    check(peer.validation.bindCapability(11, 22) && !peer.gameplayOwned(),
+          "Hello capability never claims desktop gameplay");
+    auto neutral = validPose();
+    neutral.validMask = 0;
+    neutral.head = neutral.grip[0] = neutral.grip[1] = Pose{};
+    neutral.primarySampleEligibleMask = neutral.primaryNeutralSampleMask = 0;
+    neutral.zoomSampleEligibleMask = 0;
+    Ack ack;
+    PosePacket sample, relay;
+    ConsumptionCredits credits;
+    check(credits.grant({11, 22, 1}) && peer.receive(neutral, 1000, ack) &&
+              peer.freeze(1000, sample, &relay) && !peer.gameplayOwned() &&
+              peer.relayRecipientReady(1000),
+          "accepted desktop heartbeat grants relay freshness without VR control");
+    check(!peer.receive(validPose(2), 1000, ack) && !peer.gameplayOwned(),
+          "tracked packet rejected by outstanding native consumption cannot claim gameplay");
+    int pawn = 0;
+    NativePrimaryInvocation desktop{&pawn, peer.gameplayOwned() ?
+        NativePrimaryValue::neutral() : NativePrimaryValue{}, nullptr, false};
+    for (unsigned held = 0; held != 2; ++held) {
+        desktop.held = held != 0;
+        for (unsigned kind = 0; kind != 5; ++kind)
+            for (uint32_t byte = 0; byte != 256; ++byte) {
+                const uint32_t raw = 0xabcd1200u | byte;
+                check(nativePrimaryRead(raw, &pawn, kind, &desktop) == raw,
+                      "desktop primary down/press/release/history/held remain untouched");
+            }
+    }
+    check(peer.finishInterval(ack) && credits.acknowledge(ack, 11, 22) &&
+              !credits.hasOutstandingCapability(11, 22),
+          "desktop neutral interval retires the exact transport credit");
+    check(!peer.relayRecipientReady(1000 + MaxPoseAgeMs + 1),
+          "desktop relay recipient must remain fresh");
+    OrderedPosePolicy occupied;
+    check(occupied.validation.bindCapability(11, 22) && occupied.receive(neutral, 1000, ack) &&
+              !occupied.receive(validPose(2), 1000, ack) && !occupied.gameplayOwned(),
+          "tracked packet rejected by a pending slot cannot claim gameplay");
+    auto tracked = validPose(2);
+    auto invalid = tracked;
+    invalid.head.q.w = std::numeric_limits<float>::quiet_NaN();
+    check(!peer.receive(invalid, 1001, ack) && !peer.gameplayOwned(),
+          "rejected malformed head cannot claim gameplay");
+    invalid = tracked; invalid.serverNonce = 99;
+    check(!peer.receive(invalid, 1001, ack) && !peer.gameplayOwned(),
+          "rejected foreign capability cannot claim gameplay");
+    check(!peer.receive(tracked, 1001, ack, false) && !peer.gameplayOwned(),
+          "rate/capacity rejection cannot claim gameplay");
+    invalid = tracked; invalid.sequence = 1;
+    check(!peer.receive(invalid, 1001, ack) && !peer.gameplayOwned(),
+          "replayed tracked packet cannot claim gameplay");
+    check(peer.receive(tracked, 1001, ack) && peer.gameplayOwned() &&
+              peer.freeze(1001, sample, &relay) && peer.finishInterval(ack),
+          "only accepted tracked head claims gameplay through the production receive policy");
+    neutral.sequence = 3;
+    check(peer.receive(neutral, 1002, ack) && peer.freeze(1002, sample) &&
+              !sample.validMask && peer.gameplayOwned() && peer.finishInterval(ack),
+          "tracking loss keeps established XR ownership with no valid pose");
+    peer.validation.invalidateTracking();
+    check(peer.gameplayOwned() && !peer.freeze(1003, sample),
+          "tracking invalidation cannot release XR ownership to native input");
+    NativePrimaryInvocation lost{&pawn, peer.gameplayOwned() ?
+        NativePrimaryValue::neutral() : NativePrimaryValue{}, nullptr, true};
+    check(nativePrimaryRead(0xabcd1203u, &pawn, 4, &lost) == 0xabcd1200u,
+          "established XR tracking loss suppresses both native fire bits");
+    check(peer.retainGameplayOwnership(10, 20, 10, 20) &&
+              !peer.retainGameplayOwnership(10, 20, 10, 21) &&
+              !peer.retainGameplayOwnership(10, 20, 11, 20) &&
+              !peer.retainGameplayOwnership(0, 20, 0, 20) &&
+              !peer.retainGameplayOwnership(10, 0, 10, 0),
+          "same native owner can retain ownership on capability renewal; replacement cannot");
+    const bool retained = peer.retainGameplayOwnership(10, 20, 10, 20);
+    peer = {};
+    peer.xrGameplayOwned = retained;
+    check(!peer.gameplayOwned() && peer.validation.bindCapability(33, 44) && peer.gameplayOwned(),
+          "renewal still requires a new bound transport capability");
+    peer = {};
+    check(peer.validation.bindCapability(55, 66) && !peer.gameplayOwned(),
+          "avatar/disconnect reset clears ownership before another capability");
+    OrderedPosePolicy sender;
+    check(sender.validation.bindCapability(11, 22) && sender.receive(tracked, 2000, ack) &&
+              sender.freeze(2000, sample, &relay), "VR source freezes presentation for transport");
+    Message message{}, decoded{};
+    message.kind = Kind::Relay;
+    message.relay = {relay, 99, 1};
+    // Native relay rewrites the recipient capability; it does not require the
+    // recipient to establish XR gameplay ownership.
+    message.relay.pose.clientNonce = 55;
+    message.relay.pose.serverNonce = 66;
+    neutral.clientNonce = 55; neutral.serverNonce = 66; neutral.sequence = 1;
+    check(peer.receive(neutral, 2000, ack) && peer.freeze(2000, sample) &&
+              peer.relayRecipientReady(2000) && !peer.gameplayOwned(),
+          "headset-free recipient stays eligible for VR peer delivery");
+    std::string bytes;
+    check(encode(message, bytes) && parse(bytes, decoded) == ParseResult::Valid &&
+              decoded.kind == Kind::Relay && decoded.relay.pose.validMask == 7 &&
+              decoded.relay.pose.clientNonce == 55 && decoded.relay.pose.serverNonce == 66,
+          "existing relay wire carries VR presentation to the desktop capability");
+}
 int main() {
+    mixedGameplayOwnershipChecks();
     observerGestureChecks();
     gestureWireChecks();
     gestureAdmissionChecks();

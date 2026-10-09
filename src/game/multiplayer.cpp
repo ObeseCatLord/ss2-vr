@@ -89,6 +89,13 @@ struct Peer : network::OrderedPosePolicy {
     Sample frozen;
     uint64_t rateStart = 0, lastRelay = 0;
     unsigned rateCount = 0;
+    void resetForCapability(uint32_t nextBrain, uint32_t nextAvatar) noexcept {
+        const bool owned = retainGameplayOwnership(brain, avatar, nextBrain, nextAvatar);
+        *this = {};
+        xrGameplayOwned = owned;
+        brain = nextBrain;
+        avatar = nextAvatar;
+    }
 };
 static bool receivePeer(Peer &peer, const network::PosePacket &pose, uint64_t now,
                         network::Ack &discard, bool capacity = true) {
@@ -343,9 +350,7 @@ static bool receiveServer(void *server, void *rpc, bool reliableTransport) {
                         discarded[discardCount++] = old;
                     if (peer.discardPending(old))
                         discarded[discardCount++] = old;
-                    peer = {};
-                    peer.brain = brain;
-                    peer.avatar = avatar;
+                    peer.resetForCapability(brain, avatar);
                     peer.incarnation = ++nextIncarnation;
                     peer.validation.bindCapability(message.hello.nonce, serverNonce);
                 }
@@ -571,7 +576,7 @@ bool knownVrAvatar(uint32_t avatar) noexcept {
     AcquireSRWLockShared(&lock);
     bool known = false;
     for (const auto &peer : peers)
-        known |= peer.avatar == avatar && peer.validation.serverNonce;
+        known |= peer.avatar == avatar && peer.gameplayOwned();
     ReleaseSRWLockShared(&lock);
     return known; // Local nonce/presentation replicas do not establish XR ownership.
 }
@@ -624,9 +629,7 @@ static bool submitInput(void *player, network::PosePacket &admitted, bool reliab
                 auto &peer = peers[slot];
                 if (peer.avatar != avatar || peer.brain != brain || !peer.validation.intentEpoch[0] ||
                     !peer.validation.intentEpoch[1]) {
-                    peer = {};
-                    peer.avatar = avatar;
-                    peer.brain = brain;
+                    peer.resetForCapability(brain, avatar);
                     if (nextIncarnation != UINT32_MAX)
                         peer.incarnation = ++nextIncarnation;
                     peer.validation.bindCapability(local.clientNonce, nonce());
@@ -833,7 +836,7 @@ static Sample freezeInput(void *player) {
                 result = peer.frozen;
                 break;
             }
-            result.negotiated = true;
+            result.negotiated = peer.gameplayOwned();
             result.avatar = avatar;
             result.incarnation = peer.incarnation;
             result.valid = peer.freeze(now, result.pose, &relayPose);
@@ -849,8 +852,8 @@ static Sample freezeInput(void *player) {
                 relayIncarnation = peer.incarnation;
                 for (int destination = 0; destination < int(peers.size()); ++destination) {
                     auto &recipient = peers[destination];
-                    if (recipient.avatar != avatar && recipient.validation.serverNonce &&
-                        recipient.validation.fresh(now) && bound(activeServer, destination, recipient.brain))
+                    if (recipient.avatar != avatar && recipient.relayRecipientReady(now) &&
+                        bound(activeServer, destination, recipient.brain))
                         recipients[recipientCount++] = {destination, recipient.brain,
                             recipient.validation.clientNonce, recipient.validation.serverNonce};
                 }
@@ -1000,11 +1003,11 @@ Sample authority(void *player) {
     for (auto &peer : peers)
         if (peer.avatar == avatar && peer.validation.serverNonce) {
             result = peer.frozen;
-            // Capability ownership is already live before the first interval
-            // freezes a pose. Do not infer ownership from that empty snapshot.
+            // A transport nonce alone cannot take over desktop gameplay. An
+            // admitted XR owner remains recognized through tracking loss.
             result.avatar = peer.avatar;
             result.incarnation = peer.incarnation;
-            result.negotiated = true;
+            result.negotiated = peer.gameplayOwned();
             result.liveIntentEpoch[0] = peer.validation.intentEpoch[0];
             result.liveIntentEpoch[1] = peer.validation.intentEpoch[1];
             peer.validation.filterWeaponIntents(result.pose);
@@ -1113,7 +1116,7 @@ Sample PresentationReadGuard::sample(uint32_t avatar) const {
         for (const auto &peer : peers)
             if (peer.avatar == avatar && peer.validation.serverNonce) {
                 Sample result = peer.frozen;
-                result.negotiated = true;
+                result.negotiated = peer.gameplayOwned();
                 result.valid = result.valid &&
                     validFrozenPresentationRevision(result.presentationRevision, peer.presentationRevision);
                 return result;

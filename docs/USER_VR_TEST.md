@@ -56,7 +56,8 @@ collision is not established. Record these settings and each outcome separately.
    Move one hand while the other is stationary. Weapon identity, aiming and laser
    must remain independent. Verify whether the build actually includes hands;
    do not infer a hand model from a floating weapon or controller pointer.
-2. Trace lasers across nearby walls and distant terrain. They should originate
+2. Check laser aiming on every available non-scoped weapon; it must work without
+   entering scope zoom. Trace lasers across nearby walls and distant terrain. They should originate
    at the native muzzle and terminate on the closest eligible surface. They do
    not promise the final random projectile spread or penetration path.
 3. For every combination the stock game actually permits, record left/right
@@ -138,6 +139,15 @@ controlled delay is available, test duplicates/reordering/expiry, with no old
 swing after stop/rearm. Test manual+physical motion together and each hand
 independently. Pose packets or counters alone
 do not pass this test: another player must see coherent native gameplay.
+
+Also test mixed desktop/VR sessions with the mod installed for every player.
+The desktop participant must launch without a headset and retain native desktop
+rendering, mouse/keyboard movement, aiming, firing and inventory controls. Test a
+desktop listen host with a VR client, a VR listen host with a desktop client, and
+both clients on the matching dedicated server. Verify both directions: desktop
+players see coherent VR head/hands/weapons, while VR players see native desktop
+player presentation and actions. Include reconnect, death/respawn and level
+changes. Do not count VR-only sessions as mixed-mode acceptance.
 
 ## Reporting and recovery
 

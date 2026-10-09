@@ -1579,3 +1579,27 @@ path admits supported seated riders as well as handheld players. Native exclusio
 may omit the ridden mechanism, so cockpit-interior protection remains unverified.
 The user procedure now separates body movement from head-clearance settings.
 Defaults and native code are unchanged; no game or user settings were modified.
+
+## 2026-10-09 — retain native desktop input in mixed VR multiplayer
+
+Fixed nonce-only peers being classified as XR gameplay owners, which could clear
+desktop primary bits or admit native equipment changes. Only accepted validated
+head poses establish XR ownership. Exact-owner capability renewal retains it;
+tracking loss stays managed-neutral; avatar/disconnect clears it. Desktop neutral
+packets still consume and ACK, and fresh desktop participants receive VR poses.
+No protocol/native ClientAction or projectile rewrite. Added production-policy,
+native primary/history preservation, credit, replacement and relay checks.
+
+Also completed the opt-in borrowed ride getter-time diagnostic, with pinned
+shared aliases, relocated trampoline caller, bookends and scalar native-finally
+retirement. Rejected trampoline installation now uses common rollback. All
+resource/rendered-frame/physical-steering claims remain zero. The compiled
+consumer rejects wrong original bindings, return stores, cleanup and nonzero
+finally-delegate addends; capture/entry-stack claims remain source-reviewed.
+
+Astra/xhigh bounded source/consumer GO; local tags verified, backend unattested.
+All products fingerprint605c07abcb4aa82104842c886198438a192a29382f6a2cceffdf73c975913583,
+IPC10/wire7;81Debug/81Release groups, corrected control/getter gates normal/-O,
+dispatch/remote cleanup and artifact checks pass. No runtime tests/install changes.
+Native non-scoped laser coverage, mono remote heads, physical controls, remaining
+implementation and comprehensive user-operated acceptance are still open.

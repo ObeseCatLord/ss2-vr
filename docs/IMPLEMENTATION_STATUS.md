@@ -1,5 +1,36 @@
 # Implementation status — 2026-10-09
 
+## Mixed desktop input fixed in source; native laser coverage review active
+
+The existing peer admission now separates transport capability from positively
+accepted XR gameplay ownership. Hello-only/neutral desktop peers keep native
+primary/history and equipment controls while continuing to consume/ACK packets
+and receive VR presentation. Exact same-owner renewal retains XR ownership;
+replacement/disconnect clears it; tracking loss retains managed-neutral VR input.
+Four native gameplay/presentation queries use the same ownership predicate.
+See [mixed desktop/VR](MIXED_DESKTOP_VR.md). Astra/xhigh Source GO; local tags
+verified, backend unattested. Portable predicates and projection/credit/codec
+checks passed; native RPC/gameplay and mixed multiplayer are not runtime-verified.
+
+The passive ride diagnostic additionally has a bounded borrowed getter-time
+receiver/renderable/instance join. Its actual MinHook caller is trampoline+8;
+trampoline rejection uses common rollback. It adds no pointer dereference or
+cross-frame owner map. The separate render-command ride-owner edge, resources,
+evaluated control frame and physical grabs remain unimplemented. See
+[ride observation](RIDE_CONTROL_OBSERVATION.md). Source and finite compiled
+consumer Astra GO; no vehicle run or completed physical steering is claimed.
+
+All four products rebuilt with fingerprint
+605c07abcb4aa82104842c886198438a192a29382f6a2cceffdf73c975913583,
+IPC10/wire7;81Debug/81Release groups passed. Both x86 objects pass normal/-O
+control/getter forwarding/cleanup and actual-byte counterexamples, including
+nonzero finally-delegate relocation addends. Multiplayer dispatch/remote cleanup
+gates and artifact/layout verification pass. No game, firing, movement, network
+or headset was launched. Non-scoped per-hand lasers are connected and default
+enabled; exact native getter/query coverage is being investigated. Mono remote
+heads remain the next mixed-presentation source step; user gameplay acceptance
+and the full goal remain open.
+
 ## Passive ride-control observer implemented — physical grabs still open
 
 The existing mounted-look route now has an opt-in borrowed-receiver scalar

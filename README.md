@@ -51,6 +51,12 @@ Native remote head bones are enabled by default inside admitted frozen VR stereo
 
 Use the stock game's first-person view and the exact binaries listed in [installed-build.json](docs/installed-build.json). Other native builds are rejected. Windows 10/11 x64 needs an active OpenXR HMD runtime offering D3D11 and BGRA8 or RGBA8 UNORM, with at least four composition layers. No proprietary game files are included.
 
+Desktop participants in mixed multiplayer do not need a headset. Every participant
+and the server need matching mod products. A mod handshake does not take over
+desktop controls; accepted tracked poses establish VR gameplay ownership. Mixed
+gameplay acceptance and mono remote-head presentation remain open. See
+[mixed desktop/VR status](docs/MIXED_DESKTOP_VR.md).
+
 Set **USE COMBO WEAPONS → YES** in the stock single-player or cooperative settings. Independent identical weapons require the game's combo capability and valid native dual state; its fallback mode couples the guns. Patch resources permit custom combinations, but archive filenames alone do not prove the loaded setting. See [native combo evidence](docs/NATIVE_COMBO_CAPABILITY_AUDIT.md).
 
 Set a desktop resolution with **both dimensions at most 2048** and disable MSAA. Use a 32-bit color mode. A modest window resolution such as 1280×720 reduces CPU transfer cost; the native drawport size currently determines each eye's texture size. The allocator preserves the native depth format and uses separate non-MSAA eye targets. CPU readback can stall the game; performance has not been measured.

@@ -1273,7 +1273,25 @@ struct OrderedPosePolicy {
     PeerState validation;
     PosePacket pending, active;
     bool hasPending = false, hasActive = false, awaitingConsumption = false;
+    // Transport negotiation is also used by headset-free mod clients. Only a
+    // validated, accepted tracked head can transfer native gameplay ownership.
+    // Tracking loss retires intent, not ownership; the native avatar lifecycle
+    // must reset this fact before a different pawn can claim it.
+    bool xrGameplayOwned = false;
     uint64_t pendingReceivedMs = 0, activeReceivedMs = 0;
+
+    bool gameplayOwned() const noexcept {
+        return xrGameplayOwned && validation.serverNonce != 0;
+    }
+    bool relayRecipientReady(uint64_t now) const noexcept {
+        // Desktop participants still receive tracked peers' presentation.
+        return validation.serverNonce && validation.fresh(now);
+    }
+    bool retainGameplayOwnership(uint32_t oldBrain, uint32_t oldAvatar,
+                                 uint32_t newBrain, uint32_t newAvatar) const noexcept {
+        return xrGameplayOwned && oldBrain && oldAvatar &&
+               oldBrain == newBrain && oldAvatar == newAvatar;
+    }
 
     static Ack token(const PosePacket &pose) {
         return {pose.clientNonce, pose.serverNonce, pose.sequence};
@@ -1284,6 +1302,8 @@ struct OrderedPosePolicy {
         discard = token(pose);
         if (!permitted || hasPending || awaitingConsumption || !validation.acceptPose(pose, now))
             return false;
+        if (pose.validMask & 1u)
+            xrGameplayOwned = true;
         pending = pose;
         pendingReceivedMs = now;
         hasPending = true;

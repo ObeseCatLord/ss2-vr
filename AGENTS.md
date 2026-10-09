@@ -8,6 +8,11 @@ Windows and Linux/Proton targets, SteamVR + Steam Frame and Envision/Monado +
 Bigscreen Beyond. Beyond controller profile depends on the actual controllers.
 Teleport is excluded.
 
+Non-scoped weapons require proper per-hand laser aiming. Mixed desktop/VR
+multiplayer is required when every participating player has the mod installed.
+Desktop players must retain native mouse/keyboard input and rendering without
+requiring a headset; VR pose admission must not suppress their native actions.
+
 Complete native stereo world rendering, tracked head translation/rotation and
 independent hands; native dual wield, per-hand weapon wheels/lasers/scopes;
 comfortable threshold-follow menus/HUD; coherent roomscale/body collision;
@@ -132,7 +137,8 @@ Pure offline-tool changes require their meaningful consumer/regression checks
 and product-contract verification, not an invented native rebuild requirement.
 
 Use the existing Python dependency environment for native verifiers/builds:
-PYTHONPATH=deps/python, PYTHONDONTWRITEBYTECODE=1. Run appropriate checks; do not
+PYTHONPATH must name the checkout's deps/python by absolute path, because CTest
+changes working directory; set PYTHONDONTWRITEBYTECODE=1. Run appropriate checks; do not
 repeat broader passing checks without a new change or unresolved concern.
 
 Astra at explicit xhigh or higher is required for investigations/reviews. Verify

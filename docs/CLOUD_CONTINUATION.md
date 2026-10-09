@@ -1,5 +1,27 @@
 # Latest exact noUV passive source checkpoint
 
+## Current source checkpoint — mixed desktop controls and getter diagnostic
+
+Desktop mod capability no longer claims XR gameplay ownership. Successful
+head-valid ordered admission establishes it; same native owner renewals retain
+it, tracking loss stays neutral, avatar/disconnect clears it. Four gameplay-facing
+queries are gated; neutral freeze/ACK and desktop relay freshness remain connected.
+See MIXED_DESKTOP_VR.md. Astra/xhigh Source GO, backend unattested; actual native
+multiplayer remains user-tested and unverified.
+
+Separate opt-in getter-time ride join observes borrowed native originals only.
+Pinning accounts for MinHook's relocated virtual-call return; rejected trampoline
+uses common rollback. No later render-owner/resource/frame/grasp association is
+certified. See RIDE_CONTROL_OBSERVATION.md; the next actual vehicle implementation
+edge is the native entity/render-command owner, not another unassociated collector.
+
+All four products fingerprint605c07abcb4aa82104842c886198438a192a29382f6a2cceffdf73c975913583,
+IPC10/wire7;81Debug/81Release groups and normal/-O actual compiled control/getter,
+dispatch/remote cleanup plus artifact/layout checks pass. No runtime launched.
+Current integration work: exact non-scoped native laser getter/query coverage and
+mono remote-head freeze lifetime. Mixed desktop/VR and non-scoped lasers are
+explicit requirements; source checks do not substitute for user gameplay tests.
+
 ## Passive ride-control observer implemented — physical grabs still open
 
 The existing mounted-look route now has an opt-in borrowed-receiver scalar
