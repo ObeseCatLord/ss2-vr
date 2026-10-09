@@ -77,3 +77,13 @@ IPC10/wire7.77Debug/77Release checks and36normal/optimized native/compiled gates
 pass. Runtime evidence tests26groups pass normal/-O. The private collection path
 has no remaining reviewed source blocker after its consumed-index seal check;
 actual grant/equip/save and ID13 draw association remain the next native probe.
+
+The same failure latch also runs in the enclosing simulation cleanup: original
+simulation failure can skip adapter entry entirely. Rejecting that interval only
+changes the persistent stage and leaves an issuing callback's busy ownership
+intact until its own cleanup. Regressions cover failure before entry and nested
+rejection. Astra final source GO; all seven current local review tags verified,
+backend unattested. Final all-product source fingerprint is
+`916191bbff247c09e3a38bddfa29cf391aa3d96328c0efd41bfed9882dde277d`.
+The earlier unattempted package remains preserved; use a fresh sealed fixture
+with this build for the next probe.

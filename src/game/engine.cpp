@@ -2307,6 +2307,10 @@ static void __fastcall simulationStep(void *simulation, void *) {
     }, [&](bool aborted) noexcept {
         if (aborted)
             *interval.failure = true;
+        // Failure in original simulation can prevent the post-step adapter
+        // from being entered at all. Retain it across the next fresh interval.
+        if(*interval.failure && labSniperConfigured && labSniper.stage!=LabSniperStage::Complete)
+            labSniper.rejectInterval();
         simulationInterval = interval.previous;
         if (*interval.failure && !interval.previous)
             invalidateInterruptedInput();

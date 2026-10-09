@@ -27,4 +27,14 @@ int main() {
     assert(normal.begin());normal.stage=LabPreparationStage::Complete;
     normal.finish(false,true);
     assert(!normal.begin());
+    LabPreparationProgress beforeEntry;
+    beforeEntry.stage=LabPreparationStage::Granted;
+    beforeEntry.rejectInterval(); // Original simulation failed before adapter entry.
+    assert(!beforeEntry.begin());
+    LabPreparationProgress nested;
+    assert(nested.begin());nested.stage=LabPreparationStage::Granted;
+    nested.rejectInterval(); // Preserve busy until the issuing callback unwinds.
+    assert(nested.busy && !nested.begin());
+    nested.finish(false,true);
+    assert(!nested.busy && !nested.begin());
 }
