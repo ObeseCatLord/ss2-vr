@@ -47,6 +47,36 @@ def hexwords(value,count):
 def declaration_weights(rows):
     return declaration_layout(rows)[1]
 
+def validate_geometry(geometry,count):
+    if set(geometry)!=set(range(count)):raise ValueError('Missing geometry headers')
+    draw_records=set()
+    for g in geometry.values():
+        wanted={k+':0' for k in ('affine','clip','layout','buffers','draw','streams')}
+        wanted.update('hash:'+str(i) for i in range(5))
+        wanted.update('constant:'+str(i) for i in range(g['constants']))
+        wanted.update('program:'+str(i) for i in range(0,g['words'],32))
+        wanted.update('declaration:'+str(i) for i in range(g['declaration']))
+        if set(g['data'])!=wanted:raise ValueError('Truncated consumed geometry emission')
+        if g['drawRecord'] in draw_records:raise ValueError('Repeated native draw identity')
+        draw_records.add(g['drawRecord'])
+        layout=g['data']['layout:0'];buffers=g['data']['buffers:0'];draw=g['data']['draw:0'];streams=g['data']['streams:0']
+        v,t=layout[:2]
+        if not 1<=v<=1490 or not 1<=t<=1332 or layout[3]!=0x85 or layout[6]!=0x87 or \
+           layout[9]!=0x80 or layout[12]!=0x80 or layout[4]>=255 or layout[7]>=255 or \
+           layout[10]!=layout[4] or layout[13]!=layout[4] or draw!=[4,0,0,v,layout[5]//2,t] or layout[5]%2:
+            raise ValueError('Unsupported declared geometry layout')
+        if buffers[1:5]!=[0,1,100,0] or buffers[6:10]!=[0,1,101,0]:raise ValueError('Unsupported buffer use')
+        if not streams[0] or streams[4]!=streams[0] or streams[12]!=streams[0] or not streams[16] or streams[17] or \
+           streams[1:4]!=[layout[2],12,1] or streams[5:8]!=[layout[11],4,1] or streams[14:16]!=[8,1] or \
+           (streams[8] and (streams[8]!=streams[0] or streams[9:12]!=[layout[8],4,1])):
+            raise ValueError('Unsupported stream identity/ranges')
+        input_layout,weights=declaration_layout([g['data']['declaration:'+str(i)] for i in range(g['declaration'])])
+        g['input_layout']=input_layout
+        if bool(streams[8])!=weights:raise ValueError('Declaration/bound weight disagreement')
+        ranges=[(layout[2],v*12,buffers[0]),(layout[5],t*6,buffers[5]),
+                (layout[8],v*4,buffers[0]),(layout[11],v*4,buffers[0]),(streams[13],v*8,buffers[0])]
+        if any(off+size>capacity for off,size,capacity in ranges):raise ValueError('Geometry outside bound buffer')
+
 def assess(text,expected_source):
     if not re.fullmatch('[a-f0-9]{64}',expected_source):raise ValueError('Expected compiled source required')
     records=[];current=None;seen=set()
@@ -100,6 +130,19 @@ def assess(text,expected_source):
                     not current['rejection']['state']&1 or current['rejection']['state']&40 or current['rejection']['checks']:
                 raise ValueError('Unqualified animation name failure')
             current['animation_name_failure']={'index':index,'expected':expected,'header':header}
+            continue
+        if kind=='retainedCopies':
+            if current is None or current['stage']!=3 or 'retained_copies' in current or \
+                    set(f)!={'request','eye','hand','count','postOriginal','cleanupCertified','outerCurrent'}:
+                raise ValueError('Retained companion without one rejected record')
+            if any(integer(f[k])!=current[k] for k in ('request','eye','hand')):
+                raise ValueError('Foreign retained companion')
+            count=integer(f['count'],1,8)
+            if count!=current['draws'] or f['postOriginal']!='1' or f['cleanupCertified']!='0' or f['outerCurrent']!='0':
+                raise ValueError('Retained companion claim/count mismatch')
+            current['retained_copies']={'count':count,'geometry':{},'evidence_class':'historical-post-original-pre-cleanup-copies',
+                'post_original_return':True,'cleanup_certified':False,'outer_current':False,'whole_trace_accepted':False,
+                'alignment_accepted':False,'positive_grasp_verified':False}
             continue
         if kind.startswith('stream'):
             if current is None:raise ValueError('Stream probe without native record')
@@ -176,7 +219,14 @@ def assess(text,expected_source):
                         target[index]={k:integer(f[k],0,255 if k in ('format','buffer') else (1<<32)-1) for k in names}
                 else:raise ValueError('Unknown input diagnostic')
             continue
-        if current is None or current['stage']!=4:raise ValueError('Data without complete native-copy record')
+        retained=kind in ('retainedGeometry','retainedGeometryData')
+        if retained:
+            if current is None or current['stage']!=3 or 'retained_copies' not in current:
+                raise ValueError('Retained payload without rejected companion')
+            kind={'retainedGeometry':'geometry','retainedGeometryData':'geometryData'}[kind]
+        elif current is None or current['stage']!=4:
+            raise ValueError('Data without complete native-copy record')
+        geometry=current['retained_copies']['geometry'] if retained else current['geometry']
         if any(integer(f[k])!=current[k] for k in ('request','eye','hand')):
             raise ValueError('Interleaved/foreign idle data')
         if kind=='animation':
@@ -199,17 +249,17 @@ def assess(text,expected_source):
                    'boneName','bone','cfg','file','resource','words','constants','declaration'}
             if set(f)!=names:raise ValueError('Geometry schema mismatch')
             index=integer(f['index'],0,7)
-            if index>=current['draws'] or index in current['geometry']:raise ValueError('Duplicate/outside geometry')
+            if index>=current['draws'] or index in geometry:raise ValueError('Duplicate/outside geometry')
             g={k:integer(v,-(1<<31),(1<<31)-1) if k=='resource' else integer(v,0,(1<<32)-1)
                for k,v in f.items() if k not in ('request','eye','hand','index')}
             if not 2<=g['words']<=512 or not 1<=g['declaration']<=65 or not 1<=g['constants']<=256 or not g['surface'] or not g['instance'] or not g['cfg']:
                 raise ValueError('Incomplete/unbounded rendered identity')
-            g['data']={};current['geometry'][index]=g
+            g['data']={};geometry[index]=g
         elif kind=='geometryData':
             if set(f)!={'request','eye','hand','index','kind','chunk','values'}:raise ValueError('Geometry data schema mismatch')
             index=integer(f['index'],0,7)
-            if index not in current['geometry']:raise ValueError('Geometry payload before header')
-            g=current['geometry'][index];which=f['kind'];chunk=integer(f['chunk'],0,511)
+            if index not in geometry:raise ValueError('Geometry payload before header')
+            g=geometry[index];which=f['kind'];chunk=integer(f['chunk'],0,511)
             counts={'declaration':6,'clip':16,'affine':12,'layout':14,'buffers':10,'draw':6,'streams':18,'hash':8,'constant':4}
             if which=='program':
                 if chunk%32 or chunk>=g['words']:raise ValueError('Program chunk outside declared copy')
@@ -251,7 +301,17 @@ def assess(text,expected_source):
             if failure['valid']&4 and (failure['binding'] is None or failure['surface'] is None or
                 set(failure['streams'])!=set(range(4)) or set(failure['channels'])!=set(range(4))):
                 raise ValueError('Truncated input binding diagnostic')
-        validate_stream_probe(r)
+        retained=r.get('retained_copies')
+        if retained is not None:
+            reason=r.get('rejection',{})
+            if r['stage']!=3 or reason.get('reason')!=32 or reason.get('preceding')!=2 or \
+                    reason.get('state')!=(47|r['rawGripValid']*16) or reason.get('checks') or reason.get('callbacks')!=63 or \
+                    failure is None or failure['step']!=20 or failure['valid']!=15 or \
+                    not 1<=r['contributors']<=16 or not 1<=r['matrices']<=64 or \
+                    any(not r[k] for k in ('request','input','owner','weapon','model','generation','cfg','file')):
+                raise ValueError('Retained companion lacks original copied-state qualification')
+            validate_geometry(retained['geometry'],retained['count'])
+        validate_stream_probe(r,retained_validated=retained is not None)
         if r['stage']!=4:rejected.append(r);continue
         if any(r[k]<=0 for k in ('request','input','owner','weapon','model','generation','cfg')):
             raise ValueError('Missing complete native-copy identity')
@@ -261,34 +321,7 @@ def assess(text,expected_source):
         wanted.update('canonical:'+str(i) for i in range(r['matrices']))
         if not r['contributors'] or not r['matrices'] or set(r['pose'])!=wanted or r['stretch'] is None or \
            set(r['animations'])!=set(range(r['contributors'])):raise ValueError('Truncated idle copy emission')
-        if set(r['geometry'])!=set(range(r['draws'])):raise ValueError('Missing geometry headers')
-        draw_records=set()
-        for g in r['geometry'].values():
-            wanted={k+':0' for k in ('affine','clip','layout','buffers','draw','streams')}
-            wanted.update('hash:'+str(i) for i in range(5))
-            wanted.update('constant:'+str(i) for i in range(g['constants']))
-            wanted.update('program:'+str(i) for i in range(0,g['words'],32))
-            wanted.update('declaration:'+str(i) for i in range(g['declaration']))
-            if set(g['data'])!=wanted:raise ValueError('Truncated consumed geometry emission')
-            if g['drawRecord'] in draw_records:raise ValueError('Repeated native draw identity')
-            draw_records.add(g['drawRecord'])
-            layout=g['data']['layout:0'];buffers=g['data']['buffers:0'];draw=g['data']['draw:0'];streams=g['data']['streams:0']
-            v,t=layout[:2]
-            if not 1<=v<=1490 or not 1<=t<=1332 or layout[3]!=0x85 or layout[6]!=0x87 or \
-               layout[9]!=0x80 or layout[12]!=0x80 or layout[4]>=255 or layout[7]>=255 or \
-               layout[10]!=layout[4] or layout[13]!=layout[4] or draw!=[4,0,0,v,layout[5]//2,t] or layout[5]%2:
-                raise ValueError('Unsupported declared geometry layout')
-            if buffers[1:5]!=[0,1,100,0] or buffers[6:10]!=[0,1,101,0]:raise ValueError('Unsupported buffer use')
-            if not streams[0] or streams[4]!=streams[0] or streams[12]!=streams[0] or not streams[16] or streams[17] or \
-               streams[1:4]!=[layout[2],12,1] or streams[5:8]!=[layout[11],4,1] or streams[14:16]!=[8,1] or \
-               (streams[8] and (streams[8]!=streams[0] or streams[9:12]!=[layout[8],4,1])):
-                raise ValueError('Unsupported stream identity/ranges')
-            input_layout,weights=declaration_layout([g['data']['declaration:'+str(i)] for i in range(g['declaration'])])
-            g['input_layout']=input_layout
-            if bool(streams[8])!=weights:raise ValueError('Declaration/bound weight disagreement')
-            ranges=[(layout[2],v*12,buffers[0]),(layout[5],t*6,buffers[5]),
-                    (layout[8],v*4,buffers[0]),(layout[11],v*4,buffers[0]),(streams[13],v*8,buffers[0])]
-            if any(off+size>capacity for off,size,capacity in ranges):raise ValueError('Geometry outside bound buffer')
+        validate_geometry(r['geometry'],r['draws'])
         r['evidence_class']='event-pose-and-consumed-draws' if r['draws'] else 'event-pose-only'
         r['geometry_observed']=bool(r['draws'])
         completed.append(r)

@@ -201,6 +201,18 @@ struct IdleWeaponTrace {
             if(!std::isfinite(value)) {reject(Rejection::DrawConstants);return false;}
         geometry[draws++]=copy;return true;
     }
+    // Owned historical copies only: draw() stored these after original return
+    // and its current check, before cleanup. Neither cleanup nor outer finish is
+    // certified. Keep the later rejection and whole-trace admission unchanged.
+    bool retainedDrawCopiesAvailable() const noexcept {
+        return stage==Stage::Rejected && rejection==Rejection::CollectInputs &&
+            precedingStage==Stage::Palette && inputFailure.step==20 && inputFailure.valid==15 &&
+            admitted && placementObserved && referencesCopied && poseCopied &&
+            contributors && contributors<=MaxContributors && animationsCopied==contributors &&
+            matrixCount && matrixCount<=MaxMatrices && draws && draws<=MaxDraws &&
+            binding.request && binding.input && binding.owner && binding.weapon && binding.model &&
+            binding.generation && binding.hand<2 && binding.eye<2 && config.configuration && config.file;
+    }
     bool finish(bool nativeCompleted,bool generationCurrent) noexcept {
         callbacks|=FinishSeen;
         if(stage!=Stage::Palette || !poseCopied || !placementObserved || !referencesCopied || !nativeCompleted || !generationCurrent) {reject(Rejection::Finish,checks({stage==Stage::Palette,poseCopied,placementObserved,referencesCopied,nativeCompleted,generationCurrent}));return false;}

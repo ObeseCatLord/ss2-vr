@@ -1,5 +1,63 @@
 # Event-time ID1 collection — source implemented
 
+## Historical retained-draw diagnostic — source GO
+
+The latest native capture stored one qualified draw in each of12first-eye traces
+before a subsequent unsupported pass rejected the whole trace. Source now emits
+those already owned geometry copies under a distinct rejected companion. No
+native query, buffer lock, state write, owner or cleanup route was added.
+Original first rejection and Complete-only ordinary payloads remain unchanged.
+
+The companion states post-original/pre-cleanup history only. Successful original
+draw return and then-current checks preceded storage; subsequent cleanup, outer
+finish/current state, winning cached-eye ownership and grasp remain unproved.
+The strict reader requires callbacks63 and complete copied-state/identity/count
+qualification, then reuses the same per-draw payload validator. Nonzero-draw
+passive receipts are permitted only after independently validating the retained
+companion. They otherwise retain their original zero-draw rule.
+
+Matching and unchanged-bytecode position replay share per-draw helpers but return
+retained diagnostic collections separately. Diagnostic agreement cannot affect
+accepted matches, coverage, both-eye readiness or alignment. No controller/grip
+matrix was emitted for these diagnostic draws; unavailable references stay null.
+The reference measurement tool still uses accepted draws only.
+
+Astra combined source GO follows correction of twoP2 findings: missing callback
+provenance and valid retained/passive coexistence. Latest local Astra/xhigh turn
+metadata verified; independent backend attestation unavailable. Four products
+rebuilt on `cdc45f54548282a0afdfec4f7478eada860f816f08bea850b28a857f757b1fe4`, IPC10/wire7 unchanged.
+All68Debug/68Release and28normal/optimized native/compiled gates pass;14reader and
+11passive-reader groups pass normally/optimized. Tests cover stored copies after
+later rejection/abort/retirement, failed-original/current non-contribution,
+malformed/foreign/duplicate/truncated companions and replay non-promotion. Earlier
+actual logs retain identical interpretation against the prior source reader.
+
+No runtime has used these products. Next is a fresh sealed neutral capture of
+historical channel hashes, program and reference; no old fixture may be rerun or
+resealed. Full geometry/grasp, cache, melee release, driver controls and device/
+network/user acceptance remain incomplete. This is implementation evidence for
+the next measurement, not full-mod completion.
+
+### Retained companion schema
+
+Only qualified Rejected/CollectInputs observations preceded by Palette with
+step20/valid15 and bounded stored draws may carry `retainedCopies`. The header
+pins request/eye/hand and count with `postOriginal=1 cleanupCertified=0 outerCurrent=0`.
+`retainedGeometry` and `retainedGeometryData` reuse the ordinary geometry fields;
+ordinary geometry/animation/matrix/stretches remain forbidden in rejected records.
+The parsed payload stays in `rejected_or_missing_observations[].retained_copies`.
+Matcher output `retained_diagnostic_matches` and replay output
+`retained_diagnostic_draws` cannot satisfy accepted coverage or reference readiness.
+
+| Review recommendation | Disposition |
+| --- | --- |
+| Counter is pre-cleanup storage, not cleanup/outer finish certification | Adopted; historical claim and false stronger flags |
+| Preserve first rejection and Complete policy | Adopted; distinct companion prefixes and output collection |
+| Reuse existing payload validation and per-draw matching/replay | Adopted; no Complete fabrication or parallel validation policy |
+| Require callback provenance | Corrected; callbacks63 and missing-bit negatives |
+| Permit retained/passive coexistence only after full companion validation | Corrected; keyword-only internal qualification, default false |
+| Add noUV queries or relax inactive-UV admission | Deferred/rejected; current copied-data route adds no native calls |
+
 ## Current ID1 observed-layout adapter — source GO
 
 The private neutral V15 run reached the expected Jungle scene and103complete

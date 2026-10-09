@@ -117,14 +117,16 @@ def consume(record,kind,f):
         s['constants'][index]=words(f['values'],4)
     else:raise ValueError('Unknown stream diagnostic kind')
 
-def validate(record):
+def validate(record,*,retained_validated=False):
     p=record.get('stream_probe')
     if p is None:return
+    # The reader passes this only after complete retained-companion qualification
+    # and the shared strict geometry validator. A JSON flag cannot enable it.
     failure=record['input_failure'];reason=record['rejection']
     if failure['declaration']!=6 or [failure['declaration_rows'][i] for i in range(6)]!=OBSERVED or \
             reason['preceding']!=2 or reason['checks'] or reason['state']!=(47|record['rawGripValid']*16) or \
             reason['callbacks']!=63 or not 1<=record['contributors']<=16 or \
-            not 1<=record['matrices']<=64 or record['draws'] or \
+            not 1<=record['matrices']<=64 or (record['draws'] and not retained_validated) or \
             any(not record[k] for k in ('request','input','owner','weapon','model','generation','cfg','file')):
         raise ValueError('Passive stream selector not qualified by original observation')
     if set(p['snapshots'])!=set(range(p['attempts'])) or set(p['program'])!=set(range(0,p['words'],32)):

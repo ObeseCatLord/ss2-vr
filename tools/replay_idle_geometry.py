@@ -58,12 +58,13 @@ def evaluate_geometry(g,channels,evaluator,temporary):
         raise ValueError('Unexpected offline evaluator output')
     return result
 
-def replay(evidence,candidates,candidate_root,evaluator,temporary):
-    matching=match(evidence,candidates)
-    observations={(r['request'],r['eye'],r['hand']):r for r in evidence['copied_event_pose_observations']}
+def replay_draws(rows,observations,candidates,candidate_root,evaluator,temporary,retained=False):
+    observations={(r['request'],r['eye'],r['hand']):r for r in observations}
     results=[]
-    for row in matching['matches']:
+    for row in rows:
         result=dict(row)
+        if retained:result.update(evidence_class='historical-post-original-pre-cleanup-copies',cleanup_certified=False,
+            outer_current=False,whole_trace_accepted=False,alignment_accepted=False)
         if row['result']!='unique-consumed-channel-match':
             result['position_replay']={'position_replay_agrees_with_reference':False,'reason':row['result']}
             results.append(result);continue
@@ -71,7 +72,8 @@ def replay(evidence,candidates,candidate_root,evaluator,temporary):
         c=dict(asset['candidate_channels'][identity['channel_index']]);c['asset_sha256']=asset['asset_sha256']
         channels=channel_bytes(candidate_root,identity['candidate'],c)
         o=observations[(row['request'],row['eye'],row['hand'])]
-        g=o['geometry'].get(str(row['geometry_index']),o['geometry'].get(row['geometry_index']))
+        geometry=o['retained_copies']['geometry'] if retained else o['geometry']
+        g=geometry.get(str(row['geometry_index']),geometry.get(row['geometry_index']))
         result['binding']={k:o[k] for k in ('request','input','owner','weapon','model','generation','eye','hand')}
         result['position_replay']=evaluate_geometry(g,channels,evaluator,temporary)
         if result['position_replay']['position_replay_agrees_with_reference']:
@@ -82,11 +84,19 @@ def replay(evidence,candidates,candidate_root,evaluator,temporary):
             world=[[sum(float(affine[r*4+j])*p[j] for j in range(3))+affine[r*4+3] for r in range(3)] for p in xyz]
             if any(not math.isfinite(v) for p in world for v in p):raise ValueError('Nonfinite replay geometry')
             result['render_geometry']={'positions':xyz,'world_positions':world,'triangle_indices':indices,
-                'affine':affine,'controller':o['pose']['controller:0'],'raw_aim':o['pose']['rawAim:0'],
+                'affine':affine,'controller':o['pose'].get('controller:0'),'raw_aim':o['pose'].get('rawAim:0'),
                 'raw_grip':o['pose'].get('rawGrip:0'),'channel_sha256':c['channel_sha256'],'surface_name':g['surfaceName'],'bone_name':g['boneName'],
                 'render_instance':g['instance'],'render_cfg':g['cfg'],'render_resource':g['resource']}
         results.append(result)
-    return {'schema':1,'source_fingerprint':evidence['source_fingerprint'],'draws':results,
+    return results
+
+def replay(evidence,candidates,candidate_root,evaluator,temporary):
+    matching=match(evidence,candidates)
+    results=replay_draws(matching['matches'],evidence['copied_event_pose_observations'],candidates,candidate_root,evaluator,temporary)
+    diagnostic=replay_draws(matching['retained_diagnostic_matches'],
+        [o for o in evidence['rejected_or_missing_observations'] if 'retained_copies' in o],
+        candidates,candidate_root,evaluator,temporary,True)
+    return {'schema':1,'source_fingerprint':evidence['source_fingerprint'],'draws':results,'retained_diagnostic_draws':diagnostic,
         'observations_without_geometry':matching['observations_without_geometry'],
         'copied_geometry_coverage_complete':matching['copied_geometry_coverage_complete'],
         'all_consumed_positions_agree_with_native_reference':matching['copied_geometry_coverage_complete'] and all(

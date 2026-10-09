@@ -8,25 +8,21 @@ This historical hold blocked public publication pending renewed confirmation. It
 
 ## Current PC continuation — start here
 
-Latest private capture of the710534 products reached Jungle and101native
-projectionpairs; both distinct static world-eye images inspected, cleanup and
-protected12files passed. Wholetrace geometry remains rejected:12firsteye records
-retain1qualified earlier draw each, then a later noUV0/1/5/6pass fails declaration
-grammar. Complete-only emission hides priorcopies. Next bounded Astra decision
-is rejected-diagnostic preservation of owned copies versus passive noUV observation;
-do not guess inactiveUV use or relax wholetrace/Idle/cache/grasp gates. Attempted
-fixture archived, never rerun/reseal. See latest IMPLEMENTATION_STATUS entry.
-
-Latest rebuilt products: source fingerprint
-`710534dfb75c9bb5ceac0653e5cc89daf8024a39b732526e1e751548c4dafbc1`, IPC10/wire7. ActualV15
-passive data showed local7/weights8 and unchanged202wordshader; an ID1-only exact
-observed-family getter/range/replay adapter now has Astra scopedsourceGO. Legacy
-Scope13 5/6 and every hash/influence/owner/Idle/cache gate retained. All68Debug/
-68Release and28normal/-O gates pass; focusednormal/O checks pass. No runtime of
-this build yet. Freshsealedchannel/reference capture is next underexisting bounded
-neutral authority; prior fixtures archived. Do not rename actual shader registers
-for acceptance, infer winningcached-eye events or claim grasp/alignment complete.
-See docs/IDLE_EVENT_COLLECTOR.md; earlier status/product identities are historical.
+Current rebuilt fingerprint `cdc45f54548282a0afdfec4f7478eada860f816f08bea850b28a857f757b1fe4`, IPC10/wire7. Astra combinedsourceGO
+for retained historical draw diagnostics: source emits alreadyowned copies after
+later rejection, sharedstrict reader/matching/replay keep them outside Complete
+and readiness. Callback63 and fully validated passive/retained coexistence are
+mandatory. No new native queries/locks/writes/owners. All68Debug/68Release and
+28normal/-O gates pass;14reader/11passive groups passnormal/-O. No runtime of this
+build yet. Fresh sealed capture next under existing neutral authority. Prior
+710534capture reached Jungle/101native projectionpairs with distinct static world-
+eye images, but wholetrace rejected;12earlier draw copies were suppressed after
+later noUV declaration failure. Historical diagnostic copies certify storage
+post-original/pre-cleanup, not cleanup/outer-current/winningcache/grasp/release.
+Original firstrejection, Scope13, exact hashes/influences and all acceptance gates
+stay intact. Do not reuse attempted fixtures or guess inactive UV use. See latest
+IMPLEMENTATION_STATUS and IDLE_EVENT_COLLECTOR entries; older identities below
+are historical evidence.
 
 ### Current repeated neutral SS2 capture authority
 The user explicitly answered "Allow necessary private neutral captures" to the

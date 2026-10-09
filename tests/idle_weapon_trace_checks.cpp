@@ -124,6 +124,22 @@ int main() {
     {auto t=ready();assert(t.finish(true,true));assert(t.draws==0);} // Event/pose-only, not geometry evidence.
     {auto changed=g.raster;changed.clip.m[0]=1;assert(!(changed==g.raster));}
     {auto changed=g.raster;changed.affine.m[3]=.1f;assert(!(changed==g.raster));}
+    {auto t=ready();assert(t.draw(g,true,true));
+     t.inputFailure.step=20;t.inputFailure.valid=15;
+     t.reject(IdleWeaponTrace::Rejection::CollectInputs);
+     assert(t.retainedDrawCopiesAvailable() && t.draws==1 && t.geometry[0].words==g.words);
+     t.reject(IdleWeaponTrace::Rejection::GpuAbort);t.reject(IdleWeaponTrace::Rejection::GpuRetired);
+     assert(!t.finish(false,false));
+     assert(t.retainedDrawCopiesAvailable() && t.rejection==IdleWeaponTrace::Rejection::CollectInputs &&
+            t.stage==IdleWeaponTrace::Stage::Rejected && t.geometry[0].words==g.words);
+     for(unsigned i=0;i<8;++i){auto bad=t;
+        switch(i){case 0:bad.draws=0;break;case 1:bad.inputFailure.step=19;break;case 2:bad.inputFailure.valid=11;break;
+        case 3:bad.referencesCopied=false;break;case 4:bad.poseCopied=false;break;case 5:bad.animationsCopied=0;break;
+        case 6:bad.config.file=0;break;case 7:bad.precedingStage=IdleWeaponTrace::Stage::Event;break;}
+        assert(!bad.retainedDrawCopiesAvailable());}}
+    for(bool returned:{false,true}){auto t=ready();assert(!t.draw(g,returned,!returned));
+        t.inputFailure.step=20;t.inputFailure.valid=15;t.reject(IdleWeaponTrace::Rejection::CollectInputs);
+        assert(t.draws==0 && !t.retainedDrawCopiesAvailable());}
     {auto t=ready();g.raster.clipValid=false;assert(!t.draw(g,true,true));}
 
     {IdleWeaponTrace t;assert(t.admit(id));assert(t.placement(id,identity,identity,identity));

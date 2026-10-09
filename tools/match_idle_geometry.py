@@ -9,12 +9,10 @@ import struct
 ROOT=Path(__file__).resolve().parents[1]
 CHANNELS=('positions','indices','weights','local_indices','uv')
 
-def match(evidence,candidates):
-    if evidence.get('schema')!=3 or evidence.get('alignment_accepted') is not False:
-        raise ValueError('Expected strict schema3 copied collector evidence')
+def match_draws(observations,candidates,retained=False):
     rows=[]
-    for observation in evidence['copied_event_pose_observations']:
-        for index,g in observation['geometry'].items():
+    for observation in observations:
+        for index,g in (observation['retained_copies']['geometry'] if retained else observation['geometry']).items():
             d=g['data'];layout=d['layout:0'];buffers=d['buffers:0'];streams=d['streams:0']
             hashes={name:struct.pack('<8I',*d['hash:'+str(i)]).hex() for i,name in enumerate(CHANNELS)}
             ranges={name:{'offset':off,'size':size,'format':fmt,'buffer':buf} for name,off,size,fmt,buf in [
@@ -37,11 +35,21 @@ def match(evidence,candidates):
                 'geometry_index':int(index),'draw_record':g['drawRecord'],
                 'result':'unique-consumed-channel-match' if len(found)==1 else 'unmatched' if not found else 'ambiguous',
                 'candidates':found})
+    if retained:
+        for row in rows:row.update(evidence_class='historical-post-original-pre-cleanup-copies',cleanup_certified=False,
+            outer_current=False,whole_trace_accepted=False,alignment_accepted=False)
+    return rows
+
+def match(evidence,candidates):
+    if evidence.get('schema')!=3 or evidence.get('alignment_accepted') is not False:
+        raise ValueError('Expected strict schema3 copied collector evidence')
+    rows=match_draws(evidence['copied_event_pose_observations'],candidates)
+    diagnostic=match_draws([o for o in evidence['rejected_or_missing_observations'] if 'retained_copies' in o],candidates,True)
     missing=[{'request':o['request'],'eye':o['eye'],'hand':o['hand'],'stage':o['stage']}
              for o in evidence['rejected_or_missing_observations']]
     missing.extend({'request':o['request'],'eye':o['eye'],'hand':o['hand'],'stage':o['stage']}
                    for o in evidence['copied_event_pose_observations'] if not o['geometry'])
-    return {'schema':1,'source_fingerprint':evidence['source_fingerprint'],'matches':rows,
+    return {'schema':1,'source_fingerprint':evidence['source_fingerprint'],'matches':rows,'retained_diagnostic_matches':diagnostic,
         'observations_without_geometry':missing,'copied_geometry_coverage_complete':bool(rows) and not missing,
         'consumed_channels_all_uniquely_matched':bool(rows) and not missing and all(r['result']=='unique-consumed-channel-match' for r in rows),
         'historical_loaded_bytes_verified':False,'shader_replay_verified':False,

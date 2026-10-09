@@ -12,6 +12,22 @@ MATRICES=[f'Lab idle matrix request=100 eye=1 hand=0 kind={kind} index=0 values=
 STRETCH='Lab idle stretch request=100 eye=1 hand=0 values=-1,1,1'
 VALID='\n'.join([DRAW,ANIM,*MATRICES,STRETCH])
 
+def geometry_fixture():
+    import struct
+    def row(kind,chunk,values):
+        return 'Lab idle geometryData request=100 eye=1 hand=0 index=0 kind='+kind+' chunk='+str(chunk)+' values='+','.join(f'{x:08x}' for x in values)
+    header='Lab idle geometry request=100 eye=1 hand=0 index=0 modelRecord=1 drawRecord=0 surface=40 instance=50 surfaceName=60 boneName=70 bone=0 cfg=20 file=30 resource=5 words=2 constants=1 declaration=5'
+    data=[row('affine',0,[0x3f800000,0,0,0,0,0x3f800000,0,0,0,0,0x3f800000,0]),
+          row('clip',0,[0]*16),
+          row('layout',0,[317,338,0,133,0,0,135,0,12680,128,0,13948,128,0]),
+          row('buffers',0,[17752,0,1,100,0,2028,0,1,101,0]),
+          row('draw',0,[4,0,0,317,0,338]),
+          row('streams',0,[1,0,12,1,1,13948,4,1,1,12680,4,1,1,15216,8,1,2,0]),
+          *[row('hash',i,[i+1]*8) for i in range(5)],
+          *[row('declaration',i,e) for i,e in enumerate([[0,0,2,0,5,0],[5,0,8,0,5,5],[6,0,8,0,5,6],[3,0,1,0,5,3],[255,0,17,0,0,0]])],row('program',0,[0xfffe0101,0xffff]),row('constant',0,[0,0,0,0])]
+    text=VALID.replace('draws=0','draws=1')+'\n'+header+'\n'+'\n'.join(data)
+    return text,row,header,data
+
 class Checks(unittest.TestCase):
     def test_input_failure_indices_follow_explicit_or_historical_layout(self):
         from idle_stream_evidence import OBSERVED
@@ -92,18 +108,7 @@ class Checks(unittest.TestCase):
         self.assertEqual(r['copied_event_pose_observations'][0]['stretch'],[-1,1,1])
     def test_consumed_geometry_copy(self):
         import struct
-        def row(kind,chunk,values):
-            return 'Lab idle geometryData request=100 eye=1 hand=0 index=0 kind='+kind+' chunk='+str(chunk)+' values='+','.join(f'{x:08x}' for x in values)
-        header='Lab idle geometry request=100 eye=1 hand=0 index=0 modelRecord=1 drawRecord=0 surface=40 instance=50 surfaceName=60 boneName=70 bone=0 cfg=20 file=30 resource=5 words=2 constants=1 declaration=5'
-        data=[row('affine',0,[0x3f800000,0,0,0,0,0x3f800000,0,0,0,0,0x3f800000,0]),
-              row('clip',0,[0]*16),
-              row('layout',0,[317,338,0,133,0,0,135,0,12680,128,0,13948,128,0]),
-              row('buffers',0,[17752,0,1,100,0,2028,0,1,101,0]),
-              row('draw',0,[4,0,0,317,0,338]),
-              row('streams',0,[1,0,12,1,1,13948,4,1,1,12680,4,1,1,15216,8,1,2,0]),
-              *[row('hash',i,[i+1]*8) for i in range(5)],
-              *[row('declaration',i,e) for i,e in enumerate([[0,0,2,0,5,0],[5,0,8,0,5,5],[6,0,8,0,5,6],[3,0,1,0,5,3],[255,0,17,0,0,0]])],row('program',0,[0xfffe0101,0xffff]),row('constant',0,[0,0,0,0])]
-        text=VALID.replace('draws=0','draws=1')+'\n'+header+'\n'+'\n'.join(data)
+        text,row,header,data=geometry_fixture()
         result=assess(text,SOURCE)
         self.assertFalse(result['alignment_accepted'])
         self.assertEqual(result['copied_event_pose_observations'][0]['geometry'][0]['words'],2)
@@ -140,6 +145,81 @@ class Checks(unittest.TestCase):
                     text.replace(data[3],row('buffers',0,[17752,8,1,100,0,2028,0,1,101,0])),
                     text.replace(data[5],row('streams',0,[1,0,12,1,3,13948,4,1,1,12680,4,1,1,15216,8,1,2,0]))]:
             with self.assertRaises(ValueError):assess(bad,SOURCE)
+    def retained_fixture(self):
+        from idle_stream_evidence_checks import fixture
+        text=fixture().split('Lab idle streamProbe')[0].rstrip().replace('draws=0','draws=1')
+        _,_,header,data=geometry_fixture()
+        # The stored earlier draw belongs to the same selected binding, not the
+        # subsequent failed declaration. Reuse the normal geometry payload shape.
+        payload='\n'.join([header,*data]).replace('eye=1 hand=0','eye=0 hand=1')
+        payload=payload.replace('Lab idle geometryData','Lab idle retainedGeometryData').replace('Lab idle geometry ','Lab idle retainedGeometry ')
+        companion='Lab idle retainedCopies request=100 eye=0 hand=1 count=1 postOriginal=1 cleanupCertified=0 outerCurrent=0'
+        return text+'\n'+companion+'\n'+payload
+    def test_retained_copy_is_rejected_history_not_completed(self):
+        text=self.retained_fixture();r=assess(text,SOURCE)
+        self.assertFalse(r['copied_event_pose_observations'])
+        retained=r['rejected_or_missing_observations'][0]['retained_copies']
+        self.assertEqual(len(retained['geometry']),1)
+        self.assertTrue(retained['post_original_return'])
+        for key in ('cleanup_certified','outer_current','whole_trace_accepted','alignment_accepted','positive_grasp_verified'):
+            self.assertIs(retained[key],False)
+        matching=match(r,{})
+        self.assertFalse(matching['matches']);self.assertEqual(len(matching['retained_diagnostic_matches']),1)
+        self.assertFalse(matching['copied_geometry_coverage_complete'])
+        self.assertFalse(matching['consumed_channels_all_uniquely_matched'])
+    def test_retained_companion_requires_complete_qualified_payload(self):
+        text=self.retained_fixture();lines=text.splitlines()
+        for line in lines:
+            if 'Lab idle retained' not in line:continue
+            with self.subTest(removed=line),self.assertRaises(ValueError):assess('\n'.join(x for x in lines if x!=line),SOURCE)
+            with self.subTest(duplicate=line),self.assertRaises(ValueError):assess(text+'\n'+line,SOURCE)
+        for bad in (text.replace('count=1 postOriginal','count=2 postOriginal'),text.replace('postOriginal=1','postOriginal=0'),
+                    text.replace('cleanupCertified=0','cleanupCertified=1'),text.replace('outerCurrent=0','outerCurrent=1'),
+                    text.replace('state=63','state=55'),text.replace('preceding=2','preceding=1'),
+                    text.replace('step=20 index=0','step=19 index=0'),text.replace('retainedCopies request=100','retainedCopies request=101'),
+                    text.replace('Lab idle retainedGeometry ','Lab idle geometry '),text.replace('Lab idle retainedGeometryData','Lab idle geometryData'),
+                    text.replace('matrices=4','matrices=0'),text.replace('contributors=1','contributors=0')):
+            with self.subTest(bad=bad),self.assertRaises(ValueError):assess(bad,SOURCE)
+    def test_retained_callback_provenance_and_passive_coexistence(self):
+        from idle_stream_evidence_checks import fixture
+        retained=self.retained_fixture()
+        for flags in (0,31,47,55,59,61,62):
+            with self.subTest(callbacks=flags),self.assertRaises(ValueError):assess(retained.replace('callbacks=63','callbacks='+str(flags)),SOURCE)
+        passive=fixture().replace('draws=0','draws=1')
+        both=passive+'\n'+retained[retained.index('Lab idle retainedCopies'):]
+        result=assess(both,SOURCE)
+        self.assertFalse(result['copied_event_pose_observations'])
+        r=result['rejected_or_missing_observations'][0]
+        self.assertEqual(r['stream_probe']['flags'],511)
+        self.assertEqual(len(r['retained_copies']['geometry']),1)
+        # The passive zero-draw rule is lifted only after full companion validation.
+        with self.assertRaises(ValueError):assess(passive,SOURCE)
+        with self.assertRaises(ValueError):assess(both.replace('count=1 postOriginal','count=2 postOriginal'),SOURCE)
+        with self.assertRaises(ValueError):assess(both.replace('outerCurrent=0','outerCurrent=1'),SOURCE)
+        with self.assertRaises(ValueError):assess(both[:both.index('Lab idle retainedGeometryData')],SOURCE)
+        matching=match(result,{})
+        self.assertFalse(matching['copied_geometry_coverage_complete'])
+        self.assertFalse(matching['matches'])
+    def test_agreeing_diagnostic_replay_cannot_promote_readiness(self):
+        import struct,tempfile
+        from unittest.mock import patch
+        from replay_idle_geometry import replay
+        evidence=assess(self.retained_fixture(),SOURCE)
+        row={'request':100,'eye':0,'hand':1,'geometry_index':0,'draw_record':0,
+             'result':'unique-consumed-channel-match','candidates':[{'candidate':'hand','asset_sha256':'b'*64,'mesh_object':1,'lod':0,'channel_index':0}]}
+        candidate={'hand':{'asset_sha256':'b'*64,'candidate_channels':[{'channel_sha256':{}}]}}
+        copied={'positions':struct.pack('<3f',0,0,0)*317,'indices':b'\0\0'*1014}
+        matching={'matches':[],'retained_diagnostic_matches':[row],'observations_without_geometry':[{}],'copied_geometry_coverage_complete':False}
+        with tempfile.TemporaryDirectory() as d,patch('replay_idle_geometry.match',return_value=matching), \
+                patch('replay_idle_geometry.channel_bytes',return_value=copied), \
+                patch('replay_idle_geometry.evaluate_geometry',return_value={'position_replay_agrees_with_reference':True}):
+            result=replay(evidence,candidate,Path(d),Path(d)/'unused',Path(d))
+        self.assertEqual(len(result['retained_diagnostic_draws']),1)
+        self.assertTrue(result['retained_diagnostic_draws'][0]['position_replay']['position_replay_agrees_with_reference'])
+        self.assertIsNone(result['retained_diagnostic_draws'][0]['render_geometry']['raw_grip'])
+        self.assertFalse(result['draws']);self.assertFalse(result['copied_geometry_coverage_complete'])
+        self.assertFalse(result['all_consumed_positions_agree_with_native_reference'])
+        self.assertFalse(result['alignment_accepted'])
     def test_uncalibrated_reference_availability(self):
         grip_row=next(row for row in MATRICES if 'kind=rawGrip ' in row)
         text=VALID.replace('rawGripValid=1','rawGripValid=0').replace(grip_row,'')

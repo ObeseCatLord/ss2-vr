@@ -4118,38 +4118,43 @@ static void emitIdleWeaponTrace(const IdleWeaponTrace &trace) {
             log("Lab idle streamProgram request=%llu eye=%u hand=%u chunk=%u values=%s",b.request,b.eye,b.hand,chunk,values);
         }
     }
-    if(trace.stage!=IdleWeaponTrace::Stage::Complete)return;
-    for(unsigned i=0;i<trace.contributors;++i) {
-        const auto &a=trace.animations[i];
-        log("Lab idle animation request=%llu eye=%u hand=%u index=%u raw=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x header=%08x,%08x,%08x,%08x",
-            b.request,b.eye,b.hand,i,a.contribution[0],a.contribution[1],a.contribution[2],a.contribution[3],
-            a.contribution[4],a.contribution[5],a.contribution[6],a.contribution[7],
-            a.header[0],a.header[1],a.header[2],a.header[3]);
+    const bool retained=trace.retainedDrawCopiesAvailable();
+    if(trace.stage!=IdleWeaponTrace::Stage::Complete && !retained)return;
+    if(retained)log("Lab idle retainedCopies request=%llu eye=%u hand=%u count=%u postOriginal=1 cleanupCertified=0 outerCurrent=0",
+        b.request,b.eye,b.hand,trace.draws);
+    if(!retained) {
+        for(unsigned i=0;i<trace.contributors;++i) {
+            const auto &a=trace.animations[i];
+            log("Lab idle animation request=%llu eye=%u hand=%u index=%u raw=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x header=%08x,%08x,%08x,%08x",
+                b.request,b.eye,b.hand,i,a.contribution[0],a.contribution[1],a.contribution[2],a.contribution[3],
+                a.contribution[4],a.contribution[5],a.contribution[6],a.contribution[7],
+                a.header[0],a.header[1],a.header[2],a.header[3]);
+        }
+        auto emitMatrix=[&](const char *kind,unsigned index,const Matrix34 &m) {
+            log("Lab idle matrix request=%llu eye=%u hand=%u kind=%s index=%u values=%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g",
+                b.request,b.eye,b.hand,kind,index,m.m[0],m.m[1],m.m[2],m.m[3],m.m[4],m.m[5],
+                m.m[6],m.m[7],m.m[8],m.m[9],m.m[10],m.m[11]);
+        };
+        emitMatrix("world",0,trace.world);
+        emitMatrix("nativePlacement",0,trace.nativePlacement);
+        emitMatrix("trackedPlacement",0,trace.trackedPlacement);
+        emitMatrix("controller",0,trace.controller);
+        emitMatrix("rawAim",0,trace.rawAim);
+        if(trace.rawGripValid)emitMatrix("rawGrip",0,trace.rawGrip);
+        for(unsigned i=0;i<trace.matrixCount;++i)emitMatrix("canonical",i,trace.matrices[i]);
+        log("Lab idle stretch request=%llu eye=%u hand=%u values=%.9g,%.9g,%.9g",b.request,b.eye,b.hand,
+            trace.stretch.x,trace.stretch.y,trace.stretch.z);
     }
-    auto emitMatrix=[&](const char *kind,unsigned index,const Matrix34 &m) {
-        log("Lab idle matrix request=%llu eye=%u hand=%u kind=%s index=%u values=%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g",
-            b.request,b.eye,b.hand,kind,index,m.m[0],m.m[1],m.m[2],m.m[3],m.m[4],m.m[5],
-            m.m[6],m.m[7],m.m[8],m.m[9],m.m[10],m.m[11]);
-    };
-    emitMatrix("world",0,trace.world);
-    emitMatrix("nativePlacement",0,trace.nativePlacement);
-    emitMatrix("trackedPlacement",0,trace.trackedPlacement);
-    emitMatrix("controller",0,trace.controller);
-    emitMatrix("rawAim",0,trace.rawAim);
-    if(trace.rawGripValid)emitMatrix("rawGrip",0,trace.rawGrip);
-    for(unsigned i=0;i<trace.matrixCount;++i)emitMatrix("canonical",i,trace.matrices[i]);
-    log("Lab idle stretch request=%llu eye=%u hand=%u values=%.9g,%.9g,%.9g",b.request,b.eye,b.hand,
-        trace.stretch.x,trace.stretch.y,trace.stretch.z);
     for(unsigned n=0;n<trace.draws;++n) {
         const auto &g=trace.geometry[n];const auto &r=g.raster;const auto &v=g.inputs;
-        log("Lab idle geometry request=%llu eye=%u hand=%u index=%u modelRecord=%u drawRecord=%u surface=%u instance=%u surfaceName=%u boneName=%u bone=%d cfg=%u file=%u resource=%d words=%u constants=%u declaration=%u",
-            b.request,b.eye,b.hand,n,r.modelRecord,r.drawRecord,r.surface,r.instance,r.surfaceName,r.boneName,r.bone,
+        log("Lab idle %s request=%llu eye=%u hand=%u index=%u modelRecord=%u drawRecord=%u surface=%u instance=%u surfaceName=%u boneName=%u bone=%d cfg=%u file=%u resource=%d words=%u constants=%u declaration=%u",
+            retained?"retainedGeometry":"geometry",b.request,b.eye,b.hand,n,r.modelRecord,r.drawRecord,r.surface,r.instance,r.surfaceName,r.boneName,r.bone,
             r.renderConfig.configuration,r.renderConfig.file,r.renderConfig.resource,g.words,g.constantCount,g.declarationCount);
         auto words=[&](const char *kind,unsigned chunk,std::span<const uint32_t> values) {
             char text[32*9]{};unsigned cursor=0;
             for(auto value:values)cursor+=unsigned(std::snprintf(text+cursor,sizeof(text)-cursor,"%s%08x",cursor?",":"",value));
-            log("Lab idle geometryData request=%llu eye=%u hand=%u index=%u kind=%s chunk=%u values=%s",
-                b.request,b.eye,b.hand,n,kind,chunk,text);
+            log("Lab idle %s request=%llu eye=%u hand=%u index=%u kind=%s chunk=%u values=%s",
+                retained?"retainedGeometryData":"geometryData",b.request,b.eye,b.hand,n,kind,chunk,text);
         };
         std::array<uint32_t,12> affine{};std::memcpy(affine.data(),r.affine.m,sizeof(affine));words("affine",0,affine);
         std::array<uint32_t,16> clip{};std::memcpy(clip.data(),r.clip.m,sizeof(clip));words("clip",0,clip);

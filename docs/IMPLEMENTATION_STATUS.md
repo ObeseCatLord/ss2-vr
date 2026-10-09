@@ -1,5 +1,43 @@
 # Implementation status — 2026-10-08
 
+## Historical retained-draw diagnostic — source GO
+
+The latest native capture stored one qualified draw in each of12first-eye traces
+before a subsequent unsupported pass rejected the whole trace. Source now emits
+those already owned geometry copies under a distinct rejected companion. No
+native query, buffer lock, state write, owner or cleanup route was added.
+Original first rejection and Complete-only ordinary payloads remain unchanged.
+
+The companion states post-original/pre-cleanup history only. Successful original
+draw return and then-current checks preceded storage; subsequent cleanup, outer
+finish/current state, winning cached-eye ownership and grasp remain unproved.
+The strict reader requires callbacks63 and complete copied-state/identity/count
+qualification, then reuses the same per-draw payload validator. Nonzero-draw
+passive receipts are permitted only after independently validating the retained
+companion. They otherwise retain their original zero-draw rule.
+
+Matching and unchanged-bytecode position replay share per-draw helpers but return
+retained diagnostic collections separately. Diagnostic agreement cannot affect
+accepted matches, coverage, both-eye readiness or alignment. No controller/grip
+matrix was emitted for these diagnostic draws; unavailable references stay null.
+The reference measurement tool still uses accepted draws only.
+
+Astra combined source GO follows correction of twoP2 findings: missing callback
+provenance and valid retained/passive coexistence. Latest local Astra/xhigh turn
+metadata verified; independent backend attestation unavailable. Four products
+rebuilt on `cdc45f54548282a0afdfec4f7478eada860f816f08bea850b28a857f757b1fe4`, IPC10/wire7 unchanged.
+All68Debug/68Release and28normal/optimized native/compiled gates pass;14reader and
+11passive-reader groups pass normally/optimized. Tests cover stored copies after
+later rejection/abort/retirement, failed-original/current non-contribution,
+malformed/foreign/duplicate/truncated companions and replay non-promotion. Earlier
+actual logs retain identical interpretation against the prior source reader.
+
+No runtime has used these products. Next is a fresh sealed neutral capture of
+historical channel hashes, program and reference; no old fixture may be rerun or
+resealed. Full geometry/grasp, cache, melee release, driver controls and device/
+network/user acceptance remain incomplete. This is implementation evidence for
+the next measurement, not full-mod completion.
+
 ## Latest neutral capture — rendering works, geometry gate remains
 
 The rebuilt observed-layout adapter ran in a fresh private fixture on source
@@ -18,10 +56,14 @@ emitter suppresses the earlier owned geometry copies after rejection. This is a
 concrete diagnostic boundary, not evidence that gameplay stereo is broken or
 that the unseen earlier shader/channel hashes match an asset.
 
-Next bounded decision: preserve already copied per-draw evidence as rejected
-diagnostics without promoting whole-trace/Idle/cache/grasp acceptance; compare
-that minimal change with extending passive observation of the noUV pass. Astra
-design review is pending. Do not widen declaration admission using an inactive
+The bounded Astra design review approved preserving already owned per-draw copies
+as distinct rejected diagnostics, reusing geometry serialization and strict
+per-draw matching/replay validation. Implementation is next. The draw counter
+certifies storage after successful original return and current checks, before
+owner cleanup; it does not certify cleanup or outer finish/current state. These
+historical copies must stay outside completed observations and coverage/readiness.
+Extra passive noUV queries are deferred unless this minimal route cannot answer
+the next concrete question. Do not widen declaration admission using an inactive
 UV binding, reuse cached-eye events or repeat this attempted fixture.
 
 The four parallel commits are integrated and the combined final tree rebuilt;
