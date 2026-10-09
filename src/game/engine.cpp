@@ -4094,7 +4094,7 @@ static void emitIdleWeaponTrace(const IdleWeaponTrace &trace) {
             if(s.status!=IdleWeaponTrace::StreamSnapshot::Copied)continue;
             log("Lab idle streamBinding request=%llu eye=%u hand=%u phase=%u caps=%u declaration=%u declarationObject=%u indexObject=%u shaderObject=%u",
                 b.request,b.eye,b.hand,phase,s.caps,s.declarationCount,s.declarationObject,s.indexObject,s.shaderObject);
-            constexpr unsigned numbers[]{0,7,8};
+            const auto numbers=IdleWeaponTrace::passiveStreamNumbers(trace.inputFailure);
             for(unsigned i=0;i<3;++i) {
                 const auto &v=s.streams[i];
                 log("Lab idle streamInput request=%llu eye=%u hand=%u phase=%u index=%u object=%u offset=%u stride=%u frequency=%u",

@@ -14,6 +14,19 @@ int main() {
         assert(!IdleWeaponTrace::observedStreamFamily(changed));}
      for(unsigned i=0;i<3;++i){auto changed=d;if(i==0)changed.step=19;else if(i==1)changed.valid=11;else changed.declarationCount=65;
         assert(!IdleWeaponTrace::observedStreamFamily(changed));}}
+    {IdleWeaponTrace::InputFailure d;d.step=20;d.valid=15;d.declarationCount=5;
+     d.declaration[0]={0,0,2,0,5,0};d.declaration[1]={1,0,2,0,5,1};d.declaration[2]={5,0,8,0,5,5};
+     d.declaration[3]={6,0,8,0,5,6};d.declaration[4]={255,0,17,0,0,0};
+     const std::array<unsigned,3> expected{0,5,6};
+     assert(IdleWeaponTrace::observedStreamFamily(d) && IdleWeaponTrace::passiveStreamNumbers(d)==expected);
+     bool weights=false;assert(!declaredGeometryInputs(std::span(d.declaration).first(5),weights));
+     for(unsigned i=0;i<5;++i){auto changed=d;changed.declaration[i].usageIndex++;
+        assert(!IdleWeaponTrace::observedStreamFamily(changed));}
+     auto resampled=IdleWeaponTrace::StreamSnapshot{};resampled.declaration[0].stream=7;
+     assert(IdleWeaponTrace::passiveStreamNumbers(d)==expected); // Resampling cannot select another family.
+     auto mixed=d;mixed.declaration[2].stream=7;assert(!IdleWeaponTrace::observedStreamFamily(mixed));
+     for(unsigned i=0;i<3;++i){auto bad=d;if(i==0)bad.step=19;else if(i==1)bad.valid=11;else bad.declarationCount=66;
+        assert(!IdleWeaponTrace::observedStreamFamily(bad));}}
     {IdleWeaponTrace::StreamSnapshot a;a.status=IdleWeaponTrace::StreamSnapshot::Copied;a.caps=256;
      a.declarationCount=6;a.declarationObject=1;a.indexObject=2;a.shaderObject=3;
      a.streams={ScopeStreamInput{4,0,12,1},ScopeStreamInput{4,48384,4,1},ScopeStreamInput{4,49256,4,1}};

@@ -1,8 +1,19 @@
-"""Strict passive 0/7/8 receipts; never admit geometry or infer stream roles."""
+"""Strict passive selected-stream receipts; never admit geometry or infer stream roles."""
 import re
 
 OBSERVED=[[0,0,2,0,5,0],[2,0,1,0,5,2],[3,0,1,0,5,3],
           [7,0,8,0,5,7],[8,0,8,0,5,8],[255,0,17,0,0,0]]
+NO_UV56=[[0,0,2,0,5,0],[1,0,2,0,5,1],[5,0,8,0,5,5],
+         [6,0,8,0,5,6],[255,0,17,0,0,0]]
+
+def diagnostic_stream_numbers(failure):
+    count=failure.get('declaration',0)
+    if count not in (5,6):raise ValueError('Unsupported passive declaration count')
+    rows=[failure.get('declaration_rows',{}).get(i) for i in range(count)]
+    if rows==OBSERVED:return (0,7,8)
+    if rows==NO_UV56:return (0,5,6)
+    raise ValueError('Unsupported passive original declaration')
+
 BASE={'request','eye','hand'}
 
 def declaration_layout(rows):
@@ -55,6 +66,7 @@ def consume(record,kind,f):
     if record.get('stage')!=3 or record.get('rejection',{}).get('reason')!=32 or \
             failure.get('step')!=20 or failure.get('valid')!=15:
         raise ValueError('Passive stream receipt without rejected full step20 input')
+    selected=diagnostic_stream_numbers(failure)
     if any(number(f[k],(1<<64)-1 if k=='request' else 0xffffffff)!=record[k] for k in BASE):
         raise ValueError('Foreign/interleaved stream receipt')
     if kind=='streamProbe':
@@ -78,7 +90,7 @@ def consume(record,kind,f):
         status=number(f['status'],3);step=number(f['step'],21);index=number(f['index'],8);hr=signed(f['hr'])
         if status not in (1,2,3) or (status==1 and (step or index or hr)) or \
                 (status!=1 and not step) or (phase and step>18) or \
-                (step in (9,10,11,12) and index not in (0,7,8)) or \
+                (step in (9,10,11,12) and index not in selected) or \
                 (step not in (9,10,11,12) and index) or (status==3 and hr):
             raise ValueError('Contradictory stream snapshot status')
         api_failures={1,3,4,6,9,11,13,16,19}
@@ -101,7 +113,7 @@ def consume(record,kind,f):
     index=number(f['index'])
     if kind=='streamInput':
         schema(f,{'phase','index','object','offset','stride','frequency'})
-        if index not in (0,7,8) or index in s['streams']:raise ValueError('Invalid/duplicate actual stream')
+        if index not in selected or index in s['streams']:raise ValueError('Invalid/duplicate actual stream')
         v={k:number(f[k]) for k in ('object','offset','stride','frequency')}
         if not v['object']:raise ValueError('Null copied stream identity')
         s['streams'][index]=v
@@ -123,8 +135,9 @@ def validate(record,*,retained_validated=False):
     # The reader passes this only after complete retained-companion qualification
     # and the shared strict geometry validator. A JSON flag cannot enable it.
     failure=record['input_failure'];reason=record['rejection']
-    if failure['declaration']!=6 or [failure['declaration_rows'][i] for i in range(6)]!=OBSERVED or \
-            reason['preceding']!=2 or reason['checks'] or reason['state']!=(47|record['rawGripValid']*16) or \
+    selected=diagnostic_stream_numbers(failure)
+    original_rows=[failure['declaration_rows'][i] for i in range(failure['declaration'])]
+    if reason['preceding']!=2 or reason['checks'] or reason['state']!=(47|record['rawGripValid']*16) or \
             reason['callbacks']!=63 or not 1<=record['contributors']<=16 or \
             not 1<=record['matrices']<=64 or (record['draws'] and not retained_validated) or \
             any(not record[k] for k in ('request','input','owner','weapon','model','generation','cfg','file')):
@@ -134,7 +147,7 @@ def validate(record,*,retained_validated=False):
     for s in p['snapshots'].values():
         if s['status']==1:
             b=s['binding']
-            if b is None or set(s['streams'])!={0,7,8} or set(s['declaration'])!=set(range(b['declaration'])) or \
+            if b is None or set(s['streams'])!=set(selected) or set(s['declaration'])!=set(range(b['declaration'])) or \
                     set(s['constants'])!=set(range(b['caps'])):raise ValueError('Truncated copied stream snapshot')
     flags=p['flags'];before=p['snapshots'].get(0);after=p['snapshots'].get(1)
     if p['attempts']==2 and flags&18!=18:
@@ -146,8 +159,11 @@ def validate(record,*,retained_validated=False):
     if bool(p['words'])!=bool(flags&1) or (p['words'] and p['words']<2):raise ValueError('Program copy qualification mismatch')
     if flags&2:
         if not flags&1 or before['binding']['caps']!=failure['caps'] or \
-                [before['declaration'][i] for i in range(before['binding']['declaration'])]!=OBSERVED or \
+                [before['declaration'][i] for i in range(before['binding']['declaration'])]!=original_rows or \
                 before['streams'][0]!=failure['streams'][0]:raise ValueError('Before-current evidence contradicts original inputs')
+    if flags&2 and selected==(0,5,6) and (
+            before['streams'][5]!=failure['streams'][1] or before['streams'][6]!=failure['streams'][3]):
+        raise ValueError('Before-current selected 5/6 bindings contradict original inputs')
     if flags&8 and not flags&4 or flags&16 and flags&12!=12 or flags&32 and flags&18!=18 or \
             flags&128 and not flags&32 or flags&64 and flags&35!=35:
         raise ValueError('Invalid passive draw flag dependencies')

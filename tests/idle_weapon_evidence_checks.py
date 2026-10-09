@@ -145,9 +145,9 @@ class Checks(unittest.TestCase):
                     text.replace(data[3],row('buffers',0,[17752,8,1,100,0,2028,0,1,101,0])),
                     text.replace(data[5],row('streams',0,[1,0,12,1,3,13948,4,1,1,12680,4,1,1,15216,8,1,2,0]))]:
             with self.assertRaises(ValueError):assess(bad,SOURCE)
-    def retained_fixture(self):
+    def retained_fixture(self,declaration=None):
         from idle_stream_evidence_checks import fixture
-        text=fixture().split('Lab idle streamProbe')[0].rstrip().replace('draws=0','draws=1')
+        text=(fixture(declaration) if declaration is not None else fixture()).split('Lab idle streamProbe')[0].rstrip().replace('draws=0','draws=1')
         _,_,header,data=geometry_fixture()
         # The stored earlier draw belongs to the same selected binding, not the
         # subsequent failed declaration. Reuse the normal geometry payload shape.
@@ -200,6 +200,16 @@ class Checks(unittest.TestCase):
         matching=match(result,{})
         self.assertFalse(matching['copied_geometry_coverage_complete'])
         self.assertFalse(matching['matches'])
+    def test_no_uv_retained_and_passive_coexist_without_promotion(self):
+        from idle_stream_evidence import NO_UV56
+        from idle_stream_evidence_checks import fixture
+        retained=self.retained_fixture(NO_UV56)
+        both=fixture(NO_UV56).replace('draws=0','draws=1')+'\n'+retained[retained.index('Lab idle retainedCopies'):]
+        evidence=assess(both,SOURCE);r=evidence['rejected_or_missing_observations'][0]
+        self.assertEqual(set(r['stream_probe']['snapshots'][0]['streams']),{0,5,6})
+        self.assertEqual(len(r['retained_copies']['geometry']),1)
+        self.assertFalse(evidence['copied_event_pose_observations'])
+        self.assertFalse(match(evidence,{})['copied_geometry_coverage_complete'])
     def test_agreeing_diagnostic_replay_cannot_promote_readiness(self):
         import struct,tempfile
         from unittest.mock import patch

@@ -8,6 +8,17 @@ This historical hold blocked public publication pending renewed confirmation. It
 
 ## Current PC continuation — start here
 
+Latest rebuilt source fingerprint23712f1d7a2c896cf245a3d9e073123099ed1db4f9860ec149b1f133c11f346c,
+IPC10/wire7. ExactnoUV passive extension sourceGO: immutable originalfailure
+selects0/7/8 or0/5/6 viaonesharedhelper; new5/6originalbinding agreement, oldowners/
+finally andreaderflags preserved. No productiongrammar/replayseed/admissionchange.
+All68Debug/68Release+28normal/Ogates pass,15general14passive readergroupsnormal/O.
+No runtime of this build yet; freshsealedneutral shader/binding capture next.
+Earlierweaponmesh3/nativeprogramreference matches remain useful, handannotation
+belongsDIFFERENTasset/mesh2. No inactiveUV/handassociation/grasp/cache/release claim.
+See latestIDLE_EVENT_COLLECTOR/IMPLEMENTATION_STATUS. Historicalnotes below retain
+originalidentities; attemptedfixtures neverrerun/reseal.
+
 Latest neutral runtime of cdc45 products reached Jungle/105native projectionpairs,
 normal native shutdown, empty ownedcleanup/display retired, protected12unchanged.
 11retainedcopies (eye0:7right4left) uniquelymatchfiveweaponmesh3channelhashes and

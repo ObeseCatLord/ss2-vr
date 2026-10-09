@@ -1,5 +1,32 @@
 # Event-time ID1 collection — source implemented
 
+## Exact noUV passive diagnostic — source GO
+
+Astra approved the minimal extension for the observed five-row0/1/5/6 declaration.
+One pure helper selects0/7/8 or0/5/6 from the immutable original first-failure
+rows; selection, rejected-raster qualification, sampling and emission reuse it.
+Resampled declarations cannot relabel the stream slots. The new5/6 branch also
+compares the original captured local/weight scalar bindings before claiming
+before-current agreement. No production geometry grammar, replay seed, owner
+slot, buffer lock or graphics-state write was added.
+
+Reader keysets and failure indices use the same original-family policy. Partial
+output/flag/HRESULT/callback63 rules remain; nonzero draws still require a fully
+validated retained companion. Changed after-declarations remain diagnostic and
+must clear equality. Fifteen general reader and14passive reader groups pass
+normally/optimized, including both exact families, malformed/aliased/cross-family
+inputs, original-binding contradictions, changed declarations and coexistence.
+All68Debug/68Release and28normal/optimized native/compiled gates pass. All four
+products rebuilt on23712f1d7a2c896cf245a3d9e073123099ed1db4f9860ec149b1f133c11f346c,
+IPC10/wire7 unchanged. Latest local Astra/xhigh metadata verified; backend
+attestation unavailable. No runtime has used these products yet.
+
+Next is a fresh sealed neutral shader/binding observation. This extension cannot
+prove consumed UV, hand-child association, winning cache or grasp. The earlier
+retained weapon matches remain valid but cannot take the different hand asset's
+annotation. Preserve original rejection and old fixtures; full-mod scope remains
+open. Actual shooting/vehicle/HMD/network acceptance belongs to the user.
+
 ## Latest native retained-copy result
 
 The fresh neutral run of source96d971f1cda7215d82363eaade6d4f6ad0e49372,

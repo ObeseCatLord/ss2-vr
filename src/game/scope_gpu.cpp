@@ -236,12 +236,13 @@ static bool boundInputs(IDirect3DDevice9 *d,BoundInputs &b,const ScopeIndexedDra
     for(const auto &row:b.uvRows)for(float value:row)if(!std::isfinite(value))return fail(25);
     return true;
 }
-// Passive actual 0/7/8 observations. These slots are deliberately not labelled
+// Passive actual stream observations for the exact selected family. These slots are deliberately not labelled
 // weights/local indices and are never passed to geometry admission or replay.
 // Failed/abnormal outputs remain owned by the existing ProbeOwner cleanup;
 // only an entirely normal snapshot exposes copied scalar outputs.
 static bool sampleIdleStreams(IDirect3DDevice9 *d,BoundInputs &b,unsigned phase) {
     auto &receipt=probe.idleTrace->streamProbe;
+    const auto numbers=IdleWeaponTrace::passiveStreamNumbers(probe.idleTrace->inputFailure);
     auto &out=receipt.snapshots[phase];
     out={};out.status=IdleWeaponTrace::StreamSnapshot::Interrupted;
     receipt.attempts=phase+1;
@@ -267,7 +268,6 @@ static bool sampleIdleStreams(IDirect3DDevice9 *d,BoundInputs &b,unsigned phase)
     for(UINT i=0;i<b.count;++i) {
         const auto e=elements[i];b.elements[i]={e.Stream,e.Offset,e.Type,e.Method,e.Usage,e.UsageIndex};
     }
-    constexpr UINT numbers[]{0,7,8};
     std::array<ScopeStreamInput,3> streams{};
     for(unsigned i=0;i<3;++i) {
         auto &v=streams[i];
@@ -311,7 +311,12 @@ static void beginIdleStreamProbe(IDirect3DDevice9 *d) {
     receipt.flags|=IdleWeaponTrace::StreamProbe::BeforeCopied;
     const auto &a=probe.bindings[0];const auto &b=probe.bindings[1];
     const auto &snapshot=receipt.snapshots[0];
-    if(a.count==b.count && a.elements==b.elements && a.identity[5]==b.identity[5] &&
+    const auto numbers=IdleWeaponTrace::passiveStreamNumbers(probe.idleTrace->inputFailure);
+    // The new 5/6 branch has original getters for both selected streams;
+    // compare their already captured scalar bindings without extra COM calls.
+    const bool originalStreams=numbers[1]!=5 ||
+        (a.values.localIndices==snapshot.streams[1] && a.values.weights==snapshot.streams[2]);
+    if(originalStreams && a.count==b.count && a.elements==b.elements && a.identity[5]==b.identity[5] &&
        a.identity[4]==b.identity[4] && a.values.positions==snapshot.streams[0] &&
        a.constantCount==b.constantCount && !std::memcmp(a.constants.data(),b.constants.data(),a.constantCount*4*sizeof(float)) &&
        idleStreamOwnerCurrent(d))receipt.flags|=IdleWeaponTrace::StreamProbe::BeforeCurrent;

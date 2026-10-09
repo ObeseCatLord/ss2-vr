@@ -4,12 +4,12 @@ import sys
 import unittest
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 from assess_idle_weapon import assess
-from idle_stream_evidence import OBSERVED
+from idle_stream_evidence import OBSERVED,NO_UV56,diagnostic_stream_numbers
 
 SOURCE='a'*64
 BASE='request=100 eye=0 hand=1'
 
-def fixture():
+def fixture(declaration=OBSERVED):
     lines=[f'Lab idle draw schema=3 rawGripValid=1 draws=0 source={SOURCE} ipc=10 wire=7 request=100 input=90 owner=1 weapon=2 model=3 generation=4 hand=1 eye=0 stage=3 cfg=20 file=30 resource=1 contributors=1 matrices=4 historicalBytes=0 grasp=0',
            'Lab idle rejection '+BASE+' reason=32 preceding=2 checks=0 state=63 callbacks=63',
            'Lab idle inputFailure '+BASE+' step=20 index=0 hr=0 valid=15 caps=2 declaration=6 rangeChecks=6015']
@@ -31,9 +31,61 @@ def fixture():
         lines += ['Lab idle streamDeclaration '+p+' index='+str(i)+' values='+','.join(map(str,e)) for i,e in enumerate(OBSERVED)]
         for i in range(2):lines+=['Lab idle streamConstant '+p+f' index={i} values=00000000,00000000,00000000,00000000']
     lines+=['Lab idle streamProgram '+BASE+' chunk=0 values=fffe0101,0000ffff']
+    if declaration==NO_UV56:
+        lines=[line.replace('declaration=6','declaration=5').replace('rangeChecks=6015','rangeChecks=8191')
+               for line in lines if not (('inputDeclaration' in line or 'streamDeclaration' in line) and 'index=5 values=' in line)]
+        for n,line in enumerate(lines):
+            if 'inputDeclaration' in line or 'streamDeclaration' in line:
+                index=int(line.split(' index=')[1].split()[0])
+                lines[n]=line.split(' values=')[0]+' values='+','.join(map(str,NO_UV56[index]))
+            elif 'inputStream' in line and 'index=1 ' in line:
+                lines[n]=line.replace('object=2 offset=13948','object=1 offset=49256')
+            elif 'inputStream' in line and 'index=3 ' in line:
+                lines[n]=line.replace('object=0 offset=0 stride=0 frequency=0','object=1 offset=48384 stride=4 frequency=1')
+            elif 'streamInput' in line:
+                lines[n]=line.replace('index=7 object=1 offset=48384','index=5 object=1 offset=49256').replace('index=8 object=1 offset=49256','index=6 object=1 offset=48384')
     return '\n'.join(lines)
 
 class Checks(unittest.TestCase):
+    def test_exact_no_uv_selection_and_original_binding_agreement(self):
+        text=fixture(NO_UV56);result=assess(text,SOURCE)
+        record=result['rejected_or_missing_observations'][0]
+        self.assertEqual(diagnostic_stream_numbers(record['input_failure']),(0,5,6))
+        self.assertEqual(set(record['stream_probe']['snapshots'][0]['streams']),{0,5,6})
+        self.assertFalse(result['copied_event_pose_observations'])
+        for field in ('geometry_admitted','roles_inferred','alignment_accepted'):
+            self.assertIs(record['stream_probe'][field],False)
+        for bad in (text.replace('inputStream '+BASE+' index=1 object=1 offset=49256','inputStream '+BASE+' index=1 object=1 offset=49260'),
+                    text.replace('inputStream '+BASE+' index=3 object=1 offset=48384','inputStream '+BASE+' index=3 object=2 offset=48384')):
+            with self.assertRaises(ValueError):assess(bad,SOURCE)
+        for rows in ([],NO_UV56[:-1],OBSERVED+NO_UV56):
+            with self.assertRaises(ValueError):diagnostic_stream_numbers({'declaration':len(rows),'declaration_rows':dict(enumerate(rows))})
+        for index in range(5):
+            for field in range(6):
+                rows=copy.deepcopy(NO_UV56);rows[index][field]+=1
+                with self.subTest(index=index,field=field),self.assertRaises(ValueError):
+                    diagnostic_stream_numbers({'declaration':5,'declaration_rows':dict(enumerate(rows))})
+    def test_no_uv_partial_and_cross_family_indices(self):
+        for declaration,valid,foreign in ((NO_UV56,5,7),(OBSERVED,7,5)):
+            text=fixture(declaration);head=text[:text.index('Lab idle streamSnapshot')]
+            head=head.replace('attempts=2 flags=511 words=2','attempts=1 flags=284 words=0')
+            row='Lab idle streamSnapshot '+BASE+f' phase=0 status=2 step=9 index={valid} hr=-1'
+            self.assertFalse(assess(head+row,SOURCE)['copied_event_pose_observations'])
+            with self.assertRaises(ValueError):assess(head+row.replace('index='+str(valid),'index='+str(foreign)),SOURCE)
+        text=fixture(NO_UV56)
+        for foreign in (7,8):
+            with self.assertRaises(ValueError):assess(text.replace('streamInput '+BASE+' phase=0 index=5','streamInput '+BASE+' phase=0 index='+str(foreign)),SOURCE)
+    def test_changed_after_declaration_does_not_reselect_numbers(self):
+        text=fixture(NO_UV56).replace('flags=511','flags=447')
+        rows=[line for line in text.splitlines() if not ('streamDeclaration '+BASE+' phase=1' in line)]
+        rows=[line.replace('phase=1 caps=2 declaration=5','phase=1 caps=2 declaration=6') for line in rows]
+        rows+=['Lab idle streamDeclaration '+BASE+' phase=1 index='+str(i)+' values='+','.join(map(str,e)) for i,e in enumerate(OBSERVED)]
+        changed='\n'.join(rows)
+        r=assess(changed,SOURCE)['rejected_or_missing_observations'][0]
+        self.assertEqual(set(r['stream_probe']['snapshots'][1]['streams']),{0,5,6})
+        self.assertFalse(r['stream_probe']['flags']&64)
+        with self.assertRaises(ValueError):assess(changed.replace('phase=1 index=5 object','phase=1 index=7 object'),SOURCE)
+        with self.assertRaises(ValueError):assess(changed.replace('flags=447','flags=511'),SOURCE)
     def test_complete_diagnostic_never_promotes_or_infers_roles(self):
         r=assess(fixture(),SOURCE)
         self.assertFalse(r['copied_event_pose_observations'])

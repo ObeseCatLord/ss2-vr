@@ -89,7 +89,7 @@ struct IdleWeaponTrace {
         uint32_t status=Missing,step=0,index=0,caps=0,declarationCount=0;
         int32_t hresult=0;
         uint32_t declarationObject=0,indexObject=0,shaderObject=0;
-        std::array<ScopeStreamInput,3> streams{}; // Actual 0/7/8, roles unresolved.
+        std::array<ScopeStreamInput,3> streams{}; // Selected actual numbers, roles unresolved.
         std::array<ScopeDeclarationElement,65> declaration{};
         std::array<std::array<uint32_t,4>,256> constants{};
     };
@@ -102,9 +102,21 @@ struct IdleWeaponTrace {
         std::array<StreamSnapshot,2> snapshots{};
         std::array<uint32_t,IdleGeometryCopy::MaxProgramWords> program{};
     } streamProbe{};
+    // Passive diagnostic selection only. Production geometry/replay grammar
+    // remains unchanged. Select from the immutable original rejection, never
+    // either resampled declaration.
+    static std::array<unsigned,3> passiveStreamNumbers(const InputFailure &d) noexcept {
+        if(d.step!=20 || d.valid!=15 || d.declarationCount>65)return {};
+        const auto rows=std::span(d.declaration).first(d.declarationCount);
+        if(observed78Declaration(rows))return {0,7,8};
+        constexpr std::array<ScopeDeclarationElement,5> noUv{{
+            {0,0,2,0,5,0},{1,0,2,0,5,1},{5,0,8,0,5,5},
+            {6,0,8,0,5,6},{255,0,17,0,0,0}}};
+        if(rows.size()==noUv.size() && std::equal(noUv.begin(),noUv.end(),rows.begin()))return {0,5,6};
+        return {};
+    }
     static bool observedStreamFamily(const InputFailure &d) noexcept {
-        return d.step==20 && d.valid==15 && d.declarationCount<=65 &&
-            observed78Declaration(std::span(d.declaration).first(d.declarationCount));
+        return passiveStreamNumbers(d)[1]!=0;
     }
     static bool sameStreamSnapshots(const StreamSnapshot &a,const StreamSnapshot &b) noexcept {
         return a.status==StreamSnapshot::Copied && b.status==StreamSnapshot::Copied &&
