@@ -46,6 +46,17 @@ def forwards(body,slot,section):
             result.add(a)
     return result
 
+def finally_delegates(body):
+    delegates=set()
+    for address,mn,op,relocs in decoded_nodes(body):
+        if any(target=='ss2vrNativeFinally' for _,_,target in relocs):
+            require(mn=='call' and op==hex(address+5) and
+                    relocs==[(address+1,'DISP32','ss2vrNativeFinally')],
+                    'Native-finally delegate opcode/relocation addend differs')
+            delegates.add(address)
+    require(len(delegates)==1,'Missing unique native-finally delegate')
+    return delegates
+
 def scalar_op(mn,op):
     # Adapt byte-decoded Capstone operands to the existing bounded scalar state.
     args=[]
@@ -84,7 +95,7 @@ class CleanupState(State):
         else:
             super().step(op,relocations,-1)
 
-def cleanup_cases(body,outer,offset):
+def cleanup_cases(body,outer,offset,model=False):
     nodes=decoded_nodes(body);locations={a:i for i,(a,_,_,_) in enumerate(nodes)}
     cases=0
     for abnormal in (0,1):
@@ -102,8 +113,13 @@ def cleanup_cases(body,outer,offset):
                     memory[(pointer('entered_reference',0),1)]=('constant',entered)
                     memory[(pointer('closure',4),4)]=pointer('observation_reference',0)
                     memory[(pointer('observation_reference',0),4)]=obs
-                for off,val in ((0x10,1),(0x12,1),(0x13,0),(0x14,0)):
+                flags=((0x24,1),(0x25,0),(0x26,0),(0x27,0),(0x28,0)) if model else \
+                      ((0x10,1),(0x12,1),(0x13,0),(0x14,0))
+                for off,val in flags:
                     memory[(pointer('observation',off),1)]=('constant',val)
+                if model:
+                    memory[(pointer('observation',0x1c),4)]=pointer('native_renderable',0)
+                    memory[(pointer('observation',0x20),4)]=pointer('native_instance',0)
                 state=CleanupState({'esp':pointer('stack',0)},memory,offset);index=0;visited=set()
                 while True:
                     require(index not in visited,'Cleanup cycle');visited.add(index)
@@ -115,14 +131,24 @@ def cleanup_cases(body,outer,offset):
                                     state.memory.get((pointer('tls',offset),4))==pointer('previous_observation',0),
                                     'Cleanup bypasses or corrupts saved TLS restore')
                         if abnormal or failed:
-                            require(state.memory[(pointer('observation',0x14),1)]==('constant',1) and
-                                    state.memory[(pointer('observation',0x12),1)]==('constant',0),
-                                    'Abnormal cleanup failed to invalidate observation')
+                            if model:
+                                require(all(state.memory.get((pointer('observation',off),1))==('constant',1)
+                                            for off in (0x25,0x28)) and
+                                        all(state.memory.get((pointer('observation',off),4))==('constant',0)
+                                            for off in (0x1c,0x20)),
+                                        'Abnormal cleanup failed to invalidate model join')
+                            else:
+                                require(state.memory.get((pointer('observation',0x14),1))==('constant',1) and
+                                        state.memory.get((pointer('observation',0x12),1))==('constant',0),
+                                        'Abnormal cleanup failed to invalidate observation')
                         if not outer and entered:
-                            require(state.memory[(pointer('observation',0x10),1)]==('constant',0),'Callback busy state survives')
+                            require(state.memory.get((pointer('observation',0x24 if model else 0x10),1))==('constant',0),'Callback busy state survives')
                             if not abnormal and not failed:
-                                require(state.memory[(pointer('observation',0x13),1)]==('constant',1),
+                                require(state.memory.get((pointer('observation',0x26 if model else 0x13),1))==('constant',1),
                                         'Normal callback not marked returned')
+                        if model and outer and not abnormal and not failed:
+                            require(state.memory.get((pointer('observation',0x27),1))==('constant',1),
+                                    'Normal outer getter not marked returned')
                         cases+=1;break
                     if mn.startswith('j'):
                         require(mn in ('je','jne','jmp') and re.fullmatch('0x[0-9a-f]+',op),'Unknown cleanup edge')
@@ -242,15 +268,8 @@ def verify_extent(assembly,symbols):
         paths(run,forwards(run,slot,section))
         # Finally delegates to the already proved original-forward body. Resolve
         # its actual call instruction from the relocation, not a raw call count.
-        lines=entry.splitlines();delegates=[]
-        for i,line in enumerate(lines):
-            if 'DISP32\tss2vrNativeFinally' in line:
-                previous=next((l for l in reversed(lines[:i]) if re.match(r'^\s*[0-9a-f]+:\s+(?:[0-9a-f]{2} )+',l)),None)
-                require(previous,'Missing native-finally instruction')
-                address=int(previous.split(':',1)[0].strip(),16)
-                delegates.append(next((a,mn,op) for a,mn,op in instructions(entry) if a==address))
-        require(len(delegates)==1 and delegates[0][1]=='call','Missing unique native-finally delegate')
-        paths(entry,forwards(entry,slot,section)|{delegates[0][0]},'4')
+        delegates=finally_delegates(entry)
+        paths(entry,forwards(entry,slot,section)|delegates,'4')
         finish=extent(table,name+'(void*','::Context::finish(void*, int)')
         cleanup=instructions(finish)
         require(not any(mn=='call' or mn.startswith('f') or re.search(r'\b(?:xmm|ymm|zmm)',op)

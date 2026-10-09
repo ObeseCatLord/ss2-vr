@@ -1,6 +1,7 @@
 #include "common/controls.hpp"
 #include "common/lab_preparation.hpp"
 #include "common/ride_control_observation.hpp"
+#include "common/ride_model_join.hpp"
 #include "common/ui.hpp"
 #include "common/build_contract.hpp"
 #include "common/rig_revision.hpp"
@@ -5278,6 +5279,69 @@ static bool labRideControlConfigured=false;
 static uintptr_t controlsGameBase=0;
 static thread_local RideControlObservation *activeRideControlObservation=nullptr;
 static std::atomic<unsigned> labRideControlRows=0;
+using RideModelGetter=void *(__thiscall *)(void *);
+static RideModelGetter originalRideModelInstance=nullptr,originalRideRenderable=nullptr;
+static uintptr_t rideModelRenderableReturn=0;
+static thread_local RideModelJoin *activeRideModelJoin=nullptr;
+static std::atomic<unsigned> labRideModelInvocations=0;
+static bool borrowedRideModelScalars(void *ride,uint32_t &classRva,uint32_t &handle) {
+    classRva=handle=0;
+    if(!readableMemory(ride,0x124))return false;
+    uint32_t table=0;std::memcpy(&table,ride,4);
+    if(table<controlsGameBase || (table-controlsGameBase!=0x2a8558 && table-controlsGameBase!=0x2b8420))return false;
+    classRva=uint32_t(table-controlsGameBase);
+    std::memcpy(&handle,static_cast<uint8_t*>(ride)+0x120,4);
+    return true;
+}
+static void *__fastcall observedRideRenderable(void *ride,void *) {
+#ifdef _MSC_VER
+    const auto caller=reinterpret_cast<uintptr_t>(_ReturnAddress());
+#else
+    const auto caller=reinterpret_cast<uintptr_t>(__builtin_return_address(0));
+#endif
+    auto *join=activeRideModelJoin;
+    if(!join)return originalRideRenderable(ride);
+    const bool entered=join->enter(reinterpret_cast<uintptr_t>(ride),caller,GetCurrentThreadId());
+    void *result=nullptr;
+    withNativeFinally([&] {
+        result=originalRideRenderable(ride);
+        if(entered)join->copyRenderable(reinterpret_cast<uintptr_t>(result));
+    },[&](bool aborted) noexcept {
+        if(entered)join->finishInner(aborted);
+        else if(aborted) {join->aborted=true;join->invalidate();}
+    });
+    return result; // Preserve the native EAX pointer, including null/rejected calls.
+}
+static void *__fastcall observedRideModelInstance(void *ride,void *) {
+    auto *previous=activeRideModelJoin;
+    if(previous)previous->invalidate();
+    uint32_t classRva=0,handle=0;
+    if(!labRideControlConfigured || previous || !nativePresentationThreadCurrent() ||
+       !borrowedRideModelScalars(ride,classRva,handle))return originalRideModelInstance(ride);
+    auto invocation=labRideModelInvocations.load(std::memory_order_relaxed);
+    while(invocation<64 && !labRideModelInvocations.compare_exchange_weak(invocation,invocation+1,std::memory_order_relaxed)) {}
+    if(invocation>=64)return originalRideModelInstance(ride);
+    RideModelJoin join;
+    join.receiver=reinterpret_cast<uintptr_t>(ride);join.expectedCaller=rideModelRenderableReturn;
+    join.thread=GetCurrentThreadId();join.classRva=classRva;join.handle=handle;join.invocation=invocation+1;
+    void *result=nullptr;
+    withNativeFinally([&] {
+        activeRideModelJoin=&join;
+        result=originalRideModelInstance(ride); // This body already resolves renderable and tail-calls its instance getter.
+        uint32_t liveClass=0,liveHandle=0;
+        if(borrowedRideModelScalars(ride,liveClass,liveHandle))
+            join.copyInstance(reinterpret_cast<uintptr_t>(result),liveClass,liveHandle);
+        else join.invalidate();
+    },[&](bool aborted) noexcept {
+        activeRideModelJoin=previous;
+        join.finishOuter(aborted);
+    });
+    if(join.publishable())
+        log("Lab rideModelJoin schema=1 source=%.*s invocation=%u receiver=%u class=%u handle=%u thread=%u renderableToken=%u instanceToken=%u innerCalls=%u innerReturned=1 borrowedJoin=1 localRiderAssociated=0 operatedSeatAssociated=0 resourceAssociated=0 frameAssociated=0 steeringApplied=0",
+            64,ss2vrBuildContract.sourceFingerprint.data(),join.invocation,unsigned(join.receiver),join.classRva,
+            join.handle,join.thread,unsigned(join.renderable),unsigned(join.instance),join.calls);
+    return result;
+}
 static void __fastcall observedRideLookClamp(void *ride,void *,Vec3 &look) {
     auto *observation=activeRideControlObservation;
     if(!observation) {originalRideLookClamp(ride,look);return;}
@@ -6356,6 +6420,7 @@ static std::vector<void *> ownedHooks;
 static bool attachPoisoned = false;
 static bool rollbackNativeHooks() {
     hooksReady = false;
+    rideModelRenderableReturn=0;
     bool result = rollbackHooks(
         ownedHooks,
         [](void *address) {
@@ -6523,6 +6588,16 @@ bool attach(bool headless) {
     if(labRideControlConfigured &&
        (reinterpret_cast<uintptr_t>(GetProcAddress(g,"?ClampLookDirEulAsRide@CPuppetEntity@SeriousEngine@@UAEXAAVVector3f@2@@Z"))!=reinterpret_cast<uintptr_t>(g)+0x901b0 ||
         primaryField(reinterpret_cast<void*>(swimmingPlayerVtable),0x5a0)!=reinterpret_cast<uintptr_t>(g)+0x901e0))return false;
+    if(labRideControlConfigured &&
+       (reinterpret_cast<uintptr_t>(GetProcAddress(g,"?GetModelInstance@CBaseEntity@SeriousEngine@@QAEPAVCModelInstance@2@XZ"))!=controlsGameBase+0x450b0 ||
+        reinterpret_cast<uintptr_t>(GetProcAddress(g,"?GetToolModelInstance@CBaseEntity@SeriousEngine@@UAEPAVCModelInstance@2@XZ"))!=controlsGameBase+0x450b0 ||
+        reinterpret_cast<uintptr_t>(GetProcAddress(g,"?GetModelRenderable@CPuppetEntity@SeriousEngine@@UAEPAVCModelRenderable@2@XZ"))!=controlsGameBase+0x83790 ||
+        reinterpret_cast<uintptr_t>(GetProcAddress(e,"?GetModelInstance@CModelRenderable@SeriousEngine@@QAEPAVCModelInstance@2@XZ"))!=reinterpret_cast<uintptr_t>(e)+0x15b220 ||
+        primaryField(g,0x294cf0)!=reinterpret_cast<uintptr_t>(e)+0x15b220))return false;
+    if(labRideControlConfigured)
+        for(auto table:{0x2a8558u,0x2b8420u})
+            if(primaryField(reinterpret_cast<void*>(controlsGameBase+table),0xbc)!=controlsGameBase+0x83790 ||
+               primaryField(reinterpret_cast<void*>(controlsGameBase+table),0x128)!=controlsGameBase+0x450b0)return false;
     if (!headless) {
         expectedDepthRange = reinterpret_cast<DepthRange>(reinterpret_cast<uint8_t *>(graphics) + 0x56a0);
         expectedProjectionSet = reinterpret_cast<ProjectionSet>(reinterpret_cast<uint8_t *>(graphics) + 0x69a0);
@@ -6677,6 +6752,22 @@ bool attach(bool headless) {
         if(labRideControlConfigured)
             H(g,"?ClampLookDirEulAsRide@CPuppetEntity@SeriousEngine@@UAEXAAVVector3f@2@@Z",
               observedRideLookClamp,originalRideLookClamp);
+        if(labRideControlConfigured) {
+            // Both instance aliases name this same native body: install once.
+            H(g,"?GetModelInstance@CBaseEntity@SeriousEngine@@QAEPAVCModelInstance@2@XZ",
+              observedRideModelInstance,originalRideModelInstance);
+            H(g,"?GetModelRenderable@CPuppetEntity@SeriousEngine@@UAEPAVCModelRenderable@2@XZ",
+              observedRideRenderable,originalRideRenderable);
+            // MinHook steals the virtual call: its return is in this original
+            // trampoline, not at Sam2Game450B8. Bind both prefix and jump back.
+            const auto trampoline=reinterpret_cast<uintptr_t>(originalRideModelInstance);
+            rideModelRenderableReturn=0;
+            if(ok && readableMemory(reinterpret_cast<void*>(trampoline),13))
+                rideModelRenderableReturn=rideModelTrampolineReturn(
+                    std::span(static_cast<const uint8_t*>(reinterpret_cast<void*>(trampoline)),13),
+                    uint32_t(trampoline),uint32_t(controlsGameBase+0x450b8));
+            ok=ok && rideModelRenderableReturn!=0; // Reach the existing owned-hook rollback on every failure.
+        }
         H(e, "?Prepare@CViewRenCmd@SeriousEngine@@QAEXABVMatrix34f@2@ABVMatrix44f@2@ABVBox1f@2@K@Z",
           viewPrepare, originalViewPrepare);
         H(e, "?Execute@CViewRenCmd@SeriousEngine@@UAEXXZ", viewExecute, originalViewExecute);

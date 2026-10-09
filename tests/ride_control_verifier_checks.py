@@ -59,21 +59,29 @@ class Checks(unittest.TestCase):
 
     def test_each_outer_tls_restore_and_unknown_branch_reject(self):
         finish = extent(self.table, 'mountedLookClamp(void*', '::Context::finish(void*, int)')
+        offset = symbol_offset(self.symbols, 'activeRideControlObservation')
         stores = [(a, op) for a, mn, op in instructions(finish)
-                  if mn == 'mov' and re.fullmatch(r'dword ptr \[(?:edx|esi)\], ecx', op)]
+                  if mn == 'mov' and (match := re.fullmatch(r'dword ptr \[(?:edx|esi)(?: \+ (0x[0-9a-f]+|[0-9]+))?\], ecx', op))
+                  and int(match[1] or '0', 0) == offset]
         self.assertEqual(len(stores), 2)
         for address, op in stores:
             with self.subTest(restore=op):
                 # Keep size/offset; store EBX instead of saved outer ECX.
-                replacement = bytes.fromhex('89 9a 00 00 00 00' if '[edx]' in op else '89 9e 00 00 00 00')
+                replacement = bytes.fromhex('89 9a' if '[edx' in op else '89 9e') + struct.pack('<I', offset)
                 self.rejects(self.changed(finish, address, replacement))
         branch = next(a for a, mn, _ in instructions(finish) if mn == 'je')
         self.rejects(self.changed(finish, branch, b'\xff\xe0'))
-        reload = next(a for a, mn, op in instructions(finish)
-                      if (mn, op) == ('mov', 'esi, dword ptr [ebp - 4]'))
-        # At this exact reload ESI still addresses TLS; corrupt its low byte
-        # after the valid DWORD restore. A restore count alone cannot catch it.
-        self.rejects(self.changed(finish, reload, bytes.fromhex('c6 06 01')))
+        if offset == 0:
+            reload = next(a for a, mn, op in instructions(finish)
+                          if (mn, op) == ('mov', 'esi, dword ptr [ebp - 4]'))
+            self.rejects(self.changed(finish, reload, bytes.fromhex('c6 06 01')))
+        else:
+            # In the abnormal path EDX still addresses TLS after its restore.
+            # Corrupt this symbol's byte, not an unrelated TLS slot at zero.
+            self.assertLess(offset, 128)
+            flag = next(a for a, mn, op in instructions(finish)
+                        if (mn, op) == ('mov', 'byte ptr [eax + 0x14], 1'))
+            self.rejects(self.changed(finish, flag, b'\xc6\x42' + bytes([offset, 1])))
 
     def test_cleanup_invalidation_and_callback_flags_reject(self):
         for name in ('observedRideLookClamp', 'mountedLookClamp'):
@@ -113,6 +121,14 @@ class Checks(unittest.TestCase):
         for address in repairs:
             with self.subTest(epilogue=address):
                 self.rejects(self.changed(entry, address, bytes.fromhex('83 c4 48')))
+
+    def test_finally_delegate_addend_controls(self):
+        for name in ('@_ZN5ss2vr4gameL21observedRideLookClamp','@_ZN5ss2vr4gameL16mountedLookClamp'):
+            entry = extent(self.table, name, '@12')
+            call = next(a for a, mn, op, relocs in decoded_nodes(entry)
+                        if mn == 'call' and relocs == [(a+1, 'DISP32', 'ss2vrNativeFinally')])
+            with self.subTest(entry=name):
+                self.rejects(self.changed(entry, call, bytes.fromhex('e8 01 00 00 00')))
 
 
 if __name__ == '__main__':
