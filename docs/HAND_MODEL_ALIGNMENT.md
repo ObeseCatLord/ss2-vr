@@ -1,5 +1,20 @@
 # Native hand/weapon alignment gate
 
+## Current hand content and target convention
+
+V27 now uniquely matches nine actual native hand channel sets to the rendered
+ID1 assembly, both hands in eye0, with complete native event/pose traces. The
+reviewed uploaded-transform adapter reproduces all317positions per copy under
+unchanged clip tolerance; it does not certify world export or physical grip.
+OpenXR's grip position targets the palm centroid when holding a tubular object,
+so the existing palmar surface annotation remains a candidate. See
+[reference evidence and next alignment boundary](IDLE_UPLOADED_TRANSFORM_REFERENCE.md).
+
+The current placement code already preserves the observed audited native base
+charge translation through nativePlacementWithCharge. Historical charge warnings
+below are retained as evidence; do not duplicate that implementation or infer
+unknown virtual-getter behavior. No asset grip correction is installed yet.
+
 Current tracked placement is implemented, but physical gripping alignment is not
 accepted. A gun near a controller pose is insufficient proof of a correctly sized
 and gripped native model. No new numerical offset or scale is installed here.

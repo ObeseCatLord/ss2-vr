@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 from assess_idle_weapon import assess, declaration_layout
 from match_idle_geometry import match,CHANNELS
-from idle_native_reference import native_reference, UnsupportedNativeArithmetic
+from idle_native_reference import native_reference, uploaded_transform_reference, UnsupportedNativeArithmetic, UnsupportedUploadedTransform
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -81,10 +81,12 @@ def replay_draws(rows,observations,candidates,candidate_root,evaluator,temporary
         result['binding']={k:o[k] for k in ('request','input','owner','weapon','model','generation','eye','hand')}
         result['position_replay']=evaluate_geometry(g,channels,evaluator,temporary)
         result['reference_kind']='legacy-collapsed-matrix'
-        try:reference=native_reference(o,g)
+        try:
+            reference=native_reference(o,g)
+            if reference is None:reference=uploaded_transform_reference(o,g,channels,row['geometry_index'])
         except UnsupportedNativeArithmetic as error:
             result['legacy_position_replay']=result['position_replay']
-            result['reference_kind']='native-cold-arithmetic-unknown'
+            result['reference_kind']='uploaded-transform-uncorroborated' if isinstance(error,UnsupportedUploadedTransform) else 'native-cold-arithmetic-unknown'
             result['position_replay']={'schema':1,'position_replay_agrees_with_reference':False,
                 'reason':str(error),'vertex':0,'gpu_execution':False,
                 'positive_grasp_verified':False,'alignment_accepted':False}
@@ -109,6 +111,9 @@ def replay_draws(rows,observations,candidates,candidate_root,evaluator,temporary
             if reference is not None:
                 result['render_geometry'].update(reference_kind=reference['kind'],diagnostic_only=True,
                     cleanup_certified=False,outer_current=False,positive_grasp_verified=False,alignment_accepted=False)
+                if reference['kind']=='uploaded-transform-corroboration':
+                    result['render_geometry'].update(world_positions_independently_verified=False,
+                        world_position_reference='collapsed-affine-unverified')
         results.append(result)
     return results
 

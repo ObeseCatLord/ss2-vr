@@ -73,6 +73,14 @@ def measure(replay,annotation):
             'semantic_status':annotation['semantic_status'],'native_landmarks':points,'world_landmarks':world_points,
             'native_reference_frame':native,'world_reference_frame':world,'captured_affine_reflected':determinant<0,
             'uncalibrated_grip_comparison':comparison,'controller_calibration_verified':False})
+        if 'uploaded-transform-corroboration' in (row.get('reference_kind'),g.get('reference_kind')):
+            if row.get('reference_kind')!=g.get('reference_kind') or \
+                    g.get('world_positions_independently_verified') is not False or \
+                    g.get('world_position_reference')!='collapsed-affine-unverified':
+                raise ValueError('Uploaded reference world provenance missing or contradictory')
+            results[-1].update(position_reference_kind=g['reference_kind'],
+                world_positions_independently_verified=False,
+                world_position_reference='collapsed-affine-unverified')
     return {'schema':1,'source_fingerprint':replay['source_fingerprint'],'measured_references':results,
             'positive_grasp_verified':False,'alignment_accepted':False,'native_mutation':False,
             'limits':['surface annotation convention; not pressure/contact or controller grip origin',

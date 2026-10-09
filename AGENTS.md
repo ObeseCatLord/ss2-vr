@@ -1,5 +1,42 @@
 # Serious Sam 2 OpenXR VR
 
+## V27 actual hand content and uploaded-transform reference
+
+The ten-copy build f6370d8/fingerprint28126fc reached pinned Jungle with111native
+projection pairs, clean native/owned/display shutdown and12protected files
+unchanged. Both world-eye images were visually inspected. Native collection now
+has9Complete/23Rejected (19Palette6/4Name19); all90copied channel sets uniquely
+match81gunmesh3 plus9handmesh2. The hand copies cover7right/2left, eye0, with
+native reflection/stretch preserved. Eye1 still lacks its own complete pose copy.
+
+The hand's exact320-word program uses local palette c21–c23, then projection
+c1–c4. Its independently copied Model/View/Projection factors reproduce every
+uploaded projection word; copied Local matches the palette words. The narrow
+new offline selector requires these exact matches plus same-copy API identity,
+factor bookends, program/declaration and actual influence bytes. Uploads compare
+only; they never seed the target. Cold-native precedence remains. Unqualified
+applicable references cannot fall back to passing legacy results; tolerance,
+collector, renderer, native hooks and IPC/wire stay unchanged.
+
+Fresh offline replay of the actual capture produces18uploaded corroborations
+(9gun/9hand). All9hand copies agree for317vertices each, maximum clip error
+1.15836e−7. The archived primary legacy replay remains unchanged and failed.
+Nine measured annotation candidates now retain separate position-reference and
+unverified collapsed-world provenance; they are not accepted physical grasps.
+Astra/xhigh source/correction GO followed overflow-label and downstream
+provenance fixes. All local turn tags verified; backendunattested.
+
+72Debug/72Release checks and9reference/9replay groups normal/optimized pass.
+Compiled artifacts retain fingerprint28126fc, IPC10/wire7, and pass the current
+contract check; no native source changed since the four-product rebuild. Native
+cache producer, PC/RC, GPU precision and physical/world calibration are not claimed
+by uploaded-transform corroboration. Next: establish a defensible model-relative
+palm-centroid reference and static asset alignment while preserving native
+animation/recoil/stretch, muzzle/laser/scope and remote attachments. Physical
+driver controls and user-operated hardware/shooting/melee/MP acceptance remain
+open. V27 immutable; no firing/movement/switch/device/vehicle/network probe ran.
+See [reference adapter and disposition](docs/IDLE_UPLOADED_TRANSFORM_REFERENCE.md).
+
 ## Ten-copy content collector — implemented, native proof next
 
 V26's actual ten-call sequence justified extending the existing bounded geometry
