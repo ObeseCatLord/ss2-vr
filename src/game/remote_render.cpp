@@ -804,7 +804,7 @@ static void observeIdleQuery(void *queue,uintptr_t caller) {
         const auto animation=value.contribution[7];
         if(!readableMemory(reinterpret_cast<void*>(animation),0x10)) {trace->reject(IdleWeaponTrace::Rejection::QueryAnimationMemory);return;}
         std::memcpy(value.header.data(),reinterpret_cast<void*>(animation),0x10);
-        if(value.header[0]!=idleAnimationName) {trace->reject(IdleWeaponTrace::Rejection::QueryAnimationName);return;}
+        if(value.header[0]!=idleAnimationName) {trace->rejectAnimationName(i,idleAnimationName,value);return;}
         if(!trace->animation(i,value))return;
     }
     ScopeDrawBinding currentBinding;IdleDrawIdentity current;IdleWeaponTrace *same=nullptr;

@@ -1,5 +1,39 @@
 # Event-time ID1 collection — source implemented
 
+## Current native stream evidence and rejected name snapshot
+
+The qualified bound-input diagnostic capture reached native Jungle gameplay with
+106 complete projection pairs. It still rejected all32records and copied no
+accepted geometry. Twelve records stopped at range substep20; the basic predicate
+mask6015 identifies source-identity and local-index binding failures. The actual
+native declaration exposes packed channels on7/8 while the collector selects5/6.
+The roles and bound resource offsets must be proved before an ID1-only mapping
+adapter; Scope13 admission and every event/cache/Idle/program gate remain intact.
+No selected asset metadata result substitutes for that native association.
+
+A separate bounded first-name-failure snapshot is now source implemented. It
+copies only the contributor index, already copied four-word CAnimation header
+and existing interned Idle identifier at the current typed query borrow. There
+are no extra native reads/queries, retained references or admission changes.
+The original non-Idle rejection still occurs; the first snapshot is sticky across
+later cleanup/rejections. It is emitted after the original gun extent returns.
+The strict companion reader requires the same rejected request/eye/hand, reason19,
+preceding Event, matching-root-query flags, resource identity, bounded contributor
+index and unequal observed/expected identifiers. It additionally requires zero
+matrices/draws, admitted state, no copied-pose/all-contributor-copy state and zero
+rejection checks for this first failure. It rejects contradictory,
+interleaved, duplicate and malformed headers. This is pre-End rejection evidence,
+not a completed winning animation, retained native cache or physical grasp.
+Nine reader groups pass normal/optimized, and direct compiled copy/first-failure
+checks pass. All four products rebuilt on source fingerprint
+`4038bdcf2d72645b12dfbcdc3df3808733a8976175f541ed4bc7f8883eddb483`; 67 Debug/67 Release groups and
+28 normal/optimized compiled/native gates pass. Astra gave scoped native source GO
+and corrected-reader GO after a P2 impossible-state finding. The reader correction
+was rechecked normally, with optimized Python and through both CTest configurations.
+No runtime or new preparation has used this build.
+Earlier entries retain their historical build/run claims.
+
+
 ## Bound-input substeps — current diagnostic build
 
 A subsequent neutral capture again reached native Jungle gameplay (101 complete
@@ -300,3 +334,27 @@ winning Idle/cache interpretation and physical grip correspondence. Surface
 reference measurement alone does not close them. Idle collection cannot certify
 first-use/copy melee release; preserve that separate native behavior and user
 acceptance. Assets, indexes, poses and captures stay private.
+
+## Native stream-role investigation disposition
+
+Astra verified that the native channel binder forwards a caller-selected stream
+number and descriptor. The declaration labels TEXCOORD semantics by stream number,
+while the native skinning generator substitutes caller-selected indices/weight
+inputs. Declaration7/8 alone does not prove those roles. Type8 is UBYTE4N. The
+current position evaluator knows5/6; a dependency on7/8 remains unknown, never
+silently substituted. Actual7/8 objects/offsets and vertex program are still missing.
+
+| Recommendation | Disposition |
+| --- | --- |
+| Reject a fixed7/8 semantic remap | Adopted; no production mapping changed |
+| Observe actual bindings and program at existing selected ID1 draw boundary | Adopted design; passive implementation next |
+| Preserve original rejection before extra calls | Adopted; no temporary Palette admission |
+| Reuse original typed COM owner/cleanup and forward once | Adopted design; implementation/compiled review required |
+| Recheck original metadata/generation and retain reentry/abort invalidation | Adopted design; matching endpoints do not prove no ABA |
+| Separate qualified API copies from actual draw attribution | Adopted; diagnostic never promotes geometry/grasp |
+
+Astra/xhigh gave bounded design GO, with latest local model/effort metadata verified;
+backend attestation unavailable. This design is not yet implemented or runnable.
+No additional capture, shader/buffer remap, native state write or geometry admission
+is authorized by the review itself. Existing repeated private neutral capture
+permission remains the user authority for a later fresh reviewed preparation.

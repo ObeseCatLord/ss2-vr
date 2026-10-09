@@ -4043,6 +4043,11 @@ static void emitIdleWeaponTrace(const IdleWeaponTrace &trace) {
     if(trace.rejection!=IdleWeaponTrace::Rejection::None)
         log("Lab idle rejection request=%llu eye=%u hand=%u reason=%u preceding=%u checks=%u state=%u callbacks=%u",
             b.request,b.eye,b.hand,unsigned(trace.rejection),unsigned(trace.precedingStage),trace.rejectionChecks,trace.rejectionState,trace.callbacks);
+    if(trace.rejection==IdleWeaponTrace::Rejection::QueryAnimationName && trace.animationNameFailure.copied) {
+        const auto &n=trace.animationNameFailure;
+        log("Lab idle animationNameFailure request=%llu eye=%u hand=%u index=%u expected=%08x header=%08x,%08x,%08x,%08x",
+            b.request,b.eye,b.hand,n.index,n.expected,n.header[0],n.header[1],n.header[2],n.header[3]);
+    }
     if(trace.rejection==IdleWeaponTrace::Rejection::CollectInputs && trace.inputFailure.step) {
         const auto &d=trace.inputFailure;const auto &v=d.inputs;
         log("Lab idle inputFailure request=%llu eye=%u hand=%u step=%u index=%u hr=%d valid=%u caps=%u declaration=%u rangeChecks=%u",

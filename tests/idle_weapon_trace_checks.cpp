@@ -17,6 +17,21 @@ int main() {
     const IdleConfigIdentity cfg{20,30,5};
     const auto identity=matrix(Pose{});
     IdleAnimationValue borrowed{{1,2,3,4,5,6,7,0x1000},{55,0,10,0x3f800000}};
+    {IdleWeaponTrace t;assert(t.admit(id));assert(t.event(id,cfg,true,2));
+     auto value=borrowed;t.rejectAnimationName(0,77,value);value={};
+     assert(t.rejection==IdleWeaponTrace::Rejection::QueryAnimationName && t.animationNameFailure.copied);
+     assert(t.animationNameFailure.index==0 && t.animationNameFailure.expected==77 && t.animationNameFailure.header==borrowed.header);
+     assert(t.stage==IdleWeaponTrace::Stage::Rejected && t.animationsCopied==0);
+     t.rejectAnimationName(1,88,value);t.reject(IdleWeaponTrace::Rejection::QueryAbort);
+     assert(t.animationNameFailure.expected==77 && t.animationNameFailure.header==borrowed.header);}
+    for(unsigned failure=0;failure<5;++failure) {
+        IdleWeaponTrace t;assert(t.admit(id));assert(t.event(id,cfg,true,1));
+        if(failure==0)t.reject(IdleWeaponTrace::Rejection::QueryMemory);
+        if(failure==1)t.stage=IdleWeaponTrace::Stage::Palette;
+        if(failure==2)t.animationsCopied=1;
+        t.rejectAnimationName(failure==3?1:0,failure==4?55:77,borrowed);
+        assert(!t.animationNameFailure.copied);
+    }
     std::array<Matrix34,1> nativePose{identity};
     IdleWeaponTrace trace;
     assert(trace.admit(id));assert(trace.placement(id,identity,identity,identity));assert(trace.references(id,identity,true,identity));

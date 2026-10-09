@@ -8,15 +8,14 @@ This historical hold blocked public publication pending renewed confirmation. It
 
 ## Current PC continuation — start here
 
-Latest integrated products: source fingerprint
-`162790f5b7f37e6887ff76d44a5f76319af8cdd0fee960c6043cd95d68f8ad85`, IPC10/wire7. Four reviewed
-parallel source commits are integrated; all67Debug/67Release and28normal/-O
-compiled/native gates pass. See docs/PARALLEL_INTEGRATION.md. No integrated runtime
-or deployment yet. The previous private neutral capture reached106native projection
-pairs but rejected all32geometry records. Twelve detailed failures expose an actual
-native declaration7/8 versus collector5/6 mismatch; prove roles/resource offsets
-before adapting. Event/cache/Idle/grasp gates remain intact. Earlier identities
-below are historical evidence, not current preparation instructions.
+Latest rebuilt products: source fingerprint
+`4038bdcf2d72645b12dfbcdc3df3808733a8976175f541ed4bc7f8883eddb483`, IPC10/wire7. Bounded
+rejected-animation-name companion preserves already copied pre-End scalars only;
+Astra native/corrected-reader GO, all67Debug/67Release and28normal/-O compiled/native
+gates pass. No runtime/deployment yet. Current passive7/8 actualbinding/program
+observation has Astra design GO, implementation next; no fixedsemantic remap.
+See docs/IDLE_EVENT_COLLECTOR.md. All geometry/grasp/Idle/cache/Scope13 gates retained.
+Prior diagnostic and integration entries are historical identities/evidence.
 
 ### Current repeated neutral SS2 capture authority
 The user explicitly answered "Allow necessary private neutral captures" to the

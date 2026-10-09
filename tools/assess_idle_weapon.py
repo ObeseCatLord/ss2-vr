@@ -104,6 +104,22 @@ def assess(text,expected_source):
             current['rejection']={'reason':reason,'preceding':preceding,'checks':integer(f['checks'],0,32767),
                                   'state':integer(f['state'],0,63),'callbacks':integer(f['callbacks'],0,63)}
             continue
+        if kind=='animationNameFailure':
+            if current is None or current['stage']!=3 or current.get('rejection',{}).get('reason')!=19 or \
+                    current['rejection']['preceding']!=1 or 'animation_name_failure' in current or \
+                    set(f)!={'request','eye','hand','index','expected','header'}:
+                raise ValueError('Animation name failure without one matching query rejection')
+            if any(integer(f[k])!=current[k] for k in ('request','eye','hand')):
+                raise ValueError('Interleaved/foreign animation name failure')
+            index=integer(f['index'],0,15)
+            expected=hexwords(f['expected'],1)[0];header=hexwords(f['header'],4)
+            if not current['cfg'] or not current['file'] or not 0<current['contributors']<=16 or \
+                    index>=current['contributors'] or expected==header[0] or \
+                    current['rejection']['callbacks']&33!=33 or current['draws'] or current['matrices'] or \
+                    not current['rejection']['state']&1 or current['rejection']['state']&40 or current['rejection']['checks']:
+                raise ValueError('Unqualified animation name failure')
+            current['animation_name_failure']={'index':index,'expected':expected,'header':header}
+            continue
         if kind.startswith('input'):
             if current is None or current['stage']!=3 or current.get('rejection',{}).get('reason')!=32:
                 raise ValueError('Input failure without matching CollectInputs rejection')

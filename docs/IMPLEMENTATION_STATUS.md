@@ -1,5 +1,33 @@
 # Implementation status — 2026-10-08
 
+## Current rejected-animation diagnostic source checkpoint
+
+The first rejected contributor now preserves its already copied animation header
+and expected Idle identifier. Original query/End/finally/first-rejection behavior
+is unchanged; no extra native reads or retained references. The strict reader
+rejects impossible producer states and never promotes rejected data. Astra native
+and corrected-reader source GO are recorded in docs/IDLE_EVENT_COLLECTOR.md.
+All products rebuilt on `4038bdcf2d72645b12dfbcdc3df3808733a8976175f541ed4bc7f8883eddb483`;
+67 Debug/67 Release groups and 28 normal/optimized native/compiled gates pass.
+Nine reader groups pass normally/optimized and through both CTest configurations.
+No capture or deployment has used this build. Product hashes:
+- `d3d9.dll`: `9a1850e0b30491959b8c48ecce5c36511d32497db70d27cddea45481feeec564`
+- `ss2vr_host.exe`: `a862e4194087f173834428ef595c3a8c4719f6511948638b53180d57d803d773`
+- `libopenxr_loader.dll`: `bb011caa82528c541a73967ce6408f82198ff4fd0358b38b54884719d863bd1d`
+- `SS2VRServer.dll`: `ccc49dbc766c8d9c46aea599e17c8a4aca8e3528d90915e66a89e019c7608635`
+
+Native investigation establishes caller-selected7/8 roles cannot be inferred from
+declaration numbers. A passive observation of actual stream bindings/program,
+using the existing typed owner and original draw, has Astra design GO; source
+implementation is next. It will preserve rejection and keep all geometry/grasp/
+cache/Idle gates. Fresh static selected metadata/candidate production matches all
+11 earlier supported candidates/channel bytes; one equivalent unsupported reason
+text changed. Private assets, outputs and receipts remain local. Full-mod and
+hardware/firing/vehicle/network acceptance remain incomplete.
+
+Earlier entries retain historical identities and limits.
+
+
 ## Current integrated checkpoint and actual collector diagnosis
 
 The four reviewed parallel commits have been cherry-picked in order onto

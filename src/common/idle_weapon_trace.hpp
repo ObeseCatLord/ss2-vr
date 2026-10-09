@@ -76,6 +76,13 @@ struct IdleWeaponTrace {
         ScopeBufferInputs inputs{};
         std::array<ScopeDeclarationElement,65> declaration{};
     } inputFailure{};
+    // Already copied at the original typed query boundary. A name rejection
+    // is diagnostic data, not a completed/winning animation or cache receipt.
+    struct AnimationNameFailure {
+        uint32_t index=0,expected=0;
+        std::array<uint32_t,4> header{};
+        bool copied=false;
+    } animationNameFailure{};
     static constexpr uint32_t checks(std::initializer_list<bool> values) noexcept {
         uint32_t result=0,bit=1;for(bool value:values){if(value)result|=bit;bit<<=1;}return result;
     }
@@ -100,6 +107,12 @@ struct IdleWeaponTrace {
     }
     void reject(Rejection reason=Rejection::Unspecified,uint32_t passedChecks=0) noexcept {
         noteRejection(reason,passedChecks);stage=Stage::Rejected;
+    }
+    void rejectAnimationName(unsigned index,uint32_t expected,const IdleAnimationValue &value) noexcept {
+        if(rejection==Rejection::None && stage==Stage::Event && index==animationsCopied &&
+           index<contributors && value.header[0]!=expected)
+            animationNameFailure={index,expected,value.header,true};
+        reject(Rejection::QueryAnimationName);
     }
     bool admit(const IdleDrawIdentity &identity) noexcept {
         if(admitted || stage!=Stage::Empty || !identity.request || !identity.input || !identity.owner ||

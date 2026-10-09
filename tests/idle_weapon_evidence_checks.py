@@ -13,6 +13,30 @@ STRETCH='Lab idle stretch request=100 eye=1 hand=0 values=-1,1,1'
 VALID='\n'.join([DRAW,ANIM,*MATRICES,STRETCH])
 
 class Checks(unittest.TestCase):
+    def test_rejected_animation_name_snapshot_is_qualified_and_never_a_winner(self):
+        rejected=DRAW.replace('stage=4','stage=3').replace('contributors=1','contributors=2').replace('matrices=1','matrices=0')
+        reason='Lab idle rejection request=100 eye=1 hand=0 reason=19 preceding=1 checks=0 state=23 callbacks=49'
+        name='Lab idle animationNameFailure request=100 eye=1 hand=0 index=1 expected=00000077 header=00000037,00000000,0000000a,3f800000'
+        text='\n'.join([rejected,reason,name])
+        result=assess(text,SOURCE)
+        self.assertFalse(result['copied_event_pose_observations'])
+        self.assertEqual(result['rejected_or_missing_observations'][0]['animation_name_failure'],
+                         {'index':1,'expected':119,'header':[55,0,10,0x3f800000]})
+        self.assertFalse(result['positive_grasp_verified']);self.assertFalse(result['alignment_accepted'])
+        for bad in (text+'\n'+name,name,text.replace('reason=19','reason=18'),
+                    text.replace('preceding=1','preceding=2'),text.replace('stage=3','stage=4'),
+                    text.replace('callbacks=49','callbacks=17'),text.replace('cfg=20','cfg=0'),
+                    text.replace('matrices=0','matrices=1'),text.replace('draws=0','draws=1'),
+                    text.replace('state=23','state=22'),text.replace('state=23','state=31'),
+                    text.replace('state=23','state=55'),text.replace('checks=0','checks=1'),
+                    text.replace('file=30','file=0'),text.replace('contributors=2','contributors=1'),
+                    text.replace('index=1 expected=','index=16 expected='),
+                    text.replace('expected=00000077','expected=00000037'),
+                    text.replace('expected=00000077','expected=77'),text.replace('3f800000','3F800000'),
+                    text.replace('hand=0 index=1 expected=','hand=1 index=1 expected='),
+                    text.replace('header=00000037,00000000,0000000a,3f800000','header=00000037'),
+                    text+' extra=1'):
+            with self.subTest(bad=bad),self.assertRaises(ValueError):assess(bad,SOURCE)
     def test_input_substeps_do_not_certify_bindings_and_partial_or_unqualified_payloads_reject(self):
         rejected=DRAW.replace('stage=4','stage=3')
         reason='Lab idle rejection request=100 eye=1 hand=0 reason=32 preceding=2 checks=0 state=63 callbacks=63'
