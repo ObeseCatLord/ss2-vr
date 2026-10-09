@@ -5,6 +5,38 @@ using namespace ss2vr;
 #error Geometry checks require assertions
 #endif
 int main() {
+    {const ScopeBufferInputs candidateAligned{
+        {132,108,{{{14448,0x85,0},{9564,0x87,0},{58016,0x80,0},{58544,0x80,0}}}},
+        {4,0,0,132,4782,108},{1,14448,12,1},{1,58544,4,1},{1,58016,4,1},{1,68960,8,1},
+        {70272,0,1,100,0},{10308,0,1,101,0},2,false};
+     const std::array<ScopeDeclarationElement,5> rows{{
+        {0,0,2,0,5,0},{2,0,1,0,5,2},{7,0,8,0,5,7},
+        {8,0,8,0,5,8},{255,0,17,0,0,0}}};
+     ScopeCopyRanges ranges;bool weights=false;GeometryInputLayout layout{};
+     assert(idleGeometryInputs(rows,layout,weights) && layout==GeometryInputLayout::NoUV78 && weights);
+     assert(!declaredGeometryInputs(rows,weights));
+     assert(!declaredGeometryInputs(rows,weights,GeometryInputLayout::NoUV78));
+     // Metadata-only fixture, not an observation of the new stream2 getter.
+     assert(idleBufferRanges(candidateAligned,rows,ranges) && ranges.weightsActive);
+     assert(ranges.slices[0].offset==14448 && ranges.slices[4].offset==68960);
+     for(unsigned row=0;row<5;++row)for(unsigned field=0;field<6;++field) {
+        auto bad=rows;
+        switch(field) {case 0:++bad[row].stream;break;case 1:++bad[row].offset;break;
+          case 2:++bad[row].type;break;case 3:++bad[row].method;break;case 4:++bad[row].usage;break;case 5:++bad[row].usageIndex;break;}
+        assert(!idleGeometryInputs(bad,layout,weights));
+     }
+     assert(!idleGeometryInputs(std::span(rows).first(4),layout,weights));
+     std::array<ScopeDeclarationElement,6> extended{};std::copy(rows.begin(),rows.end(),extended.begin());
+     extended[5]=rows[4];assert(!idleGeometryInputs(extended,layout,weights));
+     for(unsigned variant=0;variant<9;++variant) {
+        auto bad=candidateAligned;
+        switch(variant) {case 0:bad.uv={};break;case 1:bad.uv.object=3;break;
+          case 2:bad.uv.offset=bad.vertex.size;break;case 3:bad.uv.stride=4;break;
+          case 4:bad.uv.frequency=2;break;case 5:bad.weights={};break;
+          case 6:bad.weights.offset++;break;case 7:bad.localIndices.object=3;break;
+          case 8:bad.localIndices.stride=8;break;}
+        assert(!idleBufferRanges(bad,rows,ranges) && !ranges.slices[0].size);
+     }}
     const ScopeBufferInputs hand{
         {317,338,{{{0,0x85,0},{0,0x87,0},{12680,0x80,0},{13948,0x80,0}}}},
         {4,0,0,317,0,338}, {1,0,12,1},{1,13948,4,1},{1,12680,4,1},{1,15216,8,1},

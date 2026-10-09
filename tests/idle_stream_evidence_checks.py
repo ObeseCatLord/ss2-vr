@@ -72,6 +72,22 @@ def fixture(declaration=OBSERVED):
     return '\n'.join(lines)
 
 class Checks(unittest.TestCase):
+    def test_live_input_getter_routing_cannot_revert_or_leave_selector_unused(self):
+        from verify_scope_gpu_abi import verify_input_stream_routing
+        source=(Path(__file__).resolve().parents[1]/'src/game/scope_gpu.cpp').read_text()
+        checked=verify_input_stream_routing(source)
+        self.assertEqual(checked['no_uv78_streams'],[0,7,2,8])
+        self.assertEqual(checked['observed78_and_multi_uv78_streams'],[0,7,3,8])
+        for bad in (
+                source.replace('noUV78?2u:3u','3'),
+                source.replace('noUV78?2u:3u','noUV78?3u:2u'),
+                source.replace('noUV78?2u:3u','noUV78?2u:2u'),
+                source.replace('const bool noUV78=idle &&','const bool noUV78=true || idle &&'),
+                source.replace('GetStreamSource(streamNumbers[i],','GetStreamSource(3,'),
+                source.replace('noUV78?2u:3u','3 /* noUV78?2u:3u */')):
+            with self.subTest(mutation=bad[bad.index('const UINT streamNumbers'):][:100]),self.assertRaises(ValueError):
+                verify_input_stream_routing(bad)
+
     def test_five_row78_passive_with_five_retained_copies_never_promotes(self):
         from idle_weapon_evidence_checks import geometry_fixture
         _,_,header,data=geometry_fixture()
@@ -95,7 +111,7 @@ class Checks(unittest.TestCase):
                     text.replace('outerCurrent=0','outerCurrent=1')):
             with self.subTest(case=bad[-80:]),self.assertRaises(ValueError):assess(bad,SOURCE)
 
-    def test_five_row78_is_exact_and_passive_only(self):
+    def test_five_row78_is_exact_and_passive_receipt_stays_diagnostic(self):
         text=fixture(PASSIVE_FIVE_ROW78);result=assess(text,SOURCE)
         record=result['rejected_or_missing_observations'][0]
         self.assertEqual(diagnostic_stream_numbers(record['input_failure']),(0,7,8))
@@ -103,7 +119,7 @@ class Checks(unittest.TestCase):
         self.assertFalse(result['copied_event_pose_observations'])
         for field in ('geometry_admitted','roles_inferred','alignment_accepted'):
             self.assertIs(record['stream_probe'][field],False)
-        with self.assertRaises(ValueError):declaration_layout(PASSIVE_FIVE_ROW78)
+        self.assertEqual(declaration_layout(PASSIVE_FIVE_ROW78),(4,True))
         for index in range(5):
             for field in range(6):
                 rows=copy.deepcopy(PASSIVE_FIVE_ROW78);rows[index][field]+=1

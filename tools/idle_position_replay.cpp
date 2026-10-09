@@ -38,7 +38,7 @@ int main(int argc,char **argv) {
         if((schema!=1 && schema!=2 && schema!=3) || words<2 || words>512 || !count || count>256 || !vertices || vertices>IdleGeometryVertices || weights>1)
             throw std::runtime_error("input-bounds");
         const auto layout=schema>=2?input.take<uint32_t>():0;
-        if(layout>3 || (layout!=0 && !weights))throw std::runtime_error("input-layout");
+        if(layout>4 || (layout!=0 && !weights))throw std::runtime_error("input-layout");
         const auto clip=input.take<Matrix44>();
         for(float v:clip.m)if(!std::isfinite(v))throw std::runtime_error("nonfinite-reference");
         Matrix34 local{};

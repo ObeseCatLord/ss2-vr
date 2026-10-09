@@ -5,8 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
-import capstone
-import pefile
+import re
 
 def require(ok, message):
     if not ok:
@@ -14,6 +13,34 @@ def require(ok, message):
 
 ROOT = Path(__file__).resolve().parents[1]
 GFX_SHA256 = '88749b79be36f0c0dccb623c4f1712685b5af603b451e25ed3c5029bedcdf3ed'
+
+
+def verify_input_stream_routing(source: str) -> dict:
+    """Narrow source gate tied to the actual getter loop, not synthetic receipts.
+
+    This verifies the current bounded source form; compiled-product provenance
+    and native forwarding have separate gates. It does not execute COM getters.
+    """
+    start=source.index('static bool boundInputs(')
+    end=source.index('static bool sampleIdleStreams(',start)
+    body=re.sub(r'//[^\n]*|/\*.*?\*/','',source[start:end],flags=re.S)
+    body=''.join(body.split())
+    selectors=[
+        'constboolobserved78=idle&&observed78Declaration(std::span(b.elements).first(b.count));',
+        'constboolmultiUV78=idle&&observedMultiUV78Declaration(std::span(b.elements).first(b.count));',
+        'constboolnoUV78=idle&&noUV78Declaration(std::span(b.elements).first(b.count));',
+        'constbooluses78=observed78||multiUV78||noUV78;',
+        'constUINTstreamNumbers[]{0,uses78?7u:5u,noUV78?2u:3u,uses78?8u:6u};',
+        'for(unsignedi=0;i<(weights?4u:3u);++i){auto&stream=*streams[i];',
+        'result=d->GetStreamSource(streamNumbers[i],&b.vertex[i],&stream.offset,&stream.stride);',
+        'result=d->GetStreamSourceFreq(streamNumbers[i],&stream.frequency);',
+    ]
+    require(all(body.count(term)==1 for term in selectors),'Bound input stream routing differs from the reviewed getter path')
+    positions=[body.index(term) for term in selectors]
+    require(positions==sorted(positions),'Bound input selectors/getters are out of order')
+    return {'source_checked':True,'no_uv78_streams':[0,7,2,8],
+            'observed78_and_multi_uv78_streams':[0,7,3,8],
+            'limits':['Source routing only; no COM getter or native content executed.']}
 
 
 def symbols(path: Path) -> dict:
@@ -27,6 +54,9 @@ def symbols(path: Path) -> dict:
 
 
 def verify(game: Path) -> dict:
+    import capstone
+    import pefile
+    routing=verify_input_stream_routing((ROOT/'src/game/scope_gpu.cpp').read_text())
     native = game/'Bin/GfxD3D.dll'
     if hashlib.sha256(native.read_bytes()).hexdigest() != GFX_SHA256:
         raise ValueError('Native DIP caller fingerprint changed')
@@ -67,6 +97,7 @@ def verify(game: Path) -> dict:
                             'dip_winapi_stack_retirement':28,'original_arguments_preserved':True,
                             'actual_native_caller_forwarded':True,'scope_gpu_cdecl_arguments':9}
     return {'runtime_executed':False,'windows_code_executed':False,
+            'input_stream_routing':routing,
             'native_gfx_sha256':GFX_SHA256,'native_dip_return_rva':'0xa011','products':products,
             'limits':['Static compiled shape only; no COM invocation or exception recovery executed.']}
 

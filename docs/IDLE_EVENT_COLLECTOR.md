@@ -1,5 +1,39 @@
 # Event-time ID1 collection — source implemented
 
+## V24 result and exact NoUV78 copy adapter — source GO
+
+V24 (sourceca07dd7/fp5dbeaa9, private run20261009T042942) reached the pinned
+Jungle scene with109native stereo pairs and clean native/owned/display shutdown;
+protected12unchanged.0accepted/32rejected:17Palette6,10CollectInputs32,5Name19.
+All50retained copies match weaponmesh3;20cold-native-reference copies agree.
+Tencomplete passive receipts flags511/0invalidations contain the same194-word
+program. Astra verified oPos depends only onv0/v7.x-y/v8.x, relativec23-c25,
+shaderDEFc255 andc1-c4. Otherinputs1-6 stayunknown, including declaredv2.
+Conditional60compiled evaluations use actualprogram/constants butsynthetic
+vertices/influences and a nonnative comparator; they certify no nativecontent.
+
+The exactfive-row declaration now selects ID1 enum4NoUV78 withactual0/7/2/8
+getters. Inactive3stillpoints at the previous14-vertex surfaceUV68848; the pinned
+132-vertex surface requires68960. Stream2content is not yet observed; its copied
+auxiliary bytes must independently match allfivehashes/ranges. No offset is
+hardcoded, v2/v3remainunknown toposition, and otherfamilies keepstream3.
+Scope13 remains unchanged. Cap8, owner/COM/nativefinally/bookends and source1
+cold-reference qualification/tolerance stay unchanged; historicalV24layout0
+assessment is identical and never promoted.
+
+Astra scopedsource GO followed the revisedauxiliary boundary and an actual
+producer-routing source gate with negative mutations. LocalturntagsAstra/xhigh
+verified; backendunattested. Allfourproducts rebuilt on
+`9eb1a42db87a25cc2e951b1ee9bcc6a312a318c883ea9fee45902933fa42a00c`,
+IPC10/wire7.72Debug/72Release and32normal/optimized native/compiled gates pass;
+20passive/21reader/9replay groups passnormally/optimized. No runtime ofthiscopy
+adapter yet. Nextfreshsealedneutral capture must establish actualstream2
+bytes/hashes, exactstop andhandasset/ownedreference coverage. V24immutable,
+no guessedgrasp, cachedassociation borrowing, releasepriming orfiring/vehicle/
+headset/network probes. Fullscope remainsopen.
+See [implementation/disposition](IDLE_NO_UV78_COPY.md).
+
+
 ## Exact five-row passive extension — reviewed and built
 
 The V23 stop now selects diagnostic0/7/8 getters only for its exact5row

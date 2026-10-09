@@ -43,7 +43,7 @@ class Checks(unittest.TestCase):
             self.assertTrue(result['position_replay_agrees_with_reference']);self.assertFalse(result['alignment_accepted'])
             bad=local.copy();bad[3]+=1
             self.assertEqual(json.loads(self.run_fixture(fixture(program=program,constants=constants,local=bad,layout=layout)).stdout)['reason'],'projection-mismatch')
-            for broken in (staged[:-1],staged+b'x',fixture(local=local,weights=0),fixture(local=local,layout=4)):
+            for broken in (staged[:-1],staged+b'x',fixture(local=local,weights=0),fixture(local=local,layout=5)):
                 self.assertNotEqual(self.run_fixture(broken).returncode,0)
         old=json.loads(self.run_fixture(fixture(program=program,constants=constants)).stdout)
         self.assertEqual(old['reason'],'projection-mismatch')
@@ -68,7 +68,7 @@ class Checks(unittest.TestCase):
         new=json.loads(self.run_fixture(fixture(program=p,layout=1)).stdout)
         self.assertTrue(new['position_replay_agrees_with_reference']);self.assertFalse(new['gpu_execution'])
         self.assertTrue(json.loads(self.run_fixture(fixture(layout=0)).stdout)['position_replay_agrees_with_reference'])
-        for data in (fixture(program=p,layout=4),fixture(program=p,layout=1,weights=0)):
+        for data in (fixture(program=p,layout=5),fixture(program=p,layout=1,weights=0)):
             self.assertNotEqual(self.run_fixture(data).returncode,0)
         data=bytearray(fixture(program=p,layout=1));data[-4]=1
         self.assertEqual(json.loads(self.run_fixture(data).stdout)['reason'],'unsupported-influence')
@@ -121,6 +121,22 @@ class Checks(unittest.TestCase):
         for byte in (-8,-7,-4,-3):
             bad=bytearray(fixture(program=p,constants=c,layout=3));bad[byte]=1
             self.assertEqual(json.loads(self.run_fixture(bad).stdout)['reason'],'unsupported-influence')
+        # Exact NoUV78 uses the same known position/influence inputs. v2 is
+        # actually declared but remains unknown; auxiliary v3 is never seeded.
+        self.assertTrue(json.loads(self.run_fixture(fixture(program=p,constants=c,layout=4)).stdout)['position_replay_agrees_with_reference'])
+        for reg in range(1,7):
+            dependency=[0xfffe0101,31,0x80000005,0x900f0000,31,0x80000005|(reg<<16),0x900f0000|reg,
+                        20,0xc00f0000,0x90e40000|reg,0xa0e40000,0xffff]
+            self.assertEqual(json.loads(self.run_fixture(fixture(program=dependency,layout=4)).stdout)['reason'],'unknown-position-dependency')
+        self.assertEqual(json.loads(self.run_fixture(fixture(program=unknown,constants=c,layout=4)).stdout)['reason'],'unknown-position-dependency')
+        self.assertNotEqual(self.run_fixture(fixture(layout=4,weights=0)).returncode,0)
+        for byte in (-8,-7,-4,-3):
+            bad=bytearray(fixture(program=p,constants=c,layout=4));bad[byte]=1
+            self.assertEqual(json.loads(self.run_fixture(bad).stdout)['reason'],'unsupported-influence')
+        fractional=[0xfffe0101,31,0x80000005,0x900f0000,
+                    81,0xa00f00fe,0x3fc00000,0,0,0,
+                    1,0xb0010000,0xa00000fe,20,0xc00f0000,0x90e40000,0xa0e42000,0xffff]
+        self.assertEqual(json.loads(self.run_fixture(fixture(program=fractional,layout=4)).stdout)['reason'],'unknown-position-dependency')
     def run_fixture(self,data):
         with tempfile.TemporaryDirectory() as tmp:
             p=Path(tmp)/'input.bin';p.write_bytes(data)
@@ -325,16 +341,17 @@ class Checks(unittest.TestCase):
                 self.assertTrue(failed['draws'][2]['position_replay']['position_replay_agrees_with_reference'])
                 self.assertTrue(failed['draws'][3]['position_replay']['position_replay_agrees_with_reference'])
                 self.assertFalse(failed['all_consumed_positions_agree_with_native_reference'])
-            from idle_stream_evidence import NO_UV56
-            noUV=[line for line in lines if 'kind=declaration ' not in line]
-            for i,e in enumerate(NO_UV56):
-                noUV.append('Lab idle geometryData request=1 eye=0 hand=0 index=0 kind=declaration chunk='+str(i)+
-                            ' values='+','.join(f'{x:08x}' for x in e))
-            auxiliary=replay(assess('\n'.join(noUV),source),index,root,EVALUATOR,root)
-            self.assertTrue(auxiliary['all_consumed_positions_agree_with_native_reference'])
-            self.assertEqual(auxiliary['draws'][0]['auxiliary_channels'],['uv'])
-            self.assertEqual(auxiliary['draws'][0]['result'],'unique-position-and-auxiliary-channel-match')
-            self.assertFalse(auxiliary['positive_grasp_verified']);self.assertFalse(auxiliary['alignment_accepted'])
+            from idle_stream_evidence import NO_UV56,PASSIVE_FIVE_ROW78
+            for family in (PASSIVE_FIVE_ROW78,NO_UV56):
+                noUV=[line for line in lines if 'kind=declaration ' not in line]
+                for i,e in enumerate(family):
+                    noUV.append('Lab idle geometryData request=1 eye=0 hand=0 index=0 kind=declaration chunk='+str(i)+
+                                ' values='+','.join(f'{x:08x}' for x in e))
+                auxiliary=replay(assess('\n'.join(noUV),source),index,root,EVALUATOR,root)
+                self.assertTrue(auxiliary['all_consumed_positions_agree_with_native_reference'])
+                self.assertEqual(auxiliary['draws'][0]['auxiliary_channels'],['uv'])
+                self.assertEqual(auxiliary['draws'][0]['result'],'unique-position-and-auxiliary-channel-match')
+                self.assertFalse(auxiliary['positive_grasp_verified']);self.assertFalse(auxiliary['alignment_accepted'])
             # A supported cold native reference is selected by evidence, not
             # by whichever replay passes. All data here is synthetic.
             def raw_line(kind,chunk,values,index=0):

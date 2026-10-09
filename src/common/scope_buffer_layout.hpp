@@ -20,7 +20,13 @@ struct ScopeDeclarationElement {
     uint8_t type = 0, method = 0, usage = 0, usageIndex = 0;
     bool operator==(const ScopeDeclarationElement &) const = default;
 };
-enum class GeometryInputLayout : uint32_t { Legacy56, Observed78, NoUV56, ObservedMultiUV78 };
+enum class GeometryInputLayout : uint32_t { Legacy56, Observed78, NoUV56, ObservedMultiUV78, NoUV78 };
+inline bool noUV78Declaration(std::span<const ScopeDeclarationElement> declaration) {
+    constexpr std::array<ScopeDeclarationElement,5> observed{{
+        {0,0,2,0,5,0},{2,0,1,0,5,2},{7,0,8,0,5,7},
+        {8,0,8,0,5,8},{255,0,17,0,0,0}}};
+    return declaration.size()==observed.size() && std::equal(observed.begin(),observed.end(),declaration.begin());
+}
 inline bool observed78Declaration(std::span<const ScopeDeclarationElement> declaration) {
     constexpr std::array<ScopeDeclarationElement,6> observed{{
         {0,0,2,0,5,0},{2,0,1,0,5,2},{3,0,1,0,5,3},
@@ -119,6 +125,9 @@ inline bool idleGeometryInputs(std::span<const ScopeDeclarationElement> declarat
     layout=GeometryInputLayout::Legacy56;weights=false;
     if(noUV56Declaration(declaration)) {
         layout=GeometryInputLayout::NoUV56;weights=true;return true;
+    }
+    if(noUV78Declaration(declaration)) {
+        layout=GeometryInputLayout::NoUV78;weights=true;return true;
     }
     if(observedMultiUV78Declaration(declaration)) {
         layout=GeometryInputLayout::ObservedMultiUV78;weights=true;return true;

@@ -202,14 +202,18 @@ static bool boundInputs(IDirect3DDevice9 *d,BoundInputs &b,const ScopeIndexedDra
     const bool observed78=idle && observed78Declaration(std::span(b.elements).first(b.count));
     const bool noUV56=idle && noUV56Declaration(std::span(b.elements).first(b.count));
     const bool multiUV78=idle && observedMultiUV78Declaration(std::span(b.elements).first(b.count));
-    const bool uses78=observed78 || multiUV78;
+    const bool noUV78=idle && noUV78Declaration(std::span(b.elements).first(b.count));
+    const bool uses78=observed78 || multiUV78 || noUV78;
     if(diagnostic)diagnostic->layout=observed78?GeometryInputLayout::Observed78:
-        noUV56?GeometryInputLayout::NoUV56:multiUV78?GeometryInputLayout::ObservedMultiUV78:GeometryInputLayout::Legacy56;
+        noUV56?GeometryInputLayout::NoUV56:multiUV78?GeometryInputLayout::ObservedMultiUV78:
+        noUV78?GeometryInputLayout::NoUV78:GeometryInputLayout::Legacy56;
     if(uses78 || noUV56)weights=true;
     b.values.surface=idle?probe.idle.raster.layout:probe.raster.pose.layout;b.values.draw=draw;
     ScopeStreamInput *streams[]{&b.values.positions,&b.values.localIndices,&b.values.uv,&b.values.weights};
-    const UINT streamNumbers[]{0,uses78?7u:5u,3,uses78?8u:6u};
-    // NoUV56/MultiUV78 qualify/copy auxiliary stream3 for exact asset matching.
+    const UINT streamNumbers[]{0,uses78?7u:5u,noUV78?2u:3u,uses78?8u:6u};
+    // NoUV78's declared FLOAT2 stream2 replaces stale undeclared stream3.
+    // Auxiliary bytes still require all five hashes; v2 is not a known position input.
+    // Other families retain auxiliary stream3 for exact asset matching.
     // It is never seeded into the position interpreter as a consumed input.
     for(unsigned i=0;i<(weights?4u:3u);++i) {
         auto &stream=*streams[i];

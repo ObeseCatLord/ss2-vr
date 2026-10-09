@@ -16,7 +16,8 @@ int main() {
      assert(IdleWeaponTrace::passiveStreamNumbers(d)==expected);
      bool weights=false;GeometryInputLayout layout{};
      assert(!declaredGeometryInputs(rows,weights));
-     assert(!idleGeometryInputs(rows,layout,weights)); // No production admission.
+     assert(idleGeometryInputs(rows,layout,weights) && layout==GeometryInputLayout::NoUV78 && weights);
+     assert(!declaredGeometryInputs(rows,weights,GeometryInputLayout::NoUV78)); // Scope13 never opts in.
      for(unsigned i=0;i<rows.size();++i)for(unsigned field=0;field<6;++field) {
         auto bad=d;auto &e=bad.declaration[i];
         switch(field) {case 0:++e.stream;break;case 1:++e.offset;break;

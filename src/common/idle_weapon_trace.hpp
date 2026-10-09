@@ -171,13 +171,7 @@ struct IdleWeaponTrace {
     static std::array<unsigned,3> passiveStreamNumbers(const InputFailure &d) noexcept {
         if(d.step!=20 || d.valid!=15 || d.declarationCount>65)return {};
         const auto rows=std::span(d.declaration).first(d.declarationCount);
-        // Witnessed rejected five-row family. Select diagnostic getters only;
-        // its position dependencies and geometry admission remain unknown.
-        constexpr std::array<ScopeDeclarationElement,5> observedFiveRows{{
-            {0,0,2,0,5,0},{2,0,1,0,5,2},{7,0,8,0,5,7},
-            {8,0,8,0,5,8},{255,0,17,0,0,0}}};
-        if(rows.size()==observedFiveRows.size() &&
-           std::equal(observedFiveRows.begin(),observedFiveRows.end(),rows.begin()))return {0,7,8};
+        if(noUV78Declaration(rows))return {0,7,8};
         if(observed78Declaration(rows))return {0,7,8};
         // Select from the original failure even when the later copy adapter
         // supports this family. Passive receipts never establish admission.

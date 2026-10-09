@@ -35,10 +35,10 @@ def match_draws(observations,candidates,retained=False):
                                       'mesh_object':c['mesh_object'],'lod':c['lod'],'channel_index':channel_index})
             rows.append({'request':observation['request'],'eye':observation['eye'],'hand':observation['hand'],
                 'geometry_index':int(index),'draw_record':g['drawRecord'],
-                'result':('unique-position-and-auxiliary-channel-match' if input_layout in (2,3) else
+                'result':('unique-position-and-auxiliary-channel-match' if input_layout in (2,3,4) else
                           'unique-consumed-channel-match') if len(found)==1 else 'unmatched' if not found else 'ambiguous',
                 'candidates':found})
-            if input_layout in (2,3):rows[-1].update(input_layout=input_layout,auxiliary_channels=['uv'])
+            if input_layout in (2,3,4):rows[-1].update(input_layout=input_layout,auxiliary_channels=['uv'])
     if retained:
         for row in rows:row.update(evidence_class='historical-post-original-pre-cleanup-copies',cleanup_certified=False,
             outer_current=False,whole_trace_accepted=False,alignment_accepted=False)

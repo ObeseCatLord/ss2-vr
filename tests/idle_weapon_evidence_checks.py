@@ -57,7 +57,7 @@ class Checks(unittest.TestCase):
             if bit==7:continue
             with self.assertRaises(ValueError):assess(log.replace('checks=32639','checks='+str(32639&~(1<<bit))),SOURCE)
     def test_input_failure_indices_follow_explicit_or_historical_layout(self):
-        from idle_stream_evidence import OBSERVED,OBSERVED_MULTI_UV
+        from idle_stream_evidence import OBSERVED,OBSERVED_MULTI_UV,PASSIVE_FIVE_ROW78
         head=DRAW.replace('stage=4','stage=3')+'\nLab idle rejection request=100 eye=1 hand=0 reason=32 preceding=2 checks=0 state=63 callbacks=63\n'
         failure='Lab idle inputFailure request=100 eye=1 hand=0 step=8 index=7 hr=-1 valid=11 caps=256 declaration=6 rangeChecks=0 layout=1'
         rows='\n'.join('Lab idle inputDeclaration request=100 eye=1 hand=0 index='+str(i)+' values='+','.join(map(str,e)) for i,e in enumerate(OBSERVED))
@@ -70,7 +70,7 @@ class Checks(unittest.TestCase):
             with self.subTest(bad=bad),self.assertRaises(ValueError):assess(bad,SOURCE)
         historical=text.replace(' layout=1','').replace('index=7 hr=','index=5 hr=')
         self.assertEqual(assess(historical,SOURCE)['rejected_or_missing_observations'][0]['input_failure']['layout'],0)
-        for layout,declaration in ((1,OBSERVED),(3,OBSERVED_MULTI_UV)):
+        for layout,declaration in ((1,OBSERVED),(3,OBSERVED_MULTI_UV),(4,PASSIVE_FIVE_ROW78)):
             rows='\n'.join('Lab idle inputDeclaration request=100 eye=1 hand=0 index='+str(i)+' values='+','.join(map(str,e))
                            for i,e in enumerate(declaration))
             for step in range(8,12):
@@ -79,12 +79,12 @@ class Checks(unittest.TestCase):
                     failed='Lab idle inputFailure request=100 eye=1 hand=0 step='+str(step)+' index=7 hr='+str(hr)+\
                         ' valid=11 caps=256 declaration='+str(len(declaration))+' rangeChecks=0 layout='+str(layout)
                     text=head+failed+'\n'+rows
-                    for index in (0,3,7,8):
+                    for index in ((0,2,7,8) if layout==4 else (0,3,7,8)):
                         qualified=assess(text.replace('index=7 hr=','index='+str(index)+' hr='),SOURCE)
                         self.assertFalse(qualified['copied_event_pose_observations'])
-                    for index in (5,6):
+                    for index in ((3,5,6) if layout==4 else (2,5,6)):
                         with self.assertRaises(ValueError):assess(text.replace('index=7 hr=','index='+str(index)+' hr='),SOURCE)
-            old=text.replace(' layout=3','').replace('index=7 hr=','index=5 hr=') if layout==3 else historical
+            old=text.replace(' layout='+str(layout),'').replace('index=7 hr=','index=5 hr=') if layout in (3,4) else historical
             self.assertEqual(assess(old,SOURCE)['rejected_or_missing_observations'][0]['input_failure']['layout'],0)
     def test_no_uv_failure_header_and_historical_passive_compatibility(self):
         from idle_stream_evidence import NO_UV56
@@ -221,6 +221,27 @@ class Checks(unittest.TestCase):
         self.assertEqual(multi_match['matches'][0]['result'],'unique-position-and-auxiliary-channel-match')
         self.assertEqual(multi_match['matches'][0]['input_layout'],3)
         self.assertFalse(multi_match['consumed_channels_all_uniquely_matched'])
+        from idle_stream_evidence import PASSIVE_FIVE_ROW78
+        five=text
+        for r in old_rows:five=five.replace(r+'\n','')
+        five+='\n'+'\n'.join(row('declaration',i,e) for i,e in enumerate(PASSIVE_FIVE_ROW78))
+        five_evidence=assess(five,SOURCE)
+        self.assertEqual(five_evidence['copied_event_pose_observations'][0]['geometry'][0]['input_layout'],4)
+        five_match=match(five_evidence,candidate)
+        self.assertEqual(five_match['matches'][0]['input_layout'],4)
+        self.assertEqual(five_match['matches'][0]['auxiliary_channels'],['uv'])
+        self.assertEqual(five_match['matches'][0]['result'],'unique-position-and-auxiliary-channel-match')
+        self.assertFalse(five_match['consumed_channels_all_uniquely_matched'])
+        import copy
+        changed_candidate=copy.deepcopy(candidate)
+        changed_candidate['hand']['candidate_channels'][0]['channel_sha256']['uv']='0'*64
+        self.assertEqual(match(five_evidence,changed_candidate)['matches'][0]['result'],'unmatched')
+        # A stale auxiliary range may still fit the buffer. Even matching other
+        # channels and apparent hashes cannot rescue the wrong authored range.
+        streams=[1,0,12,1,1,13948,4,1,1,12680,4,1,1,15216,8,1,2,0]
+        stale=streams.copy();stale[13]-=8
+        wrong_range=assess(five.replace(row('streams',0,streams),row('streams',0,stale)),SOURCE)
+        self.assertEqual(match(wrong_range,candidate)['matches'][0]['result'],'unmatched')
         for row_index in range(8):
             for field in range(6):
                 rows=[r.copy() for r in OBSERVED_MULTI_UV];rows[row_index][field]+=1
