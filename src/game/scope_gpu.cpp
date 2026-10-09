@@ -57,6 +57,8 @@ struct ProbeOwner {
     ScopeRasterObservation raster;
     IdleGeometryCopy idle;
     IdleWeaponTrace *idleTrace=nullptr;
+    IdleWeaponTrace *submissionOwner=nullptr;
+    unsigned submissionSlot=IdleSubmissionTrace::NoSlot;
     BoundInputs bindings[3]; // Slot2 only for passive ID1 post-forward observation.
     bool streamReentered=false;
     ScopeLockLedger lock;
@@ -145,9 +147,11 @@ static void cleanup(bool aborted) noexcept {
     const bool current = !probe.transaction || scopeGpuTransactionCurrent(probe.device);
     auto *device = probe.device;
     release(probe.device);
+    bool afterReleaseCurrent=true;
     if (probe.transaction) {
         // Current performs identity comparisons only, never dereferences device.
         const bool afterRelease=scopeGpuTransactionCurrent(device);
+        afterReleaseCurrent=afterRelease;
         if(probe.idleTrace && probe.idleTrace->streamProbe.selected) {
             auto &receipt=probe.idleTrace->streamProbe;
             receipt.invalidations=IdleWeaponTrace::checks({probe.streamReentered,aborted,
@@ -160,12 +164,26 @@ static void cleanup(bool aborted) noexcept {
         if (!retired && probe.split && (!current || !afterRelease)) scopeGpuFault();
         scopeGpuTransactionEnd();
     }
+    // Release callbacks can invalidate a previously matching post sample.
+    // Numeric device comparison and generation checks perform no COM calls.
+    if(probe.submissionOwner)probe.submissionOwner->submissions.finalize(probe.submissionSlot,aborted,
+        current && afterReleaseCurrent && probe.generation==graphicsResourceGeneration() && scopeGpuRoutingCurrent(device),
+        probe.split);
+    probe.submissionOwner=nullptr;probe.submissionSlot=IdleSubmissionTrace::NoSlot;
     probe.sourceView = {}; probe.imageConstants = {};
     probe.transaction = probe.split = probe.imageChanged = probe.imageRestoreFailed = false;
     probe.cap = {}; probe.uvRows={}; probe.program={}; probe.colorProgram={};
     probe.idleTrace=nullptr;
     probe.streamReentered=false;
     probe.busy = false;
+}
+void retireIdleSubmissionOwner(IdleWeaponTrace *owner) noexcept {
+    // The outer weapon's native-finally owns this last-resort retirement, even
+    // if a foreign unwind interrupted the inner COM cleanup. No callbacks.
+    if(owner && probe.submissionOwner==owner) {
+        owner->submissions.finalize(probe.submissionSlot,true,false,probe.split);
+        probe.submissionOwner=nullptr;probe.submissionSlot=IdleSubmissionTrace::NoSlot;
+    }
 }
 static bool identity(IUnknown *object,IUnknown *&out,HRESULT *observed=nullptr) {
     if(!object){if(observed)*observed=E_POINTER;return false;}
@@ -610,6 +628,7 @@ static HRESULT probeScopeDraw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base
     const auto gfx=reinterpret_cast<uintptr_t>(GetModuleHandleW(L"GfxD3D.dll"));
     if(probe.busy && probe.idleTrace)probe.idleTrace->reject(IdleWeaponTrace::Rejection::GpuReentry);
     if(probe.busy && probe.idleTrace && probe.idleTrace->streamProbe.selected)probe.streamReentered=true;
+    if(probe.busy && probe.submissionOwner)probe.submissionOwner->submissions.reenter(probe.submissionSlot);
     if (probe.busy || !gfx || caller != gfx+0xa011) return forward(d,type,base,minimum,vertices,start,primitives);
     // All owning state exists above NativeFinally; no stack-native pointer is
     // kept through any COM call, and no allocation/native callback occurs locked.
@@ -620,6 +639,11 @@ static HRESULT probeScopeDraw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base
     probe.streamReentered=false;
     HRESULT result=D3DERR_INVALIDCALL;
     withNativeFinally([&] {
+        // Arm an independent bounded value owner before the first AddRef.
+        // The existing geometry rejection (including cap8) is untouched.
+        probe.submissionOwner=idleSubmissionOwner();
+        if(probe.submissionOwner)probe.submissionSlot=probe.submissionOwner->submissions.reserve(
+            ScopeIndexedDraw{uint32_t(type),base,minimum,vertices,start,primitives});
         bool colorCandidate=false;
         bool admitted=currentScopeRaster(probe.raster) && nativeUiDeviceCurrent(d);
         // Establish the borrowed ID1 trace before the first retained COM call,
@@ -692,9 +716,24 @@ static HRESULT probeScopeDraw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base
         if(probe.idleTrace && !idleAdmitted)probe.idleTrace->reject(IdleWeaponTrace::Rejection::GpuAdmission,IdleWeaponTrace::checks({idleCandidate,probe.transaction!=0}));
         if (!scopeGpuForwardingAllowed()) return;
         if (!probe.split) {
+            if(probe.submissionOwner && probe.submissionOwner->submissions.pending(probe.submissionSlot)) {
+                IdleSubmissionMetadata before;
+                const bool copied=scopeGpuRoutingCurrent(d) && probe.generation==graphicsResourceGeneration() &&
+                    copyIdleSubmissionMetadata(probe.submissionOwner,before);
+                probe.submissionOwner->submissions.before(probe.submissionSlot,before,
+                    copied && scopeGpuRoutingCurrent(d) && probe.generation==graphicsResourceGeneration());
+            }
             if(probe.idleTrace && probe.idleTrace->streamProbe.selected)
                 probe.idleTrace->streamProbe.flags|=IdleWeaponTrace::StreamProbe::ForwardCalled;
             result=forward(d,type,base,minimum,vertices,start,primitives);
+            if(probe.submissionOwner && probe.submissionSlot<IdleSubmissionTrace::MaxAttempts) {
+                IdleSubmissionMetadata after;
+                const bool copied=probe.submissionOwner->submissions.pending(probe.submissionSlot) &&
+                    scopeGpuRoutingCurrent(d) && probe.generation==graphicsResourceGeneration() &&
+                    copyIdleSubmissionMetadata(probe.submissionOwner,after);
+                probe.submissionOwner->submissions.after(probe.submissionSlot,after,
+                    copied && scopeGpuRoutingCurrent(d) && probe.generation==graphicsResourceGeneration(),int32_t(result));
+            }
         }
         if(!probe.split && probe.idleTrace && probe.idleTrace->streamProbe.selected)finishIdleStreamProbe(d,result);
         if(probe.idleTrace && idleAdmitted) {

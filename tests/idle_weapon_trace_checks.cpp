@@ -2,11 +2,54 @@
 #include <cassert>
 #include <limits>
 #include <string_view>
+#include <iostream>
 using namespace ss2vr;
 #ifdef NDEBUG
 #error Idle diagnostic checks need active assertions
 #endif
 int main() {
+    {IdleSubmissionMetadata a;a.modelAddress=100;a.drawAddress=200;a.modelRecord=1;a.drawRecord=3;
+     a.surface=300;a.instance=400;a.bone=0;a.rootConfig={500,600,1};a.renderConfig=a.rootConfig;
+     a.layout.vertices=132;a.layout.triangles=108;
+     const ScopeIndexedDraw draw{4,0,0,132,4782,108};
+     IdleWeaponTrace trace;trace.stage=IdleWeaponTrace::Stage::Rejected;
+     trace.rejection=IdleWeaponTrace::Rejection::Draw;trace.draws=8;trace.rejectionChecks=32639;
+     auto &s=trace.submissions;
+     for(unsigned i=0;i<64;++i) {
+        const auto slot=s.reserve(draw);assert(slot==i && s.rows[i].ordinal==i+1);
+        s.before(slot,a,i%2==0);s.after(slot,a,true,0);s.finalize(slot,false,true,false);
+        assert(s.rows[i].status==(i%2==0?IdleSubmissionTrace::Status::Qualified:IdleSubmissionTrace::Status::PreUnknown));
+     }
+     assert(s.reserve(draw)==IdleSubmissionTrace::NoSlot && s.attempts==65 && s.overflow);
+     assert(trace.rejection==IdleWeaponTrace::Rejection::Draw && trace.draws==8 && trace.rejectionChecks==32639);
+     s.attempts=UINT32_MAX;assert(s.reserve(draw)==IdleSubmissionTrace::NoSlot && s.attempts==UINT32_MAX);
+     for(unsigned changed=0;changed<4;++changed) {
+        IdleSubmissionTrace t;const auto slot=t.reserve(draw);auto b=a;
+        if(changed==0)++b.modelAddress;else if(changed==1)++b.drawAddress;
+        else if(changed==2)++b.instance;else ++b.rootConfig.resource;
+        t.before(slot,a,true);t.after(slot,b,true,0);t.finalize(slot,false,true,false);
+        assert(t.rows[0].status==IdleSubmissionTrace::Status::Mismatch && !t.rows[0].metadata.instance);
+     }
+     for(unsigned phase=0;phase<3;++phase) {
+        IdleSubmissionTrace t;const auto slot=t.reserve(draw);
+        if(phase==0)t.reenter(slot); // AddRef before pre sample.
+        t.before(slot,a,true);if(phase==1)t.reenter(slot); // Original forwarding.
+        t.after(slot,a,true,0);if(phase==2)t.reenter(slot); // Release after matching post sample.
+        t.finalize(slot,false,true,false);
+        assert(t.rows[0].status==IdleSubmissionTrace::Status::Reentered && t.rows[0].returned && !t.rows[0].metadata.instance);
+     }
+     for(unsigned failure=0;failure<5;++failure) {
+        IdleSubmissionTrace t;auto slot=t.reserve(draw);t.before(slot,a,true);
+        if(failure!=4)t.after(slot,a,failure!=3,failure==2?-1:0);
+        t.finalize(slot,failure==0,failure!=1,false);
+        const IdleSubmissionTrace::Status expected[]{IdleSubmissionTrace::Status::Aborted,IdleSubmissionTrace::Status::Retired,
+          IdleSubmissionTrace::Status::OriginalFailed,IdleSubmissionTrace::Status::PostUnknown,IdleSubmissionTrace::Status::NoForward};
+        assert(t.rows[0].status==expected[failure] && !t.rows[0].metadata.instance);
+     }
+     IdleSubmissionTrace split;auto slot=split.reserve(draw);split.finalize(slot,false,true,true);
+     assert(split.rows[slot].status==IdleSubmissionTrace::Status::Split);
+     std::cout<<"Submission row bytes="<<sizeof(IdleSubmissionTrace::Row)<<" inventory bytes="<<sizeof(IdleSubmissionTrace)
+              <<" whole idle trace bytes="<<sizeof(IdleWeaponTrace)<<'\n';}
     {IdleWeaponTrace::InputFailure d;d.step=20;d.valid=15;d.declarationCount=5;
      const std::array<ScopeDeclarationElement,5> rows{{
         {0,0,2,0,5,0},{2,0,1,0,5,2},{7,0,8,0,5,7},

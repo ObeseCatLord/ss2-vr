@@ -5,6 +5,9 @@ namespace ss2vr::game {
 // Valid only inside the original selected ID1 ordinary gun invocation.
 bool currentIdleRaster(IdleRasterCopy &,IdleWeaponTrace *&);
 bool currentIdleDraw(ScopeDrawBinding &,IdleDrawIdentity &,IdleWeaponTrace *&);
+IdleWeaponTrace *idleSubmissionOwner() noexcept;
+bool copyIdleSubmissionMetadata(const IdleWeaponTrace *,IdleSubmissionMetadata &) noexcept;
+void retireIdleSubmissionOwner(IdleWeaponTrace *) noexcept;
 // Pure invocation metadata borrow. The caller separately establishes native
 // thread ownership before original entry; DIP revalidates the native binding.
 IdleWeaponTrace *idleProjectionOwner() noexcept;

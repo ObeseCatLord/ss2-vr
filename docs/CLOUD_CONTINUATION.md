@@ -1,5 +1,43 @@
 # Latest exact noUV passive source checkpoint
 
+## Current V25 result and indexed-submission observer
+
+Native VR world rendering is working in the simulated lab. V25 reached the
+pinned Jungle scene with 122 native stereo projection pairs, normal native
+shutdown, no owned survivors/cleanup errors and 12 protected files unchanged.
+Earlier controlled runs verified camera response to head translation and rotation;
+V25 was stationary and does not repeat those checks or certify real hardware.
+
+The exact NoUV78 adapter is now runtime-observed: 21 copies match all five
+private channel hashes/ranges (14 surfaces of 132 vertices/108 triangles and
+7 of 32 vertices/16 triangles). All 56 retained copies match gun mesh3, not the
+separate hand mesh2. Seven traces reach the unchanged eight-copy capacity.
+Whole collector readiness remains rejected; physical grip alignment is open.
+
+A new passive indexed-submission observer records up to 64 attempted API calls
+independently of the geometry collector's rejection/cap. It samples compact
+resource/render identities around the existing unsplit original call, retains
+only matching normal-return observations after cleanup, and invalidates reentry,
+retirement, failed return, split, unwind and unknown samples. It changes neither
+native forwarding nor geometry admission. It proves API bookends only, not GPU
+visibility, vertex content, hand identity, grasp or first-use melee release.
+
+Astra/xhigh gave scoped source GO after signed-count/byte-width and contradictory
+status fixes. Local turn tags verified; independent backend attestation unavailable.
+All four products rebuilt on
+`732daee3193668262f31a2c3b8cbfdb5455b0d205b34a8cf5c1e94fa192950dc`,
+IPC10/wire7. 72 Debug/72 Release groups and 36 normal/optimized native/compiled
+gates pass. Metadata storage is 8,972 bytes; compiled x86 tracked-render frame
+reservation is 91,664 bytes in both products with stack probing. This is compiled
+measurement, not runtime stack-safety acceptance. No runtime of the observer yet.
+
+Next: fresh sealed private neutral observation with 13 tool seals, to identify
+post-cap resource/render coverage and any independently associated hand candidate.
+Earlier attempted fixtures remain immutable. No guessed grip, cache borrowing,
+release priming or firing/movement/vehicle/headset/network probe. Physical driver
+controls and full user-operated device/dual-wield/melee/multiplayer acceptance
+remain open. See [observer design and review](IDLE_SUBMISSION_OBSERVER.md).
+
 ## Exact noUV passive diagnostic — source GO
 
 Astra approved the minimal extension for the observed five-row0/1/5/6 declaration.

@@ -72,6 +72,66 @@ def fixture(declaration=OBSERVED):
     return '\n'.join(lines)
 
 class Checks(unittest.TestCase):
+    def test_submission_native_borrow_cleanup_order_is_source_bound(self):
+        from verify_idle_submission_abi import source_checks
+        root=Path(__file__).resolve().parents[1]
+        engine=(root/'src/game/engine.cpp').read_text();gpu=(root/'src/game/scope_gpu.cpp').read_text()
+        self.assertTrue(source_checks(engine,gpu)['source_order_checked'])
+        for bad in (gpu.replace('probe.submissionOwner=idleSubmissionOwner();','probe.submissionOwner=nullptr;'),
+                    gpu.replace('copyIdleSubmissionMetadata(probe.submissionOwner,after)','copyBoundIdleRaster(after)'),
+                    gpu.replace('probe.submissionOwner=nullptr;probe.submissionSlot=IdleSubmissionTrace::NoSlot;',
+                                'probe.submissionSlot=IdleSubmissionTrace::NoSlot;'),
+                    gpu.replace('scopeGpuRoutingCurrent(device)','true')):
+            with self.assertRaises(ValueError):source_checks(engine,bad)
+        for bad in (engine.replace('retireIdleSubmissionOwner(invocation.idle);',''),
+                    engine.replace('out=IdleSubmissionMetadata::copy(raster);copied=true;',
+                                   'trace->reject();out=IdleSubmissionMetadata::copy(raster);copied=true;')):
+            with self.assertRaises(ValueError):source_checks(bad,gpu)
+
+    def test_submission_after_geometry_rejection_is_not_geometry_or_hand_acceptance(self):
+        text=fixture();base=BASE
+        summary='Lab idle submissionSummary '+base+' attempts=1 count=1 overflow=0 outerReturned=1 limit=64'
+        row='Lab idle submissionRow '+base+' index=0 ordinal=1 status=8 hr=0 flags=15 draw=4,0,0,132,4782,108'
+        metadata='Lab idle submissionMetadata '+base+' index=0 keys=100,200,1,3,300,400,500,600,0 root=700,800,1 render=700,800,1 layout=132,108,14448,133,0,9564,135,0,58016,128,0,58544,128,0'
+        result=assess(text+'\n'+summary+'\n'+row+'\n'+metadata,SOURCE)
+        record=result['rejected_or_missing_observations'][0];self.assertEqual(record['rejection']['reason'],32)
+        self.assertFalse(result['copied_event_pose_observations']);self.assertFalse(record['geometry'])
+        s=record['submissions'];self.assertEqual(s['rows'][0]['metadata']['layout'][0],132)
+        for key in ('gpu_visibility_verified','vertex_content_verified','hand_resource_verified','alignment_accepted'):self.assertFalse(s[key])
+        for bad in (text+'\n'+summary+'\n'+row,text+'\n'+row+'\n'+metadata,
+                    text+'\n'+summary+'\n'+row.replace('status=8','status=6')+'\n'+metadata,
+                    text+'\n'+summary+'\n'+row.replace('flags=15','flags=7')+'\n'+metadata,
+                    text+'\n'+summary+'\n'+row.replace('hr=0','hr=-1')+'\n'+metadata,
+                    text+'\n'+summary+'\n'+row+'\n'+metadata+'\n'+metadata):
+            with self.assertRaises(ValueError):assess(bad,SOURCE)
+
+    def test_submission_attempt_budget_unknown_rows_and_repeated_native_keys(self):
+        head=fixture()+'\nLab idle submissionSummary '+BASE+' attempts=65 count=64 overflow=1 outerReturned=1 limit=64'
+        rows=['Lab idle submissionRow '+BASE+' index='+str(i)+' ordinal='+str(i+1)+' status=1 hr=0 flags=4 draw=4,0,0,132,4782,108' for i in range(64)]
+        text=head+'\n'+'\n'.join(rows);r=assess(text,SOURCE)['rejected_or_missing_observations'][0]['submissions']
+        self.assertEqual(len(r['rows']),64);self.assertTrue(r['overflow'])
+        for bad in (text.replace('count=64','count=65'),text.replace('overflow=1','overflow=0'),
+                    text.replace('outerReturned=1','outerReturned=0'),text.replace(rows[-1],''),
+                    text.replace('index=63 ordinal=64','index=63 ordinal=63')):
+            with self.assertRaises(ValueError):assess(bad,SOURCE)
+
+    def test_submission_signed_counts_byte_width_and_status_predicates(self):
+        summary='Lab idle submissionSummary '+BASE+' attempts=1 count=1 overflow=0 outerReturned=1 limit=64'
+        row='Lab idle submissionRow '+BASE+' index=0 ordinal=1 status=8 hr=0 flags=15 draw=4,0,0,132,4782,108'
+        payload='Lab idle submissionMetadata '+BASE+' index=0 keys=100,200,1,3,300,400,500,600,0 root=700,800,1 render=700,800,1 layout=-1,-2147483648,14448,133,0,9564,135,0,58016,128,0,58544,128,0'
+        prefix=fixture()+'\n'+summary+'\n';text=prefix+row+'\n'+payload
+        observed=assess(text,SOURCE)['rejected_or_missing_observations'][0]['submissions']
+        self.assertEqual(observed['rows'][0]['metadata']['layout'][:2],[-1,-2147483648])
+        for wrong in (payload.replace('14448,133,0','14448,256,0'),payload.replace('14448,133,0','14448,133,256')):
+            with self.assertRaises(ValueError):assess(prefix+row+'\n'+wrong,SOURCE)
+        for status in (1,2,3,9):
+            with self.assertRaises(ValueError):assess(prefix+row.replace('status=8','status='+str(status)),SOURCE)
+        with self.assertRaises(ValueError):assess(prefix+row.replace('status=8','status=7').replace('flags=15','flags=2'),SOURCE)
+        # Late Release reentry/retirement/abort may invalidate already matching
+        # bookends: retain their flags while withholding every metadata payload.
+        for status in (5,6,7):
+            r=assess(prefix+row.replace('status=8','status='+str(status)),SOURCE)['rejected_or_missing_observations'][0]['submissions']
+            self.assertEqual(r['rows'][0]['flags'],15);self.assertIsNone(r['rows'][0]['metadata'])
     def test_live_input_getter_routing_cannot_revert_or_leave_selector_unused(self):
         from verify_scope_gpu_abi import verify_input_stream_routing
         source=(Path(__file__).resolve().parents[1]/'src/game/scope_gpu.cpp').read_text()

@@ -4043,6 +4043,30 @@ static bool copyBoundIdleRaster(const ScopeDrawBinding &binding,const IdleDrawId
     }
     return true;
 }
+IdleWeaponTrace *idleSubmissionOwner() noexcept {
+    IdleWeaponTrace *owned=nullptr;
+    withNativeFinally([&] {
+        ScopeDrawBinding binding;IdleDrawIdentity identity;IdleWeaponTrace *trace=nullptr;
+        if(currentIdleDraw(binding,identity,trace) && trace && trace->admitted && trace->binding==identity)
+            owned=trace;
+    },[&](bool aborted) noexcept {if(aborted)owned=nullptr;});
+    return owned;
+}
+bool copyIdleSubmissionMetadata(const IdleWeaponTrace *wanted,IdleSubmissionMetadata &out) noexcept {
+    out={};bool copied=false;
+    withNativeFinally([&] {
+        ScopeDrawBinding binding;IdleDrawIdentity identity;IdleWeaponTrace *trace=nullptr;
+        if(!currentIdleDraw(binding,identity,trace) || trace!=wanted || !trace ||
+           !trace->admitted || trace->binding!=identity)return;
+        IdleRasterCopy raster;
+        if(!remote_render::copyIdleRaster(binding.modelInstance,raster))return;
+        ScopeDrawBinding after;IdleDrawIdentity current;IdleWeaponTrace *same=nullptr;
+        if(!currentIdleDraw(after,current,same) || same!=trace || current!=identity ||
+           after.modelInstance!=binding.modelInstance)return;
+        out=IdleSubmissionMetadata::copy(raster);copied=true;
+    },[&](bool aborted) noexcept {if(aborted){out={};copied=false;}});
+    return copied; // No trace rejection, clip qualification, or retained native borrow.
+}
 bool currentIdleRaster(IdleRasterCopy &out,IdleWeaponTrace *&trace) {
     out={};trace=nullptr;ScopeDrawBinding binding;IdleDrawIdentity identity;
     if(!currentIdleDraw(binding,identity,trace))return false;
@@ -4074,6 +4098,27 @@ static void emitIdleWeaponTrace(const IdleWeaponTrace &trace) {
     if(trace.rejection!=IdleWeaponTrace::Rejection::None)
         log("Lab idle rejection request=%llu eye=%u hand=%u reason=%u preceding=%u checks=%u state=%u callbacks=%u",
             b.request,b.eye,b.hand,unsigned(trace.rejection),unsigned(trace.precedingStage),trace.rejectionChecks,trace.rejectionState,trace.callbacks);
+    const auto &submitted=trace.submissions;
+    log("Lab idle submissionSummary request=%llu eye=%u hand=%u attempts=%u count=%u overflow=%u outerReturned=%u limit=%u",
+        b.request,b.eye,b.hand,submitted.attempts,submitted.count,unsigned(submitted.overflow),
+        unsigned(submitted.outerReturned),IdleSubmissionTrace::MaxAttempts);
+    for(unsigned i=0;i<submitted.count;++i) {
+        const auto &r=submitted.rows[i];const auto &d=r.draw;
+        log("Lab idle submissionRow request=%llu eye=%u hand=%u index=%u ordinal=%u status=%u hr=%d flags=%u draw=%u,%d,%u,%u,%u,%u",
+            b.request,b.eye,b.hand,i,r.ordinal,unsigned(r.status),r.hresult,
+            IdleWeaponTrace::checks({r.preCopied,r.postCopied,r.returned,r.matched}),
+            d.topology,d.base,d.minimum,d.vertices,d.start,d.primitives);
+        if(r.status!=IdleSubmissionTrace::Status::Qualified)continue;
+        const auto &m=r.metadata;const auto &l=m.layout;
+        log("Lab idle submissionMetadata request=%llu eye=%u hand=%u index=%u keys=%u,%u,%u,%u,%u,%u,%u,%u,%d root=%u,%u,%d render=%u,%u,%d layout=%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u",
+            b.request,b.eye,b.hand,i,m.modelAddress,m.drawAddress,m.modelRecord,m.drawRecord,m.surface,m.instance,
+            m.surfaceName,m.boneName,m.bone,m.rootConfig.configuration,m.rootConfig.file,m.rootConfig.resource,
+            m.renderConfig.configuration,m.renderConfig.file,m.renderConfig.resource,l.vertices,l.triangles,
+            l.channels[0].offset,l.channels[0].format,l.channels[0].buffer,
+            l.channels[1].offset,l.channels[1].format,l.channels[1].buffer,
+            l.channels[2].offset,l.channels[2].format,l.channels[2].buffer,
+            l.channels[3].offset,l.channels[3].format,l.channels[3].buffer);
+    }
     if(trace.rejection==IdleWeaponTrace::Rejection::QueryAnimationName && trace.animationNameFailure.copied) {
         const auto &n=trace.animationNameFailure;
         log("Lab idle animationNameFailure request=%llu eye=%u hand=%u index=%u expected=%08x header=%08x,%08x,%08x,%08x",
@@ -4601,11 +4646,14 @@ static void renderTrackedWeapon(void *w, Matrix34 m, bool sniper, uintptr_t call
         eyeScopePoses.finishDraw(unsigned(hand), invocation.scopePose,
                                  invocation.pass.complete() && !invocation.scopePoseAmbiguous);
     if(idleStorage) {
+        retireIdleSubmissionOwner(&*idleStorage);
+        idleStorage->submissions.outerReturned=true;
         idleStorage->projectionProbe.retire();
         idleStorage->finish(invocation.pass.complete() && !weaponPairFault,generation==graphicsResourceGeneration());
         emitIdleWeaponTrace(*idleStorage);
     }
     }, [&](bool aborted) noexcept {
+        retireIdleSubmissionOwner(invocation.idle);
         if(invocation.idle)invocation.idle->projectionProbe.retire();
         if (!aborted && physical && generation == graphicsResourceGeneration())
             finishPhysicalWeapon(invocation, generation);

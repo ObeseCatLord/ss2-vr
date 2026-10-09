@@ -117,6 +117,65 @@ struct IdleGeometryCopy {
         return true;
     }
 };
+// Independent bounded API-submission diagnostics. These values are not vertex
+// content, GPU visibility, an authored asset join, or a grasp certificate.
+struct IdleSubmissionMetadata {
+    IdleConfigIdentity rootConfig{},renderConfig{};
+    uint32_t modelAddress=0,drawAddress=0,modelRecord=0,drawRecord=0;
+    uint32_t surface=0,instance=0,surfaceName=0,boneName=0;
+    int32_t bone=-1;
+    ScopeSurfaceLayout layout{};
+    bool operator==(const IdleSubmissionMetadata &) const = default;
+    static IdleSubmissionMetadata copy(const IdleRasterCopy &r) noexcept {
+        return {r.rootConfig,r.renderConfig,r.projectionModelAddress,r.projectionDrawAddress,
+                r.modelRecord,r.drawRecord,r.surface,r.instance,r.surfaceName,r.boneName,r.bone,r.layout};
+    }
+};
+struct IdleSubmissionTrace {
+    static constexpr unsigned MaxAttempts=64,NoSlot=MaxAttempts;
+    enum class Status : uint32_t { Pending,PreUnknown,PostUnknown,Mismatch,OriginalFailed,Reentered,Retired,Aborted,Qualified,NoForward,Split };
+    struct Row {
+        uint32_t ordinal=0;
+        ScopeIndexedDraw draw{};
+        IdleSubmissionMetadata metadata{};
+        Status status=Status::Pending;
+        int32_t hresult=0;
+        bool preCopied=false,postCopied=false,returned=false,matched=false;
+    };
+    std::array<Row,MaxAttempts> rows{};
+    uint32_t attempts=0,count=0;
+    bool overflow=false,outerReturned=false;
+    unsigned reserve(const ScopeIndexedDraw &draw) noexcept {
+        if(attempts!=UINT32_MAX)++attempts;
+        if(count==MaxAttempts){overflow=true;return NoSlot;}
+        const auto slot=count++;rows[slot].ordinal=attempts;rows[slot].draw=draw;return slot;
+    }
+    void reenter(unsigned slot) noexcept {if(slot<count)rows[slot].status=Status::Reentered;}
+    bool pending(unsigned slot) const noexcept {return slot<count && rows[slot].status==Status::Pending;}
+    void before(unsigned slot,const IdleSubmissionMetadata &value,bool known) noexcept {
+        if(!pending(slot))return;
+        rows[slot].preCopied=known;if(known)rows[slot].metadata=value;
+    }
+    void after(unsigned slot,const IdleSubmissionMetadata &value,bool known,int32_t result) noexcept {
+        if(slot>=count)return;
+        auto &r=rows[slot];r.returned=true;r.hresult=result;
+        if(r.status==Status::Reentered)return;
+        r.postCopied=known;r.matched=r.preCopied && known && r.metadata==value;
+    }
+    void finalize(unsigned slot,bool aborted,bool current,bool split) noexcept {
+        if(slot>=count)return;
+        auto &r=rows[slot];
+        if(aborted)r.status=Status::Aborted;
+        else if(!current)r.status=Status::Retired;
+        else if(r.status!=Status::Reentered) {
+            r.status=split?Status::Split:!r.returned?Status::NoForward:r.hresult<0?Status::OriginalFailed:
+                !r.preCopied?Status::PreUnknown:!r.postCopied?Status::PostUnknown:
+                !r.matched?Status::Mismatch:Status::Qualified;
+        }
+        if(r.status!=Status::Qualified)r.metadata={};
+    }
+};
+static_assert(sizeof(IdleSubmissionTrace)<=16*1024); // Measured also by offline checks.
 struct IdleWeaponTrace {
     static constexpr unsigned MaxContributors=16,MaxMatrices=64,MaxDraws=8;
     static constexpr unsigned CopyLayout=1; // Per-trace qualified-copy ordinals, not native record identity.
@@ -133,6 +192,7 @@ struct IdleWeaponTrace {
     Stage stage=Stage::Empty,precedingStage=Stage::Empty;
     Rejection rejection=Rejection::None;
     uint32_t callbacks=0,rejectionChecks=0,rejectionState=0;
+    IdleSubmissionTrace submissions{};
     struct InputFailure {
         uint32_t step=0,index=0,valid=0,caps=0,declarationCount=0,rangeChecks=0;
         int32_t hresult=0;
