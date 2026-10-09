@@ -1,5 +1,11 @@
 # Native hand/weapon alignment gate
 
+Current source installs the reviewed position-only correction for the matched
+stock ID1 handle. See [implementation and limits](ID1_MODEL_ALIGNMENT.md). Older
+no-correction statements below record their original evidence boundary; they do
+not describe latest source. Other weapons and physical-contact acceptance remain
+open.
+
 ## Current hand content and target convention
 
 V27 now uniquely matches nine actual native hand channel sets to the rendered

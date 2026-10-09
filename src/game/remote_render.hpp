@@ -17,6 +17,10 @@ void noteSimulationThread();
 bool checkNativeThread();
 // Passive observers decline foreign/unknown ownership without poisoning it.
 bool ownsNativeThread();
+// Borrow only within a validated native placement or out-of-render muzzle
+// extent. Returns copied values; no model pointer or allocation is retained.
+bool copyModelConfigurationStretch(void *instance,uint32_t expectedConfigurationVtable,
+                                   IdleConfigIdentity &identity,Vec3 &stretch);
 bool idleProjectionConfigured() noexcept;
 bool copyIdleRaster(void *instance,IdleRasterCopy &out);
 ScopeRasterStatus copyScopeRaster(void *instance, Matrix34 &affine, ScopeSurfaceLayout &layout);

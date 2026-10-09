@@ -524,6 +524,43 @@ int main() {
           near(movedChargedShot.p.y, chargedShot.p.y) &&
           near(movedChargedShot.p.z, chargedShot.p.z),
           "Charge residual remains camera-relative across player movement");
+    // A model origin can be much farther from its own attachment than the
+    // controller grip is. Correct the reference before applying the grip bound.
+    const Vec3 reference{-.01f, -.005f, -.54f};
+    const Vec3 nativeAttachment{.012f, .008f, -.8f};
+    const Quat nativeRotation = normalize(multiply(yaw(.27f), Quat{.08f, 0, 0, .99f}));
+    for (const Vec3 stretch : {Vec3{1,1,1}, Vec3{-1,1,1}, Vec3{-1.1f,.9f,.8f}}) {
+        const auto aligned = modelAnchorDisplacement(nativeRotation, stretch, reference);
+        const auto attachment = rotate(nativeRotation, {stretch.x*nativeAttachment.x,
+            stretch.y*nativeAttachment.y, stretch.z*nativeAttachment.z});
+        const Vec3 neutralRoot{.2f, -.1f, -.3f};
+        const Pose nativeAttachmentPose{nativeRotation, neutralRoot + attachment};
+        const auto alignedShot = retargetShot(a, compose(a,nativeAttachmentPose),
+                                             neutralRoot + charge, grip, .5f, charge, aligned);
+        const Pose alignedModel{normalize(multiply(grip.q,nativeRotation)),
+                                 grip.p + rotate(grip.q,charge + aligned)};
+        const auto renderedAttachment = alignedModel.p + rotate(alignedModel.q,
+            {stretch.x*nativeAttachment.x,stretch.y*nativeAttachment.y,stretch.z*nativeAttachment.z});
+        check(near(alignedShot.p.x,renderedAttachment.x) && near(alignedShot.p.y,renderedAttachment.y) &&
+              near(alignedShot.p.z,renderedAttachment.z),
+              "Static handle correction keeps the model and muzzle together for mirrored/nonuniform stretch");
+        const auto renderedReference = alignedModel.p + rotate(alignedModel.q,
+            {stretch.x*reference.x,stretch.y*reference.y,stretch.z*reference.z});
+        const auto chargedGrip = grip.p + rotate(grip.q,charge);
+        check(near(renderedReference.x,chargedGrip.x) && near(renderedReference.y,chargedGrip.y) &&
+              near(renderedReference.z,chargedGrip.z),
+              "Static reference anchors exactly once while preserving native charge");
+        const auto movedAligned = retargetShot(movedBody,compose(movedBody,nativeAttachmentPose),
+                                               neutralRoot + charge,grip,.5f,charge,aligned);
+        check(near(movedAligned.p.x,alignedShot.p.x) && near(movedAligned.p.y,alignedShot.p.y) &&
+              near(movedAligned.p.z,alignedShot.p.z),
+              "Static alignment remains invariant to native body movement");
+    }
+    const auto excessiveAlignedShot = retargetShot({},Pose{{},{0,0,-4}}, {}, grip,
+                                                   .5f,charge,{0,0,.54f});
+    const auto withoutCharge = excessiveAlignedShot.p - grip.p - rotate(grip.q,charge);
+    check(near(std::sqrt(dot(withoutCharge,withoutCharge)),.5f),
+          "Aligned grip-to-attachment reach remains bounded before native charge");
     Fov f{-.9f, .7f, .8f, -.6f};
     auto p = projection(f, .1f, 1000);
     auto projectX = [&](float x) { return (p.m[0] * x - p.m[2]); };

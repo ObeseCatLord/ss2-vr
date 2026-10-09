@@ -1,5 +1,25 @@
 # Implementation status — 2026-10-09
 
+## Stock ID1 handle alignment — connected source
+
+The virtual handle centre is connected at native model placement, local shot/laser
+calibration and authority muzzle conversion. Exact native selector/signed floor,
+nonuniform stretch and charge are retained. Binding/render-phase guards reject
+stale or ambiguous model/configuration/stretch evidence. Headless renderer
+dependency found and removed; existing simulation owner and pinned configuration
+type serve both modes. Other weapons, shared gripOffset, remote children and
+Scope13 are unchanged. Contact and headless model availability remain runtime
+rows; this is not full weapon alignment or full-mod completion.
+
+Astra/xhigh source GO; all7local tags verified, backendunattested. All4products
+rebuilt on424b6917ea95b893f0ed3287ee7f72dd2c36d007ccd83abc17c331d886d22bac,
+IPC10/wire7;73Debug/73Release and36normal/optimized native/compiled gates pass.
+Fresh x86 normal/abort render-depth restoration checked, four in-memory controls
+per object rejected. No runtime/input/firing/vehicle/HMD/network probe ran.
+See [disposition](ID1_MODEL_ALIGNMENT.md). Next: remaining weapon references and
+physical driver controls, with a fresh neutral alignment observation if needed.
+Full user-operated acceptance remains open; older no-correction notes are history.
+
 ## Current alignment decision — anatomy review
 
 Native world stereo remains working in the simulated lab; the latest neutral

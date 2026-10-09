@@ -150,13 +150,23 @@ inline bool applyNativeViewHeight(Pose &base, uint32_t heightBits) {
 }
 // Model calibration is relative to the native camera, never an old world position.
 // A moved/turned player must not contribute motion to the grip-to-muzzle offset.
+// The static reference precedes native instance stretch. Reflection is a signed
+// stretch component, not a second rotation or an animated inverse-bone transform.
+inline Vec3 modelAnchorDisplacement(Quat nativeRotation, Vec3 stretch, Vec3 modelReference) {
+    return rotate(nativeRotation, {stretch.x * modelReference.x, stretch.y * modelReference.y,
+                                  stretch.z * modelReference.z}) * -1;
+}
 inline Pose retargetShot(Pose anchor, Pose nativeShot, Vec3 nativeModelLocal, Pose hand,
-                         float muzzleBound = .5f, Vec3 nativeDisplacement = {}) {
+                         float muzzleBound = .5f, Vec3 nativeDisplacement = {},
+                         Vec3 nativeAlignment = {}) {
     Pose shotLocal = compose(inverse(anchor), nativeShot);
     // Native model placement includes charge displacement, while the native
     // attachment getter does not. Remove it from the reference root, then add
     // it outside the attachment bound so it is neither cancelled nor clamped.
-    Vec3 muzzle = shotLocal.p - (nativeModelLocal - nativeDisplacement);
+    // A static model-root correction changes the neutral grip-to-attachment
+    // vector BEFORE its reach bound. Bounding relative to the old distant model
+    // root and then shifting the result can put the laser behind the handle.
+    Vec3 muzzle = shotLocal.p - (nativeModelLocal - nativeDisplacement) + nativeAlignment;
     float n = std::sqrt(dot(muzzle, muzzle));
     if (n > muzzleBound)
         muzzle = muzzle * (muzzleBound / n);

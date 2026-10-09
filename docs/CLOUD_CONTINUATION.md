@@ -1,5 +1,18 @@
 # Latest exact noUV passive source checkpoint
 
+## Current continuation — connected ID1 alignment
+
+Stock ID1 now uses the fixed virtual handle-centre correction at existing model,
+local shot/laser and authority boundaries. Exact native stretch/floor and binding/
+render-phase guards retained. Headless dependency fixed using existing simulation
+owner, without server renderer initialization. Source GO,73Debug/73Release and
+36normal/optimized gates; all-product fingerprint424b6917ea95b893f0ed3287ee7f72dd2c36d007ccd83abc17c331d886d22bac,
+IPC10/wire7. No runtime of this landing. See [limits](ID1_MODEL_ALIGNMENT.md).
+Remaining weapon references, physical driver controls and full user-operated
+acceptance stay open. Do not call ID1-only coverage full alignment or guess
+headless scale. Preserve V27 and all prior fixtures. Older no-correction/anatomy
+notes below are historical boundaries superseded by this implementation.
+
 ## Current continuation — virtual grip reference
 
 World stereo works in the simulated lab; this is now weapon/hand placement work.

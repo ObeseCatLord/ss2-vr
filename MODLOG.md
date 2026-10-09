@@ -1,5 +1,19 @@
 # Mod journal
 
+## 2026-10-09 — virtual ID1 handle alignment
+
+Connected the matched native ID1 handle-centre reference through model placement,
+local shot/laser calibration and authority muzzle conversion. Preserve native
+animation/charge and exact selector-driven reflection/floor/nonuniform stretch;
+bind model/configuration/stretch and reject stale or ambiguous render phase.
+Correction precedes existing muzzle reach bound. Removed a dedicated-server
+renderer dependency using the existing simulation owner/pinned configuration type.
+Other weapon defaults, shared gripOffset, remote native children, optics and
+IPC10/wire7 unchanged. Astra/xhigh scoped source GO;73Debug/73Release and36native/
+compiled gates pass on fingerprint424b6917ea95b893f0ed3287ee7f72dd2c36d007ccd83abc17c331d886d22bac.
+No runtime/firing probe. More weapon references, physical driver controls and
+user-operated acceptance remain; see docs/ID1_MODEL_ALIGNMENT.md.
+
 ## 2026-10-07 — Stereo follow-up and native-input probe repair
 
 Preserved native depth endpoints across target changes; fixed actual right-eye

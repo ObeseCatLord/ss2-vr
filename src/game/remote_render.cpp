@@ -762,14 +762,15 @@ static void observeLocalScope() {
         if(aborted)producerAbort();
     });
 }
-static bool idleConfig(void *instance,IdleConfigIdentity &out) {
+static bool idleConfig(void *instance,IdleConfigIdentity &out,
+                       uintptr_t expectedVtable=engineBase+0x2095b4) {
     out={};
     if(!readableMemory(instance,0x2c))return false;
     uint32_t configuration=0,vtable=0;
     std::memcpy(&configuration,static_cast<const uint8_t*>(instance)+0x18,4);
     if(!readableMemory(reinterpret_cast<void*>(configuration),0x14))return false;
     std::memcpy(&vtable,reinterpret_cast<void*>(configuration),4);
-    if(vtable!=engineBase+0x2095b4)return false;
+    if(!expectedVtable || vtable!=expectedVtable)return false;
     out.configuration=configuration;
     std::memcpy(&out.file,reinterpret_cast<void*>(configuration+0xc),4);
     std::memcpy(&out.resource,reinterpret_cast<void*>(configuration+0x10),4);
@@ -1159,6 +1160,22 @@ bool checkNativeThread() {
 bool ownsNativeThread() {
     const DWORD owner = simulationThread.load(std::memory_order_acquire);
     return scopeObservationThread(owner, GetCurrentThreadId(), isMainThread && isMainThread());
+}
+bool copyModelConfigurationStretch(void *instance,uint32_t expectedConfigurationVtable,
+                                   IdleConfigIdentity &identity,Vec3 &stretch) {
+    identity={};stretch={};
+    // The caller supplies its pinned native configuration type and owns the
+    // borrow. Headless authority must not depend on renderer initialization.
+    if(!expectedConfigurationVtable)return false;
+    IdleConfigIdentity before,after;
+    Vec3 first,last;
+    if(!idleConfig(instance,before,expectedConfigurationVtable))return false;
+    std::memcpy(&first,instance,sizeof(first));
+    if(!idleConfig(instance,after,expectedConfigurationVtable))return false;
+    std::memcpy(&last,instance,sizeof(last));
+    if(before!=after || std::memcmp(&first,&last,sizeof(first)) ||
+       !std::isfinite(first.x) || !std::isfinite(first.y) || !std::isfinite(first.z))return false;
+    identity=before;stretch=first;return true;
 }
 bool copyIdleRaster(void *instance,IdleRasterCopy &out) {
     std::optional<IdleRasterStorage> storage(std::in_place);bool observed=false;
