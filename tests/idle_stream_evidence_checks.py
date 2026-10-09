@@ -4,7 +4,7 @@ import sys
 import unittest
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 from assess_idle_weapon import assess
-from idle_stream_evidence import OBSERVED,NO_UV56,OBSERVED_MULTI_UV,diagnostic_stream_numbers,declaration_layout
+from idle_stream_evidence import OBSERVED,NO_UV56,OBSERVED_MULTI_UV,PASSIVE_FIVE_ROW78,diagnostic_stream_numbers,declaration_layout
 
 SOURCE='a'*64
 BASE='request=100 eye=0 hand=1'
@@ -44,6 +44,17 @@ def fixture(declaration=OBSERVED):
                 lines[n]=line.replace('object=0 offset=0 stride=0 frequency=0','object=1 offset=48384 stride=4 frequency=1')
             elif 'streamInput' in line:
                 lines[n]=line.replace('index=7 object=1 offset=48384','index=5 object=1 offset=49256').replace('index=8 object=1 offset=49256','index=6 object=1 offset=48384')
+    elif declaration==PASSIVE_FIVE_ROW78:
+        reduced=[]
+        for line in lines:
+            line=line.replace('declaration=6','declaration=5').replace('rangeChecks=6015','rangeChecks=6143 layout=0')
+            if 'inputDeclaration' in line or 'streamDeclaration' in line:
+                index=int(line.split(' index=')[1].split()[0])
+                if index==2:continue
+                new_index=index-1 if index>2 else index
+                line=line.split(' index=')[0]+' index='+str(new_index)+' values='+','.join(map(str,PASSIVE_FIVE_ROW78[new_index]))
+            reduced.append(line)
+        lines=reduced
     elif declaration==OBSERVED_MULTI_UV:
         expanded=[]
         for line in lines:
@@ -61,6 +72,63 @@ def fixture(declaration=OBSERVED):
     return '\n'.join(lines)
 
 class Checks(unittest.TestCase):
+    def test_five_row78_passive_with_five_retained_copies_never_promotes(self):
+        from idle_weapon_evidence_checks import geometry_fixture
+        _,_,header,data=geometry_fixture()
+        passive=fixture(PASSIVE_FIVE_ROW78).replace('schema=3 ','schema=3 copyLayout=1 ').replace('draws=0','draws=5')
+        payload=[line.replace('eye=1 hand=0','eye=0 hand=1').replace('Lab idle geometry','Lab idle retainedGeometry')
+                 for line in [header,*data]]
+        companion='Lab idle retainedCopies '+BASE+' count=5 postOriginal=1 cleanupCertified=0 outerCurrent=0'
+        copied=[line.replace('index=0 ','index='+str(i)+' ') for i in range(5) for line in payload]
+        text='\n'.join([passive,companion,*copied]);result=assess(text,SOURCE)
+        self.assertFalse(result['copied_event_pose_observations'])
+        record=result['rejected_or_missing_observations'][0]
+        self.assertEqual(record['stage'],3)
+        self.assertEqual(record['rejection']['reason'],32)
+        self.assertEqual(set(record['retained_copies']['geometry']),set(range(5)))
+        for field in ('geometry_admitted','roles_inferred','alignment_accepted'):
+            self.assertIs(record['stream_probe'][field],False)
+        for field in ('cleanup_certified','outer_current','whole_trace_accepted','positive_grasp_verified','alignment_accepted'):
+            self.assertIs(record['retained_copies'][field],False)
+        for bad in (passive,text.replace(companion,''),text.replace('count=5 postOriginal','count=4 postOriginal'),
+                    text.replace(copied[-1],''),text.replace('cleanupCertified=0','cleanupCertified=1'),
+                    text.replace('outerCurrent=0','outerCurrent=1')):
+            with self.subTest(case=bad[-80:]),self.assertRaises(ValueError):assess(bad,SOURCE)
+
+    def test_five_row78_is_exact_and_passive_only(self):
+        text=fixture(PASSIVE_FIVE_ROW78);result=assess(text,SOURCE)
+        record=result['rejected_or_missing_observations'][0]
+        self.assertEqual(diagnostic_stream_numbers(record['input_failure']),(0,7,8))
+        self.assertEqual(set(record['stream_probe']['snapshots'][0]['streams']),{0,7,8})
+        self.assertFalse(result['copied_event_pose_observations'])
+        for field in ('geometry_admitted','roles_inferred','alignment_accepted'):
+            self.assertIs(record['stream_probe'][field],False)
+        with self.assertRaises(ValueError):declaration_layout(PASSIVE_FIVE_ROW78)
+        for index in range(5):
+            for field in range(6):
+                rows=copy.deepcopy(PASSIVE_FIVE_ROW78);rows[index][field]+=1
+                with self.subTest(index=index,field=field),self.assertRaises(ValueError):
+                    diagnostic_stream_numbers({'declaration':5,'declaration_rows':dict(enumerate(rows))})
+        for count in (4,6,66):
+            with self.assertRaises(ValueError):diagnostic_stream_numbers({'declaration':count,'declaration_rows':dict(enumerate(PASSIVE_FIVE_ROW78))})
+        for foreign in (2,3,5,6):
+            with self.assertRaises(ValueError):assess(text.replace('phase=0 index=7 object','phase=0 index='+str(foreign)+' object'),SOURCE)
+
+    def test_five_row78_keeps_original_selection_and_failure_bounds(self):
+        text=fixture(PASSIVE_FIVE_ROW78)
+        head=text[:text.index('Lab idle streamSnapshot')].replace('attempts=2 flags=511 words=2','attempts=1 flags=284 words=0')
+        partial='Lab idle streamSnapshot '+BASE+' phase=0 status=2 step=9 index=7 hr=-1'
+        self.assertFalse(assess(head+partial,SOURCE)['copied_event_pose_observations'])
+        for foreign in (2,3,5,6):
+            with self.assertRaises(ValueError):assess(head+partial.replace('index=7','index='+str(foreign)),SOURCE)
+        changed=[line for line in text.replace('flags=511','flags=447').splitlines() if not ('streamDeclaration '+BASE+' phase=1' in line)]
+        changed+=['Lab idle streamDeclaration '+BASE+' phase=1 index='+str(i)+' values='+','.join(map(str,e)) for i,e in enumerate(NO_UV56)]
+        changed='\n'.join(changed)
+        record=assess(changed,SOURCE)['rejected_or_missing_observations'][0]
+        self.assertEqual(set(record['stream_probe']['snapshots'][1]['streams']),{0,7,8})
+        self.assertFalse(record['stream_probe']['flags']&64)
+        with self.assertRaises(ValueError):assess(changed.replace('flags=447','flags=511'),SOURCE)
+        with self.assertRaises(ValueError):assess(changed.replace('phase=1 index=7 object','phase=1 index=5 object'),SOURCE)
     def test_multi_uv_passive_receipt_stays_diagnostic_with_exact_copy_family(self):
         text=fixture(OBSERVED_MULTI_UV).replace('rangeChecks=6015','rangeChecks=6143 layout=0');result=assess(text,SOURCE)
         record=result['rejected_or_missing_observations'][0]

@@ -7,12 +7,14 @@ NO_UV56=[[0,0,2,0,5,0],[1,0,2,0,5,1],[5,0,8,0,5,5],
          [6,0,8,0,5,6],[255,0,17,0,0,0]]
 # Exact ID1 copy family; extra inputs remain unobserved/unknown for position.
 OBSERVED_MULTI_UV=OBSERVED[:3]+[[4,0,1,0,5,4],[5,0,1,0,5,5]]+OBSERVED[3:]
+# Passive-only witnessed rejection; declaration_layout deliberately declines it.
+PASSIVE_FIVE_ROW78=OBSERVED[:2]+OBSERVED[3:]
 
 def diagnostic_stream_numbers(failure):
     count=failure.get('declaration',0)
     if count not in (5,6,8):raise ValueError('Unsupported passive declaration count')
     rows=[failure.get('declaration_rows',{}).get(i) for i in range(count)]
-    if rows==OBSERVED or rows==OBSERVED_MULTI_UV:return (0,7,8)
+    if rows==OBSERVED or rows==OBSERVED_MULTI_UV or rows==PASSIVE_FIVE_ROW78:return (0,7,8)
     if rows==NO_UV56:return (0,5,6)
     raise ValueError('Unsupported passive original declaration')
 

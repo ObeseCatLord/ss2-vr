@@ -1,5 +1,53 @@
 # Serious Sam 2 OpenXR VR
 
+## Exact five-row passive extension — reviewed and built
+
+The V23 stop now selects diagnostic0/7/8 getters only for its exact5row
+0/2/7/8/END original rejection. Geometry enum/admission, position interpreter,
+reference/tolerance, scope13 and native ownership/forwarding/cleanup are unchanged.
+Actual rejected shader dependencies remain unknown. Astra scoped source GO followed
+a required new-family passive+five-retained-copies integration test. Local review
+turns verify Astra/xhigh; backend attestation unavailable.
+
+All four products rebuilt on
+`5dbeaa911a05a6949af957dabb4c470e5b0919cecda8bb4fce712aa076224c09`,
+IPC10/wire7.72Debug/72Release and32normal/optimized native/compiled gates pass.
+19passive,21general reader and9replay groups pass normally/optimized. The first
+Release invocation lacked dependency PYTHONPATH; original failure logs are retained
+and the corrected full invocation passes. No runtime or new fixture of this build.
+Next: fresh sealed neutral observation of actual shader/7/8metadata, not guessed
+position roles, geometry admission, hand alignment or first-use release.
+See [scoped implementation/disposition](docs/IDLE_FIVE_ROW_PASSIVE.md).
+
+
+## V23 runtime result — world stereo works, hand reference still open
+
+Source112edb18 / compiled fingerprint
+`b2e6cfe603b1c6de5e62ad9df5e3a7e852f1491e21de6820230fe0d9fd46a016`
+loaded the exact pinned Jungle scene in the authorized private neutral capture.
+122 native projection pairs, normal native shutdown, no owned survivors or
+cleanup errors, private display stopped,12protected files unchanged. Main visually
+inspected both full eye captures: native world plus both weapon models/lasers,
+visible stereo displacement. This stationary simulated run does not re-prove
+dynamic head response or actual headset/controls/network acceptance.
+
+The whole collector remains0accepted/32rejected:19Palette6,7CollectInputs32,
+6Name19.35retained diagnostic copies uniquely match weapon mesh3; seven new
+MultiUV78 material copies now include actual five-channel hashes.14copies have
+qualified cold native references and all agree. Seven221-word copies associate
+with cache-reuse sequence2, not the cold producer; their legacy reference passes
+five and fails two. Do not borrow sequence1 association or widen tolerance.
+
+The next immutable original failure is an exact5row declaration
+0FLOAT3/2FLOAT2/7UBYTE4N/8UBYTE4N/END, step20 valid15, after5stored copies.
+Its actual shader position dependencies and7/8bindings remain unknown; no passive
+receipt selected this family. Next narrow source slice observes it through the
+existing passive0/7/8 path, preserving production rejection and original/COM/
+nativefinally ownership. It does not admit geometry or infer hand/grasp/release.
+V23 is archived immutable, never rerun/resealed. Physical alignment, physical
+driver controls and full user-operated acceptance remain open.
+
+
 ## Current publication authority — explicit renewed user approval
 The user explicitly approved publishing SS2 VR source and sanitized reverse-engineering notes to public ObeseCatLord/ss2-vr, with strictly empty author/committer emails and no game assets, binaries or credentials. This delivered approval supersedes the prior publication hold below. Regular bounded source checkpoints are authorized; releases/binary publication are outside this renewed source-only scope. Keep Actions disabled, workflows absent, full-history privacy verification and all private runtime data local.
 
