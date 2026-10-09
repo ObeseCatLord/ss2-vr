@@ -1,5 +1,27 @@
 # Latest exact noUV passive source checkpoint
 
+## Latest neutral diagnostic — visible lasers, intermittent cause unresolved
+
+Source4ee5b35/fingerprint674ef564 reached pinned Jungle with129native stereo
+projection pairs, normal native/owned/display shutdown, no owned survivors or
+cleanup errors and12protected files unchanged. Both eye images were inspected:
+full world stereo with BOTH aiming beams visible.294muzzle attempts accepted
+matching calibration/current bindings;588three-line dispatch records returned,
+294per eye. No binding difference was observed.
+
+Freeze admitted294hand entries and rejected18for input-sequence mismatch. Cache
+publication logging saturated; other stage counters remained available. This
+proves the aligned path can present lasers, not the cause of the earlier absent
+beam image or a permanent fix. Diagnostic logging may change timing. Do not
+relax sequence/freshness/phase/binding fences. Whole both-eye reference collection
+remains incomplete independently; native startup/scene succeeded. No firing,
+movement, switch, zoom, vehicle, headset or multiplayer probe.
+
+Astra/xhigh diagnostic source GO; local tags verified, backend unattested. All4
+products rebuilt,73Debug/73Release and36normal/optimized gates pass. Next source
+step is isolate intermittent request/sample scheduling with these exact records,
+then resume remaining weapon references and physical driver controls.
+
 ## Active next step — actual laser regression
 
 The connected ID1 source3ada6e8/fp424b6917 ran privately:127world stereo pairs,

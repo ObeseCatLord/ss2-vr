@@ -71,3 +71,22 @@ groups; the corrected invocation passes all73. No dependencies were reinstalled.
 Lexical call-sequence comparisons in four changed extents match the preceding
 source; source review, rather than that count alone, assesses branch behavior.
 These are source/offline checks; the diagnostic has not yet run in a native scene.
+
+## First actual neutral observation
+
+The diagnostic source4ee5b35 ran in the pinned Jungle scene:129native stereo pairs,
+clean native/process/private-display shutdown, no survivors or cleanup errors,
+protected12unchanged. Both saved eye images show both aiming beams.294muzzle
+attempts passed calibration/capture/exact binding;588three-line dispatches
+returned,294per eye. Freeze admitted294hand entries and rejected18because the
+sample input sequence differed from the frame. Cache-stage logging saturated;
+other stages did not. The offline consumer reproduces each recorded handheld
+freeze result from copied fields without a native query.
+
+The preceding no-beam image is not explained by these results. Logging can affect
+scheduling; this does not prove a production fix or that a beam is continuously
+present. Preserve rejected input mismatch rather than weaken it. Whole-collector
+both-eye reference readiness remains incomplete, independently of successful
+native world rendering and visible beams. No firing/device/movement/vehicle/MP
+probe. `tools/assess_laser_diagnostic.py` summarizes private logs, copied binding
+differences, freeze reasons and observed dropped-count lower bounds.
