@@ -1,5 +1,23 @@
 # Implementation status — 2026-10-09
 
+## Private sniper fixture preparation — current operation
+
+The user has no existing sniper save and explicitly authorized verified save
+editing or cheats to create one privately. Earlier user-originated-save-only
+language below is historical. Astra/xhigh verified the native cheat data argument,
+Give All, ID13 selection and normal save route from owned binaries. Implement the
+smallest one-shot adapter at the existing simulation boundary; preserve native
+inventory/changeability, local ownership and private save isolation. Actual
+preparation/equip/save and ID13 rendered association have not run yet.
+
+The offline collector reuses the current assessor/matcher/evaluator, stores exact
+input receipts privately and never accepts grasp/alignment automatically. A narrow
+lab selector now admits exact integer1/13 and serializes the same checked selector,
+with sealed configuration tamper rejection. See OFFLINE_IDLE_COLLECTION.md.
+The source build after test registration passes76Debug/76Release; all4product
+contracts agree on3e01492f5ddd35b9339b71f17ed7a9641b4357d17d7017fa6dcf8fa126a24d46,
+IPC10/wire7. This is build/offline evidence, not a new native runtime result.
+
 ## Sniper collection capacity — source-ready, live association open
 
 The bounded capacity adapter is implemented: ID1 retains1490vertices/1332triangles;

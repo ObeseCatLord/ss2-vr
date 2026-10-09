@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 from assess_runtime import (complete_pairs_for_pose,first_person_depth_probe,dual_topologies,
     DualPhaseEvidence,require_dual_capture,dual_weapon_events,successful_dual_fire)
-from runtime_lab import (native_grip_resource_receipts,validate_idle_probe,validate_idle_preparation,
+from runtime_lab import (native_grip_resource_receipts,validate_idle_probe,validate_idle_preparation,idle_probe_weapon,
                          idle_configuration_digest,IDLE_FIXED_FILES,IDLE_TOOLS)
 
 HEAD={'p':[0,0,0],'q':[0,0,0,1]}
@@ -25,6 +25,24 @@ class IdleProbeSelectionChecks(unittest.TestCase):
                           ('pose_steps',cfg['pose_steps']+[{'name':'turned','head':[0,1.6,0,1,0,0]}])]:
             with self.subTest(key=key),self.assertRaises(ValueError):validate_idle_probe({**cfg,key:value})
         validate_idle_probe({})
+
+    def test_exact_idle_weapon_selector_and_disabled_rejection(self):
+        cfg={'idle_weapon_probe':True,'expected_product_source':'a'*64,
+             'baseline_head':[0,1.6,0,0,0,0],
+             'pose_steps':[{'name':'baseline','head':[0,1.6,0,0,0,0]}]}
+        self.assertEqual(idle_probe_weapon(cfg),1)
+        self.assertIsNone(idle_probe_weapon({}))
+        for selected in (1,13):
+            with self.subTest(selected=selected):
+                validate_idle_probe({**cfg,'idle_native_id':selected})
+                self.assertEqual(idle_probe_weapon({**cfg,'idle_native_id':selected}),selected)
+        for selected in (True,False,0,2,14,13.0,'13',None):
+            with self.subTest(selected=selected),self.assertRaises(ValueError):
+                validate_idle_probe({**cfg,'idle_native_id':selected})
+        for enabled in (False,None):
+            disabled={'idle_native_id':13}
+            if enabled is not None:disabled['idle_weapon_probe']=enabled
+            with self.assertRaises(ValueError):validate_idle_probe(disabled)
 
 class IdlePreparationChecks(unittest.TestCase):
     def prepared(self,root):
@@ -53,6 +71,7 @@ class IdlePreparationChecks(unittest.TestCase):
             validate_idle_preparation(cfg,root,game,prefix)
             validate_idle_preparation({**cfg,'compiled_product_contract':{},'verified_scene_providers':[]},root,game,prefix)
             for bad in ({**cfg,'timeout':180},{**cfg,'idle_weapon_probe':False},
+                        {**cfg,'idle_native_id':13},
                         {k:v for k,v in cfg.items() if k!='idle_weapon_probe'},
                         {**cfg,'idle_weapon_probe':False,'native_dual_probe':'zap-initial-inventory'},
                         {**cfg,'idle_preparation':{}},

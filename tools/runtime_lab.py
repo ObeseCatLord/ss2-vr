@@ -486,10 +486,19 @@ def recorded_native_focus(cfg, env, token, creation, receipt, deadline, timeout=
     # Keep existing request bounds and loading gates, including rejected code8.
     return record
 
-def validate_idle_probe(cfg):
+def idle_probe_weapon(cfg):
     enabled=cfg.get('idle_weapon_probe',False)
     if type(enabled) is not bool:raise ValueError('Idle collection selection must be explicit boolean')
-    if not enabled:return
+    if not enabled:
+        if 'idle_native_id' in cfg:raise ValueError('Idle weapon ID requires enabled neutral collection')
+        return None
+    selected=cfg.get('idle_native_id',1)
+    if type(selected) is not int or selected not in (1,13):
+        raise ValueError('Idle collection supports only exact native IDs1 and13')
+    return selected
+
+def validate_idle_probe(cfg):
+    if idle_probe_weapon(cfg) is None:return
     if cfg.get('renderer_mode','vr')!='vr' or not isinstance(cfg.get('expected_product_source'),str) or \
        not re.fullmatch('[a-f0-9]{64}',cfg['expected_product_source']):
         raise ValueError('Idle collection requires pinned VR products')
@@ -950,7 +959,8 @@ def run(cfg):
     env.pop('SS2VR_LAB_BACKGROUND_MOVE',None)
     if cfg.get('background_controls_probe')=='joystick-native-movement':env['SS2VR_LAB_BACKGROUND_MOVE']='1'
     env.pop('SS2VR_LAB_IDLE_WEAPON',None)
-    if cfg.get('idle_weapon_probe'):env['SS2VR_LAB_IDLE_WEAPON']='1'
+    selected_idle_weapon=idle_probe_weapon(cfg)
+    if selected_idle_weapon is not None:env['SS2VR_LAB_IDLE_WEAPON']=str(selected_idle_weapon)
     env.pop('SS2VR_LAB_GRIP_RESOURCES',None)
     if cfg.get('grip_resource_probe'):env['SS2VR_LAB_GRIP_RESOURCES']='1'
     if stock:env['SS2VR_LAB_STOCK_RENDER']='1'
