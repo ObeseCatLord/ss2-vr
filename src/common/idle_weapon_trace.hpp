@@ -94,6 +94,7 @@ struct IdleGeometryCopy {
 };
 struct IdleWeaponTrace {
     static constexpr unsigned MaxContributors=16,MaxMatrices=64,MaxDraws=8;
+    static constexpr unsigned CopyLayout=1; // Per-trace qualified-copy ordinals, not native record identity.
     enum class Stage : uint8_t { Empty,Event,Palette,Rejected,Complete };
     // Invocation-local scalars only; first rejection survives later cleanup.
     enum class Rejection : uint8_t { None,Unspecified,Admit,Placement,References,Event,Palette,Animation,Pose,PoseMatrix,Draw,DrawDuplicate,DrawConstants,Finish,
@@ -241,7 +242,6 @@ struct IdleWeaponTrace {
            !copy.declarationCount || copy.declarationCount>65 || !copy.constantCount || copy.constantCount>IdleGeometryCopy::MaxConstants || !finiteMatrix(copy.raster.affine)) {
             reject(Rejection::Draw,checks({stage==Stage::Palette,poseCopied,copy.raster.binding==binding,copy.raster.rootConfig==config,copy.raster.clipValid,originalCompleted,current,draws<MaxDraws,copy.words>=2,copy.words<=IdleGeometryCopy::MaxProgramWords,copy.declarationCount>0,copy.declarationCount<=65,copy.constantCount>0,copy.constantCount<=IdleGeometryCopy::MaxConstants,finiteMatrix(copy.raster.affine)}));return false;
         }
-        for(unsigned i=0;i<draws;++i)if(geometry[i].raster.drawRecord==copy.raster.drawRecord) {reject(Rejection::DrawDuplicate);return false;}
         for(unsigned i=0;i<copy.constantCount;++i)for(float value:copy.constants[i])
             if(!std::isfinite(value)) {reject(Rejection::DrawConstants);return false;}
         geometry[draws++]=copy;return true;
@@ -250,13 +250,8 @@ struct IdleWeaponTrace {
     // and its current check, before cleanup. Neither cleanup nor outer finish is
     // certified. Keep the later rejection and whole-trace admission unchanged.
     bool retainedDrawCopiesAvailable() const noexcept {
-        const bool inputFailureHistory=rejection==Rejection::CollectInputs && inputFailure.step==20 && inputFailure.valid==15;
-        // Capacity is checked before duplicate detection; reason11 cannot have
-        // eight stored copies. Only the previously accepted copies are exposed.
-        const bool repeatedHistory=rejection==Rejection::DrawDuplicate && draws<MaxDraws &&
-            rejectionChecks==0 && rejectionState==(47u|(rawGripValid?16u:0u)) && callbacks==63;
-        return stage==Stage::Rejected && (inputFailureHistory || repeatedHistory) &&
-            precedingStage==Stage::Palette &&
+        return stage==Stage::Rejected && rejection==Rejection::CollectInputs &&
+            precedingStage==Stage::Palette && inputFailure.step==20 && inputFailure.valid==15 &&
             admitted && placementObserved && referencesCopied && poseCopied &&
             contributors && contributors<=MaxContributors && animationsCopied==contributors &&
             matrixCount && matrixCount<=MaxMatrices && draws && draws<=MaxDraws &&

@@ -47,7 +47,7 @@ def hexwords(value,count):
 def declaration_weights(rows):
     return declaration_layout(rows)[1]
 
-def validate_geometry(geometry,count):
+def validate_geometry(geometry,count,copy_layout=0):
     if set(geometry)!=set(range(count)):raise ValueError('Missing geometry headers')
     draw_records=set()
     for g in geometry.values():
@@ -58,7 +58,7 @@ def validate_geometry(geometry,count):
         wanted.update('declaration:'+str(i) for i in range(g['declaration']))
         if 'factors' in g:wanted.update(k+':0' for k in ('factorModel','factorLocal','factorView','factorProjection'))
         if set(g['data'])!=wanted:raise ValueError('Truncated copied geometry emission')
-        if g['drawRecord'] in draw_records:raise ValueError('Repeated native draw identity')
+        if not copy_layout and g['drawRecord'] in draw_records:raise ValueError('Repeated native draw identity')
         draw_records.add(g['drawRecord'])
         layout=g['data']['layout:0'];buffers=g['data']['buffers:0'];draw=g['data']['draw:0'];streams=g['data']['streams:0']
         v,t=layout[:2]
@@ -81,7 +81,7 @@ def validate_geometry(geometry,count):
 
 def assess(text,expected_source):
     if not re.fullmatch('[a-f0-9]{64}',expected_source):raise ValueError('Expected compiled source required')
-    records=[];current=None;seen=set()
+    records=[];current=None;seen=set();copy_layout=None
     for line in text.splitlines():
         if not line.startswith('Lab idle'):continue
         if not line.startswith('Lab idle ') or len(line.split())<3:
@@ -90,10 +90,14 @@ def assess(text,expected_source):
         if kind=='draw':
             names={'rawGripValid','schema','draws','source','ipc','wire','request','input','owner','weapon','model','generation','hand','eye',
                    'stage','cfg','file','resource','contributors','matrices','historicalBytes','grasp'}
-            if set(f)!=names or f['source']!=expected_source:raise ValueError('Idle build/schema mismatch')
+            if set(f) not in (names,names|{'copyLayout'}) or f['source']!=expected_source:raise ValueError('Idle build/schema mismatch')
             current={k:integer(v,-(1<<31),(1<<31)-1) if k=='resource' else
                      integer(v,0,(1<<64)-1 if k in ('request','input') else (1<<32)-1)
                      for k,v in f.items() if k!='source'}
+            if 'copyLayout' in f and current['copyLayout']!=1:raise ValueError('Unknown copy ordinal layout')
+            current.setdefault('copyLayout',0)
+            if copy_layout is not None and copy_layout!=current['copyLayout']:raise ValueError('Mixed producer copy layouts')
+            copy_layout=current['copyLayout']
             if current['schema']!=3 or current['rawGripValid'] not in (0,1) or current['draws']>8:raise ValueError('Geometry schema/budget mismatch')
             if current['ipc']!=10 or current['wire']!=7 or current['historicalBytes'] or current['grasp']:
                 raise ValueError('Unsupported layout or provenance/grasp claim')
@@ -113,6 +117,7 @@ def assess(text,expected_source):
             if any(integer(f[k])!=current[k] for k in ('request','eye','hand')):
                 raise ValueError('Interleaved/foreign rejection evidence')
             reason=integer(f['reason'],1,46);preceding=integer(f['preceding'],0,4)
+            if current['copyLayout']==1 and reason==11:raise ValueError('Unreachable ordinal producer duplicate rejection')
             if preceding==3:raise ValueError('First rejection cannot follow an earlier rejected stage')
             current['rejection']={'reason':reason,'preceding':preceding,'checks':integer(f['checks'],0,32767),
                                   'state':integer(f['state'],0,63),'callbacks':integer(f['callbacks'],0,63)}
@@ -321,13 +326,13 @@ def assess(text,expected_source):
         if retained is not None:
             reason=r.get('rejection',{})
             input_history=reason.get('reason')==32 and failure is not None and failure['step']==20 and failure['valid']==15
-            repeated_history=reason.get('reason')==11 and 1<=r['draws']<8 and failure is None and 'stream_probe' not in r
+            repeated_history=r['copyLayout']==0 and reason.get('reason')==11 and 1<=r['draws']<8 and failure is None and 'stream_probe' not in r
             if r['stage']!=3 or not (input_history or repeated_history) or reason.get('preceding')!=2 or \
                     reason.get('state')!=(47|r['rawGripValid']*16) or reason.get('checks') or reason.get('callbacks')!=63 or \
                     not 1<=r['contributors']<=16 or not 1<=r['matrices']<=64 or \
                     any(not r[k] for k in ('request','input','owner','weapon','model','generation','cfg','file')):
                 raise ValueError('Retained companion lacks original copied-state qualification')
-            validate_geometry(retained['geometry'],retained['count'])
+            validate_geometry(retained['geometry'],retained['count'],r['copyLayout'])
         validate_stream_probe(r,retained_validated=retained is not None)
         if r['stage']!=4:rejected.append(r);continue
         if any(r[k]<=0 for k in ('request','input','owner','weapon','model','generation','cfg')):
@@ -338,7 +343,7 @@ def assess(text,expected_source):
         wanted.update('canonical:'+str(i) for i in range(r['matrices']))
         if not r['contributors'] or not r['matrices'] or set(r['pose'])!=wanted or r['stretch'] is None or \
            set(r['animations'])!=set(range(r['contributors'])):raise ValueError('Truncated idle copy emission')
-        validate_geometry(r['geometry'],r['draws'])
+        validate_geometry(r['geometry'],r['draws'],r['copyLayout'])
         r['evidence_class']=('event-pose-and-position-draws-with-auxiliary-uv' if any(
             g['input_layout']==2 for g in r['geometry'].values()) else 'event-pose-and-consumed-draws') if r['draws'] else 'event-pose-only'
         r['geometry_observed']=bool(r['draws'])

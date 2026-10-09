@@ -189,6 +189,78 @@ class Checks(unittest.TestCase):
             mismatch=replay(assess(changed_log,source),index,root,EVALUATOR,root)
             self.assertFalse(mismatch['all_consumed_positions_agree_with_native_reference'])
             self.assertNotIn('render_geometry',mismatch['draws'][0])
+            # Same native record, independently qualified copies: different
+            # assets/programs/constants/affines/factors, both eyes in one request.
+            second_asset=b'other-owned-synthetic-test-candidate';(root/'test2.mesh').write_bytes(second_asset)
+            second_channels=dict(channels)
+            second_channels['positions']=struct.pack('<9f',.25,0.,0.,1.25,0.,0.,.25,1.,0.)
+            (root/'positions2.bin').write_bytes(second_channels['positions'])
+            second_candidate=copy.deepcopy(index['test.mesh'])
+            second_candidate['asset_sha256']=hashlib.sha256(second_asset).hexdigest()
+            second_candidate['candidate_channels'][0]['mesh_object']=2
+            second_candidate['candidate_channels'][0]['channel_files']['positions']='positions2.bin'
+            second_candidate['candidate_channels'][0]['channel_sha256']['positions']=hashlib.sha256(second_channels['positions']).hexdigest()
+            pair_index={**index,'test2.mesh':second_candidate}
+            second_clip=clip.copy();second_clip[3]+=4
+            second_affine=affine.copy();second_affine[3]+=2
+            second_program=[0xfffe0101,31,0x80000005,0x900f0000,1,0x800f0000,0x90e40000,
+                            20,0xc00f0000,0x80e40000,0xa0e40000,0xffff]
+            def second_row(kind,chunk,values):
+                return 'Lab idle geometryData request=1 eye=0 hand=0 index=1 kind='+kind+' chunk='+str(chunk)+' values='+','.join(f'{x:08x}' for x in values)
+            copied=[]
+            for line in lines:
+                if not line.startswith('Lab idle geometry'):continue
+                line=line.replace('index=0 ','index=1 ').replace('words=9','words=12').replace('instance=50','instance=51').replace('modelRecord=1','modelRecord=2')
+                if 'kind=affine ' in line:line=second_row('affine',0,struct.unpack('<12I',struct.pack('<12f',*second_affine)))
+                elif 'kind=clip ' in line:line=second_row('clip',0,struct.unpack('<16I',struct.pack('<16f',*second_clip)))
+                elif 'kind=program ' in line:line=second_row('program',0,second_program)
+                elif 'kind=hash chunk=0 ' in line:line=second_row('hash',0,struct.unpack('<8I',hashlib.sha256(second_channels['positions']).digest()))
+                elif 'kind=constant ' in line:
+                    chunk=int(line.split(' chunk=')[1].split()[0])
+                    line=second_row('constant',chunk,struct.unpack('<4I',struct.pack('<4f',*second_clip[chunk*4:chunk*4+4])))
+                copied.append(line)
+            second_factors=[factor_lines[0].replace('index=0 ','index=1 ').replace('palette=17','palette=18')]
+            for name,values in EvidenceChecks.factor_words().items():second_factors.append(second_row(name,0,[v+1 for v in values]))
+            pair_log='\n'.join([*lines,*factor_lines,*copied,*second_factors]).replace('draws=1','draws=2').replace('schema=3 ','schema=3 copyLayout=1 ')
+            both=pair_log+'\n'+pair_log.replace('eye=0','eye=1')
+            pair_evidence=assess(both,source)
+            pair=replay(pair_evidence,pair_index,root,EVALUATOR,root)
+            self.assertEqual([(r['eye'],r['geometry_index'],r['draw_record']) for r in pair['draws']],[(0,0,0),(0,1,0),(1,0,0),(1,1,0)])
+            self.assertTrue(pair['all_consumed_positions_agree_with_native_reference'])
+            self.assertEqual([r['candidates'][0]['candidate'] for r in pair['draws']],['test.mesh','test2.mesh']*2)
+            self.assertNotEqual(pair['draws'][0]['render_geometry']['positions'],pair['draws'][1]['render_geometry']['positions'])
+            self.assertNotEqual(pair['draws'][0]['render_geometry']['affine'],pair['draws'][1]['render_geometry']['affine'])
+            for o in pair_evidence['copied_event_pose_observations']:
+                for name,values in EvidenceChecks.factor_words().items():
+                    self.assertEqual(o['geometry'][0]['data'][name+':0'],values)
+                    self.assertEqual(o['geometry'][1]['data'][name+':0'],[v+1 for v in values])
+            first_measure=measure(pair,annotation)
+            self.assertEqual([r['geometry_index'] for r in first_measure['measured_references']],[0,0])
+            other_annotation=copy.deepcopy(annotation)
+            other_annotation.update(asset_sha256=second_candidate['asset_sha256'],mesh_object=2,
+                                    channel_sha256=second_candidate['candidate_channels'][0]['channel_sha256'])
+            self.assertEqual([r['geometry_index'] for r in measure(pair,other_annotation)['measured_references']],[1,1])
+            bad_index=copy.deepcopy(pair_index);bad_index['test2.mesh']['candidate_channels'][0]['channel_sha256']['positions']='0'*64
+            unmatched=replay(pair_evidence,bad_index,root,EVALUATOR,root)
+            self.assertFalse(unmatched['all_consumed_positions_agree_with_native_reference'])
+            self.assertEqual(unmatched['draws'][1]['position_replay']['reason'],'unmatched')
+            without='\n'.join(line for line in both.splitlines() if 'geometryFactors ' not in line and 'kind=factor' not in line)
+            self.assertEqual(replay(assess(without,source),pair_index,root,EVALUATOR,root),pair)
+            original_second=second_row('program',0,second_program)
+            unknown_second=[0xfffe0101,31,0x80000005,0x900f0000,31,0x80010005,0x900f0001,
+                            20,0xc00f0000,0x90e40001,0xa0e40000,0xffff]
+            unsupported_second=second_program.copy();unsupported_second[0]=0xfffe0200
+            for shader,reason in ((unknown_second,'unknown-position-dependency'),(unsupported_second,'unsupported-program')):
+                bad_shader=both.replace(original_second,second_row('program',0,shader))
+                # The replacement applies only to eye0. Eye1 and the first copy
+                # retain their independent valid payload/results.
+                failed=replay(assess(bad_shader,source),pair_index,root,EVALUATOR,root)
+                self.assertTrue(failed['draws'][0]['position_replay']['position_replay_agrees_with_reference'])
+                self.assertEqual(failed['draws'][1]['position_replay']['reason'],reason)
+                self.assertNotIn('render_geometry',failed['draws'][1])
+                self.assertTrue(failed['draws'][2]['position_replay']['position_replay_agrees_with_reference'])
+                self.assertTrue(failed['draws'][3]['position_replay']['position_replay_agrees_with_reference'])
+                self.assertFalse(failed['all_consumed_positions_agree_with_native_reference'])
             from idle_stream_evidence import NO_UV56
             noUV=[line for line in lines if 'kind=declaration ' not in line]
             for i,e in enumerate(NO_UV56):

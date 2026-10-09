@@ -4050,8 +4050,8 @@ static bool idleWeaponDiagnosticsEnabled() {
 }
 static void emitIdleWeaponTrace(const IdleWeaponTrace &trace) {
     const auto &b=trace.binding;
-    log("Lab idle draw schema=3 rawGripValid=%u draws=%u source=%.*s ipc=%u wire=%u request=%llu input=%llu owner=%u weapon=%u model=%u generation=%u hand=%u eye=%u stage=%u cfg=%u file=%u resource=%d contributors=%u matrices=%u historicalBytes=0 grasp=0",
-        unsigned(trace.rawGripValid),trace.draws,64,ss2vrBuildContract.sourceFingerprint.data(),ss2vrBuildContract.ipcAbi,ss2vrBuildContract.wireVersion,
+    log("Lab idle draw schema=3 copyLayout=%u rawGripValid=%u draws=%u source=%.*s ipc=%u wire=%u request=%llu input=%llu owner=%u weapon=%u model=%u generation=%u hand=%u eye=%u stage=%u cfg=%u file=%u resource=%d contributors=%u matrices=%u historicalBytes=0 grasp=0",
+        IdleWeaponTrace::CopyLayout,unsigned(trace.rawGripValid),trace.draws,64,ss2vrBuildContract.sourceFingerprint.data(),ss2vrBuildContract.ipcAbi,ss2vrBuildContract.wireVersion,
         b.request,b.input,b.owner,b.weapon,b.model,b.generation,b.hand,b.eye,unsigned(trace.stage),
         trace.config.configuration,trace.config.file,trace.config.resource,trace.contributors,trace.matrixCount);
     if(trace.rejection!=IdleWeaponTrace::Rejection::None)

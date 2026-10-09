@@ -1,4 +1,48 @@
-# Implementation status — 2026-10-08
+# Implementation status — 2026-10-09
+
+## Current native result and qualified-copy adapter
+
+V20 ran source `6c0832601bd47fd6574d97ca060ad27f1ae86c33`, fingerprint
+`4d1c8050b71f2cc64484fb9fdf2f968ed505e3e8b366b5e60cda543d16aaf45a`.
+It reached the exact Jungle scene with122 native projection pairs, normal native
+shutdown, empty native/wrapper owned cleanup, retired display and12 protected
+files unchanged. Seven stored first copies were recovered with all52 independent
+transform words; all are right-hand/eye0 and uniquely match all five channels of
+weapon mesh3, LOD0,218vertices. The unchanged202word native program and both the
+old and fixed independent doubleP*V*M*L references agree for every vertex under
+the unchanged limits. Maximum errors are1.40695455e-5 and9.21622661e-6 respectively.
+
+This does not explain V18's missing-factor failure or justify replacing the
+reference/tolerance. Whole collection remains rejected:0accepted/32rejected
+(15Palette6,10Name19,7Duplicate11). Actual second-copy contents, the different
+hand asset/mesh2, winning second-eye event/cache, grasp and release remain open.
+The fixture is archived and cannot be rerun/resealed.
+
+Astra approved using the existing bounded geometry index as a qualified-copy
+ordinal. Native drawRecord is a renderer-array index, not invocation identity.
+Source removes only that uniqueness assumption; every invocation still passes
+its independent collection, original/current, finite-value and lifetime checks
+before append. Max8 is preserved, the ninth rejects, and game rendering/physics
+remain unchanged. Header `copyLayout=1` explicitly distinguishes the new producer.
+The reader rejects unknown/mixed layouts and new-layout reason11, preserves legacy
+uniqueness/archive11 and keeps reason32 histories outside readiness. Measurement
+now carries geometry_index. Unreachable producer11 retention is retired without
+renumbering rejection values or adding another diagnostic owner/schema.
+
+The actual offline evaluator roundtrip distinguishes two assets, programs,
+constants, affines and all52 factor words with repeated native record0, both eyes
+sharing a request, per-ordinal matching and reference measurement. A bad second
+shader or candidate cannot inherit first-copy agreement; failed outer finish keeps
+copies without promoting them. Factors present/absent preserve replay results.
+Astra source GO; local Astra/xhigh metadata verified, backend unattested.
+
+All four products rebuilt on
+`fa7caae5fd24deb6819519a7cf8519a57576fc404b8ae228ab513d5796654b1f`, IPC10/wire7.
+All68Debug/68Release and28normal/optimized native/compiled gates pass;
+20reader/14passive/7replay groups pass normally/optimized. No runtime of this build.
+Next is a fresh sealed neutral capture of the actual subsequent copy, preserving
+every influence/program/reference/currentness/ownership guard. Full-mod and
+user-operated hardware/dual-wield/vehicle/multiplayer acceptance remain open.
 
 ## Native V19 outcome and reason-11 history correction
 

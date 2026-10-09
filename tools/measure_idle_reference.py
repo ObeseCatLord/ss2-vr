@@ -69,7 +69,7 @@ def measure(replay,annotation):
             if not all(math.isfinite(v) for v in delta) or not math.isfinite(distance):raise ValueError('Nonfinite grip comparison')
             comparison={'origin_delta_native_world':delta,'origin_distance_native_world':distance,
                         'controller_origin_equivalence':False}
-        results.append({'binding':row['binding'],'draw_record':row['draw_record'],'reference_kind':annotation['reference_kind'],
+        results.append({'binding':row['binding'],'geometry_index':row['geometry_index'],'draw_record':row['draw_record'],'reference_kind':annotation['reference_kind'],
             'semantic_status':annotation['semantic_status'],'native_landmarks':points,'world_landmarks':world_points,
             'native_reference_frame':native,'world_reference_frame':world,'captured_affine_reflected':determinant<0,
             'uncalibrated_grip_comparison':comparison,'controller_calibration_verified':False})

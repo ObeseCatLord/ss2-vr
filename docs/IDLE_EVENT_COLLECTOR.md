@@ -1,5 +1,52 @@
 # Event-time ID1 collection — source implemented
 
+## Qualified-copy ordinals — scoped source GO
+
+The V20 neutral capture recovered seven first copies with52 independent factors;
+all five channel hashes uniquely match weapon mesh3/218vertices. Both the unchanged
+old and fixed independent references agree under unchanged limits. Jungle/122
+native projection pairs and clean native/owned/display shutdown/protected-file
+preservation passed. Whole trace remains rejected and actual second-copy/hand
+association remains missing. No reference or tolerance change is justified.
+
+Native drawRecord denotes renderer-array membership, not API-invocation identity.
+The existing geometry index now identifies each independently qualified copy
+within a trace. Source removes only native-record uniqueness, preserving all
+per-copy collection/original/current/finite/binding/configuration checks, Max8,
+native forwarding and cleanup. The ninth copy rejects without overwriting prior
+copies. This is an adapter to the existing collector, not a second implementation.
+
+The actual emitter adds `copyLayout=1` to the draw header. Exact legacy headers
+without this field remain layout0 with unique native records. Unknown explicit
+values and mixed layouts for one source reject. Only layout1 allows repeated
+native records; contiguous unique copy indices and every per-copy payload gate
+remain mandatory. New-layout reason11 is unreachable and rejected by the reader;
+archived layout0 reason11 stays diagnostic. Producer11 history retention is
+removed without renumbering enum values. Reason32 histories remain unpromoted.
+Copy layout is separate from the shader's GeometryInputLayout selection.
+
+Matcher/replay already associate geometry_index. Reference measurement now keeps
+that ordinal alongside binding/native draw_record. Asset/channel/annotation
+identity requirements remain unchanged. Same native record cannot make the second
+copy inherit the first copy's asset, shader, transform or result.
+
+| Astra recommendation | Disposition |
+| --- | --- |
+| Use existing qualified-copy index rather than add rejected-copy storage | Adopted; no new owner or parallel collector |
+| Keep independent admission before every append | Adopted; finite constants still checked, native ownership/forwarding unchanged |
+| Explicitly distinguish new/legacy producers | copyLayout1 header; unknown/mixed layouts and newreason11 reject |
+| Preserve measurement attribution | geometry_index carried through measured references |
+| Prove separation end to end | Two assets/programs/constants/affines/all52factors, repeated native record, both eyes and actual evaluator |
+| Exercise invalid second and failed outer finish | Added; no inherited result or readiness promotion |
+
+Four products rebuilt on
+`fa7caae5fd24deb6819519a7cf8519a57576fc404b8ae228ab513d5796654b1f`, IPC10/wire7.
+All68Debug/68Release and28normal/optimized native/compiled gates pass;
+20reader/14passive/7replay groups pass normally/optimized. Local Astra/xhigh source
+GO metadata verified; backend unattested. Fresh actual capture is still required
+to qualify the subsequent native copy and actual hand mesh. No new-build runtime,
+grasp, winning-cache, GPU, hardware or first/copy-release acceptance is claimed.
+
 ## Repeated native pass — preserve stored history, retain rejection
 
 Actual V19 source6f93947/fpf7363002 reached exact Jungle/135native projection pairs

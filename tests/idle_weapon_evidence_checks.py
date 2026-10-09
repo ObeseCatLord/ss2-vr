@@ -243,6 +243,35 @@ class Checks(unittest.TestCase):
         previous=assess(old,SOURCE)['rejected_or_missing_observations'][0]
         self.assertEqual(previous['rejection']['reason'],32)
         self.assertEqual(len(previous['retained_copies']['geometry']),8)
+    def test_ordinal_layout_preserves_each_copy_and_legacy_uniqueness(self):
+        text,_,_,_=geometry_fixture()
+        payload=[line for line in text.splitlines() if line.startswith('Lab idle geometry')]
+        second='\n'.join(line.replace('index=0 ','index=1 ').replace('instance=50','instance=51')
+                         for line in payload)
+        legacy=text.replace('draws=1','draws=2')+'\n'+second
+        with self.assertRaises(ValueError):assess(legacy,SOURCE)
+        new=legacy.replace('schema=3 ','schema=3 copyLayout=1 ')
+        result=assess(new,SOURCE)['copied_event_pose_observations'][0]
+        self.assertEqual(result['copyLayout'],1);self.assertEqual(set(result['geometry']),{0,1})
+        self.assertEqual([g['drawRecord'] for g in result['geometry'].values()],[0,0])
+        self.assertEqual([g['instance'] for g in result['geometry'].values()],[50,51])
+        for bad in (new.replace('copyLayout=1','copyLayout=0'),new.replace('copyLayout=1','copyLayout=2'),
+                    new.replace('index=1 ','index=2 '),new.replace('index=1 ','index=8 '),new+'\n'+second,
+                    new+'\n'+DRAW.replace('request=100','request=101').replace('stage=4','stage=3')):
+            with self.assertRaises(ValueError):assess(bad,SOURCE)
+        with self.assertRaises(ValueError):assess(self.repeated_fixture().replace('schema=3 ','schema=3 copyLayout=1 '),SOURCE)
+        eight=text.replace('draws=1','draws=8').replace('schema=3 ','schema=3 copyLayout=1 ')
+        for index in range(1,8):eight+='\n'+'\n'.join(line.replace('index=0 ','index='+str(index)+' ') for line in payload)
+        self.assertEqual(len(assess(eight,SOURCE)['copied_event_pose_observations'][0]['geometry']),8)
+        with self.assertRaises(ValueError):assess(eight.replace('draws=8','draws=9'),SOURCE)
+        # New reason32 histories may repeat native records without accepting the
+        # rejected trace. Legacy reason11 remains readable only without layout1.
+        history=self.retained_fixture().replace('schema=3 ','schema=3 copyLayout=1 ').replace('draws=1','draws=2').replace('count=1 postOriginal','count=2 postOriginal')
+        old=[line for line in history.splitlines() if line.startswith(('Lab idle retainedGeometry ','Lab idle retainedGeometryData '))]
+        history+='\n'+'\n'.join(line.replace('index=0 ','index=1 ') for line in old)
+        r=assess(history,SOURCE)
+        self.assertFalse(r['copied_event_pose_observations'])
+        self.assertEqual(len(r['rejected_or_missing_observations'][0]['retained_copies']['geometry']),2)
     @staticmethod
     def factor_words():
         import struct

@@ -8,6 +8,31 @@ This historical hold blocked public publication pending renewed confirmation. It
 
 ## Current PC continuation — start here
 
+V20 (source6c08326/fp4d1c805, run20261009T000027) reached exact Jungle with122native
+projection pairs and clean native/owned/display shutdown; protected12unchanged.
+Seven retained first copies, allright/eye0, uniquelymatch allfiveweaponmesh3 hashes
+andcarry all52independent factors. All218vertices percopy agree with both unchanged
+oldreference and fixed doubleP*V*M*L underunchangedlimits (oldmax1.40695455e-5,
+independentmax9.21622661e-6). Wholetrace0accepted; secondcopy/handmesh/cache/grasp/
+nativeRelease stillopen. V20 archived immutable. No projection/tolerance change.
+
+Current implementation is the Astra-reviewed qualified-copy ordinal adapter:
+native drawRecord isrendererarrayindex, notAPIidentity. Existinggeometryindex0..7
+nowidentifies independentlyvalidatedcopies; nativeindex mayrepeat. Max8 andall
+percopy original/current/finite/range/hash/ownership/finish guards unchanged.
+EmittercopyLayout1 discriminatesnewlayout; readerrejectsunknown/mixedlayouts and
+newreason11, preserveslegacyuniqueness/archive11 andunpromotedreason32 histories.
+Producer11retention retiredwithoutenumrenumber. Measurementpreservesgeometry_index.
+Fourproducts rebuilt onfa7caae5fd24deb6819519a7cf8519a57576fc404b8ae228ab513d5796654b1f,
+IPC10/wire7.68Debug/68Release+28normal/Ogates pass;20reader14passive7replay groups
+normal/O. ActualCLI roundtrip keepsdifferentassets/programs/constants/affines/all52
+factors separatefortwocopies/repeatednativeindex/botheyes. Invalidsecondshader,
+hashmismatch, outerfinishfailure, cap9, legacy/mixedlayouts stillfailclosed.
+No runtime ofthisbuild. Next freshsealedcapture must qualifyactualsecondcopy and
+handasset before claiminggrasp. No oldfixtures/cache/manualLowpriming/guessing.
+
+### Historical reason-11 retained-history checkpoint
+
 Latest actual capture (6f93947/fpf7363002, V19) reached exact Jungle/135native
 projection pairs, clean native/owned/display shutdown and protected12unchanged.
 Collector failed:0accepted/32rejected,18Palette6/9DrawDuplicate11/5Name19. All9
