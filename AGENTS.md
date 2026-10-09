@@ -8,6 +8,22 @@ This historical hold blocked public publication pending renewed confirmation. It
 
 ## Current PC continuation — start here
 
+Per-draw primitive-factor diagnostics are now implemented and Astra source-reviewed.
+Selected raster M/L and owned camera V/P are copied into the existing value owner;
+ordinary raster equality/admission/affine/clip/tolerance stay unchanged. Optional
+companion requires matching raw bits/palette/identity at existing pre/post draw
+bookends. Shared serializer preserves all52words/labels; reader enforces exact
+optional inventory and retains post-original/pre-cleanup diagnostic limits.
+Four products rebuilt onf7363002cf44be1896440fe9bd7cfeeb67fee2d0076cb667ab85debd6c745b93,
+IPC10/wire7. All68Debug/68Release and28normal/optimized native gates pass;18reader
+and7replay groups pass normal/optimized. Source-only checkpoint, no runtime of
+these products yet. Next: fresh sealed private neutral factor collection and
+separate fixed doubleP*V*M*L comparison alongside the unchanged original result.
+Never select whichever grouping passes, use shader constants as their own proof,
+or infer grasp/native release from idle copies. Prior capture/fixture immutable.
+
+### Historical noUV adapter checkpoint
+
 Latest neutral capture of23712f1d products reached the exact Jungle scene with
 118native projection pairs, normal native shutdown, empty owned cleanup and
 12protected files unchanged. Ten complete passive0/5/6 receipts captured the same
@@ -27,7 +43,7 @@ Do not apply the different hand asset/mesh2 annotation to weapon mesh3. Winning
 second-eye evidence, grasp and actual native release remain open. Previous notes
 below describe historical checkpoints, not current build/run instructions.
 
-Next bounded source slice has Astra designGO for diagnostic-only52float per-draw
+The then-next bounded source slice had Astra designGO for diagnostic-only52float per-draw
 M/L/V/P copies: selected raster model.world/palette[draw.first] inexistingborrow,
 already-owned pass.world.view/executedUiProjection. Preserve rawbits, paletteindex
 andexactdraw/eye/hand identity; comparebookends but missing/changedfactors disqualify
@@ -36,8 +52,8 @@ associationproof. Originalcollapsedaffine/clip/admission/tolerance/owners stay
 unchanged. Offline independent doubleP*V*M*L comparison is diagnostic, never
 choosewhichevergroupingpasses. Beforeadmissionchanges prove index/eye association,
 matrix conventions and inclusion of native stretch/bind processing inL. See
-IDLE_EVENT_COLLECTOR current factor-evidence design. No new build/runtime yet for
-this nextslice; don't skip its implementation/review/compiled gates.
+IDLE_EVENT_COLLECTOR current factor-evidence implementation. Its source/review/build
+steps are now completed as recorded above; runtime factors remain missing.
 
 ### Historical passive-extension checkpoint
 

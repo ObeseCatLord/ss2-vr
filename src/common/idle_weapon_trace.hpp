@@ -3,6 +3,7 @@
 #include "idle_geometry.hpp"
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cstdint>
 #include <initializer_list>
 #include <span>
@@ -27,6 +28,34 @@ struct IdleAnimationValue {
     std::array<uint32_t,8> contribution{};
     std::array<uint32_t,4> header{}; // IDENT, first/last frame, raw speed bits; not CResource.
 };
+// Independent primitive operands, copied only at the already validated raster
+// borrow. These diagnostics never participate in ordinary raster admission.
+struct IdleRasterFactors {
+    Matrix34 model{},local{},view{};
+    Matrix44 projection{};
+    uint32_t paletteIndex=0;
+    bool modelCopied=false,cameraCopied=false;
+    bool valid() const noexcept {
+        if(!modelCopied || !cameraCopied || paletteIndex>=32768 ||
+           !finiteMatrix(model) || !finiteMatrix(local) || !finiteMatrix(view))return false;
+        for(float v:projection.m)if(!std::isfinite(v))return false;
+        return true;
+    }
+    bool same(const IdleRasterFactors &other) const noexcept {
+        if(!valid() || !other.valid() || paletteIndex!=other.paletteIndex)return false;
+        const auto bits=[](const auto &a,const auto &b) {
+            for(unsigned i=0;i<std::size(a.m);++i)
+                if(std::bit_cast<uint32_t>(a.m[i])!=std::bit_cast<uint32_t>(b.m[i]))return false;
+            return true;
+        };
+        return bits(model,other.model) && bits(local,other.local) &&
+               bits(view,other.view) && bits(projection,other.projection);
+    }
+    template<class Emit> void emitMatrices(Emit &&emit) const {
+        emit("factorModel",std::span(model.m));emit("factorLocal",std::span(local.m));
+        emit("factorView",std::span(view.m));emit("factorProjection",std::span(projection.m));
+    }
+};
 struct IdleRasterCopy {
     IdleDrawIdentity binding{};
     IdleConfigIdentity rootConfig{},renderConfig{};
@@ -36,6 +65,7 @@ struct IdleRasterCopy {
     Matrix34 affine{};
     Matrix44 clip{};
     bool clipValid=false;
+    IdleRasterFactors factors{}; // Deliberately excluded from operator== below.
     bool operator==(const IdleRasterCopy &other) const noexcept {
         return binding==other.binding && rootConfig==other.rootConfig && renderConfig==other.renderConfig &&
             modelRecord==other.modelRecord && drawRecord==other.drawRecord && surface==other.surface &&
@@ -54,6 +84,13 @@ struct IdleGeometryCopy {
     std::array<ScopeDeclarationElement,65> declaration{};
     unsigned declarationCount=0;
     unsigned words=0,constantCount=0;
+    uint32_t factorChecks=0; // 1: pre-original bookend, 2: post-original bookend.
+    void factorBookend(const IdleRasterCopy &now,bool postOriginal) noexcept {
+        const uint32_t bit=postOriginal?2u:1u;
+        if(raster==now && raster.factors.same(now.factors))factorChecks|=bit;
+        else factorChecks&=~bit;
+    }
+    bool factorsAvailable() const noexcept {return factorChecks==3 && raster.factors.valid();}
 };
 struct IdleWeaponTrace {
     static constexpr unsigned MaxContributors=16,MaxMatrices=64,MaxDraws=8;

@@ -500,6 +500,7 @@ static bool collectIdleGeometry(IDirect3DDevice9 *d,const ScopeIndexedDraw &draw
     if(!sameInputs(probe.bindings[0],probe.bindings[1]))return reject(IdleWeaponTrace::Rejection::CollectChanged);
     IdleRasterCopy now;IdleWeaponTrace *trace=nullptr;
     if(!currentIdleRaster(now,trace) || trace!=probe.idleTrace || now!=probe.idle.raster)return reject(IdleWeaponTrace::Rejection::CollectRaster);
+    probe.idle.factorBookend(now,false);
     if(!nativeUiDeviceCurrent(d) || probe.generation!=graphicsResourceGeneration() || !scopeGpuTransactionCurrent(d))return reject(IdleWeaponTrace::Rejection::CollectLifetime);
     probe.idle.inputs=probe.bindings[0].values;
     probe.idle.words=unsigned(probe.programWords);
@@ -694,6 +695,7 @@ static HRESULT probeScopeDraw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base
             IdleRasterCopy now;IdleWeaponTrace *trace=nullptr;
             const bool current=currentIdleRaster(now,trace) && trace==probe.idleTrace && now==probe.idle.raster &&
                 nativeUiDeviceCurrent(d) && probe.generation==graphicsResourceGeneration() && scopeGpuTransactionCurrent(d);
+            if(current)probe.idle.factorBookend(now,true);
             probe.idleTrace->draw(probe.idle,SUCCEEDED(result),current);
         }
         if (probe.raster.pose.valid) {

@@ -168,6 +168,13 @@ class Checks(unittest.TestCase):
         self.assertEqual(matched['matches'][0]['auxiliary_channels'],['uv'])
         self.assertTrue(matched['copied_channels_all_uniquely_matched'])
         self.assertFalse(matched['consumed_channels_all_uniquely_matched'])
+        # Positive five-hash evidence must have exactly the same readiness with
+        # the optional factors present. Retained copies remain outside coverage.
+        self.assertEqual(match(assess(self.factor_fixture(),SOURCE),candidate),match(result,candidate))
+        retained=assess(self.factor_fixture(True),SOURCE)
+        retained_match=match(retained,candidate)
+        self.assertEqual(retained_match['retained_diagnostic_matches'][0]['result'],'unique-consumed-channel-match')
+        self.assertFalse(retained_match['copied_geometry_coverage_complete'])
         import copy
         for channel in channels:
             bad=copy.deepcopy(candidate);bad['hand']['candidate_channels'][0]['channel_sha256'][channel]='0'*64
@@ -190,6 +197,92 @@ class Checks(unittest.TestCase):
         payload=payload.replace('Lab idle geometryData','Lab idle retainedGeometryData').replace('Lab idle geometry ','Lab idle retainedGeometry ')
         companion='Lab idle retainedCopies request=100 eye=0 hand=1 count=1 postOriginal=1 cleanupCertified=0 outerCurrent=0'
         return text+'\n'+companion+'\n'+payload
+    @staticmethod
+    def factor_words():
+        import struct
+        values={name:list(struct.unpack('<'+str(size)+'I',struct.pack('<'+str(size)+'f',
+                *[float(i*100+j+1) for j in range(size)])))
+                for i,(name,size) in enumerate([('factorModel',12),('factorLocal',12),('factorView',12),('factorProjection',16)])}
+        values['factorModel'][1]=0x80000000;values['factorLocal'][2]=1;values['factorView'][3]=0x80000001
+        return values
+    def factor_fixture(self,retained=False):
+        text,row,_,_=geometry_fixture()
+        header='Lab idle geometryFactors request=100 eye=1 hand=0 index=0 palette=17 bookends=3 postOriginal=1 cleanupCertified=0 outerCurrent=0'
+        payload='\n'.join(row(kind,0,values) for kind,values in self.factor_words().items())
+        if retained:
+            text=self.retained_fixture()
+            header=header.replace('geometryFactors','retainedGeometryFactors').replace('eye=1 hand=0','eye=0 hand=1')
+            payload=payload.replace('geometryData','retainedGeometryData').replace('eye=1 hand=0','eye=0 hand=1')
+        return text+'\n'+header+'\n'+payload
+    def test_optional_factors_are_bounded_history_not_acceptance(self):
+        for retained in (False,True):
+            text=self.factor_fixture(retained);evidence=assess(text,SOURCE)
+            observation=(evidence['rejected_or_missing_observations'] if retained else evidence['copied_event_pose_observations'])[0]
+            geometry=(observation['retained_copies']['geometry'] if retained else observation['geometry'])[0]
+            self.assertEqual(geometry['factors']['palette_index'],17)
+            for name,values in self.factor_words().items():self.assertEqual(geometry['data'][name+':0'],values)
+            self.assertTrue(geometry['factors']['post_original_return']);self.assertTrue(geometry['factors']['diagnostic_only'])
+            for flag in ('cleanup_certified','outer_current','reference_replaced'):
+                self.assertFalse(geometry['factors'][flag])
+            self.assertFalse(evidence['positive_grasp_verified']);self.assertFalse(evidence['alignment_accepted'])
+            lines=text.splitlines()
+            factor_lines=[line for line in lines if 'GeometryFactors ' in line or 'geometryFactors ' in line or 'kind=factor' in line]
+            for line in factor_lines:
+                with self.subTest(retained=retained,line=line),self.assertRaises(ValueError):
+                    assess('\n'.join(x for x in lines if x!=line),SOURCE)
+                with self.assertRaises(ValueError):assess(text+'\n'+line,SOURCE)
+            for bad in (text.replace('palette=17','palette=32768'),text.replace('bookends=3','bookends=1'),
+                        text.replace('postOriginal=1 cleanupCertified=0 outerCurrent=0','postOriginal=0 cleanupCertified=0 outerCurrent=0'),
+                        text.replace('cleanupCertified=0','cleanupCertified=1'),text.replace('outerCurrent=0','outerCurrent=1'),
+                        text.replace('kind=factorLocal chunk=0','kind=factorLocal chunk=1'),
+                        text.replace('kind=factorModel chunk=0 values=3f800000','kind=factorModel chunk=0 values=7fc00000'),
+                        text.replace('index=0 palette=17','index=1 palette=17')):
+                with self.subTest(bad=bad),self.assertRaises(ValueError):assess(bad,SOURCE)
+            without='\n'.join(line for line in lines if line not in factor_lines)
+            original=assess(without,SOURCE)
+            self.assertEqual(len(original['copied_event_pose_observations']),len(evidence['copied_event_pose_observations']))
+            self.assertEqual(len(original['rejected_or_missing_observations']),len(evidence['rejected_or_missing_observations']))
+            self.assertEqual(match(original,{})['copied_geometry_coverage_complete'],match(evidence,{})['copied_geometry_coverage_complete'])
+    def test_factor_identity_ordering_widths_and_multiple_draws(self):
+        for retained in (False,True):
+            text=self.factor_fixture(retained);lines=text.splitlines()
+            header=next(line for line in lines if 'palette=17 bookends=3' in line)
+            payload=next(line for line in lines if 'kind=factorModel ' in line)
+            geometry_header=next(line for line in lines if 'modelRecord=1 drawRecord=0' in line)
+            for bad in (text.replace(header,header.replace('request=100','request=101')),
+                        text.replace(header,header.replace('eye=0' if retained else 'eye=1','eye=1' if retained else 'eye=0')),
+                        text.replace(payload,payload.replace('hand=1' if retained else 'hand=0','hand=0' if retained else 'hand=1')),
+                        text.replace(header,'').replace(geometry_header,header+'\n'+geometry_header),
+                        text.replace(payload,'').replace(header,payload+'\n'+header),text.replace('palette=17','palette=-1')):
+                with self.subTest(retained=retained),self.assertRaises(ValueError):assess(bad,SOURCE)
+            for line in (line for line in lines if 'kind=factor' in line):
+                prefix,values=line.split(' values=');parts=values.split(',')
+                for replaced in (parts[:-1],parts+['00000000'],['7f800000',*parts[1:]]):
+                    with self.assertRaises(ValueError):assess(text.replace(line,prefix+' values='+','.join(replaced)),SOURCE)
+            boundary=assess(text.replace('palette=17','palette=32767'),SOURCE)
+            observation=(boundary['rejected_or_missing_observations'] if retained else boundary['copied_event_pose_observations'])[0]
+            g=(observation['retained_copies']['geometry'] if retained else observation['geometry'])[0]
+            self.assertEqual(g['factors']['palette_index'],32767)
+        text=self.factor_fixture()
+        geometry_lines=[line for line in text.splitlines() if line.startswith('Lab idle geometry')]
+        second='\n'.join(line.replace('index=0 ','index=1 ').replace('drawRecord=0','drawRecord=1').replace('palette=17','palette=32767')
+                         for line in geometry_lines)
+        second=second.replace('kind=factorModel chunk=0 values=3f800000','kind=factorModel chunk=0 values=40000000')
+        two=text.replace('draws=1','draws=2')+'\n'+second
+        other_eye=two.replace('eye=1','eye=0').replace('kind=factorLocal chunk=0 values=42ca0000',
+                                                     'kind=factorLocal chunk=0 values=4479c000')
+        both=two+'\n'+other_eye
+        result=assess(both,SOURCE)
+        self.assertEqual(len(result['copied_event_pose_observations']),2)
+        for o in result['copied_event_pose_observations']:
+            self.assertEqual(o['request'],100)
+            self.assertEqual(set(o['geometry']),{0,1})
+            for index,g in o['geometry'].items():
+                self.assertEqual(g['factors']['palette_index'],17 if index==0 else 32767)
+                expected=self.factor_words()
+                if index==1:expected['factorModel'][0]=0x40000000
+                if o['eye']==0:expected['factorLocal'][0]=0x4479c000
+                for name,values in expected.items():self.assertEqual(g['data'][name+':0'],values)
     def test_retained_copy_is_rejected_history_not_completed(self):
         text=self.retained_fixture();r=assess(text,SOURCE)
         self.assertFalse(r['copied_event_pose_observations'])

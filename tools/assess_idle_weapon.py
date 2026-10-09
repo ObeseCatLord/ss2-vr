@@ -56,6 +56,7 @@ def validate_geometry(geometry,count):
         wanted.update('constant:'+str(i) for i in range(g['constants']))
         wanted.update('program:'+str(i) for i in range(0,g['words'],32))
         wanted.update('declaration:'+str(i) for i in range(g['declaration']))
+        if 'factors' in g:wanted.update(k+':0' for k in ('factorModel','factorLocal','factorView','factorProjection'))
         if set(g['data'])!=wanted:raise ValueError('Truncated copied geometry emission')
         if g['drawRecord'] in draw_records:raise ValueError('Repeated native draw identity')
         draw_records.add(g['drawRecord'])
@@ -220,11 +221,12 @@ def assess(text,expected_source):
                         target[index]={k:integer(f[k],0,255 if k in ('format','buffer') else (1<<32)-1) for k in names}
                 else:raise ValueError('Unknown input diagnostic')
             continue
-        retained=kind in ('retainedGeometry','retainedGeometryData')
+        retained=kind in ('retainedGeometry','retainedGeometryData','retainedGeometryFactors')
         if retained:
             if current is None or current['stage']!=3 or 'retained_copies' not in current:
                 raise ValueError('Retained payload without rejected companion')
-            kind={'retainedGeometry':'geometry','retainedGeometryData':'geometryData'}[kind]
+            kind={'retainedGeometry':'geometry','retainedGeometryData':'geometryData',
+                  'retainedGeometryFactors':'geometryFactors'}[kind]
         elif current is None or current['stage']!=4:
             raise ValueError('Data without complete native-copy record')
         geometry=current['retained_copies']['geometry'] if retained else current['geometry']
@@ -256,12 +258,24 @@ def assess(text,expected_source):
             if not 2<=g['words']<=512 or not 1<=g['declaration']<=65 or not 1<=g['constants']<=256 or not g['surface'] or not g['instance'] or not g['cfg']:
                 raise ValueError('Incomplete/unbounded rendered identity')
             g['data']={};geometry[index]=g
+        elif kind=='geometryFactors':
+            if set(f)!={'request','eye','hand','index','palette','bookends','postOriginal','cleanupCertified','outerCurrent'}:
+                raise ValueError('Factor companion schema mismatch')
+            index=integer(f['index'],0,7)
+            if index not in geometry or 'factors' in geometry[index]:raise ValueError('Factor companion before header or duplicate')
+            if (integer(f['bookends']),integer(f['postOriginal']),integer(f['cleanupCertified']),integer(f['outerCurrent']))!=(3,1,0,0):
+                raise ValueError('Unsupported factor provenance claim')
+            geometry[index]['factors']={'palette_index':integer(f['palette'],0,32767),'bookends':3,
+                'post_original_return':True,'cleanup_certified':False,'outer_current':False,
+                'diagnostic_only':True,'reference_replaced':False}
         elif kind=='geometryData':
             if set(f)!={'request','eye','hand','index','kind','chunk','values'}:raise ValueError('Geometry data schema mismatch')
             index=integer(f['index'],0,7)
             if index not in geometry:raise ValueError('Geometry payload before header')
             g=geometry[index];which=f['kind'];chunk=integer(f['chunk'],0,511)
-            counts={'declaration':6,'clip':16,'affine':12,'layout':14,'buffers':10,'draw':6,'streams':18,'hash':8,'constant':4}
+            factors={'factorModel':12,'factorLocal':12,'factorView':12,'factorProjection':16}
+            if which in factors and 'factors' not in g:raise ValueError('Factor payload before qualified companion')
+            counts={'declaration':6,'clip':16,'affine':12,'layout':14,'buffers':10,'draw':6,'streams':18,'hash':8,'constant':4,**factors}
             if which=='program':
                 if chunk%32 or chunk>=g['words']:raise ValueError('Program chunk outside declared copy')
                 count=min(32,g['words']-chunk)
@@ -273,7 +287,7 @@ def assess(text,expected_source):
             key=which+':'+str(chunk)
             if key in g['data']:raise ValueError('Duplicate geometry chunk')
             values=hexwords(f['values'],count)
-            if which in ('affine','clip','constant'):
+            if which in ('affine','clip','constant') or which in factors:
                 if any(not math.isfinite(struct.unpack('<f',struct.pack('<I',v))[0]) for v in values):
                     raise ValueError('Non-finite native geometry values')
             g['data'][key]=values

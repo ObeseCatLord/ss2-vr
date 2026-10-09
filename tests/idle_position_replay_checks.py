@@ -136,6 +136,12 @@ class Checks(unittest.TestCase):
             self.assertTrue(result['all_consumed_positions_agree_with_native_reference']);self.assertFalse(result['alignment_accepted'])
             self.assertEqual(result['draws'][0]['render_geometry']['triangle_indices'],[0,1,2])
             self.assertEqual(result['draws'][0]['render_geometry']['world_positions'],[[10.,20.,30.],[10.,20.,29.],[10.,21.,30.]])
+            from idle_weapon_evidence_checks import Checks as EvidenceChecks
+            factor_lines=['Lab idle geometryFactors request=1 eye=0 hand=0 index=0 palette=17 bookends=3 postOriginal=1 cleanupCertified=0 outerCurrent=0']
+            for name,values in EvidenceChecks.factor_words().items():
+                factor_lines.append('Lab idle geometryData request=1 eye=0 hand=0 index=0 kind='+name+' chunk=0 values='+','.join(f'{x:08x}' for x in values))
+            diagnostic=replay(assess('\n'.join([*lines,*factor_lines]),source),index,root,EVALUATOR,root)
+            self.assertEqual(diagnostic,result)
             annotation={'schema':1,'reference_kind':'indexed-surface-convention','semantic_status':'reviewed-convention',
                 'asset_sha256':index['test.mesh']['asset_sha256'],'mesh_object':1,'lod':0,'channel_index':0,
                 'channel_sha256':index['test.mesh']['candidate_channels'][0]['channel_sha256'],

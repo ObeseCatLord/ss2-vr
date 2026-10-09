@@ -1,6 +1,7 @@
 #include "common/idle_weapon_trace.hpp"
 #include <cassert>
 #include <limits>
+#include <string_view>
 using namespace ss2vr;
 #ifdef NDEBUG
 #error Idle diagnostic checks need active assertions
@@ -124,6 +125,66 @@ int main() {
     };
     IdleGeometryCopy g;g.raster.binding=id;g.raster.rootConfig=cfg;g.raster.affine=identity;g.raster.clipValid=true;
     g.words=2;g.constantCount=1;g.declarationCount=1;
+    {auto diagnostic=g;
+     auto &f=diagnostic.raster.factors;
+     f.model=f.local=f.view=identity;
+     f.model.m[3]=262.25f;f.local.m[3]=-262.25f; // Large cancelling primitive translations.
+     for(unsigned i=0;i<4;++i)f.projection.m[i*4+i]=1;
+     f.paletteIndex=17;f.modelCopied=f.cameraCopied=true;
+     assert(f.valid() && diagnostic.raster==g.raster); // Optional factors never change old equality.
+     diagnostic.factorBookend(diagnostic.raster,false);
+     assert(diagnostic.factorChecks==1 && !diagnostic.factorsAvailable());
+     diagnostic.factorBookend(diagnostic.raster,true);
+     assert(diagnostic.factorsAvailable());
+     auto t=ready();assert(t.draw(diagnostic,true,true));
+     f.local.m[3]=0; // Owned factors survive later native source reuse.
+     assert(t.geometry[0].raster.factors.local.m[3]==-262.25f);
+     for(unsigned variant=0;variant<9;++variant) {
+        auto copy=t.geometry[0];copy.factorChecks=0;auto now=copy.raster;
+        copy.factorBookend(now,false);
+        switch(variant) {case 0:now.factors.paletteIndex++;break;
+            case 1:now.factors.model.m[3]=100;now.factors.local.m[3]=-100;break; // Same combined result, different descendant operands.
+            case 2:now.factors.cameraCopied=false;break;case 3:now.factors.modelCopied=false;break;
+            case 4:now.factors.view.m[3]=.1f;break;case 5:now.factors.projection.m[3]=.1f;break;
+            case 6:now.factors.local.m[0]=std::numeric_limits<float>::quiet_NaN();break;
+            case 7:now.factors.model.m[1]=-0.f;break; // Preserve raw bits, not just numeric equality.
+            case 8:now.drawRecord++;break;}
+        copy.factorBookend(now,true);assert(!copy.factorsAvailable());
+        auto ordinary=ready();assert(ordinary.draw(copy,true,true)); // Companion loss is not draw loss.
+     }
+     auto missing=g;missing.factorChecks=3;assert(!missing.factorsAvailable());
+     auto ordinary=ready();assert(ordinary.draw(missing,true,true));
+     auto stable=t.geometry[0];stable.factorChecks=0;auto before=stable.raster;
+     before.factors.model.m[3]++;stable.factorBookend(before,false);
+     stable.factorBookend(stable.raster,true);assert(stable.factorChecks==2 && !stable.factorsAvailable());
+     stable.factorChecks=0;stable.factorBookend(stable.raster,true);assert(!stable.factorsAvailable());
+     for(unsigned variant=0;variant<7;++variant) {
+        auto original=t.geometry[0];original.factorChecks=0;auto changed=original.raster;
+        switch(variant) {case 0:changed.binding.eye^=1;break;case 1:changed.binding.hand^=1;break;
+            case 2:changed.modelRecord++;break;case 3:changed.instance++;break;case 4:changed.bone++;break;
+            case 5:changed.rootConfig.file++;break;case 6:changed.renderConfig.configuration++;break;}
+        original.factorBookend(changed,false);original.factorBookend(original.raster,true);
+        assert(!original.factorsAvailable() && !(changed==original.raster));
+     }
+    }
+    {IdleRasterFactors factors;
+     const char *labels[]{"factorModel","factorLocal","factorView","factorProjection"};
+     float *matrices[]{factors.model.m,factors.local.m,factors.view.m,factors.projection.m};
+     std::array<std::array<uint32_t,16>,4> expected{};
+     for(unsigned i=0;i<4;++i)for(unsigned j=0;j<(i==3?16u:12u);++j) {
+        expected[i][j]=std::bit_cast<uint32_t>(float(i*100+j+1));
+        matrices[i][j]=std::bit_cast<float>(expected[i][j]);
+     }
+     expected[0][1]=0x80000000;expected[1][2]=1;expected[2][3]=0x80000001;
+     for(unsigned i=0;i<3;++i)matrices[i][i+1]=std::bit_cast<float>(expected[i][i+1]);
+     unsigned count=0;
+     factors.emitMatrices([&](const char *label,std::span<const float> values) {
+        assert(count<4 && std::string_view(label)==labels[count] && values.size()==(count==3?16u:12u));
+        for(unsigned j=0;j<values.size();++j)assert(std::bit_cast<uint32_t>(values[j])==expected[count][j]);
+        ++count;
+     });
+     assert(count==4);
+    }
     {auto t=ready();assert(t.draw(g,true,true));g.constants[0][0]=1;
      assert(t.geometry[0].constants[0][0]==0);assert(!t.draw(g,true,true));}
     for(unsigned failure=0;failure<3;++failure) {

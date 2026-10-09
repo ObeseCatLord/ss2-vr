@@ -770,6 +770,10 @@ static bool readIdleRaster(void *instance,IdleRasterCopy &out,IdleRasterStorage 
     out.affine=affineMultiply(model.world,palette[size_t(draw.first)]);
     Matrix34 inverse;if(!finiteMatrix(model.world) || !finiteMatrix(palette[size_t(draw.first)]) ||
                         !affineInverse(out.affine,inverse))return false;
+    // Copy the selected raster operands themselves, not the trace root's cache.
+    // Their diagnostic absence/change cannot alter affine/clip admission.
+    out.factors.model=model.world;out.factors.local=palette[size_t(draw.first)];
+    out.factors.paletteIndex=uint32_t(draw.first);out.factors.modelCopied=true;
     out.layout=scopeSurfaceLayout(reinterpret_cast<const uint8_t*>(surfacePointer));
     out.modelRecord=uint32_t(modelIndex);out.drawRecord=uint32_t(drawIndex);out.surface=uint32_t(surfacePointer);
     out.instance=uint32_t(reinterpret_cast<uintptr_t>(model.instance));out.bone=mapping.bone;

@@ -4022,6 +4022,8 @@ static bool copyBoundIdleRaster(const ScopeDrawBinding &binding,const IdleDrawId
     out.binding=identity;
     out.clipValid=executedUiProjectionValid && scopeCapClip(executedUiProjection,physicalWeapon->pass.world.view,out.affine,out.clip);
     if(!out.clipValid){trace->reject(IdleWeaponTrace::Rejection::RasterClip);return false;}
+    out.factors.view=physicalWeapon->pass.world.view;out.factors.projection=executedUiProjection;
+    out.factors.cameraCopied=true;
     return true;
 }
 bool currentIdleRaster(IdleRasterCopy &out,IdleWeaponTrace *&trace) {
@@ -4158,6 +4160,15 @@ static void emitIdleWeaponTrace(const IdleWeaponTrace &trace) {
         };
         std::array<uint32_t,12> affine{};std::memcpy(affine.data(),r.affine.m,sizeof(affine));words("affine",0,affine);
         std::array<uint32_t,16> clip{};std::memcpy(clip.data(),r.clip.m,sizeof(clip));words("clip",0,clip);
+        if(g.factorsAvailable()) {
+            log("Lab idle %s request=%llu eye=%u hand=%u index=%u palette=%u bookends=3 postOriginal=1 cleanupCertified=0 outerCurrent=0",
+                retained?"retainedGeometryFactors":"geometryFactors",b.request,b.eye,b.hand,n,r.factors.paletteIndex);
+            r.factors.emitMatrices([&](const char *kind,std::span<const float> values) {
+                std::array<uint32_t,16> raw{};
+                std::memcpy(raw.data(),values.data(),values.size_bytes());
+                words(kind,0,std::span(raw).first(values.size()));
+            });
+        }
         const std::array<uint32_t,14> layout{uint32_t(r.layout.vertices),uint32_t(r.layout.triangles),
             r.layout.channels[0].offset,r.layout.channels[0].format,r.layout.channels[0].buffer,
             r.layout.channels[1].offset,r.layout.channels[1].format,r.layout.channels[1].buffer,

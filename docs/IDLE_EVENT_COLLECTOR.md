@@ -1,5 +1,50 @@
 # Event-time ID1 collection — source implemented
 
+## Primitive-factor companion — scoped source GO
+
+The52float M/L/V/P diagnostic slice is implemented. M/L are copied from the selected
+raster model and exact palette[draw.first] after the existing ownership/mapping/
+finite-value gates. V/P come from the already-owned eye camera values used by the
+unchanged clip calculation. A value-only companion holds the palette index and
+copied operands; ordinary raster equality explicitly excludes it.
+
+Existing pre/post raster reads qualify matching raw bits and original identity.
+The companion emits only with both bookends and finite bounded operands. Its
+geometryFactors/retainedGeometryFactors header carries the geometry index, palette
+index, bookends3, postOriginal1, cleanupCertified0 and outerCurrent0. Four existing
+geometryData/retainedGeometryData arrays carry factorModel12, factorLocal12,
+factorView12 and factorProjection16 raw words. One shared serializer fixes labels
+and lengths, tested with nonsymmetric values, signed zero and finite subnormals.
+
+The optional reader requires the existing geometry header, exact provenance,
+palette0..32767 and every finite array exactly once. It rejects truncation,
+duplicates, foreign identities, wrong ordering, widths, chunks and nonfinite
+values. Retained copies stay rejected history. Whole matching/replay results with
+and without factors are identical, including positive five-hash fixtures.
+
+| Astra recommendation | Disposition |
+| --- | --- |
+| Capture selected raster operands rather than reuse root/canonical data | Adopted; no new descendant association policy |
+| Preserve ordinary reference/admission and ownership | Adopted; optional companion only, original affine/clip/tolerance unchanged |
+| Test all52raw words and production labels | Adopted shared emitter/compiled checks and exact reader assertions |
+| Test failed pre-bookend, restored post and identity changes | Adopted; companion cannot qualify from post alone |
+| Test malformed/foreign/boundary optional payloads | Adopted for ordinary/retained records |
+| Test positive evidence cannot promote diagnostics | Adopted; entire matching/replay results unchanged |
+| Strengthen multiple draw/eye association sentinels | Adopted; different arrays across draws/eyes sharing one request |
+
+Four products rebuilt onf7363002cf44be1896440fe9bd7cfeeb67fee2d0076cb667ab85debd6c745b93,
+IPC10/wire7. All68Debug/68Release and28normal/optimized native/compiled gates pass;
+18reader and7replay groups pass normally/optimized. Latest local Astra/xhigh
+metadata verified; backend unattested. No native runtime of this build yet.
+
+The private comparison workflow reports separately named doubleP*V*M*L*position
+against unchanged shader output, alongside the old result. Synthetic cancelling-
+translation checks demonstrate diagnostic behavior only. Never choose a passing
+grouping, self-certify shader constants, apply trace stretch again without proof,
+replace the production reference or widen tolerance from these source checks.
+Fresh sealed neutral runtime operands and exact draw/eye/palette/convention/stretch
+association evidence remain required before the next admission decision.
+
 ## Current exact noUV position-copy adapter
 
 The actual neutral observation of fingerprint23712f1d reached Jungle/118native
@@ -30,7 +75,7 @@ failure-header regressions cover layout2's reachable indices0/3/5/6, foreign7/8,
 altered declarations and historical explicit-layout0 passive receipts. Local
 Astra/xhigh metadata verified; backend attestation unavailable.
 
-### Next primitive-factor evidence slice — design GO, not implemented
+### Historical primitive-factor evidence design — now implemented above
 
 Astra approved diagnostic-only capture of52floats per selected draw: M from the
 selected raster model.world, L from exact palette[draw.first], V from already-owned

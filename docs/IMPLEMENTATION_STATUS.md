@@ -1,5 +1,38 @@
 # Implementation status — 2026-10-08
 
+## Current primitive-factor diagnostics — source GO, runtime next
+
+The selected raster's model M/local palette L and already-owned camera V/projection
+P are now copied as optional value-only diagnostics. No new native lookup, COM
+call, buffer lock, retained pointer or graphics-state write was added. Existing
+affine/clip computation, raster equality, original forwarding, finally cleanup,
+success/refusal policy and tolerance are unchanged.
+
+The optional companion requires exact raw-bit/index/identity agreement at the
+existing pre-original and post-original raster bookends. Missing or changed
+operands suppress only that companion. Shared serialization preserves all52words
+and labels. Ordinary/retained payloads explicitly certify post-original history,
+not cleanup/outer-current/GPU execution. Strict optional reader validation cannot
+promote accepted geometry, readiness or grasp.
+
+Astra initial/follow-up source GO adopted exact serialization, failed-pre/restored-
+post isolation, foreign/malformed/boundary inventories and positive matching/replay
+non-promotion regressions. The final nonblocking refinement also gives different
+factor sentinels to multiple draws and both eyes of the same request. Local
+Astra/xhigh metadata verified; backend attestation remains unavailable.
+
+All four products rebuilt on fingerprint
+f7363002cf44be1896440fe9bd7cfeeb67fee2d0076cb667ab85debd6c745b93,
+IPC10/wire7 unchanged. All68Debug/68Release and28normal/optimized native/compiled
+gates pass. Eighteen reader groups and7replay groups pass normally/optimized. A
+private arithmetic diagnostic has synthetic cancelling-translation and malformed-
+output checks; it is not native geometry evidence. No runtime of this build yet.
+
+Next is a fresh sealed neutral operand capture, then independent doubleP*V*M*L
+comparison alongside the original projection result. Reference replacement and
+tolerance widening remain outside the reviewed change. Full implementation and
+user-operated hardware/dual-wield/vehicle/network acceptance remain open.
+
 ## Current ID1 noUV adapter — scoped source GO
 
 The latest private neutral capture of source791428a27cf90a0787b4fe6c5a8fcd3df6c36bed,
