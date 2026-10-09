@@ -59,6 +59,28 @@ int main() {
         assert(!idleBufferRanges(bad,noUV,ranges) && !ranges.slices[0].size);
      }
     }
+    {std::array<ScopeDeclarationElement,8> multi{{{0,0,2,0,5,0},{2,0,1,0,5,2},{3,0,1,0,5,3},
+        {4,0,1,0,5,4},{5,0,1,0,5,5},{7,0,8,0,5,7},{8,0,8,0,5,8},{255,0,17,0,0,0}}};
+     bool weights=false;GeometryInputLayout layout;
+     assert(idleGeometryInputs(multi,layout,weights) && layout==GeometryInputLayout::ObservedMultiUV78 && weights);
+     assert(!declaredGeometryInputs(multi,weights)); // Scope13 does not opt in.
+     assert(!declaredGeometryInputs(multi,weights,GeometryInputLayout::ObservedMultiUV78));
+     assert(idleBufferRanges(hand,multi,ranges) && ranges.weightsActive);
+     for(unsigned row=0;row<8;++row)for(unsigned field=0;field<6;++field) {
+        auto bad=multi;
+        switch(field) {case 0:++bad[row].stream;break;case 1:++bad[row].offset;break;
+            case 2:++bad[row].type;break;case 3:++bad[row].method;break;
+            case 4:++bad[row].usage;break;case 5:++bad[row].usageIndex;break;}
+        assert(!idleGeometryInputs(bad,layout,weights));
+     }
+     for(unsigned variant=0;variant<6;++variant) {
+        auto bad=hand;
+        switch(variant) {case 0:bad.weights={};break;case 1:bad.weights.offset++;break;
+            case 2:bad.weights.object=3;break;case 3:bad.localIndices.stride=8;break;
+            case 4:bad.uv.object=3;break;case 5:bad.uv.offset=bad.vertex.size;break;}
+        assert(!idleBufferRanges(bad,multi,ranges) && !ranges.slices[0].size);
+     }
+    }
     for(unsigned variant=0;variant<18;++variant) {
         auto bad=hand;
         switch(variant) {

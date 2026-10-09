@@ -7,7 +7,7 @@ import math
 from pathlib import Path
 import re
 import struct
-from idle_stream_evidence import consume as consume_stream_probe, validate as validate_stream_probe, declaration_layout, OBSERVED, NO_UV56
+from idle_stream_evidence import consume as consume_stream_probe, validate as validate_stream_probe, declaration_layout, OBSERVED, NO_UV56, OBSERVED_MULTI_UV
 from idle_projection_evidence import consume as consume_projection_probe, validate as validate_projection_probe, validate_association
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -74,7 +74,7 @@ def validate_geometry(geometry,count,copy_layout=0):
             raise ValueError('Unsupported stream identity/ranges')
         input_layout,weights=declaration_layout([g['data']['declaration:'+str(i)] for i in range(g['declaration'])])
         g['input_layout']=input_layout
-        if input_layout==2:g['auxiliary_channels']=['uv']
+        if input_layout in (2,3):g['auxiliary_channels']=['uv']
         if bool(streams[8])!=weights:raise ValueError('Declaration/bound weight disagreement')
         ranges=[(layout[2],v*12,buffers[0]),(layout[5],t*6,buffers[5]),
                 (layout[8],v*4,buffers[0]),(layout[11],v*4,buffers[0]),(streams[13],v*8,buffers[0])]
@@ -176,7 +176,7 @@ def assess(text,expected_source):
                    ((failure['valid']&4) and failure['valid']!=15):
                     raise ValueError('Input failure validity/budget mismatch')
                 step=failure['step']
-                failure['layout']=integer(f['layout'],0,2) if 'layout' in f else 0
+                failure['layout']=integer(f['layout'],0,3) if 'layout' in f else 0
                 failure['layout_explicit']='layout' in f
                 if step<=7 and failure['layout']:raise ValueError('Input layout selected before declaration')
                 expected_valid=0 if step==1 else 1 if step<=6 else 9 if step==7 else 11 if step<=19 else 15
@@ -328,13 +328,14 @@ def assess(text,expected_source):
                 raise ValueError('Truncated input declaration diagnostic')
             rows=[failure['declaration_rows'][i] for i in range(failure['declaration'])] if failure['valid']&2 else []
             if failure['step'] in range(8,12):
-                observed=failure['layout']==1
+                observed=failure['layout'] in (1,3)
                 if failure['index'] in (7,8) and not observed or observed and failure['index'] in (5,6):
                     raise ValueError('Stream failure index does not match selected declaration family')
                 if failure['index']==6 and not any(row[0]==6 and row[2]!=17 for row in rows):
                     raise ValueError('Optional stream failure without an active declaration input')
             if failure['valid']&2 and (failure['layout']==1 and rows!=OBSERVED or
                     failure['layout']==2 and rows!=NO_UV56 or
+                    failure['layout']==3 and rows!=OBSERVED_MULTI_UV or
                     failure['layout_explicit'] and (failure['layout']==1)!=(rows==OBSERVED)):
                 raise ValueError('Input failure layout contradicts qualified declaration')
             if failure['valid']&4 and (failure['binding'] is None or failure['surface'] is None or
@@ -345,8 +346,10 @@ def assess(text,expected_source):
             reason=r.get('rejection',{})
             input_history=reason.get('reason')==32 and failure is not None and failure['step']==20 and failure['valid']==15
             repeated_history=r['copyLayout']==0 and reason.get('reason')==11 and 1<=r['draws']<8 and failure is None and 'stream_probe' not in r
-            if r['stage']!=3 or not (input_history or repeated_history) or reason.get('preceding')!=2 or \
-                    reason.get('state')!=(47|r['rawGripValid']*16) or reason.get('checks') or reason.get('callbacks')!=63 or \
+            capacity_history=r['copyLayout']==1 and reason.get('reason')==10 and r['draws']==8 and retained['count']==8 and \
+                reason.get('checks')==32639 and failure is None and 'stream_probe' not in r
+            if r['stage']!=3 or not (input_history or repeated_history or capacity_history) or reason.get('preceding')!=2 or \
+                    reason.get('state')!=(47|r['rawGripValid']*16) or (not capacity_history and reason.get('checks')) or reason.get('callbacks')!=63 or \
                     not 1<=r['contributors']<=16 or not 1<=r['matrices']<=64 or \
                     any(not r[k] for k in ('request','input','owner','weapon','model','generation','cfg','file')):
                 raise ValueError('Retained companion lacks original copied-state qualification')
@@ -365,7 +368,7 @@ def assess(text,expected_source):
         validate_geometry(r['geometry'],r['draws'],r['copyLayout'])
         for g in r['geometry'].values():validate_association(r,g)
         r['evidence_class']=('event-pose-and-position-draws-with-auxiliary-uv' if any(
-            g['input_layout']==2 for g in r['geometry'].values()) else 'event-pose-and-consumed-draws') if r['draws'] else 'event-pose-only'
+            g['input_layout'] in (2,3) for g in r['geometry'].values()) else 'event-pose-and-consumed-draws') if r['draws'] else 'event-pose-only'
         r['geometry_observed']=bool(r['draws'])
         completed.append(r)
     return {'schema':3,'source_fingerprint':expected_source,'native_execution_by_assessor':False,

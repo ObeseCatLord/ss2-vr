@@ -5,8 +5,7 @@ OBSERVED=[[0,0,2,0,5,0],[2,0,1,0,5,2],[3,0,1,0,5,3],
           [7,0,8,0,5,7],[8,0,8,0,5,8],[255,0,17,0,0,0]]
 NO_UV56=[[0,0,2,0,5,0],[1,0,2,0,5,1],[5,0,8,0,5,5],
          [6,0,8,0,5,6],[255,0,17,0,0,0]]
-# Passive observation only; extra inputs remain unobserved/unknown. Never
-# include this declaration in declaration_layout's production grammar.
+# Exact ID1 copy family; extra inputs remain unobserved/unknown for position.
 OBSERVED_MULTI_UV=OBSERVED[:3]+[[4,0,1,0,5,4],[5,0,1,0,5,5]]+OBSERVED[3:]
 
 def diagnostic_stream_numbers(failure):
@@ -22,6 +21,7 @@ BASE={'request','eye','hand'}
 def declaration_layout(rows):
     if rows==OBSERVED:return 1,True
     if rows==NO_UV56:return 2,True
+    if rows==OBSERVED_MULTI_UV:return 3,True
     if any(e[0] in (7,8) or (e[4]==5 and e[5] in (7,8)) for e in rows):
         raise ValueError('Ambiguous/mixed observed input family')
     seen=set();active=set()

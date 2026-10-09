@@ -37,13 +37,13 @@ class Checks(unittest.TestCase):
                  1,0x80080000,0xa0ff0007,
                  20,0xc00f0000,0x80e40000,0xa0e40000,0xffff]
         constants=[IDENTITY[i:i+4] for i in range(0,16,4)]+[local[i:i+4] for i in range(0,12,4)]+[[0,0,0,1]]
-        for layout in (0,1,2):
+        for layout in (0,1,2,3):
             staged=fixture(program=program,constants=constants,local=local,layout=layout)
             result=json.loads(self.run_fixture(staged).stdout)
             self.assertTrue(result['position_replay_agrees_with_reference']);self.assertFalse(result['alignment_accepted'])
             bad=local.copy();bad[3]+=1
             self.assertEqual(json.loads(self.run_fixture(fixture(program=program,constants=constants,local=bad,layout=layout)).stdout)['reason'],'projection-mismatch')
-            for broken in (staged[:-1],staged+b'x',fixture(local=local,weights=0),fixture(local=local,layout=3)):
+            for broken in (staged[:-1],staged+b'x',fixture(local=local,weights=0),fixture(local=local,layout=4)):
                 self.assertNotEqual(self.run_fixture(broken).returncode,0)
         old=json.loads(self.run_fixture(fixture(program=program,constants=constants)).stdout)
         self.assertEqual(old['reason'],'projection-mismatch')
@@ -68,7 +68,7 @@ class Checks(unittest.TestCase):
         new=json.loads(self.run_fixture(fixture(program=p,layout=1)).stdout)
         self.assertTrue(new['position_replay_agrees_with_reference']);self.assertFalse(new['gpu_execution'])
         self.assertTrue(json.loads(self.run_fixture(fixture(layout=0)).stdout)['position_replay_agrees_with_reference'])
-        for data in (fixture(program=p,layout=3),fixture(program=p,layout=1,weights=0)):
+        for data in (fixture(program=p,layout=4),fixture(program=p,layout=1,weights=0)):
             self.assertNotEqual(self.run_fixture(data).returncode,0)
         data=bytearray(fixture(program=p,layout=1));data[-4]=1
         self.assertEqual(json.loads(self.run_fixture(data).stdout)['reason'],'unsupported-influence')
@@ -91,6 +91,36 @@ class Checks(unittest.TestCase):
            20,0xc00f0000,0x90e40000,0xa0e42000,0xffff]
         result=json.loads(self.run_fixture(fixture(program=p,layout=2,points=[(1.,2.,3.,123.,-456.)])).stdout)
         self.assertTrue(result['position_replay_agrees_with_reference'])
+    def test_multi_uv78_leaves_all_extra_inputs_unknown(self):
+        self.assertTrue(json.loads(self.run_fixture(fixture(layout=3)).stdout)['position_replay_agrees_with_reference'])
+        for reg in range(1,6):
+            p=[0xfffe0101,31,0x80000005,0x900f0000,31,0x80000005|(reg<<16),0x900f0000|reg,
+               20,0xc00f0000,0x90e40000|reg,0xa0e40000,0xffff]
+            self.assertEqual(json.loads(self.run_fixture(fixture(program=p,layout=3)).stdout)['reason'],'unknown-position-dependency')
+        self.assertNotEqual(self.run_fixture(fixture(layout=3,weights=0)).returncode,0)
+        # Synthetic relative palette lookup uses BOTH x and y index channels.
+        # Shader-local c255 overrides its uploaded value before either lookup.
+        p=[0xfffe0101,31,0x80000005,0x900f0000,31,0x80070005,0x900f0007,31,0x80080005,0x900f0008,
+           81,0xa00f00ff,0x3f800000,0x3f000000,0,0x443f40a4,
+           5,0x80010000,0x90000007,0xa0ff00ff,1,0xb0010000,0x80000000,
+           1,0x800f0001,0xa0e42000,
+           5,0x80010000,0x90550007,0xa0ff00ff,1,0xb0010000,0x80000000,
+           4,0x800f0001,0xa0e42000,0x90550008,0x80e40001,
+           9,0xc0010000,0x90e40000,0x80e40001,
+           9,0xc0020000,0x90e40000,0xa0e40001,
+           9,0xc0040000,0x90e40000,0xa0e40002,
+           1,0xc0080000,0xa00000ff,0xffff]
+        # The second palette lookup feeds oPos through a zero-weight blend:
+        # an unknown address must not become known by multiplying it by zero.
+        c=[IDENTITY[i:i+4] for i in range(0,16,4)]+[[0,0,0,0]]*252
+        c[255]=[99,99,99,99]
+        self.assertTrue(json.loads(self.run_fixture(fixture(program=p,constants=c,layout=3)).stdout)['position_replay_agrees_with_reference'])
+        unknown=p.copy();unknown[unknown.index(0x90550007)]=0x90550005
+        unknown[1:1]=[31,0x80050005,0x900f0005]
+        self.assertEqual(json.loads(self.run_fixture(fixture(program=unknown,constants=c,layout=3)).stdout)['reason'],'unknown-position-dependency')
+        for byte in (-8,-7,-4,-3):
+            bad=bytearray(fixture(program=p,constants=c,layout=3));bad[byte]=1
+            self.assertEqual(json.loads(self.run_fixture(bad).stdout)['reason'],'unsupported-influence')
     def run_fixture(self,data):
         with tempfile.TemporaryDirectory() as tmp:
             p=Path(tmp)/'input.bin';p.write_bytes(data)

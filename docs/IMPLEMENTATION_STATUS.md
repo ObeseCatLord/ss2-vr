@@ -1,6 +1,41 @@
 # Implementation status — 2026-10-09
 
-## Current V22 result and native-order reference correction
+## Current exact MultiUV78 copy adapter — source GO
+
+The V22 rejected material has an exact eight-row declaration and221-word position
+program. Astra verified its position depends on v0, v7.x/y and v8.x; extra v1-v5
+remain unknown. The collector previously fell back to stream5 (FLOAT2) for local
+indices, causing its stride/range failure. ID1 now selects exact enum3
+ObservedMultiUV78, actual7/8 indices/weights and separately qualified auxiliary3.
+Scope13 never selects it. All native owner, COM, range, hash, rebind, original and
+raster bookend checks remain. No extra UV is invented or used to certify position.
+
+An independent diagnostic capacity branch exposes only the eight previously
+stored copies after the original reason10 capacity rejection. It requires
+count8, checks32639 (onlybit7failed), precedingPalette, callback63, copied-state
+qualification and no failure/passive companion. The capacity stays8; no ninth
+store, skipped draw, retry or promotion occurs. Rejected history remains outside
+readiness, cleanup/outer/grasp uncertified. Cap-before-hand remains a prediction.
+
+Astra source GO followed an enum3 partial-failure reader fix: getter failures
+atsteps8-11 acceptactual0/3/7/8 and reject5/6; historicallayout0 remains intact.
+All local review turns reportAstra/xhigh; backend attestation unavailable.
+21 general reader,16 passive and9 replay groups passnormally/optimized; conditional
+compiled checks of the actual captured program cover16constant snapshots with
+synthetic vertices/influences only, never native byte/hash/GPU acceptance.
+All four products rebuilt on
+`b2e6cfe603b1c6de5e62ad9df5e3a7e852f1491e21de6820230fe0d9fd46a016`, IPC10/wire7.
+72Debug/72Release and32normal/optimized native/compiled gates pass. The artifact
+checker scratch-file collision was corrected; concurrent normal/optimized reports
+now agree. Original failed evidence is preserved.
+
+No runtime of this new build. Next: one fresh sealed stationary private capture
+under existing authority to obtain actual later-surface bytes/hashes and observe
+the precise stop/hand coverage. V22 remains immutable. Twelve tool seals, no
+firing/movement/vehicle/HMD/network probes, no guessed grip or release priming.
+See [adapter/retention disposition](IDLE_MULTI_UV_COPY.md).
+
+## V22 result and native-order reference correction
 
 V22 (source7945639/fped4fc52, private run20261009T023823) reached the exact Jungle
 scene with120 native stereo projection pairs and clean native/owned/display

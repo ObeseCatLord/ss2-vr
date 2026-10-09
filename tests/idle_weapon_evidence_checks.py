@@ -29,8 +29,35 @@ def geometry_fixture():
     return text,row,header,data
 
 class Checks(unittest.TestCase):
+    def test_exact_capacity_history_preserves_eight_owned_copies_only(self):
+        text,_,_,_=geometry_fixture()
+        lines=text.splitlines();base='request=100 eye=1 hand=0'
+        header=lines[0].replace('stage=4','stage=3').replace('draws=1','draws=8').replace('schema=3 ','schema=3 copyLayout=1 ')
+        copies=[line.replace('Lab idle geometry','Lab idle retainedGeometry')
+                for line in lines if line.startswith('Lab idle geometry')]
+        body=[header,'Lab idle rejection '+base+' reason=10 preceding=2 checks=32639 state=63 callbacks=63',
+              'Lab idle retainedCopies '+base+' count=8 postOriginal=1 cleanupCertified=0 outerCurrent=0']
+        for i in range(8):body += [line.replace('index=0 ','index='+str(i)+' ') for line in copies]
+        log='\n'.join(body);result=assess(log,SOURCE)
+        self.assertEqual(result['copied_event_pose_observations'],[])
+        r=result['rejected_or_missing_observations'][0]
+        self.assertEqual(len(r['retained_copies']['geometry']),8)
+        self.assertFalse(r['retained_copies']['whole_trace_accepted'])
+        self.assertFalse(result['alignment_accepted']);self.assertFalse(result['positive_grasp_verified'])
+        for bad in (log.replace('draws=8','draws=7').replace('count=8','count=7'),
+                    log.replace('draws=8','draws=9').replace('count=8','count=9'),
+                    log.replace('preceding=2','preceding=1'),log.replace('callbacks=63','callbacks=47'),
+                    log.replace('state=63','state=47'),log.replace('checks=32639','checks=32767'),
+                    log.replace('copyLayout=1','copyLayout=0'),log.replace('reason=10','reason=12'),
+                    '\n'.join(v for v in body if 'index=7 ' not in v),
+                    log+'\nLab idle inputFailure '+base+' step=1 index=0 hr=-1 valid=0 caps=0 declaration=0 rangeChecks=0',
+                    log+'\nLab idle streamProbe '+base+' attempts=0 flags=0 words=0 invalidations=0 forwardResult=0'):
+            with self.subTest(bad=bad[:150]),self.assertRaises(ValueError):assess(bad,SOURCE)
+        for bit in range(15):
+            if bit==7:continue
+            with self.assertRaises(ValueError):assess(log.replace('checks=32639','checks='+str(32639&~(1<<bit))),SOURCE)
     def test_input_failure_indices_follow_explicit_or_historical_layout(self):
-        from idle_stream_evidence import OBSERVED
+        from idle_stream_evidence import OBSERVED,OBSERVED_MULTI_UV
         head=DRAW.replace('stage=4','stage=3')+'\nLab idle rejection request=100 eye=1 hand=0 reason=32 preceding=2 checks=0 state=63 callbacks=63\n'
         failure='Lab idle inputFailure request=100 eye=1 hand=0 step=8 index=7 hr=-1 valid=11 caps=256 declaration=6 rangeChecks=0 layout=1'
         rows='\n'.join('Lab idle inputDeclaration request=100 eye=1 hand=0 index='+str(i)+' values='+','.join(map(str,e)) for i,e in enumerate(OBSERVED))
@@ -43,6 +70,22 @@ class Checks(unittest.TestCase):
             with self.subTest(bad=bad),self.assertRaises(ValueError):assess(bad,SOURCE)
         historical=text.replace(' layout=1','').replace('index=7 hr=','index=5 hr=')
         self.assertEqual(assess(historical,SOURCE)['rejected_or_missing_observations'][0]['input_failure']['layout'],0)
+        for layout,declaration in ((1,OBSERVED),(3,OBSERVED_MULTI_UV)):
+            rows='\n'.join('Lab idle inputDeclaration request=100 eye=1 hand=0 index='+str(i)+' values='+','.join(map(str,e))
+                           for i,e in enumerate(declaration))
+            for step in range(8,12):
+                hrs=(0,) if step==9 else (-1,0) if step==11 else (-1,)
+                for hr in hrs:
+                    failed='Lab idle inputFailure request=100 eye=1 hand=0 step='+str(step)+' index=7 hr='+str(hr)+\
+                        ' valid=11 caps=256 declaration='+str(len(declaration))+' rangeChecks=0 layout='+str(layout)
+                    text=head+failed+'\n'+rows
+                    for index in (0,3,7,8):
+                        qualified=assess(text.replace('index=7 hr=','index='+str(index)+' hr='),SOURCE)
+                        self.assertFalse(qualified['copied_event_pose_observations'])
+                    for index in (5,6):
+                        with self.assertRaises(ValueError):assess(text.replace('index=7 hr=','index='+str(index)+' hr='),SOURCE)
+            old=text.replace(' layout=3','').replace('index=7 hr=','index=5 hr=') if layout==3 else historical
+            self.assertEqual(assess(old,SOURCE)['rejected_or_missing_observations'][0]['input_failure']['layout'],0)
     def test_no_uv_failure_header_and_historical_passive_compatibility(self):
         from idle_stream_evidence import NO_UV56
         from idle_stream_evidence_checks import fixture
@@ -168,6 +211,22 @@ class Checks(unittest.TestCase):
         self.assertEqual(matched['matches'][0]['auxiliary_channels'],['uv'])
         self.assertTrue(matched['copied_channels_all_uniquely_matched'])
         self.assertFalse(matched['consumed_channels_all_uniquely_matched'])
+        from idle_stream_evidence import OBSERVED_MULTI_UV
+        multi=text.replace('declaration=5','declaration=8')
+        for r in old_rows:multi=multi.replace(r+'\n','')
+        multi+='\n'+'\n'.join(row('declaration',i,e) for i,e in enumerate(OBSERVED_MULTI_UV))
+        actual_multi=assess(multi,SOURCE)
+        self.assertEqual(actual_multi['copied_event_pose_observations'][0]['geometry'][0]['input_layout'],3)
+        multi_match=match(actual_multi,candidate)
+        self.assertEqual(multi_match['matches'][0]['result'],'unique-position-and-auxiliary-channel-match')
+        self.assertEqual(multi_match['matches'][0]['input_layout'],3)
+        self.assertFalse(multi_match['consumed_channels_all_uniquely_matched'])
+        for row_index in range(8):
+            for field in range(6):
+                rows=[r.copy() for r in OBSERVED_MULTI_UV];rows[row_index][field]+=1
+                bad=multi
+                for i,element in enumerate(OBSERVED_MULTI_UV):bad=bad.replace(row('declaration',i,element),row('declaration',i,rows[i]))
+                with self.assertRaises(ValueError):assess(bad,SOURCE)
         # Positive five-hash evidence must have exactly the same readiness with
         # the optional factors present. Retained copies remain outside coverage.
         self.assertEqual(match(assess(self.factor_fixture(),SOURCE),candidate),match(result,candidate))

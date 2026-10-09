@@ -172,14 +172,9 @@ struct IdleWeaponTrace {
         if(d.step!=20 || d.valid!=15 || d.declarationCount>65)return {};
         const auto rows=std::span(d.declaration).first(d.declarationCount);
         if(observed78Declaration(rows))return {0,7,8};
-        // Observed ID1 material pass: additional FLOAT2 streams 4/5 are not
-        // copied or interpreted. This selects only the existing passive 0/7/8
-        // observation after rejection; production geometry grammar is unchanged.
-        static constexpr std::array<ScopeDeclarationElement,8> multiUv{{
-            {0,0,2,0,5,0},{2,0,1,0,5,2},{3,0,1,0,5,3},
-            {4,0,1,0,5,4},{5,0,1,0,5,5},{7,0,8,0,5,7},
-            {8,0,8,0,5,8},{255,0,17,0,0,0}}};
-        if(rows.size()==multiUv.size() && std::equal(rows.begin(),rows.end(),multiUv.begin()))return {0,7,8};
+        // Select from the original failure even when the later copy adapter
+        // supports this family. Passive receipts never establish admission.
+        if(observedMultiUV78Declaration(rows))return {0,7,8};
         if(noUV56Declaration(rows))return {0,5,6};
         return {};
     }
@@ -283,14 +278,26 @@ struct IdleWeaponTrace {
     // Owned historical copies only: draw() stored these after original return
     // and its current check, before cleanup. Neither cleanup nor outer finish is
     // certified. Keep the later rejection and whole-trace admission unchanged.
-    bool retainedDrawCopiesAvailable() const noexcept {
-        return stage==Stage::Rejected && rejection==Rejection::CollectInputs &&
-            precedingStage==Stage::Palette && inputFailure.step==20 && inputFailure.valid==15 &&
+    bool retainedCopyOwnerQualified() const noexcept {
+        return stage==Stage::Rejected && precedingStage==Stage::Palette &&
             admitted && placementObserved && referencesCopied && poseCopied &&
             contributors && contributors<=MaxContributors && animationsCopied==contributors &&
             matrixCount && matrixCount<=MaxMatrices && draws && draws<=MaxDraws &&
             binding.request && binding.input && binding.owner && binding.weapon && binding.model &&
             binding.generation && binding.hand<2 && binding.eye<2 && config.configuration && config.file;
+    }
+    bool retainedCapacityCopiesAvailable() const noexcept {
+        // Exactly the original capacity check failed after a normal/current
+        // ninth draw. No ninth copy exists; expose only the eight owned values.
+        constexpr uint32_t capacityOnly=((1u<<15)-1) & ~(1u<<7);
+        return retainedCopyOwnerQualified() && rejection==Rejection::Draw &&
+            draws==MaxDraws && rejectionChecks==capacityOnly && callbacks==63 &&
+            rejectionState==(47u|unsigned(rawGripValid)*16u) &&
+            !inputFailure.step && !streamProbe.selected;
+    }
+    bool retainedDrawCopiesAvailable() const noexcept {
+        return (retainedCopyOwnerQualified() && rejection==Rejection::CollectInputs &&
+                inputFailure.step==20 && inputFailure.valid==15) || retainedCapacityCopiesAvailable();
     }
     bool finish(bool nativeCompleted,bool generationCurrent) noexcept {
         callbacks|=FinishSeen;

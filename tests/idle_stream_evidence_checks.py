@@ -61,7 +61,7 @@ def fixture(declaration=OBSERVED):
     return '\n'.join(lines)
 
 class Checks(unittest.TestCase):
-    def test_multi_uv_passive_only_and_exact_original_selector(self):
+    def test_multi_uv_passive_receipt_stays_diagnostic_with_exact_copy_family(self):
         text=fixture(OBSERVED_MULTI_UV).replace('rangeChecks=6015','rangeChecks=6143 layout=0');result=assess(text,SOURCE)
         record=result['rejected_or_missing_observations'][0]
         self.assertEqual(diagnostic_stream_numbers(record['input_failure']),(0,7,8))
@@ -70,7 +70,10 @@ class Checks(unittest.TestCase):
         self.assertFalse(result['copied_event_pose_observations'])
         for field in ('geometry_admitted','roles_inferred','alignment_accepted'):
             self.assertIs(record['stream_probe'][field],False)
-        with self.assertRaises(ValueError):declaration_layout(OBSERVED_MULTI_UV)
+        self.assertEqual(declaration_layout(OBSERVED_MULTI_UV),(3,True))
+        new=text.replace('layout=0','layout=3')
+        self.assertEqual(assess(new,SOURCE)['rejected_or_missing_observations'][0]['input_failure']['layout'],3)
+        with self.assertRaises(ValueError):assess(new.replace('layout=3','layout=4'),SOURCE)
         for index in range(8):
             for field in range(6):
                 rows=copy.deepcopy(OBSERVED_MULTI_UV);rows[index][field]+=1

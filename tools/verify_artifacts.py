@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import struct
 import subprocess
+import tempfile
 import pefile
 from build_contract import validate_products
 ROOT=Path(__file__).resolve().parents[1]
@@ -103,10 +104,14 @@ def verify(game):
     layouts=[]
     expected=(0x32565253,10,272,440,352,33554928,83887840,48,672,67110528)
     for prefix,folder in [('i686','build-game'),('x86_64','build-host')]:
-        object_path=ROOT/folder/'ipc-layout.o';binary=ROOT/folder/'ipc-layout.bin'
-        subprocess.run([prefix+'-w64-mingw32-g++','-std=c++20','-I'+str(ROOT/'src'),'-c',str(ROOT/'tests/abi_layout.cpp'),'-o',str(object_path)],check=True)
-        subprocess.run([prefix+'-w64-mingw32-objcopy','-O','binary','-j','.ss2abi',str(object_path),str(binary)],check=True)
-        layout=struct.unpack('<10I',binary.read_bytes()[:40])
+        # Concurrent normal/optimized checks must not truncate each other's
+        # compiler output between compile and objcopy. Only owned scratch files
+        # are retired; existing build products and historical probes stay intact.
+        with tempfile.TemporaryDirectory(prefix='ss2vr-ipc-layout-',dir=ROOT/folder) as scratch:
+            object_path=Path(scratch)/'ipc-layout.o';binary=Path(scratch)/'ipc-layout.bin'
+            subprocess.run([prefix+'-w64-mingw32-g++','-std=c++20','-I'+str(ROOT/'src'),'-c',str(ROOT/'tests/abi_layout.cpp'),'-o',str(object_path)],check=True)
+            subprocess.run([prefix+'-w64-mingw32-objcopy','-O','binary','-j','.ss2abi',str(object_path),str(binary)],check=True)
+            layout=struct.unpack('<10I',binary.read_bytes()[:40])
         if layout!=expected:raise ValueError('IPC ABI differs from frozen layout: '+prefix)
         layouts.append(layout)
     if layouts[0]!=layouts[1]:raise ValueError('IPC architecture mismatch')

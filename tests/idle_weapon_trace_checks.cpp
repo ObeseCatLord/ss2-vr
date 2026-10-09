@@ -243,7 +243,26 @@ int main() {
     {auto t=ready();t.callbacks=63;auto copy=g;
      for(unsigned i=0;i<8;++i){copy.constants[0][0]=float(i);assert(t.draw(copy,true,true));}
      copy.raster.drawRecord=0;assert(!t.draw(copy,true,true));
-     assert(t.rejection==IdleWeaponTrace::Rejection::Draw && !t.retainedDrawCopiesAvailable());}
+     assert(t.rejection==IdleWeaponTrace::Rejection::Draw && t.rejectionChecks==32639);
+     assert(t.retainedCapacityCopiesAvailable() && t.retainedDrawCopiesAvailable());
+     for(unsigned i=0;i<8;++i)assert(t.geometry[i].raster.drawRecord==g.raster.drawRecord);
+     for(unsigned bit=0;bit<15;++bit)if(bit!=7) {
+        auto bad=t;bad.rejectionChecks&=~(1u<<bit);assert(!bad.retainedDrawCopiesAvailable());
+     }
+     for(unsigned variant=0;variant<9;++variant) {
+        auto bad=t;
+        switch(variant) {case 0:bad.draws=7;break;case 1:bad.draws=9;break;
+            case 2:bad.precedingStage=IdleWeaponTrace::Stage::Event;break;case 3:bad.callbacks=47;break;
+            case 4:bad.rejectionState^=1;break;case 5:bad.inputFailure.step=20;break;
+            case 6:bad.streamProbe.selected=true;break;case 7:bad.config.file=0;break;
+            case 8:bad.rejection=IdleWeaponTrace::Rejection::DrawConstants;break;}
+        assert(!bad.retainedCapacityCopiesAvailable() && !bad.retainedDrawCopiesAvailable());
+     }
+     auto mixed=ready();mixed.callbacks=63;
+     for(unsigned i=0;i<8;++i)assert(mixed.draw(copy,true,true));
+     assert(!mixed.draw(copy,false,true) && !mixed.retainedDrawCopiesAvailable());
+     assert(!t.finish(true,true) && t.retainedDrawCopiesAvailable()); // Still rejected, no outer claim.
+    }
     for(bool original:{false,true}){auto t=ready();t.callbacks=63;assert(t.draw(g,true,true));
         assert(!t.draw(g,original,!original));assert(t.rejection==IdleWeaponTrace::Rejection::Draw);
         assert(t.draws==1 && !t.retainedDrawCopiesAvailable());}
