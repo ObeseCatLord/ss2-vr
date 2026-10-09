@@ -1,5 +1,24 @@
 # Mod journal
 
+## 2026-10-09 — existing-call sniper attachment provenance
+
+Added a private-lab passive hook around the existing native attachment return.
+It preserves native arguments/result/output, copies only one successful48-byte
+matrix, and retires stack-owned TLS under normal/unwind/nested paths. Publication
+retains current weapon/config/resource checks. A strict private receipt consumer
+rejects malformed, unsupported, duplicate or incomplete records. Copied draw and
+calibration identities are provenance, not an animation-equivalence certificate.
+
+Astra/xhigh scoped collector GO; local routing verified, backend unattested.
+All4products rebuilt on1645e894228f;79Debug/79Release and8compiled attachment/
+muzzle gates normal/-O pass, plus7altered-object negative controls. Neutral native
+run supplied an accepted existing-call receipt,149projection pairs, two eye images,
+private sniper save and clean shutdown.12protected original files unchanged.
+Whole model collection rejected32early own-animation-name observations and remains
+unqualified. No firing/movement/zoom/desktop input. The0.5m retarget bound remains
+unchanged; visual/native-origin policy and full feature/device acceptance open.
+
+
 ## 2026-10-09 — virtual ID1 handle alignment
 
 Connected the matched native ID1 handle-centre reference through model placement,

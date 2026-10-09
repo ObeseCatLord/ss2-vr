@@ -40,18 +40,55 @@ def verify(obj):
             instruction = ' '.join(columns[-1].split()).split(' <')[0]
             if re.match('[a-z]', instruction):
                 instructions.append(instruction)
-    # The saved prior depth is captured by reference above the native extent.
-    # Both completion paths share its unconditional restore before branching.
-    restore = 'mov DWORD PTR [esi+' + hex(int(depth[0], 16)) + '],ebx'
-    require(instructions.count(restore) == 1 and
-            instructions.index('mov ecx,DWORD PTR [eax+0x4]') <
-            instructions.index('mov eax,DWORD PTR [ecx]') <
-            instructions.index('mov ebx,DWORD PTR [eax]') < instructions.index(restore),
-            'Cleanup must restore the saved outer depth, not decrement or clear it')
-    first_branch = next((i for i, item in enumerate(instructions) if item.startswith('j')), len(instructions))
-    require(instructions.index(restore) < first_branch,
-            'Normal and abnormal cleanup must both restore muzzle TLS')
-    require('mov BYTE PTR [ecx],0x0' in instructions and 'mov BYTE PTR [eax],0x1' in instructions,
+    # Capture growth can split normal/abnormal cleanup into separate scalar
+    # blocks. Prove every reachable return crosses exactly one saved-depth
+    # restore instead of depending on the old register/capture layout.
+    addresses=[];code={}
+    for line in body.splitlines():
+        match=re.match(r"^\s*([0-9a-f]+):\t[^\t]+\t(.+)",line)
+        if match:
+            address=int(match[1],16)
+            instruction=' '.join(match[2].split()).split(' <')[0]
+            addresses.append(address);code[address]=instruction
+    next_address=dict(zip(addresses,addresses[1:]))
+    offset=hex(int(depth[0],16))
+    restore_pattern=r'mov DWORD PTR \[(?:eax|esi)\+'+re.escape(offset)+r'\],(?:esi|ebx)$'
+    restores={address for address,ins in code.items() if re.fullmatch(restore_pattern,ins)}
+    require(len(restores)==2,'Expected distinct saved-depth normal/abort stores')
+    require('mov ebx,DWORD PTR [eax+0xc]' in instructions and
+            'mov ebx,DWORD PTR [ebx]' in instructions and
+            'mov esi,DWORD PTR [ebx]' in instructions,
+            'Both depth stores must load the saved outer depth reference')
+    pending=[(addresses[0],0)];seen=set();returned=False
+    while pending:
+        address,count=pending.pop()
+        if (address,count) in seen:continue
+        seen.add((address,count));count+=int(address in restores)
+        require(count<=1,'Cleanup repeats depth restoration')
+        ins=code[address]
+        if ins=='ret':
+            require(count==1,'Reachable cleanup return bypasses depth restore')
+            returned=True;continue
+        branch=re.match(r'(j[a-z]+) ([0-9a-f]+)$',ins)
+        if branch:
+            target=int(branch[2],16)
+            require(target in code,'Cleanup branch escapes verified body')
+            pending.append((target,count))
+            if branch[1]=='jmp':continue
+        require(address in next_address,'Cleanup falls out of verified body')
+        pending.append((next_address[address],count))
+    require(returned,'Cleanup has no verified reachable return')
+    observed=re.findall(r'0x([0-9a-f]+) ss2vr::game::activeAttachmentObservation$',symbols,re.M)
+    require(len(observed)==1,'Missing passive attachment TLS')
+    receipt_offset=hex(int(observed[0],16))
+    require('mov DWORD PTR [edi+'+receipt_offset+'],esi' in instructions and
+            'mov DWORD PTR [esi+'+receipt_offset+'],edi' in instructions and
+            'mov esi,DWORD PTR [eax+0x4]' in instructions and
+            'mov edi,DWORD PTR [eax+0x4]' in instructions and
+            'mov esi,DWORD PTR [esi]' in instructions and 'mov edi,DWORD PTR [edi]' in instructions and
+            'mov BYTE PTR [ebx],0x0' in instructions,
+            'Both published-receipt paths must restore the saved outer TLS and retire publication')
+    require('mov BYTE PTR [eax],0x0' in instructions and 'mov BYTE PTR [eax],0x1' in instructions,
             'Abort must revoke the copied calibration witness and active input interval')
     require(not any(re.match(r'call\b|f[a-z]', item) or
                     re.search(r'\b(?:xmm|ymm|zmm)[0-9]', item) for item in instructions),

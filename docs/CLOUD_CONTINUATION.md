@@ -1,5 +1,65 @@
 # Latest exact noUV passive source checkpoint
 
+## Existing-call sniper attachment captured in native runtime
+
+The fresh isolated neutral run loaded the exact Jungle scene, completed native
+sniper grant/equip/save, produced149matched native/OpenXR world projection pairs
+and per-eye images, and shut down native/display processes with no survivors or
+cleanup errors.12protected original files remain unchanged. No firing, movement,
+zoom, desktop input or hardware-headset probe occurred.
+
+One accepted right-ID13 receipt copied the actual opaque IDENT and twelve matrix
+words from the existing native attachment call, plus that invocation's original
+shooting pose and current admitted model binding. This establishes native-call
+provenance. The earlier calibration reference is not an animation fence.
+
+The broader model collector rejected all32early observations at its own-animation
+name check (reason19), yielding zero qualified draws. Its exit1 is an evidence
+rejection after a clean native run, not a startup/rendering crash. That fixture
+is immutable; own-event checks remain strict. Visual muzzle coincidence remains
+unverified and the0.5m bound remains unchanged pending the bounded native-origin
+review. All4products use1645e894228f61ccbec652bc713a08caf670b0afc379548419ce6249e52626d8;
+79Debug/79Release and8compiled attachment/muzzle gates normal/-O pass. Seven
+altered-object controls reject missing forwarding/copy/cleanup. Strict parser
+also rejects unsupported/truncated records mixed with an otherwise valid receipt.
+
+
+## Passive native sniper attachment collector integrated
+
+The isolated lab now observes the existing native attachment call and copies its
+opaque IDENT and successful 48-byte matrix without adding a lookup or changing
+aim. Protected receipt lifetime rejects duplicate/nested/aborted calls; publication
+requires the existing final binding checks and exact model instance. Copied
+calibration serial/request/input/eye and native reference support correlation,
+not unchanged-animation proof. See NATIVE_ATTACHMENT_OBSERVATION.md.
+
+Astra/xhigh scoped source GO accepted forwarding, TLS cleanup and publication;
+local model tags verified, backend unattested. The neutral right-ID13 runtime
+receipt remains to be collected. The existing 0.5 m bound is unchanged. Full
+implementation and user-operated firing/device/multiplayer acceptance remain open.
+
+
+## Desktop sniper calibration recovered in native runtime
+
+The fresh private capture completed with141matched native/OpenXR stereo pairs,
+ten qualified Black observations covering both eyes, complete native save/preload
+preparation and clean native/display shutdown. Both laser lines are visible in
+the private eye images after the narrow desktop-delegation fix.12protected files
+remain unchanged. No firing, movement, zoom or physical-headset test occurred.
+
+One accepted idle right-ID13 muzzle witness emitted with cache age44ms and
+stretch1. Its actual pre-clamp radius is0.702913761m, limited to0.5m. Independent
+offline C++ reproduction from the copied inputs matches vector and target exactly.
+This proves actual truncation of that native return; it does not establish visual
+muzzle coincidence or an all-animation maximum. The remaining muzzle policy is
+under bounded Astra review. No new bound or unrestricted exception is active.
+
+Published source checkpointb1539dfbba5e906ca9f0e164d2421597e6240560, all99
+reachable author/committer emails empty, Actions disabled, workflows absent.
+Native products are3d4d8ab6387eb0ec4cb387903c27a668b746edb838d9e1b3c53b11ce4fddebe3,
+IPC10/wire7. Exact private package/capture receipts retain hashes. Full source
+implementation and user-operated device/gameplay acceptance remain unfinished.
+
 ## Native stereo capture succeeds — desktop sniper delegation fix pending
 
 The private aligned-sniper run completed collection and safe shutdown:147matched

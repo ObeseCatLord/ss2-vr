@@ -21,6 +21,7 @@
 #include "common/hook_transaction.hpp"
 #include "common/lasers.hpp"
 #include "common/muzzle.hpp"
+#include "common/attachment_observation.hpp"
 #include "common/win_settings.hpp"
 #include "common/winproc.hpp"
 #include "common/winpath.hpp"
@@ -168,6 +169,24 @@ using AttachmentIdent = uint32_t *(__thiscall *)(void *, uint32_t *);
 using ShootDirection = Vec3 *(__thiscall *)(void *, Vec3 *);
 static ModelInstanceGet laserModelInstance = nullptr;
 static AttachmentGet laserAttachment = nullptr;
+static AttachmentGet originalObservedAttachment=nullptr;
+static uintptr_t nativeShotAttachmentReturn=0;
+static thread_local AttachmentObservation *activeAttachmentObservation=nullptr;
+// No native evaluation is added. Every invocation forwards once and returns the
+// untouched native result/output. Only a successful, exact existing-call return
+// can copy 48 bytes; an unwind is retired by the enclosing shooting finally.
+static int __cdecl observedAttachment(void *model,uint32_t ident,Matrix34 &out) {
+#ifdef _MSC_VER
+    const auto caller=reinterpret_cast<uintptr_t>(_ReturnAddress());
+#else
+    const auto caller=reinterpret_cast<uintptr_t>(__builtin_return_address(0));
+#endif
+    auto *receipt=caller==nativeShotAttachmentReturn?activeAttachmentObservation:nullptr;
+    if(receipt)receipt->begin(reinterpret_cast<uintptr_t>(model),ident);
+    const int result=originalObservedAttachment(model,ident,out);
+    if(receipt)receipt->complete(result,out);
+    return result;
+}
 static uint32_t laserIdleAttachment = 0;
 static uint32_t bulletCategory = 0,headQueryCategory = 0;
 static VoidThis originalOperatorFiring = nullptr;
@@ -315,7 +334,12 @@ struct Calibration {
     Vec3 nativeAlignment;
     WeaponAlignmentBinding alignment;
     bool alignmentApplied = false;
+    // Private copied provenance only; never used as a production admission gate.
+    uint64_t labSerial=0,labRequest=0,labInput=0;
+    int labEye=-1;
+    Matrix34 labNativeModel{};
 };
+static uint64_t labCalibrationSerial=0; // Publication is under snapshotLock.
 thread_local int eyeIndex = -1;
 static thread_local unsigned nativeWeaponRenderDepth=0;
 static thread_local unsigned nativeShotDepth = 0;
@@ -3504,11 +3528,30 @@ static Pose *shooting(void *w, Pose *out, PoseGet original, const Snapshot *snap
     const bool nested = previousDepth != 0;
     if (calibrated) *calibrated = false;
     if (previousDepth != UINT_MAX) ++nativeShotDepth;
+    AttachmentObservation attachmentReceipt;
+    AttachmentObservation *previousAttachment=nullptr;
+    bool attachmentPublished=false;
     // Context acquisition and native retarget getters share this extent. A
     // foreign unwind must not strand TLS; reentry during adaptation stays native.
     withNativeFinally([&] {
         const auto s = nested ? Snapshot{} : (snapshot ? *snapshot : copySnapshot());
         const auto context = nested ? MuzzleContext{} : muzzleContext(w, s, snapshot != nullptr);
+        if(nested && activeAttachmentObservation)activeAttachmentObservation->nested=true;
+        const bool observeAttachment=snapshot && context.accepted && !nested && context.hand==1 &&
+            labSniperConfigured && labOnlineIsolationInstalled() &&
+            primaryField(w,0xb4)==13 && primaryField(w,0xb0)==1 && !primaryField(w,0xd4) &&
+            !s.fire[0] && !s.fire[1] && s.input.trigger[0]==0 && s.input.trigger[1]==0 &&
+            !s.input.zoomDownMask;
+        const auto originalWithObservation=[&](PoseGet getter) {
+            if(observeAttachment) {
+                previousAttachment=activeAttachmentObservation;
+                activeAttachmentObservation=&attachmentReceipt;attachmentPublished=true;
+            }
+            getter(w,out);
+            if(attachmentPublished) {
+                activeAttachmentObservation=previousAttachment;attachmentPublished=false;
+            }
+        };
         unsigned diagnosticRejection=10;
         // Zoomed native sniper placement (Sam+172A70) is the owner's view
         // origin, not its gun attachment. Keep native zoom/damage, but obtain
@@ -3516,8 +3559,8 @@ static Pose *shooting(void *w, Pose *out, PoseGet original, const Snapshot *snap
         // This shared boundary also serves collision lasers and server shots.
         invokeNativeMuzzle(
             original == originalSniperShot, context.accepted, nested,
-            [&] { original(w, out); },
-            [&] { originalShot(w, out); },
+            [&] { originalWithObservation(original); },
+            [&] { originalWithObservation(originalShot); },
             [&] {
                 const Pose nativeReturned=*out; // Existing original return, before adaptation/getters.
                 diagnosticRejection=11;
@@ -3627,6 +3670,30 @@ static Pose *shooting(void *w, Pose *out, PoseGet original, const Snapshot *snap
                         return;
                     }
                 }
+                // Exact-call attachment provenance joins only this accepted
+                // binding and copied calibration. It does NOT assert that the
+                // earlier draw's animation transform is unchanged.
+                static std::atomic<bool> attachmentWitnessReported{false};
+                if(observeAttachment && c.alignmentApplied && c.alignment.nativeId==13 && c.labSerial &&
+                   attachmentReceipt.admitted(c.alignment.instance) &&
+                   !attachmentWitnessReported.exchange(true,std::memory_order_relaxed)) {
+                    const auto &a=attachmentReceipt;
+                    log("Lab sniper attachment schema=1 input=%llu generation=%u owner=%u weapon=%u hand=%u nativeId=13 model=%u instance=%u ident=%u calls=%u result=%d calibrationSerial=%llu drawRequest=%llu drawInput=%llu drawEye=%d cacheAge=%llu cfg=%u file=%u resource=%d nativeReturn=%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g",
+                        s.input.sequence,s.generation,c.alignment.owner,c.alignment.weapon,context.hand,
+                        c.alignment.model,c.alignment.instance,a.ident,a.calls,a.result,c.labSerial,c.labRequest,
+                        c.labInput,c.labEye,now-c.tickMs,c.alignment.configuration,c.alignment.file,c.alignment.resource,
+                        nativeReturned.p.x,nativeReturned.p.y,nativeReturned.p.z,nativeReturned.q.x,
+                        nativeReturned.q.y,nativeReturned.q.z,nativeReturned.q.w);
+                    const auto emitMatrix=[&](const char *kind,const Matrix34 &m) {
+                        log("Lab sniper attachment matrix schema=1 calibrationSerial=%llu kind=%s words=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x",
+                            c.labSerial,kind,std::bit_cast<uint32_t>(m.m[0]),std::bit_cast<uint32_t>(m.m[1]),
+                            std::bit_cast<uint32_t>(m.m[2]),std::bit_cast<uint32_t>(m.m[3]),std::bit_cast<uint32_t>(m.m[4]),
+                            std::bit_cast<uint32_t>(m.m[5]),std::bit_cast<uint32_t>(m.m[6]),std::bit_cast<uint32_t>(m.m[7]),
+                            std::bit_cast<uint32_t>(m.m[8]),std::bit_cast<uint32_t>(m.m[9]),std::bit_cast<uint32_t>(m.m[10]),
+                            std::bit_cast<uint32_t>(m.m[11]));
+                    };
+                    emitMatrix("nativeAttachment",a.absolute);emitMatrix("calibrationNativeModel",c.labNativeModel);
+                }
                 // One private neutral original-return observation. No native
                 // getter is added and the existing clamp/output is unchanged.
                 static std::atomic<bool> muzzleWitnessReported{false};
@@ -3661,6 +3728,10 @@ static Pose *shooting(void *w, Pose *out, PoseGet original, const Snapshot *snap
             laserTraceValue(LaserTraceStage::Muzzle,"attempt-completed",s,context.hand,0,
                             diagnosticRejection);
     }, [&](bool aborted) noexcept {
+        if(attachmentPublished) {
+            activeAttachmentObservation=previousAttachment;attachmentPublished=false;
+        }
+        if(aborted)attachmentReceipt.aborted=true;
         nativeShotDepth = previousDepth;
         if (aborted) {
             if (calibrated) *calibrated = false;
@@ -4846,6 +4917,11 @@ static int __fastcall weaponAbs(void *w, void *, const Matrix34 &view, Matrix34 
         calibration[h] = {calibrated && finite(flatPose), s.handle[h], relative,
                           GetTickCount64(), calibrated ? rotate(relative.q, flatCharge) : Vec3{},
                           alignment,alignmentAfter,align};
+        if(labSniperConfigured && eyeIndex>=0 && eyeIndex<2 && labCalibrationSerial!=UINT64_MAX) {
+            auto &c=calibration[h];c.labSerial=++labCalibrationSerial;
+            c.labRequest=eyeRequest.sequence;c.labInput=eyeRequest.input.sequence;c.labEye=eyeIndex;
+            c.labNativeModel=flatModel;
+        }
         if(physical && physicalWeapon->idle) {
             auto &trace=*physicalWeapon->idle;
             const IdleDrawIdentity identity{eyeRequest.sequence,eyeRequest.input.sequence,s.playerHandle,s.handle[h],
@@ -6308,6 +6384,7 @@ bool attach(bool headless) {
     uiFadeReturn[1] = reinterpret_cast<uintptr_t>(g) + 0xfea07;
     // Audited CLOSRequest setup: every collision setter follows this rayInit call.
     allowedRayReturn = reinterpret_cast<uintptr_t>(g) + 0x21ae69;
+    nativeShotAttachmentReturn = reinterpret_cast<uintptr_t>(g) + 0x4a824;
     laserEngineBase = reinterpret_cast<uintptr_t>(e);
     laserTurretVtable = reinterpret_cast<uintptr_t>(g) + 0x2b39e8;
     weaponFrustumReturn = reinterpret_cast<uintptr_t>(g) + 0x4c8e9;
@@ -6466,6 +6543,9 @@ bool attach(bool headless) {
     }
 #define H(module, name, fn, orig)                                                                            \
     ok = hook(module, name, reinterpret_cast<void *>(fn), reinterpret_cast<void **>(&orig)) && ok
+    if(!headless && labSniperConfigured)
+        H(e,"?mdlGetAttachmentAbsolutePlacement@SeriousEngine@@YAHPAVCModelInstance@1@VIDENT@1@AAVMatrix34f@1@@Z",
+          observedAttachment,originalObservedAttachment);
     if (headless) {
         ok = symbol(g, "?GetCameraPlacement@CPuppetEntity@SeriousEngine@@UAE?AVQuatVect@2@XZ",
                     originalCamera) &&
