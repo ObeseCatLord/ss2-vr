@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Match copied consumed ID1 channels to a private candidate index; no game launch."""
+"""Match copied ID1 channels to a private candidate index; no game launch."""
 import argparse
 import json
 from pathlib import Path
 import re
 import struct
+from idle_stream_evidence import declaration_layout
 
 ROOT=Path(__file__).resolve().parents[1]
 CHANNELS=('positions','indices','weights','local_indices','uv')
@@ -14,6 +15,7 @@ def match_draws(observations,candidates,retained=False):
     for observation in observations:
         for index,g in (observation['retained_copies']['geometry'] if retained else observation['geometry']).items():
             d=g['data'];layout=d['layout:0'];buffers=d['buffers:0'];streams=d['streams:0']
+            input_layout,_=declaration_layout([d['declaration:'+str(i)] for i in range(g['declaration'])])
             hashes={name:struct.pack('<8I',*d['hash:'+str(i)]).hex() for i,name in enumerate(CHANNELS)}
             ranges={name:{'offset':off,'size':size,'format':fmt,'buffer':buf} for name,off,size,fmt,buf in [
                 ('positions',layout[2],layout[0]*12,layout[3],layout[4]),
@@ -33,8 +35,10 @@ def match_draws(observations,candidates,retained=False):
                                       'mesh_object':c['mesh_object'],'lod':c['lod'],'channel_index':channel_index})
             rows.append({'request':observation['request'],'eye':observation['eye'],'hand':observation['hand'],
                 'geometry_index':int(index),'draw_record':g['drawRecord'],
-                'result':'unique-consumed-channel-match' if len(found)==1 else 'unmatched' if not found else 'ambiguous',
+                'result':('unique-position-and-auxiliary-channel-match' if input_layout==2 else
+                          'unique-consumed-channel-match') if len(found)==1 else 'unmatched' if not found else 'ambiguous',
                 'candidates':found})
+            if input_layout==2:rows[-1].update(input_layout=2,auxiliary_channels=['uv'])
     if retained:
         for row in rows:row.update(evidence_class='historical-post-original-pre-cleanup-copies',cleanup_certified=False,
             outer_current=False,whole_trace_accepted=False,alignment_accepted=False)
@@ -52,6 +56,8 @@ def match(evidence,candidates):
     return {'schema':1,'source_fingerprint':evidence['source_fingerprint'],'matches':rows,'retained_diagnostic_matches':diagnostic,
         'observations_without_geometry':missing,'copied_geometry_coverage_complete':bool(rows) and not missing,
         'consumed_channels_all_uniquely_matched':bool(rows) and not missing and all(r['result']=='unique-consumed-channel-match' for r in rows),
+        'copied_channels_all_uniquely_matched':bool(rows) and not missing and all(r['result'] in (
+            'unique-consumed-channel-match','unique-position-and-auxiliary-channel-match') for r in rows),
         'historical_loaded_bytes_verified':False,'shader_replay_verified':False,
         'positive_grasp_verified':False,'alignment_accepted':False}
 

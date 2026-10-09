@@ -102,17 +102,13 @@ struct IdleWeaponTrace {
         std::array<StreamSnapshot,2> snapshots{};
         std::array<uint32_t,IdleGeometryCopy::MaxProgramWords> program{};
     } streamProbe{};
-    // Passive diagnostic selection only. Production geometry/replay grammar
-    // remains unchanged. Select from the immutable original rejection, never
-    // either resampled declaration.
+    // Select passive diagnostics from the immutable original rejection, never
+    // either resampled declaration. Reuse the exact ID1 declaration predicates.
     static std::array<unsigned,3> passiveStreamNumbers(const InputFailure &d) noexcept {
         if(d.step!=20 || d.valid!=15 || d.declarationCount>65)return {};
         const auto rows=std::span(d.declaration).first(d.declarationCount);
         if(observed78Declaration(rows))return {0,7,8};
-        constexpr std::array<ScopeDeclarationElement,5> noUv{{
-            {0,0,2,0,5,0},{1,0,2,0,5,1},{5,0,8,0,5,5},
-            {6,0,8,0,5,6},{255,0,17,0,0,0}}};
-        if(rows.size()==noUv.size() && std::equal(noUv.begin(),noUv.end(),rows.begin()))return {0,5,6};
+        if(noUV56Declaration(rows))return {0,5,6};
         return {};
     }
     static bool observedStreamFamily(const InputFailure &d) noexcept {

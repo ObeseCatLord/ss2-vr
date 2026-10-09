@@ -200,11 +200,15 @@ static bool boundInputs(IDirect3DDevice9 *d,BoundInputs &b,const ScopeIndexedDra
     }
     if(diagnostic){diagnostic->valid|=2;diagnostic->declaration=b.elements;}
     const bool observed78=idle && observed78Declaration(std::span(b.elements).first(b.count));
-    if(diagnostic)diagnostic->layout=observed78?GeometryInputLayout::Observed78:GeometryInputLayout::Legacy56;
-    if(observed78)weights=true;
+    const bool noUV56=idle && noUV56Declaration(std::span(b.elements).first(b.count));
+    if(diagnostic)diagnostic->layout=observed78?GeometryInputLayout::Observed78:
+        noUV56?GeometryInputLayout::NoUV56:GeometryInputLayout::Legacy56;
+    if(observed78 || noUV56)weights=true;
     b.values.surface=idle?probe.idle.raster.layout:probe.raster.pose.layout;b.values.draw=draw;
     ScopeStreamInput *streams[]{&b.values.positions,&b.values.localIndices,&b.values.uv,&b.values.weights};
     const UINT streamNumbers[]{0,observed78?7u:5u,3,observed78?8u:6u};
+    // NoUV56 still qualifies/copies auxiliary stream3 for exact asset matching.
+    // It is never seeded into the position interpreter as a consumed input.
     for(unsigned i=0;i<(weights?4u:3u);++i) {
         auto &stream=*streams[i];
         result=d->GetStreamSource(streamNumbers[i],&b.vertex[i],&stream.offset,&stream.stride);if(FAILED(result))return fail(8,streamNumbers[i]);

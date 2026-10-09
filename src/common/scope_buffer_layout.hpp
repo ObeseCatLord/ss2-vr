@@ -20,11 +20,17 @@ struct ScopeDeclarationElement {
     uint8_t type = 0, method = 0, usage = 0, usageIndex = 0;
     bool operator==(const ScopeDeclarationElement &) const = default;
 };
-enum class GeometryInputLayout : uint32_t { Legacy56, Observed78 };
+enum class GeometryInputLayout : uint32_t { Legacy56, Observed78, NoUV56 };
 inline bool observed78Declaration(std::span<const ScopeDeclarationElement> declaration) {
     constexpr std::array<ScopeDeclarationElement,6> observed{{
         {0,0,2,0,5,0},{2,0,1,0,5,2},{3,0,1,0,5,3},
         {7,0,8,0,5,7},{8,0,8,0,5,8},{255,0,17,0,0,0}}};
+    return declaration.size()==observed.size() && std::equal(observed.begin(),observed.end(),declaration.begin());
+}
+inline bool noUV56Declaration(std::span<const ScopeDeclarationElement> declaration) {
+    constexpr std::array<ScopeDeclarationElement,5> observed{{
+        {0,0,2,0,5,0},{1,0,2,0,5,1},{5,0,8,0,5,5},
+        {6,0,8,0,5,6},{255,0,17,0,0,0}}};
     return declaration.size()==observed.size() && std::equal(observed.begin(),observed.end(),declaration.begin());
 }
 struct ScopeIndexedDraw {
@@ -98,11 +104,15 @@ inline bool declaredGeometryInputs(std::span<const ScopeDeclarationElement> decl
     if (!ended || !position || !local || !uv || (layout==GeometryInputLayout::Observed78 && !weights)) return false;
     return true;
 }
-// ID1 alone may select the actually witnessed 7-local/8-weight family. Mixed
-// or aliased families decline; Scope13 never calls this selector.
+// ID1 alone may select the actually witnessed alternate families. NoUV56's
+// separately bound UV is an auxiliary asset fingerprint, never a shader input.
+// Mixed or aliased families decline; Scope13 never calls this selector.
 inline bool idleGeometryInputs(std::span<const ScopeDeclarationElement> declaration,
                                GeometryInputLayout &layout,bool &weights) {
     layout=GeometryInputLayout::Legacy56;weights=false;
+    if(noUV56Declaration(declaration)) {
+        layout=GeometryInputLayout::NoUV56;weights=true;return true;
+    }
     const bool mentions78=std::any_of(declaration.begin(),declaration.end(),[](const auto &e) {
         return e.stream==7 || e.stream==8 || (e.usage==5 && (e.usageIndex==7 || e.usageIndex==8));
     });

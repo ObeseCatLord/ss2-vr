@@ -8,12 +8,46 @@ This historical hold blocked public publication pending renewed confirmation. It
 
 ## Current PC continuation — start here
 
+Latest neutral capture of23712f1d products reached the exact Jungle scene with
+118native projection pairs, normal native shutdown, empty owned cleanup and
+12protected files unchanged. Ten complete passive0/5/6 receipts captured the same
+261word program; Astra verified its position depends on v0/v5/v6 and relative
+palette/projection constants, not v1-v4. Ten earlier five-channel weapon mesh3
+matches remain diagnostic, but their projection reference differs by up to
+5.74404e-5. Matrix factorization is under investigation; never widen tolerance or
+derive an independent reference from the shader constants being checked.
+
+Exact ID1 NoUV56 adapter is implemented and Astra source-reviewed. It keeps
+the auxiliary UV binding/range/five-hash requirement and leaves v1-v4 unknown in
+position replay. Scope13 and original forwarding/cleanup stay unchanged. All four
+products rebuilt on7e9f72eba4463d1c58b75b0c578ce69e3197fa9552c3ca5f2875ebc4d62b5476;
+68Debug/68Release and28normal/optimized native gates pass;16general/14passive/
+7replay reader groups pass normally/optimized. No runtime of this new build.
+Do not apply the different hand asset/mesh2 annotation to weapon mesh3. Winning
+second-eye evidence, grasp and actual native release remain open. Previous notes
+below describe historical checkpoints, not current build/run instructions.
+
+Next bounded source slice has Astra designGO for diagnostic-only52float per-draw
+M/L/V/P copies: selected raster model.world/palette[draw.first] inexistingborrow,
+already-owned pass.world.view/executedUiProjection. Preserve rawbits, paletteindex
+andexactdraw/eye/hand identity; comparebookends but missing/changedfactors disqualify
+onlythecompanion. Do not reuse root/canonical matrices for descendants without
+associationproof. Originalcollapsedaffine/clip/admission/tolerance/owners stay
+unchanged. Offline independent doubleP*V*M*L comparison is diagnostic, never
+choosewhichevergroupingpasses. Beforeadmissionchanges prove index/eye association,
+matrix conventions and inclusion of native stretch/bind processing inL. See
+IDLE_EVENT_COLLECTOR current factor-evidence design. No new build/runtime yet for
+this nextslice; don't skip its implementation/review/compiled gates.
+
+### Historical passive-extension checkpoint
+
 Latest rebuilt source fingerprint23712f1d7a2c896cf245a3d9e073123099ed1db4f9860ec149b1f133c11f346c,
 IPC10/wire7. ExactnoUV passive extension sourceGO: immutable originalfailure
 selects0/7/8 or0/5/6 viaonesharedhelper; new5/6originalbinding agreement, oldowners/
 finally andreaderflags preserved. No productiongrammar/replayseed/admissionchange.
 All68Debug/68Release+28normal/Ogates pass,15general14passive readergroupsnormal/O.
-No runtime of this build yet; freshsealedneutral shader/binding capture next.
+The capture described above has now run this build; the following next-step note
+records the pre-capture checkpoint.
 Earlierweaponmesh3/nativeprogramreference matches remain useful, handannotation
 belongsDIFFERENTasset/mesh2. No inactiveUV/handassociation/grasp/cache/release claim.
 See latestIDLE_EVENT_COLLECTOR/IMPLEMENTATION_STATUS. Historicalnotes below retain

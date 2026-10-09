@@ -1,6 +1,68 @@
 # Event-time ID1 collection — source implemented
 
-## Exact noUV passive diagnostic — source GO
+## Current exact noUV position-copy adapter
+
+The actual neutral observation of fingerprint23712f1d reached Jungle/118native
+projection pairs and clean owned shutdown with protected files unchanged. Ten
+complete passive0/5/6 receipts captured the same261word shader
+SHA2563e8a3fc3156e23f3d4f596e12b3586ddbd5baff8eb553b0be1b2b245686ea7fa.
+Astra verified v0/v5/v6 plus relative palettec22-c24/projectionc1-c4/localDEFc255
+as its position dependencies; v1-v4 remain unnecessary and unknown. Ten retained
+weapon matches fail the current collapsed independent reference, with maximum
+vertex discrepancy5.74404e-5. Matrix factorization investigation remains open;
+neither these receipts nor shader-constant agreement alone certify geometry.
+
+The reviewed design is implemented and has scoped Astra source GO: exact ID1
+NoUV56 declaration only, mandatory auxiliary stream3 canonical-VB/range/copy/hash
+qualification and every existing influence/ownership/currentness gate. The shared
+replay layout enum adds2 for this mode; schema1 remains legacy, schema2 carries
+the bounded layout. NoUV leaves v1-v4 unknown, so a shader using any for position
+declines. UV is explicitly auxiliary in the reader and matching result; it is
+never described as consumed by this declaration or seeded into the interpreter.
+Old explicit-layout0 noUV failure receipts remain historical diagnostics; new
+layout2 failures must match the exact declaration. Scope13's default grammar
+remains unchanged. No new-build capture, grasp or actual release certification.
+
+Products rebuilt on7e9f72eba4463d1c58b75b0c578ce69e3197fa9552c3ca5f2875ebc4d62b5476,
+IPC10/wire7. All68Debug/68Release and28normal/optimized native/compiled gates pass;
+16general reader,14passive and7replay groups pass normally/optimized. Final
+failure-header regressions cover layout2's reachable indices0/3/5/6, foreign7/8,
+altered declarations and historical explicit-layout0 passive receipts. Local
+Astra/xhigh metadata verified; backend attestation unavailable.
+
+### Next primitive-factor evidence slice — design GO, not implemented
+
+Astra approved diagnostic-only capture of52floats per selected draw: M from the
+selected raster model.world, L from exact palette[draw.first], V from already-owned
+pass.world.view and P from executedUiProjection. Keep raw float bits, exact
+request/eye/hand/model/draw/bone/config and selected palette-index identity. Copy
+only at the existing validated borrows; add no native lookup, COM call, retained
+pointer or full-palette dump. Root/canonical matrices are not substitutes because
+descendant and global-palette correspondence remains unproved.
+
+The original float M*L then V*(M*L) reference remains unchanged. Missing, invalid
+or changed factor bookends disqualify only the optional companion, preserving
+ordinary successes/refusals/owners/finally/tolerance. Strict optional reader
+qualification must preserve retained post-original/pre-cleanup limits. Offline
+report independent doubleP*V*M*L*position alongside the old result; never choose
+whichever grouping passes or use uploaded shader constants to certify themselves.
+Do not apply trace stretch again without proof.
+
+| Review requirement | Next implementation obligation |
+| --- | --- |
+| Preserve exact selected raster operands | Owned M/L copies and palette index inside readIdleRaster |
+| Preserve exact eye camera operands | Owned V/P at copyBoundIdleRaster and existing bookend comparison |
+| Avoid changing admission policy | Optional bounded diagnostic payload only; original affine/clip unchanged |
+| Prove association before reference replacement | Exact draw/eye/palette, matrix conventions, native stretch/bind inclusion |
+| Exercise meaningful counterexamples | Large cancelling translations, root/descendant mismatch, wrong palette, changed/truncated factors, legacy preservation/non-promotion |
+
+If primitive agreement remains absent, inspect only this selected draw's native
+eye-space palette construction/upload order. The design review authorizes no
+production reference replacement or tolerance increase. Source implementation,
+source review, all-product rebuild and compiled gates are still required before a
+fresh sealed capture; preserve all previous evidence and attempted fixtures.
+
+## Historical exact noUV passive diagnostic — source GO
 
 Astra approved the minimal extension for the observed five-row0/1/5/6 declaration.
 One pure helper selects0/7/8 or0/5/6 from the immutable original first-failure
@@ -19,7 +81,8 @@ inputs, original-binding contradictions, changed declarations and coexistence.
 All68Debug/68Release and28normal/optimized native/compiled gates pass. All four
 products rebuilt on23712f1d7a2c896cf245a3d9e073123099ed1db4f9860ec149b1f133c11f346c,
 IPC10/wire7 unchanged. Latest local Astra/xhigh metadata verified; backend
-attestation unavailable. No runtime has used these products yet.
+attestation unavailable. The current native observation above supersedes this
+historical pre-runtime status.
 
 Next is a fresh sealed neutral shader/binding observation. This extension cannot
 prove consumed UV, hand-child association, winning cache or grasp. The earlier

@@ -37,6 +37,28 @@ int main() {
      std::array<ScopeDeclarationElement,8> mixed{};
      std::copy_n(observed.begin(),5,mixed.begin());mixed[5]=decl[1];mixed[6]=decl[2];mixed[7]=observed[5];
      assert(!idleGeometryInputs(mixed,layout,weights));}
+    {std::array<ScopeDeclarationElement,5> noUV{{{0,0,2,0,5,0},{1,0,2,0,5,1},
+        {5,0,8,0,5,5},{6,0,8,0,5,6},{255,0,17,0,0,0}}};
+     bool weights=false;GeometryInputLayout layout;
+     assert(!declaredGeometryInputs(noUV,weights)); // Scope13 still requires consumed UV.
+     assert(idleGeometryInputs(noUV,layout,weights) && layout==GeometryInputLayout::NoUV56 && weights);
+     assert(idleBufferRanges(hand,noUV,ranges) && ranges.weightsActive);
+     assert(ranges.slices[4].offset==hand.uv.offset); // Auxiliary UV is still copied/hash-qualified.
+     for(unsigned row=0;row<5;++row)for(unsigned field=0;field<6;++field) {
+        auto bad=noUV;
+        switch(field) {case 0:++bad[row].stream;break;case 1:++bad[row].offset;break;
+            case 2:++bad[row].type;break;case 3:++bad[row].method;break;
+            case 4:++bad[row].usage;break;case 5:++bad[row].usageIndex;break;}
+        assert(!idleGeometryInputs(bad,layout,weights));
+     }
+     for(unsigned variant=0;variant<5;++variant) {
+        auto bad=hand;
+        switch(variant) {case 0:bad.uv={};break;case 1:bad.uv.object=3;break;
+            case 2:bad.uv.offset=bad.vertex.size;break;case 3:bad.uv.stride=4;break;
+            case 4:bad.uv.frequency=2;break;}
+        assert(!idleBufferRanges(bad,noUV,ranges) && !ranges.slices[0].size);
+     }
+    }
     for(unsigned variant=0;variant<18;++variant) {
         auto bad=hand;
         switch(variant) {

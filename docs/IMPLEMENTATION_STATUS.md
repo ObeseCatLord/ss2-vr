@@ -1,6 +1,51 @@
 # Implementation status — 2026-10-08
 
-## Exact noUV passive diagnostic — source GO
+## Current ID1 noUV adapter — scoped source GO
+
+The latest private neutral capture of source791428a27cf90a0787b4fe6c5a8fcd3df6c36bed,
+fingerprint23712f1d7a2c896cf245a3d9e073123099ed1db4f9860ec149b1f133c11f346c,
+reached the expected Jungle scene with118native projection pairs. Native shutdown,
+owned cleanup/display retirement and12protected-file preservation passed. Ten
+passive0/5/6 receipts have flags511/no invalidations and the same261word program
+SHA2563e8a3fc3156e23f3d4f596e12b3586ddbd5baff8eb553b0be1b2b245686ea7fa.
+Whole-trace acceptance remains zero; successful runtime rendering is separate
+from failed weapon evidence collection.
+
+Astra verified the exact position dependencies: v0.xyzw, v5.xy, v6.x, localDEFc255,
+relative palettec22-c24 and uploaded projectionc1-c4. No v1-v4 dependency or
+unsupported operation reaches position. API receipts alone do not certify
+influence bytes; freshly copied exact indices/weights remain mandatory.
+
+The narrow ID1 adapter now accepts only the exact five-row NoUV56 declaration.
+It reuses the existing canonical-buffer, bounds, five-copy/hash, before/after,
+original-call-once and finally gates. Bound stream3 remains an auxiliary asset
+fingerprint, explicitly labelled as such in reader/matcher output. NoUV replay
+leaves v1-v4 unknown and preserves original bytecode, influence checks and
+comparison tolerance. Scope13 continues to require its existing consumed-UV
+interface. Astra gave scoped source GO; no new-build runtime acceptance is claimed.
+All four products rebuilt on fingerprint
+7e9f72eba4463d1c58b75b0c578ce69e3197fa9552c3ca5f2875ebc4d62b5476,
+IPC10/wire7 unchanged. All68Debug/68Release and28normal/optimized native/compiled
+gates pass. Sixteen general reader,14passive and7replay groups pass normally and
+optimized. The nonblocking review gap now has a regression for layout2 failure
+indices0/3/5/6, rejection of7/8/altered declarations and historical layout0 passive
+compatibility. Reviewer local Astra/xhigh metadata verified; backend unattested.
+
+Ten retained earlier copies still uniquely match weapon mesh3, but all now fail
+the independent projection reference. Offline diagnosis isolates translation
+coefficient differences (maximum vertex error5.74404e-5); other coefficients
+differ by at most1.03866e-7. The shader itself agrees with its factorized uploaded
+matrices within1.47034e-7. This does not prove rounding or reference equivalence.
+Native model/bone/view/projection factor evidence is the next bounded design
+decision, now design-reviewed for diagnostic-only52float per-draw M/L/V/P copies
+inside existing validated borrows. This next slice is not yet implemented. Keep
+original affine/clip computation and acceptance unchanged; compare independent
+doubleP*V*M*L separately, not a reference constructed from shader constants. The
+annotation for another asset/mesh2
+cannot establish this weapon's grasp. Hardware/dual-wield/vehicle/network tests
+remain user-operated, and full implementation remains open.
+
+## Historical exact noUV passive diagnostic — source GO
 
 Astra approved the minimal extension for the observed five-row0/1/5/6 declaration.
 One pure helper selects0/7/8 or0/5/6 from the immutable original first-failure
@@ -19,7 +64,8 @@ inputs, original-binding contradictions, changed declarations and coexistence.
 All68Debug/68Release and28normal/optimized native/compiled gates pass. All four
 products rebuilt on23712f1d7a2c896cf245a3d9e073123099ed1db4f9860ec149b1f133c11f346c,
 IPC10/wire7 unchanged. Latest local Astra/xhigh metadata verified; backend
-attestation unavailable. No runtime has used these products yet.
+attestation unavailable. The native capture above now supersedes this checkpoint's
+pre-runtime status.
 
 Next is a fresh sealed neutral shader/binding observation. This extension cannot
 prove consumed UV, hand-child association, winning cache or grasp. The earlier

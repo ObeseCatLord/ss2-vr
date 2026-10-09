@@ -65,7 +65,7 @@ def replay_draws(rows,observations,candidates,candidate_root,evaluator,temporary
         result=dict(row)
         if retained:result.update(evidence_class='historical-post-original-pre-cleanup-copies',cleanup_certified=False,
             outer_current=False,whole_trace_accepted=False,alignment_accepted=False)
-        if row['result']!='unique-consumed-channel-match':
+        if row['result'] not in ('unique-consumed-channel-match','unique-position-and-auxiliary-channel-match'):
             result['position_replay']={'position_replay_agrees_with_reference':False,'reason':row['result']}
             results.append(result);continue
         identity=row['candidates'][0];asset=candidates[identity['candidate']]

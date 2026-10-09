@@ -18,6 +18,7 @@ BASE={'request','eye','hand'}
 
 def declaration_layout(rows):
     if rows==OBSERVED:return 1,True
+    if rows==NO_UV56:return 2,True
     if any(e[0] in (7,8) or (e[4]==5 and e[5] in (7,8)) for e in rows):
         raise ValueError('Ambiguous/mixed observed input family')
     seen=set();active=set()

@@ -43,6 +43,28 @@ class Checks(unittest.TestCase):
             with self.subTest(bad=bad),self.assertRaises(ValueError):assess(bad,SOURCE)
         historical=text.replace(' layout=1','').replace('index=7 hr=','index=5 hr=')
         self.assertEqual(assess(historical,SOURCE)['rejected_or_missing_observations'][0]['input_failure']['layout'],0)
+    def test_no_uv_failure_header_and_historical_passive_compatibility(self):
+        from idle_stream_evidence import NO_UV56
+        from idle_stream_evidence_checks import fixture
+        head=DRAW.replace('stage=4','stage=3')+'\nLab idle rejection request=100 eye=1 hand=0 reason=32 preceding=2 checks=0 state=63 callbacks=63\n'
+        failure='Lab idle inputFailure request=100 eye=1 hand=0 step=8 index=5 hr=-1 valid=11 caps=256 declaration=5 rangeChecks=0 layout=2'
+        rows='\n'.join('Lab idle inputDeclaration request=100 eye=1 hand=0 index='+str(i)+' values='+','.join(map(str,row))
+                       for i,row in enumerate(NO_UV56))
+        text=head+failure+'\n'+rows
+        for index in (0,3,5,6):
+            for suffix in (' layout=2',' layout=0',''):
+                result=assess(text.replace('index=5 hr=','index='+str(index)+' hr=').replace(' layout=2',suffix),SOURCE)
+                self.assertFalse(result['copied_event_pose_observations'])
+                self.assertEqual(result['rejected_or_missing_observations'][0]['input_failure']['layout'],2 if suffix.endswith('2') else 0)
+        for bad in (text.replace('index=5 hr=','index=7 hr='),text.replace('index=5 hr=','index=8 hr='),
+                    text.replace('layout=2','layout=1'),text.replace('values=1,0,2,0,5,1','values=1,0,2,0,5,2')):
+            with self.subTest(bad=bad),self.assertRaises(ValueError):assess(bad,SOURCE)
+        passive=fixture(NO_UV56)
+        for suffix in (' layout=0',' layout=2'):
+            selected='\n'.join(line+suffix if line.startswith('Lab idle inputFailure ') else line for line in passive.splitlines())
+            result=assess(selected,SOURCE)
+            self.assertFalse(result['copied_event_pose_observations'])
+            self.assertEqual(set(result['rejected_or_missing_observations'][0]['stream_probe']['snapshots'][0]['streams']),{0,5,6})
     def test_rejected_animation_name_snapshot_is_qualified_and_never_a_winner(self):
         rejected=DRAW.replace('stage=4','stage=3').replace('contributors=1','contributors=2').replace('matrices=1','matrices=0')
         reason='Lab idle rejection request=100 eye=1 hand=0 reason=19 preceding=1 checks=0 state=23 callbacks=49'
@@ -134,10 +156,23 @@ class Checks(unittest.TestCase):
             'channel_sha256':{name:struct.pack('<8I',*([i+1]*8)).hex() for i,name in enumerate(channels)}}]}}
         self.assertTrue(match(result,candidate)['consumed_channels_all_uniquely_matched'])
         self.assertFalse(match(result,candidate)['alignment_accepted'])
+        from idle_stream_evidence import NO_UV56
+        noUV=text
+        for r in old_rows:noUV=noUV.replace(r+'\n','')
+        noUV+='\n'+'\n'.join(row('declaration',i,e) for i,e in enumerate(NO_UV56))
+        auxiliary=assess(noUV,SOURCE)
+        self.assertEqual(auxiliary['copied_event_pose_observations'][0]['geometry'][0]['input_layout'],2)
+        self.assertEqual(auxiliary['copied_event_pose_observations'][0]['geometry'][0]['auxiliary_channels'],['uv'])
+        matched=match(auxiliary,candidate)
+        self.assertEqual(matched['matches'][0]['result'],'unique-position-and-auxiliary-channel-match')
+        self.assertEqual(matched['matches'][0]['auxiliary_channels'],['uv'])
+        self.assertTrue(matched['copied_channels_all_uniquely_matched'])
+        self.assertFalse(matched['consumed_channels_all_uniquely_matched'])
         import copy
         for channel in channels:
             bad=copy.deepcopy(candidate);bad['hand']['candidate_channels'][0]['channel_sha256'][channel]='0'*64
             self.assertFalse(match(result,bad)['consumed_channels_all_uniquely_matched'])
+            self.assertFalse(match(auxiliary,bad)['copied_channels_all_uniquely_matched'])
         ambiguous=copy.deepcopy(candidate);ambiguous['other']=ambiguous['hand']
         self.assertEqual(match(result,ambiguous)['matches'][0]['result'],'ambiguous')
         for bad in [text.replace(data[-1],''),text+'\n'+data[0],text.replace('words=2','words=513'),

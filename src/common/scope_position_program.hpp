@@ -21,8 +21,9 @@ inline bool position(std::span<const uint32_t> words,std::span<const std::array<
                      Vec3 p,std::array<float,2> uv,bool weightsBound,std::array<float,4> &out,
                      GeometryInputLayout layout=GeometryInputLayout::Legacy56) noexcept {
     using namespace scope_program;
-    if(layout!=GeometryInputLayout::Legacy56 && layout!=GeometryInputLayout::Observed78)return false;
-    if(layout==GeometryInputLayout::Observed78 && !weightsBound)return false;
+    if(layout!=GeometryInputLayout::Legacy56 && layout!=GeometryInputLayout::Observed78 &&
+       layout!=GeometryInputLayout::NoUV56)return false;
+    if(layout!=GeometryInputLayout::Legacy56 && !weightsBound)return false;
     std::array<std::array<float,4>,256> constants{};
     std::array<bool,256> available{};
     for (size_t i=0;i<uploaded.size();++i) { constants[i]=uploaded[i]; available[i]=true; }
@@ -42,7 +43,9 @@ inline bool position(std::span<const uint32_t> words,std::span<const std::array<
     std::array<Vector,12> temporary{};
     std::array<Vector,16> inputs{};
     inputs[0]=constant({p.x,p.y,p.z,1}); // Actual admitted FLOAT3 position.
-    inputs[3]=constant({uv[0],uv[1],0,1}); // Actual admitted FLOAT2 diffuse UV.
+    if(layout!=GeometryInputLayout::NoUV56)
+        inputs[3]=constant({uv[0],uv[1],0,1}); // Actual admitted FLOAT2 diffuse UV.
+    // NoUV56 leaves v1-v4 unknown: its UV copy identifies the asset only.
     const unsigned local=layout==GeometryInputLayout::Observed78?7:5,weight=layout==GeometryInputLayout::Observed78?8:6;
     inputs[local]=constant({0,0,0,0}); // Exact hashed first-local-palette indices, UBYTE4N.
     if (weightsBound) inputs[weight]=constant({1,0,0,0}); // Exact 255/0/0/0 UBYTE4N weights.
