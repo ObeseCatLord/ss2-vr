@@ -35,12 +35,17 @@ int main(int argc,char **argv) {
         if(input.take<std::array<char,8>>()!=std::array<char,8>{'S','S','2','V','I','R','P','1'})throw std::runtime_error("input-magic");
         const auto schema=input.take<uint32_t>(),words=input.take<uint32_t>(),count=input.take<uint32_t>(),
                    vertices=input.take<uint32_t>(),weights=input.take<uint32_t>();
-        if((schema!=1 && schema!=2) || words<2 || words>512 || !count || count>256 || !vertices || vertices>IdleGeometryVertices || weights>1)
+        if((schema!=1 && schema!=2 && schema!=3) || words<2 || words>512 || !count || count>256 || !vertices || vertices>IdleGeometryVertices || weights>1)
             throw std::runtime_error("input-bounds");
-        const auto layout=schema==2?input.take<uint32_t>():0;
+        const auto layout=schema>=2?input.take<uint32_t>():0;
         if(layout>2 || (layout!=0 && !weights))throw std::runtime_error("input-layout");
         const auto clip=input.take<Matrix44>();
         for(float v:clip.m)if(!std::isfinite(v))throw std::runtime_error("nonfinite-reference");
+        Matrix34 local{};
+        if(schema==3) {
+            local=input.take<Matrix34>();
+            if(!weights || !finiteMatrix(local))throw std::runtime_error("invalid-staged-local-reference");
+        }
         std::array<uint32_t,512> program{};for(unsigned i=0;i<words;++i)program[i]=input.take<uint32_t>();
         std::array<std::array<float,4>,256> constants{};
         for(unsigned i=0;i<count;++i) {constants[i]=input.take<std::array<float,4>>();
@@ -66,9 +71,26 @@ int main(int argc,char **argv) {
             if(!scope_position::position(std::span(program).first(words),std::span(constants).first(count),v.p,v.uv,weights!=0,actual,
                                         GeometryInputLayout(layout)))
                 return result(false,"unknown-position-dependency",i);
+            Vec3 point=v.p;
+            if(schema==3) {
+                // Keep the native local palette stage separate from the stored
+                // projection matrix. Explicit stores prohibit contraction or
+                // excess precision from silently collapsing these stages.
+                const float inputPoint[]{v.p.x,v.p.y,v.p.z,1};
+                float output[3]{};
+                for(unsigned row=0;row<3;++row) {
+                    volatile float sum=0;
+                    for(unsigned col=0;col<4;++col) {
+                        volatile float product=local.m[row*4+col]*inputPoint[col];
+                        sum=sum+product;
+                    }
+                    output[row]=sum;
+                }
+                point={output[0],output[1],output[2]};
+            }
             for(unsigned row=0;row<4;++row) {
-                const double expected=double(clip.m[row*4])*v.p.x+double(clip.m[row*4+1])*v.p.y+
-                                      double(clip.m[row*4+2])*v.p.z+clip.m[row*4+3];
+                const double expected=double(clip.m[row*4])*point.x+double(clip.m[row*4+1])*point.y+
+                                      double(clip.m[row*4+2])*point.z+clip.m[row*4+3];
                 const double error=std::abs(double(actual[row])-expected);
                 if(!std::isfinite(expected) || !std::isfinite(actual[row]) ||
                    error>1e-5+1e-5*std::max(std::abs(double(actual[row])),std::abs(expected)))

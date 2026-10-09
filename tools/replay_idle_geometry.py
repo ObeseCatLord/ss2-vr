@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 from assess_idle_weapon import assess, declaration_layout
 from match_idle_geometry import match,CHANNELS
+from idle_native_reference import native_reference, UnsupportedNativeArithmetic
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -35,16 +36,19 @@ def channel_bytes(root,asset,row):
         channels[name]=data
     return channels
 
-def evaluate_geometry(g,channels,evaluator,temporary):
+def evaluate_geometry(g,channels,evaluator,temporary,reference=None):
     d=g['data'];vertices=d['layout:0'][0]
     program=[w for i in range(0,g['words'],32) for w in d['program:'+str(i)]]
     constants=[w for i in range(g['constants']) for w in d['constant:'+str(i)]]
     data=bytearray(b'SS2VIRP1')
     layout,weights=declaration_layout([d['declaration:'+str(i)] for i in range(g['declaration'])])
     if weights!=bool(d['streams:0'][8]):raise ValueError('Replay input family/binding mismatch')
-    data+=struct.pack('<5I',2 if layout else 1,len(program),g['constants'],vertices,int(weights))
-    if layout:data+=struct.pack('<I',layout)
-    data+=struct.pack('<16I',*d['clip:0'])+struct.pack('<'+str(len(program))+'I',*program)
+    schema=3 if reference is not None else 2 if layout else 1
+    data+=struct.pack('<5I',schema,len(program),g['constants'],vertices,int(weights))
+    if schema>=2:data+=struct.pack('<I',layout)
+    data+=struct.pack('<16I',*(reference['matrix'] if reference is not None else d['clip:0']))
+    if reference is not None:data+=struct.pack('<12I',*reference['local'])
+    data+=struct.pack('<'+str(len(program))+'I',*program)
     data+=struct.pack('<'+str(len(constants))+'I',*constants)
     for i in range(vertices):
         data+=channels['positions'][i*12:i*12+12]+channels['uv'][i*8:i*8+8]
@@ -76,6 +80,21 @@ def replay_draws(rows,observations,candidates,candidate_root,evaluator,temporary
         g=geometry.get(str(row['geometry_index']),geometry.get(row['geometry_index']))
         result['binding']={k:o[k] for k in ('request','input','owner','weapon','model','generation','eye','hand')}
         result['position_replay']=evaluate_geometry(g,channels,evaluator,temporary)
+        result['reference_kind']='legacy-collapsed-matrix'
+        try:reference=native_reference(o,g)
+        except UnsupportedNativeArithmetic as error:
+            result['legacy_position_replay']=result['position_replay']
+            result['reference_kind']='native-cold-arithmetic-unknown'
+            result['position_replay']={'schema':1,'position_replay_agrees_with_reference':False,
+                'reason':str(error),'vertex':0,'gpu_execution':False,
+                'positive_grasp_verified':False,'alignment_accepted':False}
+            reference=None
+        if reference is not None:
+            result['legacy_position_replay']=result['position_replay']
+            result['native_reference']=reference
+            result['reference_kind']=reference['kind']
+            # Select by qualified evidence, never by which calculation passes.
+            result['position_replay']=evaluate_geometry(g,channels,evaluator,temporary,reference)
         if result['position_replay']['position_replay_agrees_with_reference']:
             affine=struct.unpack('<12f',struct.pack('<12I',*g['data']['affine:0']))
             xyz=list(struct.iter_unpack('<3f',channels['positions']))
@@ -87,6 +106,9 @@ def replay_draws(rows,observations,candidates,candidate_root,evaluator,temporary
                 'affine':affine,'controller':o['pose'].get('controller:0'),'raw_aim':o['pose'].get('rawAim:0'),
                 'raw_grip':o['pose'].get('rawGrip:0'),'channel_sha256':c['channel_sha256'],'surface_name':g['surfaceName'],'bone_name':g['boneName'],
                 'render_instance':g['instance'],'render_cfg':g['cfg'],'render_resource':g['resource']}
+            if reference is not None:
+                result['render_geometry'].update(reference_kind=reference['kind'],diagnostic_only=True,
+                    cleanup_certified=False,outer_current=False,positive_grasp_verified=False,alignment_accepted=False)
         results.append(result)
     return results
 

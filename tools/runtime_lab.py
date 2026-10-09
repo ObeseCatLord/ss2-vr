@@ -498,7 +498,7 @@ def validate_idle_probe(cfg):
     if cfg.get('pose_steps')!=[{'name':'baseline','head':cfg.get('baseline_head')}]:
         raise ValueError('Idle collection requires only the stationary baseline pose')
 
-IDLE_TOOLS=('runtime_lab.py','assess_idle_weapon.py','idle_stream_evidence.py','idle_projection_evidence.py','replay_idle_geometry.py',
+IDLE_TOOLS=('runtime_lab.py','assess_idle_weapon.py','idle_stream_evidence.py','idle_projection_evidence.py','idle_native_reference.py','replay_idle_geometry.py',
             'measure_idle_reference.py','match_idle_geometry.py',
             'private_display_lab.py','display_timing_probe.cpp','lab_window_focus.hpp','private_x11_windows.cpp')
 IDLE_INVENTORIES=('game/Content/SeriousSam2/Config','game/Content/PlayerProfiles',

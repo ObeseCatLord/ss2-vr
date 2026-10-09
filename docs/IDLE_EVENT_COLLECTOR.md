@@ -1,6 +1,46 @@
 # Event-time ID1 collection — source implemented
 
-## Current native precision/cache observation — source implemented
+## Current V22 result and native-order reference correction
+
+V22 (source7945639/fped4fc52, private run20261009T023823) reached the exact Jungle
+scene with120 native stereo projection pairs and clean native/owned/display
+shutdown. Twelve protected files remain unchanged. Whole trace remains0accepted/
+32rejected. The actual observer recorded16 pairs, eight cold0→6 and eight reuse
+14→14, all control127 (PC24/nearest), no invalidation. All eight cold first-material
+Q/R outputs independently match every raw word. Sixteen geometry copies associate
+with coldsequence1; all3488 vertices agree with the independently computed native
+order and separately rounded local stage under the unchanged tolerance. The old
+collapsed reference fails3924 components. Incoming cache producers remain unknown.
+
+The reviewed offline correction is implemented in idle_native_reference.py and
+schema3 of idle_position_replay. It supports only source1/control127/cold0→6 with
+existing qualified association and exact independent Q/R output corroboration.
+Qualified native results become primary regardless of success; legacy results
+remain explicit. Arithmetic unknown affects only its copy and suppresses geometry;
+structural corruption still rejects. Retained history stays outside readiness.
+Sixteen gun-mesh copies now yield diagnostic geometry; sixteen other copies lack
+association. The different authored hand asset is still unmatched. No measured
+hand/grasp offset, winning second-eye event, GPU precision or actual release is
+certified. Production collector/raster reference/admission/tolerance are unchanged.
+
+Astra source GO followed partial-result, observed-flags, deterministic selection,
+local cancellation and integration-test fixes. Both local review turns were
+verified Astra/xhigh; backend attestation unavailable. All four products rebuilt on
+`46e88dffe9e0e325faae37111f0be567f0d2dd1a0a4e66beed8a230bb07f3375`, IPC10/wire7.
+72 Debug/72 Release groups and32 normal/optimized native/compiled gates pass.
+Five helper and eight replay groups also pass normally/optimized. Future fresh
+fixtures need12 tool seals; V22 and all earlier attempts remain immutable.
+
+Next finite edge: interpret the exact later8row material's captured position
+inputs and the collector stop before the hand resource. Preserve extra4/5 unknown
+until proved; do not relax declaration, owner, copy-cap or resource gates merely
+because the earlier gun geometry now replays. The hand asset/mesh and positive
+reference must be associated independently before any alignment correction.
+Physical driver controls, wider presentation coverage and user-operated hardware/
+melee/dual-wield/MP acceptance remain open. No firing/vehicle/HMD/network probe ran.
+See [reference implementation/disposition](IDLE_NATIVE_REFERENCE.md).
+
+## Observer source checkpoint before the V22 capture
 
 Two reviewed whole-function hooks now observe the first native material's
 call-free matrix-production interval. The slots helper is sampled after its

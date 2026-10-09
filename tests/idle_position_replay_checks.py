@@ -15,16 +15,50 @@ EVALUATOR=Path(sys.argv.pop(1)).resolve()
 IDENTITY=[1.,0.,0.,0.,0.,1.,0.,0.,0.,0.,1.,0.,0.,0.,0.,1.]
 PROGRAM=[0xfffe0101,31,0x80000005,0x900f0000,20,0xc00f0000,0x90e40000,0xa0e40000,0xffff]
 
-def fixture(program=PROGRAM,constants=None,points=None,clip=IDENTITY,weights=1,layout=None):
+def fixture(program=PROGRAM,constants=None,points=None,clip=IDENTITY,weights=1,layout=None,local=None):
     constants=constants or [IDENTITY[i:i+4] for i in range(0,16,4)]
     points=points or [(1.,2.,3.,.25,.75)]
-    data=b'SS2VIRP1'+struct.pack('<5I',1 if layout is None else 2,len(program),len(constants),len(points),weights)
-    if layout is not None:data+=struct.pack('<I',layout)
-    data+=struct.pack('<16f',*clip)+struct.pack('<'+str(len(program))+'I',*program)
+    schema=3 if local is not None else 1 if layout is None else 2
+    data=b'SS2VIRP1'+struct.pack('<5I',schema,len(program),len(constants),len(points),weights)
+    if schema>=2:data+=struct.pack('<I',0 if layout is None else layout)
+    data+=struct.pack('<16f',*clip)
+    if local is not None:data+=struct.pack('<12f',*local)
+    data+=struct.pack('<'+str(len(program))+'I',*program)
     data+=struct.pack('<'+str(len(constants)*4)+'f',*[v for row in constants for v in row])
     return data+b''.join(struct.pack('<5f',*p)+bytes([255,0,0,0,0,0,0,0]) for p in points)
 
 class Checks(unittest.TestCase):
+    def test_staged_local_reference_preserves_old_schemas(self):
+        local=[1.,0.,0.,100.,0.,1.,0.,-10.,0.,0.,1.,2.]
+        program=[0xfffe0101,31,0x80000005,0x900f0000,
+                 9,0x80010000,0x90e40000,0xa0e40004,
+                 9,0x80020000,0x90e40000,0xa0e40005,
+                 9,0x80040000,0x90e40000,0xa0e40006,
+                 1,0x80080000,0xa0ff0007,
+                 20,0xc00f0000,0x80e40000,0xa0e40000,0xffff]
+        constants=[IDENTITY[i:i+4] for i in range(0,16,4)]+[local[i:i+4] for i in range(0,12,4)]+[[0,0,0,1]]
+        for layout in (0,1,2):
+            staged=fixture(program=program,constants=constants,local=local,layout=layout)
+            result=json.loads(self.run_fixture(staged).stdout)
+            self.assertTrue(result['position_replay_agrees_with_reference']);self.assertFalse(result['alignment_accepted'])
+            bad=local.copy();bad[3]+=1
+            self.assertEqual(json.loads(self.run_fixture(fixture(program=program,constants=constants,local=bad,layout=layout)).stdout)['reason'],'projection-mismatch')
+            for broken in (staged[:-1],staged+b'x',fixture(local=local,weights=0),fixture(local=local,layout=3)):
+                self.assertNotEqual(self.run_fixture(broken).returncode,0)
+        old=json.loads(self.run_fixture(fixture(program=program,constants=constants)).stdout)
+        self.assertEqual(old['reason'],'projection-mismatch')
+        bad=local.copy();bad[0]=float('nan')
+        self.assertNotEqual(self.run_fixture(fixture(local=bad)).returncode,0)
+        self.assertTrue(json.loads(self.run_fixture(fixture()).stdout)['position_replay_agrees_with_reference'])
+        # Intermediate binary32 rounding is observable: the mathematically
+        # collapsed local dot is 1, but the staged native-style dot is 0.
+        cancel=[float(2**24),1.,float(-2**24),0.,0.,1.,0.,0.,0.,0.,1.,0.]
+        constants=[IDENTITY[i:i+4] for i in range(0,16,4)]+[cancel[i:i+4] for i in range(0,12,4)]+[[0,0,0,1]]
+        self.assertTrue(json.loads(self.run_fixture(fixture(program=program,constants=constants,local=cancel,
+            points=[(1.,1.,1.,0.,0.)])).stdout)['position_replay_agrees_with_reference'])
+        self.assertEqual(json.loads(self.run_fixture(fixture(program=program,constants=constants,
+            points=[(1.,1.,1.,0.,0.)])).stdout)['reason'],'projection-mismatch')
+
     def test_observed_input_layout_and_schema_compatibility(self):
         p=[0xfffe0101,31,0x80000005,0x900f0000,31,0x80070005,0x900f0007,31,0x80080005,0x900f0008,
            1,0x800f0000,0x90e40000,4,0x800f0000,0x90e40007,0x90e40008,0x80e40000,
@@ -271,6 +305,91 @@ class Checks(unittest.TestCase):
             self.assertEqual(auxiliary['draws'][0]['auxiliary_channels'],['uv'])
             self.assertEqual(auxiliary['draws'][0]['result'],'unique-position-and-auxiliary-channel-match')
             self.assertFalse(auxiliary['positive_grasp_verified']);self.assertFalse(auxiliary['alignment_accepted'])
+            # A supported cold native reference is selected by evidence, not
+            # by whichever replay passes. All data here is synthetic.
+            def raw_line(kind,chunk,values,index=0):
+                return 'Lab idle geometryData request=1 eye=0 hand=0 index='+str(index)+' kind='+kind+' chunk='+str(chunk)+\
+                    ' values='+','.join(f'{x:08x}' for x in values)
+            word=lambda values:list(struct.unpack('<'+str(len(values))+'I',struct.pack('<'+str(len(values))+'f',*values)))
+            native_program=PROGRAM.copy();native_program[-2]=0xa0e40001
+            wrong_legacy=clip.copy();wrong_legacy[3]+=1
+            native=[]
+            for line in lines:
+                if 'kind=constant ' in line:continue
+                if 'Lab idle geometry request=' in line:line=line.replace('constants=4','constants=5')
+                elif 'kind=program ' in line:line=raw_line('program',0,native_program)
+                elif 'kind=clip ' in line:line=raw_line('clip',0,word(wrong_legacy))
+                native.append(line)
+            native += [raw_line('constant',0,[0]*4),*[raw_line('constant',i,word(clip[(i-1)*4:i*4])) for i in range(1,5)]]
+            base='request=1 eye=0 hand=0'
+            native += ['Lab idle projectionSummary '+base+' configured=1 count=1 invalidations=0 blocked=0 pending=0',
+                       'Lab idle projectionPair '+base+' sequence=1 source=1 complete=1 controlBefore=127 controlAfter=127 flagsBefore=0 flagsAfter=6 modelBefore=1000 modelAfter=1000 drawBefore=2000 drawAfter=2000 cleanupCertified=0 outerCurrent=0']
+            projection=[2.,0.,0.,0.,0.,3.,0.,0.,0.,0.,4.,0.,0.,0.,0.,1.]
+            identity34=IDENTITY[:12]
+            for phase in (0,1):
+                for kind,values in [('model',affine),('view',identity34),('projection',projection),
+                                    ('cachedVP',projection if phase else [0.]*16),('cachedMVP',clip if phase else [0.]*16)]:
+                    native.append('Lab idle projectionData '+base+' sequence=1 phase='+str(phase)+' kind='+kind+
+                                  ' values='+','.join(f'{x:08x}' for x in word(values)))
+            native.append('Lab idle geometryFactors '+base+' index=0 palette=0 bookends=3 postOriginal=1 cleanupCertified=0 outerCurrent=0')
+            for kind,values in [('factorModel',affine),('factorLocal',identity34),('factorView',identity34),('factorProjection',projection)]:
+                native.append(raw_line(kind,0,word(values)))
+            native.append('Lab idle geometryProjection '+base+' index=0 sequence=1 modelAddress=1000 drawAddress=2000 bookends=3 postOriginal=1 cleanupCertified=0 outerCurrent=0')
+            native_log='\n'.join(native)
+            corrected=replay(assess(native_log,source),index,root,EVALUATOR,root)
+            first=corrected['draws'][0]
+            self.assertTrue(first['position_replay']['position_replay_agrees_with_reference'])
+            self.assertFalse(first['legacy_position_replay']['position_replay_agrees_with_reference'])
+            self.assertEqual(first['reference_kind'],'cold-first-material-pc24-nearest-staged-local')
+            self.assertFalse(first['render_geometry']['cleanup_certified'])
+            self.assertFalse(first['render_geometry']['positive_grasp_verified'])
+            # Legacy succeeds against the shader's c0 matrix, while the
+            # qualified native reference fails. Never rescue it with legacy.
+            shader_c0=native_log.replace(raw_line('program',0,native_program),raw_line('program',0,PROGRAM))
+            legacy_c0=[0.]*4+clip[:12]
+            shader_c0=shader_c0.replace(raw_line('clip',0,word(wrong_legacy)),raw_line('clip',0,word(legacy_c0)))
+            failed=replay(assess(shader_c0,source),index,root,EVALUATOR,root)['draws'][0]
+            self.assertTrue(failed['legacy_position_replay']['position_replay_agrees_with_reference'])
+            self.assertFalse(failed['position_replay']['position_replay_agrees_with_reference'])
+            self.assertNotIn('render_geometry',failed)
+            missing='\n'.join(v for v in native if 'geometryProjection ' not in v)
+            missing_result=replay(assess(missing,source),index,root,EVALUATOR,root)['draws'][0]
+            self.assertEqual(missing_result['reference_kind'],'legacy-collapsed-matrix')
+            self.assertNotIn('legacy_position_replay',missing_result)
+            # Signed-zero arithmetic is unsupported, not structural corruption:
+            # preserve legacy and unrelated rows but suppress this geometry.
+            vp='phase=1 kind=cachedVP values=40000000,00000000'
+            unknown=native_log.replace(vp,'phase=1 kind=cachedVP values=40000000,80000000')
+            unknown=unknown.replace(raw_line('clip',0,word(wrong_legacy)),raw_line('clip',0,word(clip)))
+            row_unknown=replay(assess(unknown,source),index,root,EVALUATOR,root)['draws'][0]
+            self.assertTrue(row_unknown['legacy_position_replay']['position_replay_agrees_with_reference'])
+            self.assertFalse(row_unknown['position_replay']['position_replay_agrees_with_reference'])
+            self.assertEqual(row_unknown['reference_kind'],'native-cold-arithmetic-unknown')
+            self.assertNotIn('render_geometry',row_unknown)
+            with self.assertRaises(ValueError):replay(assess(native_log.replace('modelAddress=1000','modelAddress=1001'),source),index,root,EVALUATOR,root)
+            second=[v.replace('index=0 ','index=1 ') for v in native if v.startswith('Lab idle geometry') and
+                    'geometryProjection ' not in v and 'geometryFactors ' not in v and 'kind=factor' not in v]
+            second=[v.replace(raw_line('clip',0,word(wrong_legacy),1),raw_line('clip',0,word(clip),1)) for v in second]
+            mixed_log='\n'.join([*native,*second]).replace('draws=1','draws=2').replace('schema=3 ','schema=3 copyLayout=1 ')
+            mixed=replay(assess(mixed_log,source),index,root,EVALUATOR,root)
+            self.assertEqual([r['reference_kind'] for r in mixed['draws']],['cold-first-material-pc24-nearest-staged-local','legacy-collapsed-matrix'])
+            self.assertTrue(all(r['position_replay']['position_replay_agrees_with_reference'] for r in mixed['draws']))
+            partial=replay(assess(mixed_log.replace(vp,'phase=1 kind=cachedVP values=40000000,80000000'),source),index,root,EVALUATOR,root)
+            self.assertFalse(partial['draws'][0]['position_replay']['position_replay_agrees_with_reference'])
+            self.assertTrue(partial['draws'][1]['position_replay']['position_replay_agrees_with_reference'])
+            stored=[v.replace('Lab idle geometry','Lab idle retainedGeometry') for v in [*native,*second] if v.startswith('Lab idle geometry')]
+            from idle_stream_evidence_checks import fixture as input_failure_fixture
+            failure=[v.replace('request=100','request=1').replace('hand=1','hand=0')
+                     for v in input_failure_fixture().splitlines() if v.startswith('Lab idle input')]
+            retained=[native[0].replace('draws=1','draws=2').replace('stage=4','stage=3').replace('schema=3 ','schema=3 copyLayout=1 '),
+                      'Lab idle rejection '+base+' reason=32 preceding=2 checks=0 state=63 callbacks=63',
+                      *failure,
+                      'Lab idle retainedCopies '+base+' count=2 postOriginal=1 cleanupCertified=0 outerCurrent=0',
+                      *[v for v in native if v.startswith('Lab idle projection')],*stored]
+            history=replay(assess('\n'.join(retained),source),index,root,EVALUATOR,root)
+            self.assertTrue(history['retained_diagnostic_draws'][0]['position_replay']['position_replay_agrees_with_reference'])
+            self.assertFalse(history['all_consumed_positions_agree_with_native_reference'])
+            self.assertFalse(history['copied_geometry_coverage_complete']);self.assertFalse(history['alignment_accepted'])
             (root/'positions.bin').write_bytes(bytes(36))
             with self.assertRaises(ValueError):replay(evidence,index,root,EVALUATOR,root)
             with self.assertRaises(ValueError):replay(assess('\n'.join(noUV),source),index,root,EVALUATOR,root)
