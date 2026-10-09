@@ -1,5 +1,29 @@
 # Implementation status — 2026-10-09
 
+## Fresh neutral capture — guarded stop, second-eye evidence gap identified
+
+The fresh run on sourceaee8f6c/native fingerprint9c8602b reached the pinned Jungle
+scene, selected ID13, and submitted eight native/OpenXR projection pairs. The
+preparation adapter stopped before save with simulation-phase failure. Native
+shutdown was observed, no cleanup errors, and12protected files stayed unchanged.
+This was a guarded preparation rejection, not a game startup/stereo failure.
+The earlier successful sniper save remains preserved; attempted fixtures are
+immutable. No firing/movement/zoom or desktop input/focus occurred.
+
+Offline replay qualifies one completed first-eye/right-hand Black draw. Second-eye
+records have actual qualified native API draws/current evaluated palette but no
+animation query callback; the collector correctly rejects missing event evidence
+(Palette reason6/checks118), without borrowing first-eye animation ownership.
+Astra investigates the narrow native cache route for a defensible passive receipt.
+A diagnostic-only first-failed-phase label preserves all existing preparation
+predicate ordering/short-circuiting; all4products rebuilt on
+1df54a57b15b2e5c1384a63d9819b6f0990901e53b29fd6ca8969e30545bf25a.
+77Debug/77Release checks pass. No new package or runtime. Astra accepted the diagnostic hunk: original
+predicates retain order, short-circuiting and single evaluation; labels add no
+native queries. Local Astra/xhigh tags verified, backend unattested.
+No guard was relaxed.
+ID13 alignment and full feature completion remain open.
+
 ## Sniper transform reference unblocked — both-eye capture next
 
 The own source2 conditional adapter now reproduces seven completed Black draws,

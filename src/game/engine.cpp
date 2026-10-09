@@ -5986,15 +5986,30 @@ static __attribute__((noinline)) void runPostSimulationSniper(SimulationInterval
         };
         if(!labOnlineIsolationInstalled()) {fail("isolation");return;}
         validateLabOnlineIsolation(true);
-        auto phaseCurrent=[&] {
-            return interval.simulation && interval.preparedWorld && interval.preparedManager &&
-                simulationInterval==&interval && interval.nativeCaller==roomscaleSimulationReturn &&
-                currentSimulation()==interval.simulation && currentWorld()==interval.preparedWorld &&
-                primaryField(interval.simulation,0x4c)==0 &&
-                primaryField(interval.preparedWorld,0x74)==reinterpret_cast<uintptr_t>(interval.preparedManager) &&
-                simulationRevision==revision && nativeInputHealthy() && nativePresentationIdleForBodyMove();
+        const char *phaseFailure="unsampled";
+        auto phaseCheck=[&](bool passed,const char *label) {
+            if(!passed)phaseFailure=label;
+            return passed;
         };
-        if(!phaseCurrent()) {fail("simulation-phase");return;}
+        auto phaseCurrent=[&] {
+            phaseFailure="none";
+            // Preserve original evaluation order and short-circuiting. Labels
+            // report the first failed existing check; no extra native queries.
+            return phaseCheck(interval.simulation && interval.preparedWorld && interval.preparedManager,"prepared") &&
+                phaseCheck(simulationInterval==&interval,"interval") &&
+                phaseCheck(interval.nativeCaller==roomscaleSimulationReturn,"caller") &&
+                phaseCheck(currentSimulation()==interval.simulation,"simulation") &&
+                phaseCheck(currentWorld()==interval.preparedWorld,"world") &&
+                phaseCheck(primaryField(interval.simulation,0x4c)==0,"native-phase") &&
+                phaseCheck(primaryField(interval.preparedWorld,0x74)==reinterpret_cast<uintptr_t>(interval.preparedManager),"manager") &&
+                phaseCheck(simulationRevision==revision,"revision") &&
+                phaseCheck(nativeInputHealthy(),"input-health") &&
+                phaseCheck(nativePresentationIdleForBodyMove(),"presentation-idle");
+        };
+        if(!phaseCurrent()) {
+            log("Lab sniper phase failure check=%s stage=%u",phaseFailure,unsigned(labSniper.stage));
+            fail("simulation-phase");return;
+        }
         const auto s=copySnapshot();
         const bool bound=labSniper.player!=0;
         if(bound && (GetTickCount64()>labSniper.deadline ||

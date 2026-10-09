@@ -1,5 +1,22 @@
 # User-operated idle observation gate
 
+## Current authority and evidence — 2026-10-09
+
+Current user instructions authorize repeated isolated private neutral captures and
+verified single-player cheat/equip/save preparation. The no-agent-launch language
+below is historical and superseded; active AGENTS.md defines the bounded scope.
+Actual sniper preparation created a private native save and preload companion.
+The own source2 offline reference now corroborates seven first-eye/right-hand
+Black draws at unchanged tolerance, but neither alignment nor both-eye evidence
+is complete. A fresh run stopped at the unchanged simulation-phase guard.
+Second-eye native draws use an evaluated palette without the collector's own
+animation-query event; current event admission correctly rejects them. Native
+cache receipt transfer is not verified. A bounded Astra review assesses an
+independent per-eye observation path before any collector change. No firing or
+movement probes are authorized in this collection scope. See implementation status.
+
+## Historical collection and rejected proposals
+
 ## Current reviewed collection path — 2026-10-08
 
 The borrowed-original event/draw collector, offline position replay, indexed
