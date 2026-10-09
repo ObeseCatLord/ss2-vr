@@ -12,6 +12,15 @@ int main() {
     std::array<ScopeDeclarationElement,5> decl{{{0,0,2,0,5,0},{5,0,8,0,5,5},
         {6,0,8,0,5,6},{3,0,1,0,5,3},{255,0,17,0,0,0}}};
     ScopeCopyRanges ranges;
+    uint32_t diagnostic=0;
+    assert(idleBufferRanges(hand,decl,ranges,&diagnostic) && diagnostic==((1u<<20)-1));
+    {auto unsupported=hand;unsupported.vertex.pool=0;
+     assert(!idleBufferRanges(unsupported,decl,ranges,&diagnostic));
+     assert((diagnostic&0x1fff)==(0x1fff&~(1u<<8)) && !(diagnostic&(1u<<13)));
+     assert(ranges.slices[0].size==0);}
+    {auto truncated=hand;truncated.uv.offset=truncated.vertex.size;
+     assert(!idleBufferRanges(truncated,decl,ranges,&diagnostic));
+     assert(diagnostic==((1u<<19)-1) && ranges.slices[0].size==0);}
     assert(idleBufferRanges(hand,decl,ranges));assert(ranges.slices[0].size==3804);
     assert(ranges.slices[1].size==2028 && ranges.slices[4].offset==15216);
     for(unsigned variant=0;variant<18;++variant) {

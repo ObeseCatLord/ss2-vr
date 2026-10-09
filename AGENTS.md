@@ -8,6 +8,15 @@ This historical hold blocked public publication pending renewed confirmation. It
 
 ## Current PC continuation — start here
 
+Latest active diagnostic products: source fingerprint
+`782e716e38b6cf6081d3fe7940004e5ac815e1bd702ee2f987c82fff25e019b3`,
+IPC10/wire7. Native Jungle/projection stereo now reaches gameplay in private
+neutral captures; geometry remains rejected. First-bound-input substeps/HRESULTs
+and qualified scalar/mask outputs are implemented, rebuilt and Astra-approved.
+All65Debug/65Release/28normal-O gates pass. Fresh diagnostic preparation/handoff
+review precedes the next capture; no cache/Idle/event/layout gate is relaxed.
+Earlier product/status entries retain historical evidence, not latest identities.
+
 ### Current repeated neutral SS2 capture authority
 The user explicitly answered "Allow necessary private neutral captures" to the
 reviewed startup/idle-geometry collector question. This supersedes the exhausted

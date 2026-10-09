@@ -4043,6 +4043,29 @@ static void emitIdleWeaponTrace(const IdleWeaponTrace &trace) {
     if(trace.rejection!=IdleWeaponTrace::Rejection::None)
         log("Lab idle rejection request=%llu eye=%u hand=%u reason=%u preceding=%u checks=%u state=%u callbacks=%u",
             b.request,b.eye,b.hand,unsigned(trace.rejection),unsigned(trace.precedingStage),trace.rejectionChecks,trace.rejectionState,trace.callbacks);
+    if(trace.rejection==IdleWeaponTrace::Rejection::CollectInputs && trace.inputFailure.step) {
+        const auto &d=trace.inputFailure;const auto &v=d.inputs;
+        log("Lab idle inputFailure request=%llu eye=%u hand=%u step=%u index=%u hr=%d valid=%u caps=%u declaration=%u rangeChecks=%u",
+            b.request,b.eye,b.hand,d.step,d.index,d.hresult,d.valid,d.caps,d.declarationCount,d.rangeChecks);
+        if(d.valid&2)for(unsigned i=0;i<d.declarationCount;++i) {
+            const auto &e=d.declaration[i];
+            log("Lab idle inputDeclaration request=%llu eye=%u hand=%u index=%u values=%u,%u,%u,%u,%u,%u",
+                b.request,b.eye,b.hand,i,unsigned(e.stream),unsigned(e.offset),unsigned(e.type),unsigned(e.method),unsigned(e.usage),unsigned(e.usageIndex));
+        }
+        if(d.valid&4) {
+            log("Lab idle inputBinding request=%llu eye=%u hand=%u vertex=%u,%u,%u,%u,%u index=%u,%u,%u,%u,%u draw=%u,%d,%u,%u,%u,%u software=%u",
+                b.request,b.eye,b.hand,v.vertex.size,v.vertex.usage,v.vertex.pool,v.vertex.format,v.vertex.fvf,
+                v.index.size,v.index.usage,v.index.pool,v.index.format,v.index.fvf,
+                v.draw.topology,v.draw.base,v.draw.minimum,v.draw.vertices,v.draw.start,v.draw.primitives,unsigned(v.softwarePositions));
+            const ScopeStreamInput streams[]{v.positions,v.localIndices,v.uv,v.weights};
+            for(unsigned i=0;i<4;++i)log("Lab idle inputStream request=%llu eye=%u hand=%u index=%u object=%u offset=%u stride=%u frequency=%u",
+                b.request,b.eye,b.hand,i,unsigned(streams[i].object),streams[i].offset,streams[i].stride,streams[i].frequency);
+            log("Lab idle inputSurface request=%llu eye=%u hand=%u vertices=%d triangles=%d",
+                b.request,b.eye,b.hand,v.surface.vertices,v.surface.triangles);
+            for(unsigned i=0;i<4;++i)log("Lab idle inputChannel request=%llu eye=%u hand=%u index=%u offset=%u format=%u buffer=%u",
+                b.request,b.eye,b.hand,i,v.surface.channels[i].offset,v.surface.channels[i].format,v.surface.channels[i].buffer);
+        }
+    }
     if(trace.stage!=IdleWeaponTrace::Stage::Complete)return;
     for(unsigned i=0;i<trace.contributors;++i) {
         const auto &a=trace.animations[i];

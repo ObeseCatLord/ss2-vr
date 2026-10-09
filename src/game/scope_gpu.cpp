@@ -157,51 +157,70 @@ static void cleanup(bool aborted) noexcept {
     probe.idleTrace=nullptr;
     probe.busy = false;
 }
-static bool identity(IUnknown *object,IUnknown *&out) {
-    return object && SUCCEEDED(object->QueryInterface(IID_IUnknown,reinterpret_cast<void **>(&out))) && out;
+static bool identity(IUnknown *object,IUnknown *&out,HRESULT *observed=nullptr) {
+    if(!object){if(observed)*observed=E_POINTER;return false;}
+    const HRESULT result=object->QueryInterface(IID_IUnknown,reinterpret_cast<void **>(&out));
+    if(observed)*observed=result;
+    return SUCCEEDED(result) && out;
 }
-static bool boundInputs(IDirect3DDevice9 *d,BoundInputs &b,const ScopeIndexedDraw &draw,bool idle=false) {
+static bool boundInputs(IDirect3DDevice9 *d,BoundInputs &b,const ScopeIndexedDraw &draw,bool idle=false,
+                        IdleWeaponTrace::InputFailure *diagnostic=nullptr) {
     b.values = {}; b.count = MAXD3DDECLLENGTH+1;
+    HRESULT result=S_OK;
+    auto fail=[&](uint32_t step,uint32_t index=0) {
+        if(diagnostic){diagnostic->step=step;diagnostic->index=index;diagnostic->hresult=int32_t(result);}
+        return false;
+    };
     D3DCAPS9 caps{};
-    if (FAILED(d->GetDeviceCaps(&caps)) || !caps.MaxVertexShaderConst || caps.MaxVertexShaderConst > 256) return false;
-    b.constantCount = caps.MaxVertexShaderConst;
-    if (FAILED(d->GetVertexShaderConstantF(0,b.constants[0].data(),b.constantCount))) return false;
+    result=d->GetDeviceCaps(&caps);if(FAILED(result))return fail(1);
+    if(diagnostic){diagnostic->valid|=1;diagnostic->caps=caps.MaxVertexShaderConst;}
+    if(!caps.MaxVertexShaderConst || caps.MaxVertexShaderConst>256)return fail(2);
+    b.constantCount=caps.MaxVertexShaderConst;
+    result=d->GetVertexShaderConstantF(0,b.constants[0].data(),b.constantCount);if(FAILED(result))return fail(3);
     D3DVERTEXELEMENT9 elements[MAXD3DDECLLENGTH+1]{};
-    if (FAILED(d->GetVertexDeclaration(&b.declaration)) || !b.declaration ||
-        FAILED(b.declaration->GetDeclaration(elements,&b.count)) || !b.count || b.count > std::size(elements)) return false;
-    bool weights = false;
-    for (UINT i=0;i<b.count;++i) {
-        const auto e=elements[i];
-        b.elements[i]={e.Stream,e.Offset,e.Type,e.Method,e.Usage,e.UsageIndex};
-        if (e.Stream == 6 && e.Type != D3DDECLTYPE_UNUSED) weights = true;
+    result=d->GetVertexDeclaration(&b.declaration);if(FAILED(result))return fail(4);
+    if(!b.declaration)return fail(5);
+    result=b.declaration->GetDeclaration(elements,&b.count);if(FAILED(result))return fail(6);
+    if(diagnostic){diagnostic->valid|=8;diagnostic->declarationCount=b.count;}
+    if(!b.count || b.count>std::size(elements))return fail(7);
+    bool weights=false;
+    for(UINT i=0;i<b.count;++i) {
+        const auto e=elements[i];b.elements[i]={e.Stream,e.Offset,e.Type,e.Method,e.Usage,e.UsageIndex};
+        if(e.Stream==6 && e.Type!=D3DDECLTYPE_UNUSED)weights=true;
     }
-    b.values.surface=idle?probe.idle.raster.layout:probe.raster.pose.layout;
-    b.values.draw=draw;
-    // The three mandatory streams precede independently optional stream 6.
+    if(diagnostic){diagnostic->valid|=2;diagnostic->declaration=b.elements;}
+    b.values.surface=idle?probe.idle.raster.layout:probe.raster.pose.layout;b.values.draw=draw;
     ScopeStreamInput *streams[]{&b.values.positions,&b.values.localIndices,&b.values.uv,&b.values.weights};
     const UINT streamNumbers[]{0,5,3,6};
-    for (unsigned i=0;i<(weights?4u:3u);++i) {
-        auto &s=*streams[i];
-        if (FAILED(d->GetStreamSource(streamNumbers[i],&b.vertex[i],&s.offset,&s.stride)) || !b.vertex[i] ||
-            FAILED(d->GetStreamSourceFreq(streamNumbers[i],&s.frequency)) ||
-            !identity(b.vertex[i],b.identity[i])) return false;
-        s.object=reinterpret_cast<uintptr_t>(b.identity[i]);
+    for(unsigned i=0;i<(weights?4u:3u);++i) {
+        auto &stream=*streams[i];
+        result=d->GetStreamSource(streamNumbers[i],&b.vertex[i],&stream.offset,&stream.stride);if(FAILED(result))return fail(8,streamNumbers[i]);
+        if(!b.vertex[i])return fail(9,streamNumbers[i]);
+        result=d->GetStreamSourceFreq(streamNumbers[i],&stream.frequency);if(FAILED(result))return fail(10,streamNumbers[i]);
+        if(!identity(b.vertex[i],b.identity[i],&result))return fail(11,streamNumbers[i]);
+        stream.object=reinterpret_cast<uintptr_t>(b.identity[i]);
     }
-    D3DVERTEXBUFFER_DESC vertex{};
-    D3DINDEXBUFFER_DESC index{};
-    if (FAILED(b.vertex[0]->GetDesc(&vertex)) || vertex.Type != D3DRTYPE_VERTEXBUFFER ||
-        FAILED(d->GetIndices(&b.index)) || !b.index || FAILED(b.index->GetDesc(&index)) ||
-        index.Type != D3DRTYPE_INDEXBUFFER || !identity(b.index,b.identity[4]) ||
-        !identity(b.declaration,b.identity[5])) return false;
+    D3DVERTEXBUFFER_DESC vertex{};D3DINDEXBUFFER_DESC index{};
+    result=b.vertex[0]->GetDesc(&vertex);if(FAILED(result))return fail(12);
+    if(vertex.Type!=D3DRTYPE_VERTEXBUFFER)return fail(13);
+    result=d->GetIndices(&b.index);if(FAILED(result))return fail(14);
+    if(!b.index)return fail(15);
+    result=b.index->GetDesc(&index);if(FAILED(result))return fail(16);
+    if(index.Type!=D3DRTYPE_INDEXBUFFER)return fail(17);
+    if(!identity(b.index,b.identity[4],&result))return fail(18);
+    if(!identity(b.declaration,b.identity[5],&result))return fail(19);
     b.values.vertex={vertex.Size,vertex.Usage,uint32_t(vertex.Pool),uint32_t(vertex.Format),vertex.FVF};
     b.values.index={index.Size,index.Usage,uint32_t(index.Pool),uint32_t(index.Format),0};
     b.values.indexObject=reinterpret_cast<uintptr_t>(b.identity[4]);
+    if(diagnostic){diagnostic->valid|=4;diagnostic->inputs=b.values;}
     ScopeCopyRanges ranges;
-    if (!(idle?idleBufferRanges(b.values,std::span(b.elements).first(b.count),ranges):
-               scopeBufferRanges(b.values,std::span(b.elements).first(b.count),ranges)) ||
-        FAILED(d->GetVertexShader(&b.shader)) || !b.shader || !identity(b.shader,b.identity[6]) ||
-        FAILED(d->GetVertexShaderConstantF(8,b.uvRows[0].data(),2))) return false;
-    for (const auto &row:b.uvRows) for (float value:row) if (!std::isfinite(value)) return false;
+    if(!(idle?idleBufferRanges(b.values,std::span(b.elements).first(b.count),ranges,diagnostic?&diagnostic->rangeChecks:nullptr):
+              scopeBufferRanges(b.values,std::span(b.elements).first(b.count),ranges)))return fail(20);
+    result=d->GetVertexShader(&b.shader);if(FAILED(result))return fail(21);
+    if(!b.shader)return fail(22);
+    if(!identity(b.shader,b.identity[6],&result))return fail(23);
+    result=d->GetVertexShaderConstantF(8,b.uvRows[0].data(),2);if(FAILED(result))return fail(24);
+    for(const auto &row:b.uvRows)for(float value:row)if(!std::isfinite(value))return fail(25);
     return true;
 }
 // Shader objects expose no bytecode mutator; same canonical identity in the
@@ -349,7 +368,11 @@ static bool collectIdleGeometry(IDirect3DDevice9 *d,const ScopeIndexedDraw &draw
     if(probe.idleTrace)probe.idleTrace->callbacks|=IdleWeaponTrace::GeometrySeen;
     if(!nativeUiDeviceCurrent(d))return reject(IdleWeaponTrace::Rejection::CollectDevice);
     ScopeCopyRanges ranges;
-    if(!boundInputs(d,probe.bindings[0],draw,true))return reject(IdleWeaponTrace::Rejection::CollectInputs);
+    IdleWeaponTrace::InputFailure inputFailure{};
+    if(!boundInputs(d,probe.bindings[0],draw,true,&inputFailure)) {
+        if(probe.idleTrace && probe.idleTrace->rejection==IdleWeaponTrace::Rejection::None)probe.idleTrace->inputFailure=inputFailure;
+        return reject(IdleWeaponTrace::Rejection::CollectInputs);
+    }
     if(!idleBufferRanges(probe.bindings[0].values,std::span(probe.bindings[0].elements).first(probe.bindings[0].count),ranges))return reject(IdleWeaponTrace::Rejection::CollectRanges);
     if(!boundProgram(true))return reject(IdleWeaponTrace::Rejection::CollectProgram);
     const std::array<std::span<uint8_t>,5> storage{probe.positions,probe.indices,probe.weights,probe.localIndices,probe.uv};

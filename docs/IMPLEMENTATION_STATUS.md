@@ -1,5 +1,27 @@
 # Implementation status — 2026-10-08
 
+## Current bound-input diagnostic checkpoint
+
+The first-rejection capture reached gameplay but identified13first-eye bound-input
+failures, three contributor-name failures and16second-eye palettes without event
+admission. Geometry/grasp remains incomplete. Native cache reuse is consistent
+with this evidence, but winning-producer retention has not been established.
+Astra-approved substep/HRESULT/qualified-output diagnostics now reuse the same
+COM calls and range predicates. Reader progression/count/width/qualification
+checks reject producer-impossible receipts. No acceptance gates were relaxed.
+All products rebuilt:65Debug/65Release and28normal/optimized compiled/native
+gates pass; the corrected reader is rechecked. No runtime of this build yet.
+Source fingerprint `782e716e38b6cf6081d3fe7940004e5ac815e1bd702ee2f987c82fff25e019b3`, IPC10/wire7 unchanged. Product hashes: game
+`2200860112cbf2688b60319f8b579f4c0bb84f35d70c8af2ef9a2b3a8969cdd3`, server
+`8e148667025f1b92603d5c1c9cb85027d8ac3427e69730796c5f56704eedf45d`, host
+`588c4b8d08a20199c9a5d112085cbaed5cd2dcaa2ab29370d11258f03591b771`, loader
+`bb011caa82528c541a73967ce6408f82198ff4fd0358b38b54884719d863bd1d`.
+Next: fresh sealed private neutral diagnostic capture under existing repeated
+authority; use actual substep/scalars to choose one supported fix. Preserve all
+old failed attempts and originals. Full geometry/grasp, driver controls and
+physical/device/network/user acceptance remain open.
+
+
 ## Latest gameplay and diagnostic build
 
 The eager private runtime setup reached actual Jungle gameplay in the subsequent

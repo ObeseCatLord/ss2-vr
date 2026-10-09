@@ -104,6 +104,73 @@ def assess(text,expected_source):
             current['rejection']={'reason':reason,'preceding':preceding,'checks':integer(f['checks'],0,32767),
                                   'state':integer(f['state'],0,63),'callbacks':integer(f['callbacks'],0,63)}
             continue
+        if kind.startswith('input'):
+            if current is None or current['stage']!=3 or current.get('rejection',{}).get('reason')!=32:
+                raise ValueError('Input failure without matching CollectInputs rejection')
+            if any(integer(f[k])!=current[k] for k in ('request','eye','hand')):
+                raise ValueError('Interleaved/foreign input failure')
+            if kind=='inputFailure':
+                if set(f)!={'request','eye','hand','step','index','hr','valid','caps','declaration','rangeChecks'} or 'input_failure' in current:
+                    raise ValueError('Duplicate or malformed input failure')
+                failure={k:integer(f[k],-(1<<31),(1<<31)-1) if k=='hr' else integer(f[k],0,(1<<32)-1)
+                         for k in ('step','index','hr','valid','caps','declaration','rangeChecks')}
+                if not 1<=failure['step']<=25 or failure['index']>6 or failure['valid']>15 or failure['rangeChecks']>=(1<<20) or \
+                   ((failure['valid']&2) and (not failure['valid']&8 or not 1<=failure['declaration']<=65)) or \
+                   ((failure['valid']&4) and failure['valid']!=15):
+                    raise ValueError('Input failure validity/budget mismatch')
+                step=failure['step']
+                expected_valid=0 if step==1 else 1 if step<=6 else 9 if step==7 else 11 if step<=19 else 15
+                api_failures={1,3,4,6,8,10,12,14,16,21,24}
+                identity_failures={11,18,19,23}
+                if failure['valid']!=expected_valid or \
+                   (step in range(8,12) and failure['index'] not in (0,5,3,6)) or \
+                   (step not in range(8,12) and failure['index']) or \
+                   (step in api_failures and failure['hr']>=0) or \
+                   (step not in api_failures|identity_failures and failure['hr']<0) or \
+                   (step==1 and failure['caps']) or \
+                   (step==2 and 1<=failure['caps']<=256) or \
+                   (step>=3 and not 1<=failure['caps']<=256) or \
+                   (step<=6 and failure['declaration']) or \
+                   (step==7 and 1<=failure['declaration']<=65) or \
+                   (step>=8 and not 1<=failure['declaration']<=65) or \
+                   (step<20 and failure['rangeChecks']) or \
+                   (step==20 and failure['rangeChecks']==(1<<20)-1) or \
+                   (step>20 and failure['rangeChecks']!=(1<<20)-1):
+                    raise ValueError('Input failure contradicts producer progression')
+                failure.update(declaration_rows={},binding=None,streams={},surface=None,channels={})
+                current['input_failure']=failure
+            else:
+                failure=current.get('input_failure')
+                if failure is None:raise ValueError('Input data before qualified failure')
+                def numbers(value,count,signed_index=None):
+                    parts=value.split(',')
+                    if len(parts)!=count:raise ValueError('Truncated scalar input snapshot')
+                    return [integer(v,-(1<<31),(1<<31)-1) if i==signed_index else integer(v,0,(1<<32)-1) for i,v in enumerate(parts)]
+                if kind=='inputDeclaration':
+                    if not failure['valid']&2 or set(f)!={'request','eye','hand','index','values'}:raise ValueError('Unqualified declaration snapshot')
+                    index=integer(f['index'],0,failure['declaration']-1);values=numbers(f['values'],6)
+                    if index in failure['declaration_rows'] or any(v>(65535 if i<2 else 255) for i,v in enumerate(values)):
+                        raise ValueError('Duplicate/outside declaration field')
+                    failure['declaration_rows'][index]=values
+                elif kind in ('inputBinding','inputStream','inputSurface','inputChannel'):
+                    if not failure['valid']&4:raise ValueError('Unqualified input binding snapshot')
+                    if kind=='inputBinding':
+                        if set(f)!={'request','eye','hand','vertex','index','draw','software'} or failure['binding'] is not None:
+                            raise ValueError('Binding snapshot schema mismatch')
+                        failure['binding']={'vertex':numbers(f['vertex'],5),'index':numbers(f['index'],5),
+                                            'draw':numbers(f['draw'],6,1),'software':integer(f['software'],0,1)}
+                    elif kind=='inputSurface':
+                        if set(f)!={'request','eye','hand','vertices','triangles'} or failure['surface'] is not None:
+                            raise ValueError('Surface snapshot schema mismatch')
+                        failure['surface']={k:integer(f[k],-(1<<31),(1<<31)-1) for k in ('vertices','triangles')}
+                    else:
+                        names=('object','offset','stride','frequency') if kind=='inputStream' else ('offset','format','buffer')
+                        if set(f)!={'request','eye','hand','index',*names}:raise ValueError('Input channel/stream schema mismatch')
+                        index=integer(f['index'],0,3);target=failure['streams' if kind=='inputStream' else 'channels']
+                        if index in target:raise ValueError('Repeated input channel/stream')
+                        target[index]={k:integer(f[k],0,255 if k in ('format','buffer') else (1<<32)-1) for k in names}
+                else:raise ValueError('Unknown input diagnostic')
+            continue
         if current is None or current['stage']!=4:raise ValueError('Data without complete native-copy record')
         if any(integer(f[k])!=current[k] for k in ('request','eye','hand')):
             raise ValueError('Interleaved/foreign idle data')
@@ -162,6 +229,16 @@ def assess(text,expected_source):
     if not records:raise ValueError('No idle observations')
     completed=[];rejected=[]
     for r in records:
+        failure=r.get('input_failure')
+        if failure:
+            if failure['valid']&2 and set(failure['declaration_rows'])!=set(range(failure['declaration'])):
+                raise ValueError('Truncated input declaration diagnostic')
+            if failure['step'] in range(8,12) and failure['index']==6 and not any(
+                row[0]==6 and row[2]!=17 for row in failure['declaration_rows'].values()):
+                raise ValueError('Optional stream failure without an active declaration input')
+            if failure['valid']&4 and (failure['binding'] is None or failure['surface'] is None or
+                set(failure['streams'])!=set(range(4)) or set(failure['channels'])!=set(range(4))):
+                raise ValueError('Truncated input binding diagnostic')
         if r['stage']!=4:rejected.append(r);continue
         if any(r[k]<=0 for k in ('request','input','owner','weapon','model','generation','cfg')):
             raise ValueError('Missing complete native-copy identity')

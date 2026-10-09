@@ -70,6 +70,12 @@ struct IdleWeaponTrace {
     Stage stage=Stage::Empty,precedingStage=Stage::Empty;
     Rejection rejection=Rejection::None;
     uint32_t callbacks=0,rejectionChecks=0,rejectionState=0;
+    struct InputFailure {
+        uint32_t step=0,index=0,valid=0,caps=0,declarationCount=0,rangeChecks=0;
+        int32_t hresult=0;
+        ScopeBufferInputs inputs{};
+        std::array<ScopeDeclarationElement,65> declaration{};
+    } inputFailure{};
     static constexpr uint32_t checks(std::initializer_list<bool> values) noexcept {
         uint32_t result=0,bit=1;for(bool value:values){if(value)result|=bit;bit<<=1;}return result;
     }

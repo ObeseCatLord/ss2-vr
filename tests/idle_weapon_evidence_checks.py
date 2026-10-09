@@ -13,6 +13,25 @@ STRETCH='Lab idle stretch request=100 eye=1 hand=0 values=-1,1,1'
 VALID='\n'.join([DRAW,ANIM,*MATRICES,STRETCH])
 
 class Checks(unittest.TestCase):
+    def test_input_substeps_do_not_certify_bindings_and_partial_or_unqualified_payloads_reject(self):
+        rejected=DRAW.replace('stage=4','stage=3')
+        reason='Lab idle rejection request=100 eye=1 hand=0 reason=32 preceding=2 checks=0 state=63 callbacks=63'
+        failure='Lab idle inputFailure request=100 eye=1 hand=0 step=7 index=0 hr=0 valid=9 caps=256 declaration=0 rangeChecks=0'
+        text=rejected+'\n'+reason+'\n'+failure
+        r=assess(text,SOURCE)
+        self.assertFalse(r['copied_event_pose_observations'])
+        self.assertEqual(r['rejected_or_missing_observations'][0]['input_failure']['step'],7)
+        row='Lab idle inputDeclaration request=100 eye=1 hand=0 index=0 values=255,0,17,0,0,0'
+        qualified=text.replace('step=7','step=8').replace('hr=0','hr=-1').replace('valid=9','valid=11').replace('declaration=0','declaration=1')+'\n'+row
+        self.assertEqual(len(assess(qualified,SOURCE)['rejected_or_missing_observations'][0]['input_failure']['declaration_rows']),1)
+        for bad in (text.replace('valid=9','valid=11').replace('declaration=0','declaration=1')+'\n'+row,
+                    text+'\n'+row,qualified+'\n'+row,qualified.replace('\n'+row,''),
+                    text.replace('valid=9','valid=4'),text.replace('step=7','step=26'),
+                    text.replace('rangeChecks=0','rangeChecks=1048576'),text.replace('reason=32','reason=31'),
+                    qualified.replace('valid=11','valid=15'),qualified.replace('values=255','values=65536'),qualified.replace('index=0 hr=','index=1 hr='),
+                    qualified.replace('index=0 hr=','index=6 hr='),qualified.replace('caps=256','caps=0'),
+                    qualified.replace('hr=-1','hr=0'),qualified.replace('rangeChecks=0','rangeChecks=1')):
+            with self.subTest(bad=bad),self.assertRaises(ValueError):assess(bad,SOURCE)
     def test_first_rejection_diagnostics_never_promote_geometry_and_require_one_matching_record(self):
         rejected=DRAW.replace('stage=4','stage=3')
         reason='Lab idle rejection request=100 eye=1 hand=0 reason=28 preceding=2 checks=1 state=7 callbacks=31'

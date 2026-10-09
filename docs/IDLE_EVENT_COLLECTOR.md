@@ -1,5 +1,48 @@
 # Event-time ID1 collection — source implemented
 
+## Bound-input substeps — current diagnostic build
+
+A subsequent neutral capture again reached native Jungle gameplay (101 complete
+projection pairs), but geometry remained rejected. First reasons were 13 first-eye
+bound-input failures, three first-eye contributor-name rejections and 16 second-eye
+palette failures without an admitted event. Native shutdown/owned cleanup and
+protected original files passed. No gameplay movement or firing input was sent.
+
+The first bound-input failure now records the existing failing substep and HRESULT,
+stream index when applicable, and validity-qualified scalar outputs. COM calls,
+order, short-circuits, retained owners and layout admission remain unchanged.
+Validity bits: caps output 1; bounded declaration array 2; complete binding
+snapshot 4; successful declaration-count output 8. A failed API call does not
+qualify its outputs. A successful count may still be rejected as zero/too large.
+The reader enforces the exact producer progression, output qualification and
+native numeric widths; contradictory, interleaved, duplicate or truncated data
+rejects. Diagnostic records never certify accepted bindings or grasp.
+
+Substeps: 1 caps call, 2 caps bound, 3 constants call, 4 declaration call,
+5 null declaration, 6 declaration-elements call, 7 count bound, 8 stream call,
+9 null stream, 10 frequency call, 11 stream identity, 12 vertex-description call,
+13 vertex type, 14 index call, 15 null index, 16 index-description call,
+17 index type, 18 index identity, 19 declaration identity, 20 ranges/grammar,
+21 shader call, 22 null shader, 23 shader identity, 24 UV-constant call,
+25 finite UV constants. Identity failure can carry success HRESULT with null output.
+
+The optional range mask evaluates the same copied-data predicates. Bits 0–12:
+vertex bound, triangle bound, software exclusion, topology/base/minimum, draw
+range, channel formats, channel buffers, source identities, vertex descriptor,
+index descriptor, position stream, local-index stream, UV stream. Bit13 is
+declaration grammar; bit14 is optional-weight binding; bits15–19 are each copied
+channel's byte range. Later groups remain unevaluated after an earlier rejection.
+A full mask means this helper passed, not that copying/native draw completed.
+
+Astra/xhigh approved native instrumentation and the corrected reader. All products
+rebuilt; 65 Debug/65 Release groups and28 normal/optimized compiled/native gates
+pass, and the corrected eight-group reader passed normal/optimized and CTest.
+No capture has run this build yet. Native cache reuse is a concrete explanation
+for missing second-eye events, but tags/pointer equality and an earlier pre-End
+copy do not prove producer retention. The cache/event/Idle-name gates stay closed
+until the exact association is established; no event is borrowed from another eye.
+
+
 ## Current first-failure instrumentation and runtime evidence
 
 The latest private neutral capture reached native Jungle gameplay, with matched
