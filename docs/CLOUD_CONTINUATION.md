@@ -1,3 +1,32 @@
+# Latest native geometry evidence
+
+## Latest native retained-copy result
+
+The fresh neutral run of source96d971f1cda7215d82363eaade6d4f6ad0e49372,
+fingerprint cdc45f54548282a0afdfec4f7478eada860f816f08bea850b28a857f757b1fe4,
+reached expected Jungle with105native projection pairs. Native isolation shutdown,
+owned cleanup/display retirement and12protected-file preservation passed. Whole
+collector remains rejected:0accepted observations,32rejected records.
+
+Eleven retained draws (7right/4left, eye0) uniquely match all five private candidate
+channel hashes and replay the unchanged202word native shader against the captured
+position reference. All218vertices per draw agree; maximum absolute homogeneous
+clip error across the eleven draws is1.57475e-5. These are historical post-original/
+pre-cleanup diagnostic copies, not whole-trace/cleanup/GPU/grasp certification.
+
+The matched geometry is weapon mesh3; the existing indexed hand annotation refers
+to a different asset/mesh2. It cannot be applied to this weapon or certify grasp.
+The subsequent noUV0/1/5/6pass still rejects whole-trace collection, and the second
+eye still lacks winning-event admission. Astra designGO approves an exact passive
+noUV-shader observation using the existing owned slots and original draw;
+implementation is next. Numbers must derive from the original failure declaration,
+with original5/6 scalar-binding comparison and all geometry/filter/cache gates
+unchanged. Extra native queries are justified
+only for this now-demonstrated missing pass; no broad lifetime/census repeat.
+Assets, shader bytes and runtime captures stay private. No firing/movement/vehicle/
+head-motion/hardware/network acceptance was performed. Prior fixture is archived
+and must not be rerun/resealed. Full-mod scope remains open.
+
 # Latest retained-draw source checkpoint
 
 ## Historical retained-draw diagnostic — source GO

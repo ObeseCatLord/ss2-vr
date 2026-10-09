@@ -8,13 +8,24 @@ This historical hold blocked public publication pending renewed confirmation. It
 
 ## Current PC continuation — start here
 
+Latest neutral runtime of cdc45 products reached Jungle/105native projectionpairs,
+normal native shutdown, empty ownedcleanup/display retired, protected12unchanged.
+11retainedcopies (eye0:7right4left) uniquelymatchfiveweaponmesh3channelhashes and
+unchanged202wordshader/reference replay; maxcliperror1.57475e-5. Authoredhand
+annotation is DIFFERENTasset/mesh2, neverapplyit toweapon. Wholetrace remains
+rejected, second-eye winningevent andgrasp/release open. NextboundedAstra decision
+now has designGO for exactnoUV0/1/5/6pass passive observation inexistingtypedownedslots;
+implementation next. Immutable originalfailure selects numbers; compareoriginal
+5/6bindings, preserveold7/8 behavior. No geometry
+admission/UVguess/filter/cache relaxation. Attemptedfixtures archivedneverrerun.
+
 Current rebuilt fingerprint `cdc45f54548282a0afdfec4f7478eada860f816f08bea850b28a857f757b1fe4`, IPC10/wire7. Astra combinedsourceGO
 for retained historical draw diagnostics: source emits alreadyowned copies after
 later rejection, sharedstrict reader/matching/replay keep them outside Complete
 and readiness. Callback63 and fully validated passive/retained coexistence are
 mandatory. No new native queries/locks/writes/owners. All68Debug/68Release and
 28normal/-O gates pass;14reader/11passive groups passnormal/-O. No runtime of this
-build yet. Fresh sealed capture next under existing neutral authority. Prior
+build was absent at the source checkpoint; the latest runtime outcome above now supersedes that status. Prior
 710534capture reached Jungle/101native projectionpairs with distinct static world-
 eye images, but wholetrace rejected;12earlier draw copies were suppressed after
 later noUV declaration failure. Historical diagnostic copies certify storage
