@@ -4407,6 +4407,26 @@ bool copyIdleSubmissionMetadata(const IdleWeaponTrace *wanted,IdleSubmissionMeta
     },[&](bool aborted) noexcept {if(aborted){out={};copied=false;}});
     return copied; // No trace rejection, clip qualification, or retained native borrow.
 }
+bool copyIdleSubmissionPalette(const IdleWeaponTrace *wanted,IdlePaletteCopy &out) noexcept {
+    out={};bool copied=false;
+    withNativeFinally([&] {
+        ScopeDrawBinding binding;IdleDrawIdentity identity;IdleWeaponTrace *trace=nullptr;
+        if(!currentIdleDraw(binding,identity,trace) || trace!=wanted || !trace || trace->nativeId!=2 ||
+           !trace->admitted || trace->binding!=identity || !trace->config.configuration)return;
+        IdlePaletteCopy before,after;
+        if(!remote_render::copyIdlePalette(binding.modelInstance,before) ||
+           before.metadata.rootConfig!=trace->config)return;
+        ScopeDrawBinding now;IdleDrawIdentity current;IdleWeaponTrace *same=nullptr;
+        if(!currentIdleDraw(now,current,same) || same!=trace || current!=identity ||
+           now.modelInstance!=binding.modelInstance ||
+           !remote_render::copyIdlePalette(now.modelInstance,after) || before!=after)return;
+        ScopeDrawBinding end;IdleDrawIdentity finalIdentity;IdleWeaponTrace *finalTrace=nullptr;
+        if(!currentIdleDraw(end,finalIdentity,finalTrace) || finalTrace!=trace || finalIdentity!=identity ||
+           end.modelInstance!=binding.modelInstance)return;
+        out=before;copied=true;
+    },[&](bool aborted) noexcept {if(aborted){out={};copied=false;}});
+    return copied;
+}
 bool currentIdleRaster(IdleRasterCopy &out,IdleWeaponTrace *&trace) {
     out={};trace=nullptr;ScopeDrawBinding binding;IdleDrawIdentity identity;
     if(!currentIdleDraw(binding,identity,trace))return false;
@@ -4423,6 +4443,52 @@ bool idleRejectedRasterCurrent(const IdleRasterCopy &expected,const IdleWeaponTr
        !trace->poseCopied || !IdleWeaponTrace::observedStreamFamily(trace->inputFailure))return false;
     IdleRasterCopy now;
     return copyBoundIdleRaster(binding,identity,trace,now) && now==expected;
+}
+static void emitIdlePaletteCompanions(const IdleWeaponTrace &trace) {
+    if(trace.nativeId!=2)return;
+    const auto &b=trace.binding;
+    log("Lab idle paletteSummary schema=1 request=%llu eye=%u hand=%u source=%.*s payloads=%u overflow=%u outerCompleted=%u alignment=0 grasp=0",
+        b.request,b.eye,b.hand,64,ss2vrBuildContract.sourceFingerprint.data(),trace.paletteApiCount,
+        unsigned(trace.paletteApiOverflow),unsigned(trace.submissions.outerCompleted));
+    for(unsigned n=0;n<trace.submissions.count;++n) {
+        if(!trace.paletteApiPublishable(n))continue;
+        const auto &row=trace.submissions.rows[n];const auto &p=row.palette;
+        const auto &api=trace.paletteApiPayloads[row.paletteApiSlot];const auto &s=api.before;
+        const auto &m=p.metadata;
+        log("Lab idle paletteRow schema=1 request=%llu input=%llu generation=%u owner=%u weapon=%u model=%u eye=%u hand=%u index=%u ordinal=%u api=%u modelAddress=%u drawAddress=%u modelRecord=%d drawRecord=%d instance=%u surface=%u root=%u,%u,%d render=%u,%u,%d evaluated=%u matrices=%u mapping=%u palette=%u first=%u count=%u mapCount=%u paletteCount=%u canonicalCount=%u modelCount=%u canonicalEqual=%u words=%u constants=%u declaration=%u objects=%u,%u,%u cleanupCertified=1 outerCurrent=1",
+            b.request,b.input,b.generation,b.owner,b.weapon,b.model,b.eye,b.hand,n,row.ordinal,row.paletteApiSlot,
+            m.modelAddress,m.drawAddress,m.modelRecord,m.drawRecord,m.instance,m.surface,
+            m.rootConfig.configuration,m.rootConfig.file,m.rootConfig.resource,
+            m.renderConfig.configuration,m.renderConfig.file,m.renderConfig.resource,
+            p.evaluated,p.matrices,p.mappingAddress,p.paletteAddress,p.first,p.count,p.mapCount,p.paletteCount,
+            p.canonicalCount,p.modelCount,unsigned(p.paletteCopiesCanonical()),api.words,s.caps,s.declarationCount,
+            s.declarationObject,s.indexObject,s.shaderObject);
+        auto words=[&](const char *kind,unsigned item,unsigned chunk,std::span<const uint32_t> values) {
+            char text[32*9]{};unsigned cursor=0;
+            for(auto value:values)cursor+=unsigned(std::snprintf(text+cursor,sizeof(text)-cursor,"%s%08x",cursor?",":"",value));
+            log("Lab idle paletteData request=%llu eye=%u hand=%u index=%u ordinal=%u kind=%s item=%u chunk=%u values=%s",
+                b.request,b.eye,b.hand,n,row.ordinal,kind,item,chunk,text);
+        };
+        words("world",0,0,p.world);
+        const auto &d=row.draw;
+        const std::array<uint32_t,6> draw{d.topology,uint32_t(d.base),d.minimum,d.vertices,d.start,d.primitives};
+        words("draw",0,0,draw);
+        for(unsigned i=0;i<p.count;++i) {
+            const auto &e=p.entries[i];
+            const std::array<uint32_t,5> mapping{uint32_t(e.draw),uint32_t(e.bone),uint32_t(e.owner),e.definition,e.name};
+            words("mapping",i,0,mapping);words("canonical",i,0,e.canonical);words("palette",i,0,e.palette);
+        }
+        for(unsigned i=0;i<s.streams.size();++i) {
+            const auto &v=s.streams[i];
+            const std::array<uint32_t,4> values{uint32_t(v.object),v.offset,v.stride,v.frequency};words("stream",i,0,values);
+        }
+        for(unsigned i=0;i<s.declarationCount;++i) {
+            const auto &e=s.declaration[i];
+            const std::array<uint32_t,6> values{e.stream,e.offset,e.type,e.method,e.usage,e.usageIndex};words("declaration",i,0,values);
+        }
+        for(unsigned i=0;i<s.caps;++i)words("constant",i,0,s.constants[i]);
+        for(unsigned i=0;i<api.words;i+=32)words("program",0,i,std::span(api.program).subspan(i,std::min(32u,api.words-i)));
+    }
 }
 static void emitIdleWeaponTrace(const IdleWeaponTrace &trace) {
     const auto &b=trace.binding;
@@ -4979,8 +5045,8 @@ static void renderTrackedWeapon(void *w, Matrix34 m, bool sniper, uintptr_t call
     physicalWeapon = nullptr;
     PhysicalWeaponInvocation invocation;
     std::optional<IdleWeaponTrace> idleStorage;
-    bool physical = false;
-    withNativeFinally([&] {
+    bool physical = false,originalReturned=false;
+    const bool returned=withNativeFinally([&] {
     previousRoute=weaponRenderRoute;
     route.parent=previousRoute;
     weaponRenderRoute=&route;
@@ -5023,6 +5089,7 @@ static void renderTrackedWeapon(void *w, Matrix34 m, bool sniper, uintptr_t call
         originalSniperRender(w, m);
     else
         originalWeaponRender(w, m);
+    originalReturned=true;
     route.originalActive=false;
     if (physical && generation == graphicsResourceGeneration())
         eyeScopePoses.finishDraw(unsigned(hand), invocation.scopePose,
@@ -5043,7 +5110,14 @@ static void renderTrackedWeapon(void *w, Matrix34 m, bool sniper, uintptr_t call
             finishPhysicalWeapon(invocation, generation);
         physicalWeapon = !aborted && generation == graphicsResourceGeneration() ? previous : nullptr;
         if (aborted) {weaponPairFault = true;if(invocation.idle)invocation.idle->reject(IdleWeaponTrace::Rejection::GunAbort);}
+        if(invocation.idle)invocation.idle->submissions.completeOuter(originalReturned,
+            physical && !aborted && invocation.pass.complete(),
+            !aborted && generation==graphicsResourceGeneration(),!weaponPairFault,!aborted);
     });
+    // The joined companion emits only here, after normal original and
+    // cleanup completion. Legacy diagnostics keep their existing schema/order.
+    if(!returned && idleStorage)idleStorage->submissions.outerCompleted=false;
+    if(returned && idleStorage)withNativeFinally([&] {emitIdlePaletteCompanions(*idleStorage);},[](bool) noexcept {});
 }
 static void __fastcall weaponRender(void *w, void *, Matrix34 m) {
     renderTrackedWeapon(w, m, false,reinterpret_cast<uintptr_t>(__builtin_return_address(0)));

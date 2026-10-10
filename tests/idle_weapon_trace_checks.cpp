@@ -8,6 +8,102 @@ using namespace ss2vr;
 #error Idle diagnostic checks need active assertions
 #endif
 int main() {
+    {IdlePaletteCopy p;
+     p.metadata.modelAddress=100;p.metadata.drawAddress=200;p.metadata.modelRecord=1;
+     p.metadata.drawRecord=3;p.metadata.surface=300;p.metadata.instance=400;
+     p.metadata.rootConfig={500,600,1};p.metadata.renderConfig=p.metadata.rootConfig;
+     p.first=4;p.count=3;p.mapCount=7;p.paletteCount=7;p.canonicalCount=12;p.modelCount=2;
+     p.evaluated=700;p.matrices=800;p.mappingAddress=900;p.paletteAddress=1000;p.copied=true;
+     p.world[0]=p.world[5]=p.world[10]=0x3f800000;
+     for(unsigned i=0;i<3;++i) {
+        auto &e=p.entries[i];e.draw=3;e.bone=int32_t(2+i);e.owner=1;e.definition=1100+i*120;e.name=1200+i;
+        e.canonical[0]=e.canonical[5]=e.canonical[10]=0x3f800000;
+        e.canonical[3]=std::bit_cast<uint32_t>(float(i+1)*7);
+        e.palette=e.canonical;
+     }
+     assert(p.bounded() && p.paletteCopiesCanonical());
+     auto different=p;different.entries[1].palette=p.entries[0].palette;
+     assert(different.bounded() && !different.paletteCopiesCanonical()); // Independent reference catches a crossed palette.
+     assert(different!=p);
+     for(unsigned change=0;change<14;++change) {
+        auto bad=p;
+        if(change==0)bad.count=0;else if(change==1)bad.count=4;
+        else if(change==2)bad.first=UINT32_MAX;else if(change==3)bad.paletteCount=6;
+        else if(change==4)bad.mapCount=6;else if(change==5)bad.canonicalCount=4;
+        else if(change==6)bad.entries[0].bone=-1;else if(change==7)bad.entries[2].draw=2;
+        else if(change==8)bad.entries[2].owner=0;else if(change==9)bad.entries[1].definition=0;
+        else if(change==10)bad.world[3]=0x7f800000;else if(change==11)bad.entries[0].canonical[0]=0x7fc00001;
+        else if(change==12)bad.entries[2].palette[0]=0xff800000;else bad.copied=false;
+        assert(!bad.bounded() && !bad.paletteCopiesCanonical());
+     }
+     for(unsigned count:{1u,2u,3u}) {auto part=p;part.count=count;
+        assert(part.bounded() && part.paletteCopiesCanonical());}
+     // A matching matrix is insufficient when the row's identity changes.
+     different=p;different.metadata.instance=401;
+     assert(different.bounded() && different.paletteCopiesCanonical() && different!=p);
+     different=p;different.evaluated=701;assert(different!=p);
+     different=p;different.entries[2].definition=1400;assert(different!=p);
+     const ScopeIndexedDraw draw{4,0,0,3017,0,2673};
+     IdleSubmissionTrace s;const auto slot=s.reserve(draw);
+     s.before(slot,p.metadata,true);s.paletteBefore(slot,p,true);
+     s.after(slot,p.metadata,true,0);s.paletteAfter(slot,p,true);s.finalize(slot,false,true,false);
+     assert(!s.palettePublishable(slot)); // A DIP alone cannot complete the original weapon invocation.
+     s.outerReturned=true;
+     for(unsigned missing=0;missing<5;++missing) {
+        s.completeOuter(missing!=0,missing!=1,missing!=2,missing!=3,missing!=4);
+        assert(!s.palettePublishable(slot));
+     }
+     s.completeOuter(true,true,true,true,true);assert(s.palettePublishable(slot));
+     s.paletteAfter(slot,different,true);assert(!s.palettePublishable(slot));
+     // Disagreement between native rows is diagnostic data, not a filter that
+     // seeks a matching sample or substitutes upload rows as the reference.
+     s=IdleSubmissionTrace{};different=p;different.entries[1].palette=p.entries[0].palette;
+     const auto mismatchSlot=s.reserve(draw);s.before(mismatchSlot,different.metadata,true);
+     s.paletteBefore(mismatchSlot,different,true);s.after(mismatchSlot,different.metadata,true,0);
+     s.paletteAfter(mismatchSlot,different,true);s.finalize(mismatchSlot,false,true,false);
+     s.outerReturned=true;s.completeOuter(true,true,true,true,true);
+     assert(s.palettePublishable(mismatchSlot) && !s.rows[mismatchSlot].palette.paletteCopiesCanonical());
+     s.reenter(mismatchSlot);s.finalize(mismatchSlot,false,true,false);
+     assert(!s.palettePublishable(mismatchSlot) && !s.rows[mismatchSlot].palette.copied);
+     // The API copy has its own capacity and exact ordinal; rejected geometry
+     // and failed getters must not select a later passing draw as a substitute.
+     IdleWeaponTrace t;t.nativeId=2;t.draws=IdleWeaponTrace::MaxDraws;
+     t.stage=IdleWeaponTrace::Stage::Rejected;t.rejection=IdleWeaponTrace::Rejection::RasterMapping;
+     for(unsigned i=0;i<IdleWeaponTrace::MaxPaletteApiPayloads;++i) {
+        const auto n=t.submissions.reserve(draw),api=t.reservePaletteApi(n);
+        assert(api==i && t.paletteApiPayloads[api].submissionSlot==n &&
+               t.paletteApiPayloads[api].ordinal==i+1 && t.submissions.rows[n].paletteApiSlot==api);
+        assert(!t.paletteApiPublishable(n)); // Missing getter copies still consume a slot.
+     }
+     const auto overflow=t.submissions.reserve(draw);
+     assert(t.reservePaletteApi(overflow)==IdleWeaponTrace::MaxPaletteApiPayloads && t.paletteApiOverflow);
+     assert(t.paletteApiCount==IdleWeaponTrace::MaxPaletteApiPayloads &&
+            t.rejection==IdleWeaponTrace::Rejection::RasterMapping && t.draws==IdleWeaponTrace::MaxDraws);
+     t.submissions.before(0,p.metadata,true);t.submissions.paletteBefore(0,p,true);
+     t.submissions.after(0,p.metadata,true,0);t.submissions.paletteAfter(0,p,true);
+     t.submissions.finalize(0,false,true,false);t.submissions.outerReturned=true;
+     t.submissions.completeOuter(true,true,true,true,true);
+     auto &api=t.paletteApiPayloads[0];api.words=2;api.before.status=IdleWeaponTrace::StreamSnapshot::Copied;
+     api.beforeCopied=api.afterCopied=api.matched=true;
+     assert(t.paletteApiPublishable(0)); // Overall RasterMapping rejection is diagnostic, not a new admission rule.
+     const auto good=api;
+     for(unsigned failure=0;failure<9;++failure) {
+        api=good;
+        if(failure==0)api.submissionSlot=1;else if(failure==1)++api.ordinal;
+        else if(failure==2)api.words=1;else if(failure==3)api.words=uint32_t(api.program.size()+1);
+        else if(failure==4)api.beforeCopied=false;else if(failure==5)api.afterCopied=false;
+        else if(failure==6)api.matched=false;else if(failure==7)api.before.status=IdleWeaponTrace::StreamSnapshot::Interrupted;
+        else t.submissions.rows[0].paletteApiSlot=IdleWeaponTrace::MaxPaletteApiPayloads;
+        assert(!t.paletteApiPublishable(0));
+     }
+     api=good;t.submissions.rows[0].paletteApiSlot=0;
+     t.submissions.finalize(0,false,false,false);assert(!t.paletteApiPublishable(0)); // Release-time retirement.
+     for(int id:{1,13}) {t=IdleWeaponTrace{};t.nativeId=id;
+        const auto n=t.submissions.reserve(draw);
+        assert(t.reservePaletteApi(n)==IdleWeaponTrace::MaxPaletteApiPayloads && !t.paletteApiCount);}
+     t=IdleWeaponTrace{};t.nativeId=2;
+     assert(t.reservePaletteApi(IdleSubmissionTrace::NoSlot)==IdleWeaponTrace::MaxPaletteApiPayloads && !t.paletteApiCount);
+    }
     {IdleSubmissionMetadata a;a.modelAddress=100;a.drawAddress=200;a.modelRecord=1;a.drawRecord=3;
      a.surface=300;a.instance=400;a.bone=0;a.rootConfig={500,600,1};a.renderConfig=a.rootConfig;
      a.layout.vertices=132;a.layout.triangles=108;

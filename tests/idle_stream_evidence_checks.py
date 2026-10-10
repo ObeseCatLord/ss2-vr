@@ -78,14 +78,39 @@ class Checks(unittest.TestCase):
         engine=(root/'src/game/engine.cpp').read_text();gpu=(root/'src/game/scope_gpu.cpp').read_text()
         self.assertTrue(source_checks(engine,gpu)['source_order_checked'])
         for bad in (gpu.replace('probe.submissionOwner=idleSubmissionOwner();','probe.submissionOwner=nullptr;'),
-                    gpu.replace('copyIdleSubmissionMetadata(probe.submissionOwner,after)','copyBoundIdleRaster(after)'),
+                    gpu.replace('copyIdleSubmissionMetadata(owner,after)','copyBoundIdleRaster(after)'),
                     gpu.replace('probe.submissionOwner=nullptr;probe.submissionSlot=IdleSubmissionTrace::NoSlot;',
                                 'probe.submissionSlot=IdleSubmissionTrace::NoSlot;'),
                     gpu.replace('scopeGpuRoutingCurrent(device)','true')):
+            self.assertTrue(bad!=gpu,'Mutation must change the actual source form')
             with self.assertRaises(ValueError):source_checks(engine,bad)
         for bad in (engine.replace('retireIdleSubmissionOwner(invocation.idle);',''),
                     engine.replace('out=IdleSubmissionMetadata::copy(raster);copied=true;',
                                    'trace->reject();out=IdleSubmissionMetadata::copy(raster);copied=true;')):
+            self.assertTrue(bad!=engine,'Mutation must change the actual source form')
+            with self.assertRaises(ValueError):source_checks(bad,gpu)
+
+    def test_joined_palette_source_mutations_reject(self):
+        from verify_idle_submission_abi import source_checks
+        root=Path(__file__).resolve().parents[1]
+        engine=(root/'src/game/engine.cpp').read_text();gpu=(root/'src/game/scope_gpu.cpp').read_text()
+        for old,new in [('probe.submissionOwner->reservePaletteApi(', 'reserveDifferentPayload('),
+                        ('sampleIdleApi(d,probe.bindings[1],p.before,p.program,p.words,{},true,true)', 'sampleWrongInputs()'),
+                        ('copyIdleSubmissionPalette(owner,bookend)', 'copyWrongPalette(bookend)'),
+                        ('paletteApiOwnerCurrent(d,owner,slot,api)', 'true'),
+                        ('api>=IdleWeaponTrace::MaxPaletteApiPayloads ||',
+                         'api>=IdleWeaponTrace::MaxPaletteApiPayloads || !nativeUiDeviceCurrent(d) ||'),
+                        ('if(geometryAdmitted)copied=serializePaletteGeometry(p);',
+                         'if(false)copied=serializePaletteGeometry(p);'),
+                        ('!owner->paletteApiPayloads[api].matched', 'false'),
+                        ('program.size_bytes()', 'UINT32_MAX')]:
+            bad=gpu.replace(old,new);self.assertTrue(bad!=gpu,'GPU mutation did not change source: '+old)
+            with self.assertRaises(ValueError):source_checks(engine,bad)
+        for old,new in [('trace->nativeId!=2', 'trace->nativeId!=13'),
+                        ('submissions.completeOuter(', 'submissions.ignoreOuter('),
+                        ('trace.paletteApiPublishable(n)', 'true'),
+                        ('alignment=0 grasp=0', 'alignment=1 grasp=1')]:
+            bad=engine.replace(old,new);self.assertTrue(bad!=engine,'Engine mutation did not change source: '+old)
             with self.assertRaises(ValueError):source_checks(bad,gpu)
 
     def test_submission_after_geometry_rejection_is_not_geometry_or_hand_acceptance(self):

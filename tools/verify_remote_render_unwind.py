@@ -186,6 +186,20 @@ def verify(obj):
     idle_cold=[b for n,b in bodies.items() if 'copyIdleRaster(' in n and '::Context::run(void*) [clone .cold]' in n]
     require(len(idle_cold)==1 and '__cxa_begin_catch' in idle_cold[0] and '__cxa_end_catch' in idle_cold[0],
             'Idle raster allocation failure must be contained locally')
+    palette_entry=one('ss2vr::game::remote_render::','copyIdlePalette(void*, ss2vr::IdlePaletteCopy&)')
+    require(palette_entry.count('DISP32\tss2vrNativeFinally')==1,
+            'Joined palette scratch lacks local containment')
+    palette_cleanup=one('copyIdlePalette(', '::Context::finish(void*, int)')
+    palette_calls=re.findall(r'DISP32\s+([^\n]+)',palette_cleanup)
+    require(palette_calls==['operator delete(void*, unsigned int)']*8 and
+            sum(i.startswith('call ') for i in code(palette_cleanup))==8,
+            'All eight joined palette scratch vectors must retire; no native callbacks')
+    require(not any(re.match(r'f[a-z]',i) or re.search(r'\b(?:xmm|ymm|zmm)[0-9]',i) or
+                    re.match(r'call (?:DWORD PTR|(?:eax|ebx|ecx|edx|esi|edi|ebp|esp)$)',i) for i in code(palette_cleanup)),
+            'Joined palette scratch cleanup gained FP or indirect callbacks')
+    palette_cold=[b for n,b in bodies.items() if 'copyIdlePalette(' in n and '::Context::run(void*) [clone .cold]' in n]
+    require(len(palette_cold)==1 and '__cxa_begin_catch' in palette_cold[0] and '__cxa_end_catch' in palette_cold[0],
+            'Joined palette allocation failure must be contained locally')
     # These helpers are callable from foreign-unwind cleanup. Their exact
     # ownership semantics are covered by production-policy/source checks; this
     # compiled gate verifies no hidden lock library, lazy TLS or FP/callback.
@@ -206,7 +220,8 @@ def verify(obj):
             require(any(re.fullmatch(r'lock cmpxchg DWORD PTR ds:'+hex(offset('pairOwner'))+r',[a-z]{3}',i)
                         for i in code(helper)), 'Missing lock-free x86 owner CAS: '+name)
     return {'object_sha256': hashlib.sha256(obj.read_bytes()).hexdigest(),
-            'explicit_native_cleanup_boundaries': len(cleanup_names)+1, 'idle_scratch_vectors_retired':8,
+            'explicit_native_cleanup_boundaries': len(cleanup_names)+2, 'idle_scratch_vectors_retired':8,
+            'palette_scratch_vectors_retired':8,
             'scratch_and_lock_retirement': True,
             'ui_fault_object_sha256': hashlib.sha256(bridge.read_bytes()).hexdigest(),
             'ui_fault_cleanup_scalar': True, 'ui_fault_variants_checked': len(fault_bodies),

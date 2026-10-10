@@ -60,7 +60,8 @@ struct ProbeOwner {
     int idleNativeId=-1; // Copied before AddRef; never selected again after COM callbacks.
     IdleWeaponTrace *submissionOwner=nullptr;
     unsigned submissionSlot=IdleSubmissionTrace::NoSlot;
-    BoundInputs bindings[3]; // Slot2 only for passive ID1 post-forward observation.
+    unsigned paletteApiSlot=IdleWeaponTrace::MaxPaletteApiPayloads;
+    BoundInputs bindings[3]; // Original/pre/post observations; one existing cleanup owner.
     bool streamReentered=false;
     ScopeLockLedger lock;
     IDirect3DVertexBuffer9 *lockedVertex = nullptr;
@@ -171,6 +172,7 @@ static void cleanup(bool aborted) noexcept {
         current && afterReleaseCurrent && probe.generation==graphicsResourceGeneration() && scopeGpuRoutingCurrent(device),
         probe.split);
     probe.submissionOwner=nullptr;probe.submissionSlot=IdleSubmissionTrace::NoSlot;
+    probe.paletteApiSlot=IdleWeaponTrace::MaxPaletteApiPayloads;
     probe.sourceView = {}; probe.imageConstants = {};
     probe.transaction = probe.split = probe.imageChanged = probe.imageRestoreFailed = false;
     probe.cap = {}; probe.uvRows={}; probe.program={}; probe.colorProgram={};
@@ -184,6 +186,7 @@ void retireIdleSubmissionOwner(IdleWeaponTrace *owner) noexcept {
     if(owner && probe.submissionOwner==owner) {
         owner->submissions.finalize(probe.submissionSlot,true,false,probe.split);
         probe.submissionOwner=nullptr;probe.submissionSlot=IdleSubmissionTrace::NoSlot;
+        probe.paletteApiSlot=IdleWeaponTrace::MaxPaletteApiPayloads;
     }
 }
 static bool identity(IUnknown *object,IUnknown *&out,HRESULT *observed=nullptr) {
@@ -269,12 +272,10 @@ static bool boundInputs(IDirect3DDevice9 *d,BoundInputs &b,const ScopeIndexedDra
 // weights/local indices and are never passed to geometry admission or replay.
 // Failed/abnormal outputs remain owned by the existing ProbeOwner cleanup;
 // only an entirely normal snapshot exposes copied scalar outputs.
-static bool sampleIdleStreams(IDirect3DDevice9 *d,BoundInputs &b,unsigned phase) {
-    auto &receipt=probe.idleTrace->streamProbe;
-    const auto numbers=IdleWeaponTrace::passiveStreamNumbers(probe.idleTrace->inputFailure);
-    auto &out=receipt.snapshots[phase];
+static bool sampleIdleApi(IDirect3DDevice9 *d,BoundInputs &b,IdleWeaponTrace::StreamSnapshot &out,
+                           std::span<uint32_t> program,uint32_t &words,
+                           std::array<unsigned,3> numbers,bool actualDeclaration,bool copyProgram) {
     out={};out.status=IdleWeaponTrace::StreamSnapshot::Interrupted;
-    receipt.attempts=phase+1;
     b.values={};b.elements={};b.constants={};b.count=MAXD3DDECLLENGTH+1;
     HRESULT result=S_OK;
     auto at=[&](uint32_t step,uint32_t index=0) {out.step=step;out.index=index;};
@@ -297,6 +298,14 @@ static bool sampleIdleStreams(IDirect3DDevice9 *d,BoundInputs &b,unsigned phase)
     for(UINT i=0;i<b.count;++i) {
         const auto e=elements[i];b.elements[i]={e.Stream,e.Offset,e.Type,e.Method,e.Usage,e.UsageIndex};
     }
+    if(actualDeclaration) {
+        GeometryInputLayout layout{};bool weights=false;
+        at(22);
+        if(!idleGeometryInputs(std::span(b.elements).first(b.count),layout,weights) || !weights)return fail();
+        const bool uses78=layout==GeometryInputLayout::Observed78 || layout==GeometryInputLayout::ObservedMultiUV78 ||
+                          layout==GeometryInputLayout::NoUV78;
+        numbers=uses78?std::array<unsigned,3>{0,7,8}:std::array<unsigned,3>{0,5,6};
+    }
     std::array<ScopeStreamInput,3> streams{};
     for(unsigned i=0;i<3;++i) {
         auto &v=streams[i];
@@ -312,14 +321,14 @@ static bool sampleIdleStreams(IDirect3DDevice9 *d,BoundInputs &b,unsigned phase)
     at(16);result=d->GetVertexShader(&b.shader);if(FAILED(result))return fail();
     at(17);if(!b.shader)return fail();
     at(18);if(!identity(b.shader,b.identity[6],&result))return fail();
-    if(!phase) {
+    if(copyProgram) {
         UINT bytes=0;
         at(19);result=b.shader->GetFunction(nullptr,&bytes);if(FAILED(result))return fail();
-        at(20);if(bytes<8 || bytes%4 || bytes>sizeof(receipt.program))return fail();
+        at(20);if(bytes<8 || bytes%4 || bytes>program.size_bytes())return fail();
         const UINT expected=bytes;
-        at(21);result=b.shader->GetFunction(receipt.program.data(),&bytes);
+        at(21);result=b.shader->GetFunction(program.data(),&bytes);
         if(FAILED(result) || bytes!=expected)return fail();
-        receipt.words=bytes/4;
+        words=bytes/4;
     }
     out.status=IdleWeaponTrace::StreamSnapshot::Copied;out.step=out.index=0;out.hresult=0;
     out.caps=b.constantCount;out.declarationCount=b.count;out.declaration=b.elements;out.streams=streams;
@@ -328,6 +337,75 @@ static bool sampleIdleStreams(IDirect3DDevice9 *d,BoundInputs &b,unsigned phase)
     out.shaderObject=uint32_t(reinterpret_cast<uintptr_t>(b.identity[6]));
     for(unsigned i=0;i<b.constantCount;++i)for(unsigned j=0;j<4;++j)
         out.constants[i][j]=std::bit_cast<uint32_t>(b.constants[i][j]);
+    return true;
+}
+static bool sampleIdleStreams(IDirect3DDevice9 *d,BoundInputs &b,unsigned phase) {
+    auto &receipt=probe.idleTrace->streamProbe;
+    receipt.attempts=phase+1;
+    return sampleIdleApi(d,b,receipt.snapshots[phase],receipt.program,receipt.words,
+                        IdleWeaponTrace::passiveStreamNumbers(probe.idleTrace->inputFailure),false,!phase);
+}
+static bool paletteApiOwnerCurrent(IDirect3DDevice9 *d,IdleWeaponTrace *owner,unsigned slot,unsigned api) {
+    if(!owner || probe.submissionOwner!=owner || probe.submissionSlot!=slot ||
+       api>=IdleWeaponTrace::MaxPaletteApiPayloads ||
+       probe.generation!=graphicsResourceGeneration() || !scopeGpuRoutingCurrent(d))return false;
+    if(owner->nativeId!=2 || api>=owner->paletteApiCount || !owner->submissions.pending(slot))return false;
+    const auto &p=owner->paletteApiPayloads[api];
+    return p.submissionSlot==slot && p.ordinal==owner->submissions.rows[slot].ordinal;
+}
+static bool serializePaletteGeometry(IdleWeaponTrace::PaletteApiPayload &p) {
+    const auto &g=probe.idle;const auto &b=probe.bindings[0];
+    if(!g.words || g.words>p.program.size() || !g.constantCount || g.constantCount>256 ||
+       !g.declarationCount || g.declarationCount>65 || !b.identity[4] || !b.identity[5] || !b.identity[6])return false;
+    auto &s=p.before;s={};s.status=IdleWeaponTrace::StreamSnapshot::Copied;
+    s.caps=g.constantCount;s.declarationCount=g.declarationCount;s.declaration=g.declaration;
+    s.declarationObject=uint32_t(reinterpret_cast<uintptr_t>(b.identity[5]));
+    s.indexObject=uint32_t(reinterpret_cast<uintptr_t>(b.identity[4]));
+    s.shaderObject=uint32_t(reinterpret_cast<uintptr_t>(b.identity[6]));
+    s.streams={g.inputs.positions,g.inputs.localIndices,g.inputs.weights};
+    for(unsigned i=0;i<g.constantCount;++i)for(unsigned j=0;j<4;++j)
+        s.constants[i][j]=std::bit_cast<uint32_t>(g.constants[i][j]);
+    p.words=g.words;std::copy_n(g.program.begin(),g.words,p.program.begin());
+    return true; // Copied scalar state only; retain both original binding owners.
+}
+static bool beginPaletteApi(IDirect3DDevice9 *d,IdleWeaponTrace *owner,unsigned slot,unsigned api,bool geometryAdmitted) {
+    if(!paletteApiOwnerCurrent(d,owner,slot,api))return false;
+    // Capability getters are outside the sampled interval. An admitted geometry
+    // already performed them; do not add callbacks after its certification.
+    if(!geometryAdmitted && (!nativeUiDeviceCurrent(d) || !paletteApiOwnerCurrent(d,owner,slot,api)))return false;
+    IdlePaletteCopy before,bookend;
+    if(!copyIdleSubmissionPalette(owner,before) || !paletteApiOwnerCurrent(d,owner,slot,api))return false;
+    auto &p=owner->paletteApiPayloads[api];
+    bool copied=false;
+    if(geometryAdmitted)copied=serializePaletteGeometry(p);
+    else {
+        // Reuse the existing slots only when no geometry was certified.
+        releaseBindings(probe.bindings[1]);releaseBindings(probe.bindings[2]);
+        if(!paletteApiOwnerCurrent(d,owner,slot,api))return false;
+        copied=sampleIdleApi(d,probe.bindings[1],p.before,p.program,p.words,{},true,true);
+    }
+    if(!paletteApiOwnerCurrent(d,owner,slot,api))return false;
+    p.beforeCopied=copied;
+    if(!copied || !copyIdleSubmissionPalette(owner,bookend) ||
+       !paletteApiOwnerCurrent(d,owner,slot,api) || before!=bookend)return false;
+    owner->submissions.before(slot,before.metadata,true);
+    owner->submissions.paletteBefore(slot,before,true);
+    return true;
+}
+static bool finishPaletteApi(IDirect3DDevice9 *d,IdleWeaponTrace *owner,unsigned slot,unsigned api,
+                             IdlePaletteCopy &after) {
+    if(!paletteApiOwnerCurrent(d,owner,slot,api))return false;
+    IdlePaletteCopy bookend;
+    if(!copyIdleSubmissionPalette(owner,after) || !paletteApiOwnerCurrent(d,owner,slot,api))return false;
+    IdleWeaponTrace::StreamSnapshot snapshot;
+    uint32_t unusedWords=0;
+    const bool copied=sampleIdleApi(d,probe.bindings[2],snapshot,{},unusedWords,{},true,false);
+    if(!paletteApiOwnerCurrent(d,owner,slot,api))return false;
+    auto &p=owner->paletteApiPayloads[api];p.afterCopied=copied;
+    if(!copied || !copyIdleSubmissionPalette(owner,bookend) ||
+       !paletteApiOwnerCurrent(d,owner,slot,api) || after!=bookend)return false;
+    p.matched=p.beforeCopied && IdleWeaponTrace::sameStreamSnapshots(p.before,snapshot);
+    owner->submissions.paletteAfter(slot,after,true);
     return true;
 }
 static bool idleStreamOwnerCurrent(IDirect3DDevice9 *d) {
@@ -512,7 +590,8 @@ static bool collectIdleGeometry(IDirect3DDevice9 *d,const ScopeIndexedDraw &draw
         const bool first=probe.idleTrace && probe.idleTrace->rejection==IdleWeaponTrace::Rejection::None;
         if(first)probe.idleTrace->inputFailure=inputFailure;
         reject(IdleWeaponTrace::Rejection::CollectInputs); // Original immediate rejection precedes all extra queries.
-        if(first && IdleWeaponTrace::observedStreamFamily(inputFailure))beginIdleStreamProbe(d);
+        if(first && probe.paletteApiSlot==IdleWeaponTrace::MaxPaletteApiPayloads &&
+           IdleWeaponTrace::observedStreamFamily(inputFailure))beginIdleStreamProbe(d);
         return false;
     }
     if(!idleBufferRanges(probe.bindings[0].values,std::span(probe.bindings[0].elements).first(probe.bindings[0].count),ranges,nullptr,probe.idleNativeId))return reject(IdleWeaponTrace::Rejection::CollectRanges);
@@ -638,6 +717,7 @@ static HRESULT probeScopeDraw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base
     probe.generation=graphicsResourceGeneration();
     probe.programWords=0;
     probe.streamReentered=false;
+    probe.paletteApiSlot=IdleWeaponTrace::MaxPaletteApiPayloads;
     HRESULT result=D3DERR_INVALIDCALL;
     withNativeFinally([&] {
         // Arm an independent bounded value owner before the first AddRef.
@@ -645,6 +725,7 @@ static HRESULT probeScopeDraw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base
         probe.submissionOwner=idleSubmissionOwner();
         if(probe.submissionOwner)probe.submissionSlot=probe.submissionOwner->submissions.reserve(
             ScopeIndexedDraw{uint32_t(type),base,minimum,vertices,start,primitives});
+        if(probe.submissionOwner)probe.paletteApiSlot=probe.submissionOwner->reservePaletteApi(probe.submissionSlot);
         bool colorCandidate=false;
         bool admitted=currentScopeRaster(probe.raster) && nativeUiDeviceCurrent(d);
         // Establish the borrowed ID1 trace before the first retained COM call,
@@ -718,23 +799,39 @@ static HRESULT probeScopeDraw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base
         if(probe.idleTrace && !idleAdmitted)probe.idleTrace->reject(IdleWeaponTrace::Rejection::GpuAdmission,IdleWeaponTrace::checks({idleCandidate,probe.transaction!=0}));
         if (!scopeGpuForwardingAllowed()) return;
         if (!probe.split) {
-            if(probe.submissionOwner && probe.submissionOwner->submissions.pending(probe.submissionSlot)) {
+            auto *const owner=probe.submissionOwner;
+            const unsigned slot=probe.submissionSlot,api=probe.paletteApiSlot;
+            const bool paletteBefore=beginPaletteApi(d,owner,slot,api,idleAdmitted);
+            if(!paletteBefore && owner && probe.submissionOwner==owner && probe.submissionSlot==slot &&
+               owner->submissions.pending(slot)) {
                 IdleSubmissionMetadata before;
                 const bool copied=scopeGpuRoutingCurrent(d) && probe.generation==graphicsResourceGeneration() &&
-                    copyIdleSubmissionMetadata(probe.submissionOwner,before);
-                probe.submissionOwner->submissions.before(probe.submissionSlot,before,
-                    copied && scopeGpuRoutingCurrent(d) && probe.generation==graphicsResourceGeneration());
+                    copyIdleSubmissionMetadata(owner,before);
+                if(probe.submissionOwner==owner && probe.submissionSlot==slot)
+                    owner->submissions.before(slot,before,
+                        copied && scopeGpuRoutingCurrent(d) && probe.generation==graphicsResourceGeneration());
             }
             if(probe.idleTrace && probe.idleTrace->streamProbe.selected)
                 probe.idleTrace->streamProbe.flags|=IdleWeaponTrace::StreamProbe::ForwardCalled;
             result=forward(d,type,base,minimum,vertices,start,primitives);
-            if(probe.submissionOwner && probe.submissionSlot<IdleSubmissionTrace::MaxAttempts) {
+            IdlePaletteCopy paletteAfter;
+            const bool paletteCopied=paletteBefore && finishPaletteApi(d,owner,slot,api,paletteAfter);
+            if(idleAdmitted && paletteBefore && !paletteApiOwnerCurrent(d,owner,slot,api)) {
+                idleAdmitted=false;
+                if(probe.idleTrace)probe.idleTrace->reject(IdleWeaponTrace::Rejection::CollectLifetime);
+            } else if(idleAdmitted && paletteBefore && (!paletteCopied || !owner->paletteApiPayloads[api].matched)) {
+                idleAdmitted=false;
+                if(probe.idleTrace)probe.idleTrace->reject(IdleWeaponTrace::Rejection::CollectChanged);
+            }
+            if(owner && probe.submissionOwner==owner && probe.submissionSlot==slot && slot<IdleSubmissionTrace::MaxAttempts) {
                 IdleSubmissionMetadata after;
-                const bool copied=probe.submissionOwner->submissions.pending(probe.submissionSlot) &&
+                if(paletteCopied)after=paletteAfter.metadata;
+                const bool copied=paletteCopied || (owner->submissions.pending(slot) &&
                     scopeGpuRoutingCurrent(d) && probe.generation==graphicsResourceGeneration() &&
-                    copyIdleSubmissionMetadata(probe.submissionOwner,after);
-                probe.submissionOwner->submissions.after(probe.submissionSlot,after,
-                    copied && scopeGpuRoutingCurrent(d) && probe.generation==graphicsResourceGeneration(),int32_t(result));
+                    copyIdleSubmissionMetadata(owner,after));
+                if(probe.submissionOwner==owner && probe.submissionSlot==slot)
+                    owner->submissions.after(slot,after,
+                        copied && scopeGpuRoutingCurrent(d) && probe.generation==graphicsResourceGeneration(),int32_t(result));
             }
         }
         if(!probe.split && probe.idleTrace && probe.idleTrace->streamProbe.selected)finishIdleStreamProbe(d,result);

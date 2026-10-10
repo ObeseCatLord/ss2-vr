@@ -17,19 +17,49 @@ def ordered(body,terms):
     require(positions==sorted(positions),'Submission lifetime/forwarding order changed')
 
 def source_checks(engine,gpu):
-    wrapper=region(engine,'bool copyIdleSubmissionMetadata(','bool currentIdleRaster(')
+    wrapper=region(engine,'bool copyIdleSubmissionMetadata(','bool copyIdleSubmissionPalette(')
     require('withNativeFinally(' in wrapper and 'currentIdleDraw(' in wrapper and
             'remote_render::copyIdleRaster(' in wrapper and 'trace->binding!=identity' in wrapper,
             'Submission wrapper lost owned containment')
     require('reject(' not in wrapper and 'copyBoundIdleRaster' not in wrapper and 'clipValid' not in wrapper,
             'Submission wrapper changes geometry policy')
+    palette=region(engine,'bool copyIdleSubmissionPalette(','bool currentIdleRaster(')
+    require('withNativeFinally(' in palette and 'trace->nativeId!=2' in palette and
+            palette.count('remote_render::copyIdlePalette(')==2 and 'before!=after' in palette and
+            'copyBoundIdleRaster' not in palette and 'reject(' not in palette,
+            'Palette wrapper lost its independent ID2-only native bookend')
     draw=region(gpu,'static HRESULT probeScopeDraw(','HRESULT scopeGpuDraw(')
     ordered(draw,['probe.submissionOwner=idleSubmissionOwner();',
-                  'probe.submissionOwner->submissions.reserve(', 'd->AddRef();',
-                  'copyIdleSubmissionMetadata(probe.submissionOwner,before)',
+                  'probe.submissionOwner->submissions.reserve(', 'probe.submissionOwner->reservePaletteApi(', 'd->AddRef();',
+                  'beginPaletteApi(d,owner,slot,api,idleAdmitted)', 'copyIdleSubmissionMetadata(owner,before)',
                   'result=forward(d,type,base,minimum,vertices,start,primitives);',
-                  'copyIdleSubmissionMetadata(probe.submissionOwner,after)',
+                  'finishPaletteApi(d,owner,slot,api,paletteAfter)', 'copyIdleSubmissionMetadata(owner,after)',
                   'finishIdleStreamProbe(d,result)'])
+    pre=region(gpu,'static bool beginPaletteApi(','static bool finishPaletteApi(')
+    ordered(pre,['copyIdleSubmissionPalette(owner,before)','releaseBindings(probe.bindings[1]);',
+                 'sampleIdleApi(d,probe.bindings[1],p.before,p.program,p.words,{},true,true)',
+                 'copyIdleSubmissionPalette(owner,bookend)','owner->submissions.paletteBefore(slot,before,true);'])
+    require('if(geometryAdmitted)copied=serializePaletteGeometry(p);else{' in pre and
+            pre.index('nativeUiDeviceCurrent(d)')<pre.index('copyIdleSubmissionPalette(owner,before)'),
+            'Companion disturbed certified geometry or queried device outside native/API bracket')
+    guard=region(gpu,'static bool paletteApiOwnerCurrent(','static bool serializePaletteGeometry(')
+    calls=re.findall(r'([A-Za-z_][A-Za-z_0-9]*)\(',guard.split('{',1)[1])
+    require(set(calls)<= {'paletteApiOwnerCurrent','if','scopeGpuRoutingCurrent','graphicsResourceGeneration','pending'},
+            'Palette scalar owner guard gained an unreviewed callback')
+    serialize=region(gpu,'static bool serializePaletteGeometry(','static bool beginPaletteApi(')
+    require('releaseBindings(' not in serialize and 'sampleIdleApi(' not in serialize and '->' not in serialize,
+            'Certified geometry serialization must retain references without foreign callbacks')
+    post=region(gpu,'static bool finishPaletteApi(','static bool idleStreamOwnerCurrent(')
+    ordered(post,['copyIdleSubmissionPalette(owner,after)',
+                  'sampleIdleApi(d,probe.bindings[2],snapshot,{},unusedWords,{},true,false)',
+                  'copyIdleSubmissionPalette(owner,bookend)','owner->submissions.paletteAfter(slot,after,true);'])
+    for body in (pre,post):
+        require(body.count('paletteApiOwnerCurrent(')>=3,'Missing foreign-call palette owner revalidation')
+    require('!owner->paletteApiPayloads[api].matched' in draw and
+            'idleAdmitted=false;' in draw,'Changed companion post-state must retire certified geometry')
+    sampler=region(gpu,'static bool sampleIdleApi(','static bool sampleIdleStreams(')
+    require('idleGeometryInputs(' in sampler and 'if(copyProgram)' in sampler and
+            'program.size_bytes()' in sampler,'Actual-declaration/program copy contract changed')
     cleanup=region(gpu,'static void cleanup(','void retireIdleSubmissionOwner(')
     ordered(cleanup,['release(probe.device);','probe.submissionOwner->submissions.finalize(',
                      'probe.submissionOwner=nullptr;','probe.busy=false;'])
@@ -37,8 +67,12 @@ def source_checks(engine,gpu):
     outer=region(engine,'static void renderTrackedWeapon(','static void __fastcall weaponRender(')
     require(outer.count('retireIdleSubmissionOwner(')==2,'Missing normal/unwind outer retirement')
     ordered(outer,['retireIdleSubmissionOwner(&*idleStorage);','idleStorage->submissions.outerReturned=true;',
-                   'emitIdleWeaponTrace(*idleStorage);','retireIdleSubmissionOwner(invocation.idle);'])
-    return {'source_order_checked':True,'geometry_cap_changed':False,
+                   'emitIdleWeaponTrace(*idleStorage);','retireIdleSubmissionOwner(invocation.idle);',
+                   'submissions.completeOuter(', 'emitIdlePaletteCompanions(*idleStorage);'])
+    emitter=region(engine,'static void emitIdlePaletteCompanions(','static void emitIdleWeaponTrace(')
+    require('trace.paletteApiPublishable(n)' in emitter and 'alignment=0grasp=0' in emitter,
+            'Joined palette output lost its completion gate or claim limits')
+    return {'source_order_checked':True,'joined_palette_source_checked':True,'geometry_cap_changed':False,
             'limits':['Checks the bounded current source form, not general CFG dominance.']}
 
 def bodies(path):
@@ -52,7 +86,8 @@ def verify(engine_obj,gpu_obj):
     engine=bodies(engine_obj);gpu=bodies(gpu_obj)
     checked=[]
     for name in ('ss2vr::game::idleSubmissionOwner()',
-                 'ss2vr::game::copyIdleSubmissionMetadata(ss2vr::IdleWeaponTrace const*, ss2vr::IdleSubmissionMetadata&)'):
+                 'ss2vr::game::copyIdleSubmissionMetadata(ss2vr::IdleWeaponTrace const*, ss2vr::IdleSubmissionMetadata&)',
+                 'ss2vr::game::copyIdleSubmissionPalette(ss2vr::IdleWeaponTrace const*, ss2vr::IdlePaletteCopy&)'):
         require(name in engine,'Missing compiled submission entry: '+name)
         require(engine[name].count('DISP32\tss2vrNativeFinally')==1,'Submission entry lost native finally')
         checked.append(name)

@@ -940,8 +940,11 @@ __attribute__((noinline)) static void publishRideObservation(uint32_t owner,bool
         emit("modelWorld",frame.world);emit("MainCanonical",frame.main);
     }
 }
-static bool readIdleRaster(void *instance,IdleRasterCopy &out,IdleRasterStorage &storage) {
+enum class IdleNativeDrawPolicy { SingleAffine,Id2Palette };
+static bool readIdleNativeDraw(void *instance,IdleRasterCopy &out,IdleRasterStorage &storage,
+                               IdleNativeDrawPolicy policy,IdlePaletteCopy *companion=nullptr) {
     out={};
+    if(companion)*companion={};
     if(!instance || !hooksReady.load(std::memory_order_acquire) || !ready.load(std::memory_order_acquire) ||
        !ownsNativeThread() || paletteInvalidated)return false;
     std::span<NativeModelRecord> records;std::span<NativeMeshRecord> meshes;
@@ -979,25 +982,72 @@ static bool readIdleRaster(void *instance,IdleRasterCopy &out,IdleRasterStorage 
     const auto &draw=draws[drawIndex];const auto &model=records[modelIndex];
     uintptr_t declaredSurface=0;std::memcpy(&declaredSurface,reinterpret_cast<const uint8_t*>(&draw)+0x18,4);
     if(surfacePointer!=declaredSurface || !readableMemory(reinterpret_cast<void*>(surfacePointer),0x130) ||
-       draw.count!=1 || draw.first<0 || size_t(draw.first)>=maps.size() || size_t(draw.first)>=palette.size())return false;
-    const auto mapping=maps[size_t(draw.first)];
-    if(mapping.draw!=int32_t(drawIndex) || mapping.bone<0 || size_t(mapping.bone)>=bones.size() ||
-       bones[size_t(mapping.bone)].owner!=int32_t(modelIndex) ||
-       !readableMemory(bones[size_t(mapping.bone)].definition,4) ||
-       !idleConfig(instance,out.rootConfig) || !idleConfig(model.instance,out.renderConfig))return false;
-    out.affine=affineMultiply(model.world,palette[size_t(draw.first)]);
-    Matrix34 inverse;if(!finiteMatrix(model.world) || !finiteMatrix(palette[size_t(draw.first)]) ||
-                        !affineInverse(out.affine,inverse))return false;
-    // Copy the selected raster operands themselves, not the trace root's cache.
-    // Their diagnostic absence/change cannot alter affine/clip admission.
-    out.factors.model=model.world;out.factors.local=palette[size_t(draw.first)];
-    out.factors.paletteIndex=uint32_t(draw.first);out.factors.modelCopied=true;
+       draw.first<0)return false;
+    if(policy==IdleNativeDrawPolicy::SingleAffine) {
+        // Existing admission is deliberately count-one, including its original
+        // mapping, configuration, finite affine and invertibility checks.
+        if(draw.count!=1 || size_t(draw.first)>=maps.size() || size_t(draw.first)>=palette.size())return false;
+        const auto mapping=maps[size_t(draw.first)];
+        if(mapping.draw!=int32_t(drawIndex) || mapping.bone<0 || size_t(mapping.bone)>=bones.size() ||
+           bones[size_t(mapping.bone)].owner!=int32_t(modelIndex) ||
+           !readableMemory(bones[size_t(mapping.bone)].definition,4) ||
+           !idleConfig(instance,out.rootConfig) || !idleConfig(model.instance,out.renderConfig))return false;
+        out.affine=affineMultiply(model.world,palette[size_t(draw.first)]);
+        Matrix34 inverse;if(!finiteMatrix(model.world) || !finiteMatrix(palette[size_t(draw.first)]) ||
+                            !affineInverse(out.affine,inverse))return false;
+        out.factors.model=model.world;out.factors.local=palette[size_t(draw.first)];
+        out.factors.paletteIndex=uint32_t(draw.first);out.factors.modelCopied=true;
+        out.bone=mapping.bone;
+        std::memcpy(&out.boneName,bones[size_t(mapping.bone)].definition,4);
+    } else {
+        if(!companion || draw.count<1 || draw.count>int32_t(IdlePaletteCopy::MaxPalette) ||
+           !validPaletteSpan(draw.first,draw.count,maps.size()) ||
+           !validPaletteSpan(draw.first,draw.count,palette.size()))return false;
+        auto &p=*companion;
+        for(int32_t i=0;i<draw.count;++i) {
+            const auto mapping=maps[size_t(draw.first)+size_t(i)];
+            if(mapping.draw!=int32_t(drawIndex) || mapping.bone<0 || size_t(mapping.bone)>=bones.size() ||
+               bones[size_t(mapping.bone)].owner!=int32_t(modelIndex) ||
+               !readableMemory(bones[size_t(mapping.bone)].definition,4))return false;
+            auto &entry=p.entries[size_t(i)];
+            entry.draw=mapping.draw;entry.bone=mapping.bone;entry.owner=int32_t(modelIndex);
+            entry.definition=uint32_t(reinterpret_cast<uintptr_t>(bones[size_t(mapping.bone)].definition));
+            std::memcpy(&entry.name,bones[size_t(mapping.bone)].definition,4);
+        }
+        if(!idleConfig(instance,out.rootConfig) || !idleConfig(model.instance,out.renderConfig) ||
+           !readableMemory(instance,0x2c))return false;
+        uint32_t linked=0,cacheOwner=0;
+        std::memcpy(&p.evaluated,reinterpret_cast<void*>(engineBase+0x2eab68),4);
+        std::memcpy(&linked,static_cast<uint8_t*>(instance)+0x28,4);
+        if(!p.evaluated || p.evaluated!=linked || !readableMemory(reinterpret_cast<void*>(p.evaluated),0x28))return false;
+        std::memcpy(&cacheOwner,reinterpret_cast<void*>(p.evaluated+0x18),4);
+        std::memcpy(&p.matrices,reinterpret_cast<void*>(p.evaluated+0x20),4);
+        std::memcpy(&p.canonicalCount,reinterpret_cast<void*>(p.evaluated+0x24),4);
+        if(cacheOwner!=reinterpret_cast<uintptr_t>(instance) || p.canonicalCount<bones.size() ||
+           p.canonicalCount>MaxNativeBones || !p.matrices ||
+           !readableMemory(reinterpret_cast<void*>(p.matrices),size_t(p.canonicalCount)*48))return false;
+        p.first=uint32_t(draw.first);p.count=uint32_t(draw.count);
+        p.mapCount=uint32_t(maps.size());p.paletteCount=uint32_t(palette.size());p.modelCount=uint32_t(records.size());
+        p.mappingAddress=uint32_t(reinterpret_cast<uintptr_t>(maps.data()));
+        p.paletteAddress=uint32_t(reinterpret_cast<uintptr_t>(palette.data()));
+        std::memcpy(p.world.data(),model.world.m,48);
+        for(unsigned i=0;i<p.count;++i) {
+            auto &entry=p.entries[i];
+            std::memcpy(entry.canonical.data(),reinterpret_cast<void*>(p.matrices+uint32_t(entry.bone)*48),48);
+            std::memcpy(entry.palette.data(),palette[size_t(p.first)+i].m,48);
+        }
+        // A multi-mapping draw has no single bone or invented affine.
+        if(draw.count==1) {out.bone=p.entries[0].bone;out.boneName=p.entries[0].name;}
+    }
     out.layout=scopeSurfaceLayout(reinterpret_cast<const uint8_t*>(surfacePointer));
     out.modelRecord=uint32_t(modelIndex);out.drawRecord=uint32_t(drawIndex);out.surface=uint32_t(surfacePointer);
     out.projectionModelAddress=uint32_t(modelPointer);out.projectionDrawAddress=uint32_t(drawPointer);
-    out.instance=uint32_t(reinterpret_cast<uintptr_t>(model.instance));out.bone=mapping.bone;
+    out.instance=uint32_t(reinterpret_cast<uintptr_t>(model.instance));
     std::memcpy(&out.surfaceName,reinterpret_cast<void*>(surfacePointer),4);
-    std::memcpy(&out.boneName,bones[size_t(mapping.bone)].definition,4);
+    if(companion) {
+        companion->metadata=IdleSubmissionMetadata::copy(out);companion->copied=true;
+        if(!companion->bounded())return false;
+    }
     return !paletteInvalidated;
 }
 static void observeIdleQuery(void *queue,uintptr_t caller) {
@@ -1350,9 +1400,18 @@ bool copyIdleRaster(void *instance,IdleRasterCopy &out) {
     std::optional<IdleRasterStorage> storage(std::in_place);bool observed=false;
     // Owners live above this frame. GNU allocation failure declines diagnostics
     // locally; foreign unwind retires every vector before crossing the caller.
-    withNativeFinally([&] {observed=readIdleRaster(instance,out,*storage);},[&](bool aborted) noexcept {
+    withNativeFinally([&] {observed=readIdleNativeDraw(instance,out,*storage,IdleNativeDrawPolicy::SingleAffine);},[&](bool aborted) noexcept {
         storage.reset();if(aborted)observed=false;
     });
+    return observed;
+}
+bool copyIdlePalette(void *instance,IdlePaletteCopy &out) {
+    std::optional<IdleRasterStorage> storage(std::in_place);bool observed=false;
+    withNativeFinally([&] {
+        IdleRasterCopy metadata;
+        observed=readIdleNativeDraw(instance,metadata,*storage,IdleNativeDrawPolicy::Id2Palette,&out);
+    },[&](bool aborted) noexcept {storage.reset();if(aborted)observed=false;});
+    if(!observed)out={};
     return observed;
 }
 bool idleProjectionConfigured() noexcept {

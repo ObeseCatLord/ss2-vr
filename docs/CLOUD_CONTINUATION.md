@@ -1,5 +1,28 @@
 # Current source continuation
 
+## Joined ID2 palette evidence connected; REA static provider usable
+
+The optional draw-local companion now copies1–3 mappings and independent canonical
+matrices beside the actual shader/constants/declaration/bindings under the existing
+submission owner. Emission requires matching bookends, successful original draw,
+post-release validity and normal complete outer cleanup. Existing count-one affine
+admission remains unchanged; certified pre-state is reused without extra queries.
+No register/base/index association, authored grasp or native replay is inferred.
+See [diagnostic and Astra disposition](ID2_PALETTE_COMPANION.md).
+
+All four products rebuilt at source fingerprint
+d836a37c958f4e16c6efa8ca3e010adf8c1b3951afbe075c4e064353fbbdf8c1, IPC10/wire7.
+81Debug/81assert-enabledRelease groups and58normal/-O compiled/artifact reports
+passed. Astra/xhigh source GO follows two corrected callback/state-ordering issues;
+local routing verified, backend unattested. No new runtime/geometry acceptance.
+
+User-installed REA6.3.0 works through its configured Ghidra12.1.2/Java21 CLI.
+A static pinned Engine upload-function check succeeded; raw evidence remains
+private. It corroborates existing static facts rather than runtime association.
+See [REA workflow](REA_WORKFLOW.md). All-weapon alignment, physical cockpit
+controls, multiplayer body/origin settlement and full goal remain unfinished.
+
+
 ## Controlled ride/render association implemented; copied rigid inputs added
 
 The optional ride diagnostic now positively joins the local operated hover ride

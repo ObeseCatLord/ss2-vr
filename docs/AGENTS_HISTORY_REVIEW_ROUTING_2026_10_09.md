@@ -141,12 +141,9 @@ PYTHONPATH must name the checkout's deps/python by absolute path, because CTest
 changes working directory; set PYTHONDONTWRITEBYTECODE=1. Run appropriate checks; do not
 repeat broader passing checks without a new change or unresolved concern.
 
-Use the main agent or Terra for substantive investigation and implementation.
-All delegated reviews require explicit gpt-6-astra at xhigh or a supported Astra
-Max/Ultra setting; never use a fixed Terra reviewer, Sol or Spark for reviews.
-Verify current local model/effort tags before relying on a review; resumed
-overrides can change. Report unavailable Astra instead of substituting models.
-State independent backend-attestation limitations. Before delegation specify objective, exact scope,
+Astra at explicit xhigh or higher is required for investigations/reviews. Verify
+current local model/effort tags; resumed overrides can change. State independent
+backend-attestation limitations. Before delegation specify objective, exact scope,
 read-only/disjoint write ownership, output/evidence bounds and failure path.
 Workers must not revert others. Main retains architecture/integration and public
 conclusions. Close completed agents; periodically inspect subagent-audit results

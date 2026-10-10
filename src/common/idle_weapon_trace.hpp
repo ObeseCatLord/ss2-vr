@@ -132,6 +132,51 @@ struct IdleSubmissionMetadata {
                 r.modelRecord,r.drawRecord,r.surface,r.instance,r.surfaceName,r.boneName,r.bone,r.layout};
     }
 };
+// Optional copied draw-local palette evidence. This does not supply a single
+// affine, a shader register base, a qualified image, or a grasp reference.
+// The native/API submission owner must establish those separate relationships.
+struct IdlePaletteCopy {
+    static constexpr uint32_t MaxPalette=3,MaxMappings=32768,MaxBones=8192,MaxModels=2048;
+    struct Entry {
+        int32_t draw=-1,bone=-1,owner=-1;
+        uint32_t definition=0,name=0;
+        std::array<uint32_t,12> canonical{},palette{};
+        bool operator==(const Entry &) const = default;
+    };
+    IdleSubmissionMetadata metadata;
+    uint32_t first=0,count=0,mapCount=0,paletteCount=0,canonicalCount=0,modelCount=0;
+    uint32_t evaluated=0,matrices=0,mappingAddress=0,paletteAddress=0;
+    std::array<uint32_t,12> world{};
+    std::array<Entry,MaxPalette> entries{};
+    bool copied=false;
+    bool operator==(const IdlePaletteCopy &) const = default;
+    static bool finiteWords(const std::array<uint32_t,12> &m) noexcept {
+        for(auto bits:m)if((bits&0x7f800000u)==0x7f800000u)return false;
+        return true; // Raw IEEE float finiteness only, not an invertible frame.
+    }
+    bool bounded() const noexcept {
+        if(!copied || !count || count>MaxPalette || mapCount>MaxMappings || paletteCount>MaxMappings ||
+           first>mapCount || count>mapCount-first || first>paletteCount || count>paletteCount-first ||
+           !canonicalCount || canonicalCount>MaxBones || !modelCount || modelCount>MaxModels ||
+           !metadata.modelRecord || metadata.modelRecord>=modelCount || !metadata.modelAddress ||
+           !metadata.drawAddress || !metadata.surface || !metadata.instance ||
+           !metadata.rootConfig.configuration || !metadata.renderConfig.configuration ||
+           !evaluated || !matrices || !mappingAddress || !paletteAddress || !finiteWords(world))return false;
+        for(unsigned i=0;i<count;++i) {
+            const auto &e=entries[i];
+            if(e.draw<0 || uint32_t(e.draw)!=metadata.drawRecord || e.bone<0 ||
+               uint32_t(e.bone)>=canonicalCount || e.owner<0 || uint32_t(e.owner)!=metadata.modelRecord ||
+               !e.definition || !finiteWords(e.canonical) || !finiteWords(e.palette))return false;
+        }
+        return true;
+    }
+    bool paletteCopiesCanonical() const noexcept {
+        if(!bounded())return false;
+        for(unsigned i=0;i<count;++i)if(entries[i].palette!=entries[i].canonical)return false;
+        return true; // Native row-copy agreement; no shader address/clip proof.
+    }
+};
+constexpr unsigned IdlePaletteApiCapacity=10;
 struct IdleSubmissionTrace {
     static constexpr unsigned MaxAttempts=64,NoSlot=MaxAttempts;
     enum class Status : uint32_t { Pending,PreUnknown,PostUnknown,Mismatch,OriginalFailed,Reentered,Retired,Aborted,Qualified,NoForward,Split };
@@ -139,13 +184,16 @@ struct IdleSubmissionTrace {
         uint32_t ordinal=0;
         ScopeIndexedDraw draw{};
         IdleSubmissionMetadata metadata{};
+        IdlePaletteCopy palette{};
         Status status=Status::Pending;
         int32_t hresult=0;
         bool preCopied=false,postCopied=false,returned=false,matched=false;
+        bool paletteBeforeCopied=false,paletteAfterCopied=false,paletteMatched=false;
+        uint32_t paletteApiSlot=IdlePaletteApiCapacity; // Independent capacity, never geometry.draws.
     };
     std::array<Row,MaxAttempts> rows{};
     uint32_t attempts=0,count=0;
-    bool overflow=false,outerReturned=false;
+    bool overflow=false,outerReturned=false,outerCompleted=false;
     unsigned reserve(const ScopeIndexedDraw &draw) noexcept {
         if(attempts!=UINT32_MAX)++attempts;
         if(count==MaxAttempts){overflow=true;return NoSlot;}
@@ -163,6 +211,26 @@ struct IdleSubmissionTrace {
         if(r.status==Status::Reentered)return;
         r.postCopied=known;r.matched=r.preCopied && known && r.metadata==value;
     }
+    void paletteBefore(unsigned slot,const IdlePaletteCopy &value,bool known) noexcept {
+        if(!pending(slot))return;
+        auto &r=rows[slot];r.paletteBeforeCopied=known && value.bounded();
+        if(r.paletteBeforeCopied)r.palette=value;
+    }
+    void paletteAfter(unsigned slot,const IdlePaletteCopy &value,bool known) noexcept {
+        if(slot>=count || rows[slot].status==Status::Reentered)return;
+        auto &r=rows[slot];r.paletteAfterCopied=known && value.bounded();
+        r.paletteMatched=r.paletteBeforeCopied && r.paletteAfterCopied && r.palette==value;
+    }
+    void completeOuter(bool originalReturned,bool passComplete,bool generationCurrent,
+                       bool noWeaponFault,bool normalCleanup) noexcept {
+        outerCompleted=originalReturned && passComplete && generationCurrent && noWeaponFault && normalCleanup;
+    }
+    bool palettePublishable(unsigned slot) const noexcept {
+        if(slot>=count || !outerReturned || !outerCompleted)return false;
+        const auto &r=rows[slot];
+        return r.status==Status::Qualified && r.paletteBeforeCopied && r.paletteAfterCopied &&
+               r.paletteMatched && r.palette.bounded() && r.palette.metadata==r.metadata;
+    }
     void finalize(unsigned slot,bool aborted,bool current,bool split) noexcept {
         if(slot>=count)return;
         auto &r=rows[slot];
@@ -173,10 +241,10 @@ struct IdleSubmissionTrace {
                 !r.preCopied?Status::PreUnknown:!r.postCopied?Status::PostUnknown:
                 !r.matched?Status::Mismatch:Status::Qualified;
         }
-        if(r.status!=Status::Qualified)r.metadata={};
+        if(r.status!=Status::Qualified) {r.metadata={};r.palette={};}
     }
 };
-static_assert(sizeof(IdleSubmissionTrace)<=16*1024); // Measured also by offline checks.
+static_assert(sizeof(IdleSubmissionTrace)<=48*1024); // Bounded in-row copies; no second palette allocator.
 struct IdleWeaponTrace {
     static constexpr unsigned MaxContributors=16,MaxMatrices=64,MaxDraws=10;
     static constexpr unsigned CopyLayout=1; // Per-trace qualified-copy ordinals, not native record identity.
@@ -231,6 +299,35 @@ struct IdleWeaponTrace {
         std::array<StreamSnapshot,2> snapshots{};
         std::array<uint32_t,IdleGeometryCopy::MaxProgramWords> program{};
     } streamProbe{};
+    struct PaletteApiPayload {
+        uint32_t submissionSlot=IdleSubmissionTrace::NoSlot,ordinal=0,words=0;
+        bool beforeCopied=false,afterCopied=false,matched=false;
+        StreamSnapshot before;
+        std::array<uint32_t,IdleGeometryCopy::MaxProgramWords> program{};
+    };
+    static constexpr unsigned MaxPaletteApiPayloads=IdlePaletteApiCapacity;
+    static_assert(MaxPaletteApiPayloads==MaxDraws); // Reuse the capacity, not the geometry counter.
+    std::array<PaletteApiPayload,MaxPaletteApiPayloads> paletteApiPayloads{};
+    uint32_t paletteApiCount=0;
+    bool paletteApiOverflow=false;
+    unsigned reservePaletteApi(unsigned submissionSlot) noexcept {
+        if(nativeId!=2 || !submissions.pending(submissionSlot))return MaxPaletteApiPayloads;
+        if(paletteApiCount==MaxPaletteApiPayloads) {paletteApiOverflow=true;return MaxPaletteApiPayloads;}
+        const unsigned slot=paletteApiCount++;
+        auto &p=paletteApiPayloads[slot];p.submissionSlot=submissionSlot;
+        p.ordinal=submissions.rows[submissionSlot].ordinal;
+        submissions.rows[submissionSlot].paletteApiSlot=slot;
+        return slot; // Failed samples consume capacity too; never search for a passing replacement.
+    }
+    bool paletteApiPublishable(unsigned submissionSlot) const noexcept {
+        if(!submissions.palettePublishable(submissionSlot))return false;
+        const auto &r=submissions.rows[submissionSlot];
+        if(r.paletteApiSlot>=paletteApiCount || r.paletteApiSlot>=MaxPaletteApiPayloads)return false;
+        const auto &p=paletteApiPayloads[r.paletteApiSlot];
+        return p.submissionSlot==submissionSlot && p.ordinal==r.ordinal && p.words>=2 &&
+               p.words<=p.program.size() && p.beforeCopied && p.afterCopied && p.matched &&
+               p.before.status==StreamSnapshot::Copied;
+    }
     IdleProjectionProbe projectionProbe{};
     // Select passive diagnostics from the immutable original rejection, never
     // either resampled declaration. Reuse the exact ID1 declaration predicates.

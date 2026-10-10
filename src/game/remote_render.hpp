@@ -24,6 +24,9 @@ bool copyModelConfigurationStretch(void *instance,uint32_t expectedConfiguration
                                    IdleConfigIdentity &identity,Vec3 &stretch);
 bool idleProjectionConfigured() noexcept;
 bool copyIdleRaster(void *instance,IdleRasterCopy &out);
+// ID2-only policy selected by the current submission owner; copies raw values
+// without changing the single-affine raster/geometry admission policy.
+bool copyIdlePalette(void *instance,IdlePaletteCopy &out);
 ScopeRasterStatus copyScopeRaster(void *instance, Matrix34 &affine, ScopeSurfaceLayout &layout);
 
 // Called on the simulation thread after the original CPlayerOnStep.
