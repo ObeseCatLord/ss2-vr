@@ -90,3 +90,56 @@ to this event, including Fighter Loading, and simulation-time freshness for the
 existing rider/rig/input owner. Then one-/two-hand grabs and smooth transfer must
 join native mode-appropriate input. Mode2 lateral X and mode3 sign-based steering
 must remain distinct; no synthetic wheel/pivot or guessed offsets are admitted.
+
+## Paired evaluated Main and Seat
+
+The optional observer now requires one distinct Main and Seat definition in the
+same admitted model's selected skeleton LOD. It copies both canonical matrices
+using their global native bone indices and includes Seat identity/raw words in
+the existing two-bookend comparison. Missing or ambiguous Seat declines this
+observation. No extra sampling-time native query, evaluation, allocation, owner
+or cross-frame registry was added. Both native IDENTs are initialized and checked
+during the existing configuration path.
+
+Schema2 adds the actual source fingerprint, seat bone/definition and SeatCanonical
+matrix. Every identity, binding and matrix row uses the same schema. The existing
+assess_ride_control.py now has --kind render; it requires a complete mono or stereo
+observation, exact schema-specific inventories and selected model/LOD/bone bounds.
+Stereo eyes share frozen rider/ride/seat/configuration identities; each eye's
+transient cache, indices and raw matrices are validated independently. Raw matrix
+words are retained, including unsupported numerical values, without normalization.
+
+Historical schema1 remains readable but reports source as unavailable and Seat
+as absent. The expected source supplied by a caller does not authenticate those
+old rows. Schema2 compares emitted source with the expected fingerprint while
+still denying independent source authentication and runtime acceptance.
+
+Named Seat membership is not a certificate of the operated-seat attachment or a
+usable grasp transform. Resource, seat, grasp and steering claims remain zero.
+A complete rendered frame is not simulation-time freshness. Joystick/native aim,
+ClientAction and physics behavior remain unchanged. The next feature integration
+still needs current resource/operator-seat correspondence and a safely current
+input-time frame for the actual handgrip geometry; Fighter Loading prohibits a
+fixed authored Main/Seat replacement.
+
+| Astra design finding | Disposition |
+| --- | --- |
+| Historical source is unavailable | Adopted; schema1 source/Seat remain unknown. |
+| Complete schema-specific record grammar | Adopted; exact owner/binding/matrix inventories and finite32-observation budget. |
+| Separate stereo ownership from cache values | Adopted; shared identity/config with independent per-eye native bounds. |
+| Reuse owned cache/global indexing and raw bookends | Adopted; no new sampling callback or owner. |
+| Seat name does not prove operated-seat attachment | Adopted; all feature claims remain zero. |
+
+The source-order checker states its finite lexical scope; existing compiled
+scalar-copy and declined-entry checks do not prove all Seat-selection semantics
+or actual native execution. Private scripts/captures/assets remain private.
+
+Final source review caught accepted lookalike log prefixes. Main reproduced the
+identity/binding/matrix counterexamples, added exact reserved-prefix/delimiter
+validation and independent negative cases, and obtained corrected-prefix source
+GO.9normal/-O reader cases pass, now registered with CTest.82Debug and82assert-
+enabledRelease groups and54normal/-O current compiled/artifact/mutation reports
+pass. All four products match source fingerprint
+1a453f2210cbefa6199c866aaac2f14317fbb106bc2cfc6d79e978fb0b17aec2,
+IPC10/wire7. Local reviewer routing was Astra/xhigh; backend unattested.
+No vehicle/runtime acceptance follows from this passive source change.

@@ -13,6 +13,33 @@ def require(ok, message):
     if not ok:
         raise ValueError(message)
 
+def verify_ride_frame_source(text):
+    """Finite current-source markers; not a general CFG/lifetime proof."""
+    def region(a,b):
+        start=text.index(a);end=text.index(b,start+len(a))
+        return ''.join(re.sub(r'//[^\n]*|/\*.*?\*/','',text[start:end],flags=re.S).split())
+    copy=region('static bool copyRidePaletteBookend(', '__attribute__((noinline)) static void observeRidePalette(')
+    require('if(name==mainName){++mains;frame.mainBone=uint32_t(i);frame.boneDefinition=uint32_t(definition);}' in copy and
+            'if(name==seatName){++seats;frame.seatBone=uint32_t(i);frame.seatDefinition=uint32_t(definition);}' in copy and
+            'if(mains!=1||seats!=1||frame.mainBone==frame.seatBone)returnfalse;' in copy,
+            'Paired ride frames require unique distinct selected Main/Seat')
+    require('frame.matrices+frame.mainBone*48' in copy and 'frame.matrices+frame.seatBone*48' in copy and
+            copy.index('if(mains!=1')<copy.index('std::memcpy(frame.seat.data()'),
+            'Seat copy must use the admitted global canonical index')
+    observe=region('static void observeRidePalette()', '__attribute__((noinline)) static void publishRideObservation(')
+    require('before!=after' in observe and 'rideFrames[index]=before.frame;' in observe,
+            'Ride frame must retain both raw native bookends')
+    publish=region('static void publishRideObservation(', 'enum class IdleNativeDrawPolicy')
+    require('!rideFrameSeen[0]||(stereo&&!rideFrameSeen[1])' in publish and
+            'emit("SeatCanonical",frame.seat);' in publish and
+            'resourceClaim=0seatClaim=0graspClaim=0steeringClaim=0' in publish and
+            'schema=2source=%.*s' in publish,
+            'Ride frame output lacks completion/source/claim limits')
+    require('stringId(&seatName,"Seat");' in text and
+            'seatName==*invalidId||mainName==seatName' in ''.join(text.split()),
+            'Seat IDENT initialization must be distinct and valid')
+    return {'paired_main_seat_source_checked':True,'limit':'Finite lexical form, not native execution or general CFG proof.'}
+
 def verify_declined_ride_entries(assembly):
     """Actual consumer bytes with the source-reviewed owner gate returning false.
 
@@ -71,6 +98,7 @@ def verify_declined_ride_entries(assembly):
 
 def verify(obj):
     assembly = subprocess.check_output(['objdump', '-drC', '-Mintel', '--insn-width=16', str(obj)], text=True)
+    ride_frame_source=verify_ride_frame_source((Path(__file__).resolve().parents[1]/'src/game/remote_render.cpp').read_text())
     declined_ride_entries=verify_declined_ride_entries(assembly)
     symbols = subprocess.check_output(['objdump', '-tC', str(obj)], text=True)
     require('file format pe-i386' in assembly, 'Expected GNU x86 remote-render object')
@@ -227,6 +255,7 @@ def verify(obj):
             'ui_fault_cleanup_scalar': True, 'ui_fault_variants_checked': len(fault_bodies),
             'owner_helpers_scalar_no_callbacks':True,
             'ride_snapshot_body_scalar':True,
+            'ride_frame_source':ride_frame_source,
             'declined_ride_entries_without_global_reads':declined_ride_entries,
             'owner_cas_width_bits':32,
             'owner_comparison_semantics':'production portable policy plus source review; not a compiled path proof',

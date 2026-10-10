@@ -1,5 +1,34 @@
 # Current source continuation
 
+## Paired live Main/Seat source capture; external parser evaluated
+
+The existing optional vehicle render observer now copies distinct Main and Seat
+from the same validated model/selected LOD/canonical cache, using global bone
+indices and the existing raw bookends. Schema2 includes the source fingerprint;
+the existing ride assessor reads complete mono/stereo groups without promoting
+Seat-name membership to operated-seat attachment, grasp or input-time freshness.
+Historical schema1 remains source-unverified and Seat-absent. Astra/xhigh design
+and corrected-prefix source GO; current local tags verified, backend unattested.
+See [paired frame evidence](RIDE_RENDER_OBSERVATION.md).
+
+All4products rebuilt after source/test-registration changes with fingerprint
+1a453f2210cbefa6199c866aaac2f14317fbb106bc2cfc6d79e978fb0b17aec2,
+IPC10/wire7.82Debug/82assert-enabledRelease groups,9normal/-O reader cases and
+54normal/-O compiled/artifact/mutation reports pass. An earlier targeted CTest
+regex matched no tests; the ride reader is now explicitly registered and passed
+as group81. Earlier81-group/pre-registration builds are historical evidence.
+No game/editor/headset/vehicle/network/firing/movement run or package staging.
+
+The author-linked SE2 importer standalone parser was evaluated privately against
+both characterized AutoShotgun variants and the Fighter embedded model. Channel
+ranges/hashes, buffer identities, counts/bounds and Main/Seat local transforms
+agree with existing independent decoders. No Blender UI/import conversion was
+executed. This can reduce further authored resource decoding; it does not prove
+runtime loaded resources/animation, grasp or controls. See EXISTING_SS2_TOOLS.md.
+Physical cockpit controls, broader weapon alignment, multiplayer authoritative
+body/origin settlement and full user/device acceptance remain unfinished.
+
+
 ## Multi-palette content snapshot and existing-tool research
 
 Optional ID2 schema2 diagnostics now copy five bounded content hashes alongside

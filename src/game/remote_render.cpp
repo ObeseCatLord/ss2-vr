@@ -2,6 +2,7 @@
 #include "native_finally.hpp"
 #include "remote_render.hpp"
 #include "common/idle_projection_source.hpp"
+#include "common/build_contract.hpp"
 
 #include "common/model_tree.hpp"
 #include "common/head_palette.hpp"
@@ -20,6 +21,8 @@
 #include <span>
 #include <optional>
 #include <vector>
+
+extern "C" const ss2vr::BuildContract ss2vrBuildContract;
 
 namespace ss2vr::game::remote_render {
 namespace {
@@ -90,7 +93,7 @@ static uint32_t headName = 0;
 static uint32_t scopeName = 0, scopeBoneName = 0;
 static bool headTrackingEnabled = false;
 static bool rideObservationEnabled = false;
-static uint32_t mainName = 0;
+static uint32_t mainName = 0, seatName = 0;
 static StringId stringId = nullptr;
 static int(__cdecl *isMainThread)() = nullptr;
 static const uint32_t *invalidId = nullptr;
@@ -882,19 +885,21 @@ static bool copyRidePaletteBookend(RidePaletteBookend &out,bool &selected) {
     uint32_t cacheLod=0;
     std::memcpy(&cacheLod,reinterpret_cast<void*>(out.cacheRows[1]+owner*8+4),4);
     if(cacheLod!=out.lod)return false;
-    unsigned mains=0;
+    unsigned mains=0,seats=0;
     for(size_t i=out.boneFirst;i<size_t(out.boneFirst)+out.boneCount;++i) {
         const auto &bone=bones[i];const auto definition=reinterpret_cast<uintptr_t>(bone.definition);
         if(bone.owner!=int32_t(owner) || definition<out.definitions ||
            (definition-out.definitions)%0x78 || (definition-out.definitions)/0x78>=out.definitionCount)return false;
         uint32_t name=0;std::memcpy(&name,bone.definition,4);
         if(name==mainName) {++mains;frame.mainBone=uint32_t(i);frame.boneDefinition=uint32_t(definition);}
+        if(name==seatName) {++seats;frame.seatBone=uint32_t(i);frame.seatDefinition=uint32_t(definition);}
     }
-    if(mains!=1)return false;
+    if(mains!=1 || seats!=1 || frame.mainBone==frame.seatBone)return false;
     // Global NativeBone index, exactly the native DDE97/DDEA5 lookup, not the
     // model-relative index. All reads remain within the selected cache bounds.
     std::memcpy(frame.world.data(),model+0x24,48);
     std::memcpy(frame.main.data(),reinterpret_cast<void*>(frame.matrices+frame.mainBone*48),48);
+    std::memcpy(frame.seat.data(),reinterpret_cast<void*>(frame.matrices+frame.seatBone*48),48);
     frame.skeleton=out.skeleton;frame.lod=out.lod;frame.definitions=out.definitions;
     frame.definitionCount=out.definitionCount;frame.boneFirst=out.boneFirst;frame.boneCount=out.boneCount;
     frame.canonicalCount=out.canonicalCount;frame.cacheRows=out.cacheRows[1];frame.cacheRowCount=out.cacheRows[2];
@@ -926,18 +931,18 @@ __attribute__((noinline)) static void publishRideObservation(uint32_t owner,bool
     if(row>=32)return;
     for(unsigned eye=0;eye<(stereo?2u:1u);++eye) {
         const auto &frame=rideFrames[eye];const auto &id=frame.identity;
-        log("Lab ride render schema=1 row=%u bank=%u eye=%d player=%u brain=%u ride=%u seat=%u class=%x renderableHandle=%u renderable=%u instance=%u cfg=%u file=%u resource=%u modelRecord=%u evaluated=%u matrices=%u mainBone=%u definition=%u resourceClaim=0 seatClaim=0 graspClaim=0 steeringClaim=0",
-            row,owner,stereo?int(eye):-1,id.player,id.brain,id.ride,id.seat,id.classRva,id.renderableHandle,
+        log("Lab ride render schema=2 source=%.*s row=%u bank=%u eye=%d player=%u brain=%u ride=%u seat=%u class=%x renderableHandle=%u renderable=%u instance=%u cfg=%u file=%u resource=%u modelRecord=%u evaluated=%u matrices=%u mainBone=%u definition=%u seatBone=%u seatDefinition=%u resourceClaim=0 seatClaim=0 graspClaim=0 steeringClaim=0",
+            64,ss2vrBuildContract.sourceFingerprint.data(),row,owner,stereo?int(eye):-1,id.player,id.brain,id.ride,id.seat,id.classRva,id.renderableHandle,
             id.renderable,id.instance,frame.configuration,frame.file,frame.resource,frame.modelRecord,
-            frame.evaluated,frame.matrices,frame.mainBone,frame.boneDefinition);
-        log("Lab ride render binding schema=1 row=%u bank=%u eye=%d skeleton=%u lod=%u definitions=%u definitionCount=%u boneFirst=%u boneCount=%u canonicalCount=%u cacheRows=%u cacheRowCount=%u",
+            frame.evaluated,frame.matrices,frame.mainBone,frame.boneDefinition,frame.seatBone,frame.seatDefinition);
+        log("Lab ride render binding schema=2 row=%u bank=%u eye=%d skeleton=%u lod=%u definitions=%u definitionCount=%u boneFirst=%u boneCount=%u canonicalCount=%u cacheRows=%u cacheRowCount=%u",
             row,owner,stereo?int(eye):-1,frame.skeleton,frame.lod,frame.definitions,frame.definitionCount,
             frame.boneFirst,frame.boneCount,frame.canonicalCount,frame.cacheRows,frame.cacheRowCount);
         const auto emit=[&](const char *kind,const std::array<uint32_t,12> &m) {
-            log("Lab ride render matrix schema=1 row=%u bank=%u eye=%d kind=%s words=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x",
+            log("Lab ride render matrix schema=2 row=%u bank=%u eye=%d kind=%s words=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x",
                 row,owner,stereo?int(eye):-1,kind,m[0],m[1],m[2],m[3],m[4],m[5],m[6],m[7],m[8],m[9],m[10],m[11]);
         };
-        emit("modelWorld",frame.world);emit("MainCanonical",frame.main);
+        emit("modelWorld",frame.world);emit("MainCanonical",frame.main);emit("SeatCanonical",frame.seat);
     }
 }
 enum class IdleNativeDrawPolicy { SingleAffine,Id2Palette };
@@ -1218,8 +1223,8 @@ bool initialize(HMODULE engine, HMODULE core, HMODULE sam, HookInstallerRva inst
     stringId(&scopeName, "Scope");
     stringId(&scopeBoneName, "Sniper");
     if(observeRideControl) {
-        stringId(&mainName,"Main");
-        if(!invalidId || mainName==*invalidId)return false;
+        stringId(&mainName,"Main");stringId(&seatName,"Seat");
+        if(!invalidId || mainName==*invalidId || seatName==*invalidId || mainName==seatName)return false;
     }
     if (!invalidId || scopeName == *invalidId || scopeBoneName == *invalidId ||
         !install(engine, 0xdde30, reinterpret_cast<void *>(palettePass),

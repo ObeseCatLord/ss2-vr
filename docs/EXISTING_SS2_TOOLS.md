@@ -6,8 +6,8 @@ meshes, animations and skeletons. This can reduce authored asset decoding for
 weapon alignment and physical vehicle controls. It cannot replace evidence of
 which instance, animation/cache, shader and native owner actually render.
 
-This is research and a read-only installed-file inventory, not a tested tool
-integration. The original installation was not modified and no editor/game was
+The research and read-only installed-file inventory were followed by the
+bounded standalone parser evaluation below; Blender/editor integration is untested. The original installation was not modified and no editor/game was
 launched. An Astra/xhigh research task supplied candidates; the integration owner
 independently checked the primary sources below. Local routing was verified;
 independent backend attestation is unavailable.
@@ -56,3 +56,28 @@ are not evidence of current headers or source availability. Console/Macro guides
 may help future test-map authoring, but no replacement for the project's verified
 startup/save/isolation route was established. No new executable was downloaded,
 installed or run, and no game content was added to public source.
+
+## Standalone parser evaluated against characterized resources
+
+The author-linked add-on ZIP was obtained privately and pinned at
+f74594d02326cb86671b34967e88418bfd24435195d79e1a89481a5c49d345ed.
+Its unchanged stream/meta/type-mapping modules were reviewed and loaded without
+executing the Blender registration, import/export UI or mesh conversion. The
+comparison process used a bounded CPU/memory budget and exact owned input bytes.
+No installation or editor/game launch was needed.
+
+Both previously characterized Auto Shotgun variants matched all five channel
+hashes/ranges, both complete buffer hashes/lengths, counts, bounds and palette
+names. The embedded Fighter resource matched three LODs/four surfaces, six whole
+buffer hashes and Main/Seat parent/local transforms bit-for-bit as binary32.
+This supports using the standalone parser for further private authored-resource
+inspection. It does not certify Blender's converted scene, arbitrary resource
+versions, animation evaluation, runtime loaded-instance association or grasp.
+Raw resources, extracted source, comparison scripts and results remain private;
+no redistribution license was established for the add-on.
+
+Practical next use: read authored skeleton/mesh/animation relationships with this
+parser instead of repeatedly writing a resource-specific decoder. Keep pinned
+bytes and independent range/count/hash/reference checks before trusting a new
+resource. The native observer is still needed for the actual evaluated Main/Seat
+frame: Fighter Loading invalidates a fixed authored Seat-to-Main assumption.

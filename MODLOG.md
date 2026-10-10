@@ -1,5 +1,16 @@
 # Mod journal
 
+## 2026-10-09 — paired evaluated cockpit Main/Seat copies
+
+Added Seat to the existing bounded ride render observer/cache bookends, preserving
+native global bone indexing and normal owning completion. Existing assessor now
+reads schema1/2 with exact copied inventories, historical source/Seat limits and
+independent eye caches. Astra found an accepted lookalike-prefix counterexample;
+corrected and registered the reader regressions with CTest. All4products rebuilt;
+82Debug/82Release and54normal/-O gates pass. No runtime launch or physical-controls
+completion. Standalone SE2 importer parser matched three known resources privately,
+providing a usable authored-resource inspection route without editor/game launches.
+
 ## 2026-10-09 — optional multi-palette content copies and SS2 tools
 
 Joined native/API diagnostics can optionally hash existing bounded channel copies

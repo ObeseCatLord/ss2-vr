@@ -18,9 +18,10 @@ struct RideRenderFrameCopy {
     RideRenderIdentity identity;
     uint32_t configuration=0,file=0,resource=0,modelRecord=0;
     uint32_t evaluated=0,matrices=0,boneDefinition=0,mainBone=0;
+    uint32_t seatDefinition=0,seatBone=0;
     uint32_t skeleton=0,lod=0,definitions=0,definitionCount=0,boneFirst=0,boneCount=0;
     uint32_t canonicalCount=0,cacheRows=0,cacheRowCount=0;
-    std::array<uint32_t,12> world{},main{};
+    std::array<uint32_t,12> world{},main{},seat{};
     bool operator==(const RideRenderFrameCopy &) const = default;
 };
 } // namespace ss2vr
