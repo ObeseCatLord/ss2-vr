@@ -1,5 +1,17 @@
 # Full-project source closure review — 2026-10-08
 
+Current continuation — 2026-10-10: this is the dated closure review, not a new
+full-project audit or the current source-gap list. Later source checkpoints
+connected first-use/copy saw admission, controlling-local MP origin capture,
+mono remote-head presentation and submitted Fighter/Saucer handle steering.
+ID1/ID13 reference conventions and neutral render evidence also supersede the
+V21-only grasp blocker below. ID2 own-camera/palette replay is implemented;
+actual loaded ID2 reference/grasp evidence remains outstanding. Broader weapons,
+literal driver wheels/positive wider controls and user device/gameplay acceptance
+remain required. Follow IMPLEMENTATION_STATUS.md/CLOUD_CONTINUATION.md and the
+current worktree; preserve all historical evidence below. Bounded later GO reports
+are not full-mod completion or actual hardware/MP acceptance.
+
 Current continuation: the previously blocked idle observation is now runnable
 under the user's repeated private-neutral capture authority. V21 reached Jungle
 with 123 native stereo pairs and clean shutdown. It recovered 36 individually

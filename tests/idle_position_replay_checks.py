@@ -116,6 +116,15 @@ class Checks(unittest.TestCase):
             self.assertTrue(draw['position_replay']['position_replay_agrees_with_reference'])
             self.assertEqual(draw['native_reference']['projection_sequence'],1)
             self.assertNotIn('render_geometry',draw);self.assertFalse(result['all_consumed_positions_agree_with_native_reference'])
+            from collect_idle_evidence import palette_diagnostics
+            single=palette_diagnostics(result,2)
+            self.assertEqual(len(single['qualified_palette_reference_draws']),1)
+            self.assertFalse(single['same_request_palette_reference_cohorts'])
+            both=assess('\n'.join(lines)+'\n'+'\n'.join(line.replace('eye=0','eye=1') for line in lines),SOURCE)
+            paired=palette_diagnostics(replay(both,candidates,root,EVALUATOR,root),2)
+            self.assertEqual(len(paired['same_request_palette_reference_cohorts']),1)
+            self.assertFalse(paired['palette_alignment_accepted']);self.assertFalse(paired['palette_gpu_visibility_verified'])
+
             for key in ('api_geometry_coverage_complete','gpu_execution','positive_grasp_verified','alignment_accepted'):
                 self.assertFalse(result[key]);self.assertFalse(draw[key])
             for failure,reason in [('missing','projection-association-unavailable'),('cached','native-cold-pc24-reference-unavailable'),
@@ -134,6 +143,36 @@ class Checks(unittest.TestCase):
                 self.assertFalse(failed['position_replay']['position_replay_agrees_with_reference'])
             old=copy.deepcopy(evidence);old['rejected_or_missing_observations'][0]['submissions']['palette_copies']['rows'][2].pop('projection_association')
             self.assertEqual(replay(old,candidates,root,EVALUATOR,root)['palette_draws'][0]['position_replay']['reason'],'projection-association-unavailable')
+
+    def test_replay_deadline_caps_existing_subprocess_and_prevents_next_draw(self):
+        from unittest.mock import patch
+        from replay_idle_geometry import evaluate_geometry,replay_palette_draws,replay_allowance
+        with patch('replay_idle_geometry.time.monotonic',return_value=100):
+            self.assertEqual(replay_allowance(None),10)
+            self.assertEqual(replay_allowance(104),4)
+            self.assertEqual(replay_allowance(150),10)
+            for deadline in (100,99,float('nan'),float('inf')):
+                with self.assertRaises(TimeoutError):replay_allowance(deadline)
+            with patch('replay_idle_geometry.subprocess.run',side_effect=AssertionError('Must not execute')):
+                with self.assertRaises(TimeoutError):evaluate_geometry({},None,None,None,deadline=99)
+        rows=[{'result':'unmatched'},{'result':'unmatched'}]
+        with patch('replay_idle_geometry.time.monotonic',side_effect=[100,105]):
+            with self.assertRaises(TimeoutError):replay_palette_draws(rows,[],{},Path('.'),Path('.'),Path('.'),deadline=104)
+        # Actual serializer supplies the shared remaining allowance to its child.
+        from idle_stream_evidence import NO_UV56
+        g={'words':len(PROGRAM),'constants':4,'declaration':len(NO_UV56),'data':{
+            'layout:0':[1],'streams:0':[0]*8+[1],'program:0':PROGRAM,
+            'clip:0':list(struct.unpack('<16I',struct.pack('<16f',*IDENTITY))),
+            'declaration:0':NO_UV56[0]}}
+        for i,row in enumerate(NO_UV56):g['data'][f'declaration:{i}']=row
+        for i in range(4):g['data'][f'constant:{i}']=list(struct.unpack('<4I',struct.pack('<4f',*IDENTITY[i*4:i*4+4])))
+        channels={'positions':struct.pack('<3f',1,2,3),'uv':struct.pack('<2f',.25,.75),
+            'weights':bytes([255,0,0,0]),'local_indices':bytes(4)}
+        answer={'schema':1,'gpu_execution':False,'alignment_accepted':False}
+        with tempfile.TemporaryDirectory() as directory,patch('replay_idle_geometry.time.monotonic',return_value=100), \
+             patch('replay_idle_geometry.subprocess.run',return_value=subprocess.CompletedProcess([],0,json.dumps(answer),'')) as child:
+            evaluate_geometry(g,channels,Path('unused'),Path(directory),deadline=104)
+        self.assertEqual(child.call_args.kwargs['timeout'],4)
 
     def test_larger_offline_envelope_and_overflow(self):
         data=fixture(points=[(1.,2.,3.,.25,.75)]*2904)

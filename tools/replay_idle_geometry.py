@@ -8,11 +8,18 @@ from pathlib import Path
 import struct
 import subprocess
 import tempfile
+import time
 from assess_idle_weapon import assess, declaration_layout
 from match_idle_geometry import match,CHANNELS
 from idle_native_reference import native_reference, uploaded_transform_reference, first_material_matrices, UnsupportedNativeArithmetic, UnsupportedUploadedTransform
 
 ROOT=Path(__file__).resolve().parents[1]
+
+def replay_allowance(deadline,maximum=10):
+    if deadline is None:return maximum
+    remaining=deadline-time.monotonic()
+    if not math.isfinite(remaining) or remaining<=0:raise TimeoutError('Offline replay deadline exceeded; preserve copied inputs')
+    return min(maximum,remaining)
 
 def private_path(root,relative):
     path=(root/relative).resolve()
@@ -36,7 +43,8 @@ def channel_bytes(root,asset,row):
         channels[name]=data
     return channels
 
-def evaluate_geometry(g,channels,evaluator,temporary,reference=None):
+def evaluate_geometry(g,channels,evaluator,temporary,reference=None,deadline=None):
+    replay_allowance(deadline)
     d=g['data'];vertices=d['layout:0'][0]
     program=[w for i in range(0,g['words'],32) for w in d['program:'+str(i)]]
     constants=[w for i in range(g['constants']) for w in d['constant:'+str(i)]]
@@ -58,17 +66,19 @@ def evaluate_geometry(g,channels,evaluator,temporary,reference=None):
         data+=channels['weights'][i*4:i*4+4]+channels['local_indices'][i*4:i*4+4]
     if len(data)>131072:raise ValueError('Evaluator input budget exceeded')
     path=temporary/'copied-input.bin';path.write_bytes(data)
-    p=subprocess.run([str(evaluator),str(path)],capture_output=True,text=True,timeout=10)
+    p=subprocess.run([str(evaluator),str(path)],capture_output=True,text=True,timeout=replay_allowance(deadline))
     if p.returncode or len(p.stdout)>2048:raise ValueError('Offline evaluator rejected input: '+p.stderr.strip()[:160])
+    replay_allowance(deadline)
     result=json.loads(p.stdout)
     if result.get('schema')!=1 or result.get('gpu_execution') is not False or result.get('alignment_accepted') is not False:
         raise ValueError('Unexpected offline evaluator output')
     return result
 
-def replay_draws(rows,observations,candidates,candidate_root,evaluator,temporary,retained=False):
+def replay_draws(rows,observations,candidates,candidate_root,evaluator,temporary,retained=False,deadline=None):
     observations={(r['request'],r['eye'],r['hand']):r for r in observations}
     results=[]
     for row in rows:
+        replay_allowance(deadline)
         result=dict(row)
         if retained:result.update(evidence_class='historical-post-original-pre-cleanup-copies',cleanup_certified=False,
             outer_current=False,whole_trace_accepted=False,alignment_accepted=False)
@@ -91,7 +101,7 @@ def replay_draws(rows,observations,candidates,candidate_root,evaluator,temporary
                 'reason':'ID2 consumed-index/palette transform evidence is not implemented',
                 'vertex':0,'gpu_execution':False,'positive_grasp_verified':False,'alignment_accepted':False}
             results.append(result);continue
-        result['position_replay']=evaluate_geometry(g,channels,evaluator,temporary)
+        result['position_replay']=evaluate_geometry(g,channels,evaluator,temporary,deadline=deadline)
         result['reference_kind']='legacy-collapsed-matrix'
         try:
             reference=native_reference(o,g)
@@ -111,7 +121,7 @@ def replay_draws(rows,observations,candidates,candidate_root,evaluator,temporary
             result['reference_kind']=reference['kind']
             if 'api_association' in reference:result['api_association']=reference['api_association']
             # Select by qualified evidence, never by which calculation passes.
-            result['position_replay']=evaluate_geometry(g,channels,evaluator,temporary,reference)
+            result['position_replay']=evaluate_geometry(g,channels,evaluator,temporary,reference,deadline)
         if result['position_replay']['position_replay_agrees_with_reference']:
             affine=struct.unpack('<12f',struct.pack('<12I',*g['data']['affine:0']))
             xyz=list(struct.iter_unpack('<3f',channels['positions']))
@@ -161,11 +171,12 @@ def palette_reference(observation,row):
         'projection_sequence':a['sequence'],'submission_index':row['index'],'ordinal':row['ordinal'],
         'diagnostic_only':True,'gpu_execution':False,'positive_grasp_verified':False,'alignment_accepted':False}
 
-def replay_palette_draws(rows,observations,candidates,candidate_root,evaluator,temporary):
+def replay_palette_draws(rows,observations,candidates,candidate_root,evaluator,temporary,deadline=None):
     if not rows:return []
     owned={(o['request'],o['eye'],o['hand']):o for o in observations}
     results=[]
     for matched in rows:
+        replay_allowance(deadline)
         result=dict(matched)
         result.update(reference_kind='id2-palette-reference-unavailable',
             whole_trace_accepted=False,api_geometry_coverage_complete=False,
@@ -185,6 +196,11 @@ def replay_palette_draws(rows,observations,candidates,candidate_root,evaluator,t
         candidate=dict(asset['candidate_channels'][identity['channel_index']]);candidate['asset_sha256']=asset['asset_sha256']
         channels=channel_bytes(candidate_root,identity['candidate'],candidate)
         d=row['data']
+        result['binding']={k:o[k] for k in ('request','input','owner','weapon','model','generation','eye','hand')}
+        result['binding']['nativeId']=o['nativeId']
+        result['palette_identity']={k:row[k] for k in ('instance','surface','count')}
+        result['palette_identity'].update(root=row['root'],render=row['render'],world=d['world:0:0'],
+            canonical=[d[f'canonical:{i}:0'] for i in range(row['count'])])
         # Reuse serializer/evaluator only. No legacy affine/world-position promotion.
         data={'layout:0':d['contentSurface:0:0'],'streams:0':[0]*8+[1]}
         for kind,count in [('constant',row['constants']),('declaration',row['declaration'])]:
@@ -192,19 +208,21 @@ def replay_palette_draws(rows,observations,candidates,candidate_root,evaluator,t
         for i in range(0,row['words'],32):data[f'program:{i}']=d[f'program:0:{i}']
         geometry={'data':data,'words':row['words'],'constants':row['constants'],'declaration':row['declaration']}
         result['native_reference']=reference;result['reference_kind']=reference['kind']
-        result['position_replay']=evaluate_geometry(geometry,channels,evaluator,temporary,reference)
+        result['position_replay']=evaluate_geometry(geometry,channels,evaluator,temporary,reference,deadline)
         results.append(result)
     return results
 
-def replay(evidence,candidates,candidate_root,evaluator,temporary):
+def replay(evidence,candidates,candidate_root,evaluator,temporary,deadline=None):
+    replay_allowance(deadline)
     matching=match(evidence,candidates)
-    results=replay_draws(matching['matches'],evidence['copied_event_pose_observations'],candidates,candidate_root,evaluator,temporary)
+    results=replay_draws(matching['matches'],evidence['copied_event_pose_observations'],candidates,candidate_root,evaluator,temporary,deadline=deadline)
     diagnostic=replay_draws(matching['retained_diagnostic_matches'],
         [o for o in evidence['rejected_or_missing_observations'] if 'retained_copies' in o],
-        candidates,candidate_root,evaluator,temporary,True)
+        candidates,candidate_root,evaluator,temporary,True,deadline)
     palette=replay_palette_draws(matching['palette_content_matches'],
         evidence['copied_event_pose_observations']+evidence['rejected_or_missing_observations'],
-        candidates,candidate_root,evaluator,temporary)
+        candidates,candidate_root,evaluator,temporary,deadline)
+    replay_allowance(deadline)
     copied_agree=matching['copied_geometry_coverage_complete'] and all(
         r['position_replay']['position_replay_agrees_with_reference'] for r in results)
     partial_api=any(o.get('submissions',{}).get('attempts',0)>o['draws']

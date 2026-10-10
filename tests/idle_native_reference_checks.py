@@ -235,8 +235,7 @@ class Checks(unittest.TestCase):
         rows=[{'request':r['request'],'eye':r['eye'],'hand':r['hand'],'geometry_index':0,
                'result':'unique-consumed-channel-match','candidates':[{'candidate':'synthetic.mesh','channel_index':0}]}
               for r in (record,other)]
-        def evaluator(*args):
-            reference=args[-1] if isinstance(args[-1],dict) else None
+        def evaluator(g,channels,executable,temporary,reference=None,deadline=None):
             return {'position_replay_agrees_with_reference':reference is None,'reason':'intentional-test-verdict'}
         with patch('idle_native_reference.UPLOADED_PROGRAM_HASH',digest), \
              patch('replay_idle_geometry.channel_bytes',return_value=channels), \

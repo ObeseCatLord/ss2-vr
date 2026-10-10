@@ -1,5 +1,46 @@
 # Implementation status — 2026-10-10
 
+## ID2 collection evidence connected and replay budget bounded
+
+The existing offline collector now consumes the separate palette replay output.
+Copied channel matches, qualified numerical references and two-eye cohorts are
+reported independently. Cohorts require identical request/input/native binding,
+asset/channel and copied instance/surface/config/world/canonical identity, with
+at least one qualified draw per eye. Each draw retains its own camera sequence
+and submission/ordinal. Multiple material draws can form one cohort; no one-to-one
+correspondence, winning animation, GPU/grasp/alignment or complete coverage claim.
+
+The collector now shares one120-second absolute replay deadline across all
+existing evaluators, reducing the previous per-child10-second allowance to the
+remaining budget. Expiry preserves copied inputs/receipt and failure.json through
+existing cleanup. This is a checked replay/subprocess allowance, not a hard bound
+for filesystem/scheduling/output writes. Native runtime cleanup occurs first.
+
+Astra/xhigh reporting ADAPT was adopted (cohort naming plus four-draw regression),
+and final deadline/wrapper delta received bounded source GO. Local tags verified;
+independent backend attestation unavailable.11collector and13replay cases pass
+normal/-O; seven relevant Debug and assert-enabled Release consumer groups pass.
+The real synthetic two-eye assessment→match→replay→summary path is covered.
+Pure Python/tool-test changes leave native fingerprint98ebe103... IPC11/wire7 and
+all4 previously built product identities unchanged; no native rebuild required.
+
+A new private collection path is being staged from the reviewed V46 wrapper.
+Older V45 preparation remains preserved and intentionally stale after source-tool
+changes. Final fresh package/config/receipt/profile/inode/scene seals and offline
+preflight are recorded in the private handoff. No game, Monado, Wine, display,
+weapon grant/equip, firing/movement or hardware test has run. Current native ID2
+runtime preparation remains authorization-pending. The runnable collection obtains
+loaded reference evidence needed before a justified Auto Shotgun grasp correction;
+it does not finish all-weapon alignment or the full mod goal.
+
+| Review recommendation | Disposition |
+| --- | --- |
+| Do not call four independent submissions one matched pair | Adopted: cohort terminology and explicit four-draw regression. |
+| Preserve separate content/reference/grasp acceptance | Adopted: qualified reference counters never promote GPU/whole-trace/grasp flags. |
+| Bound aggregate CPU replay, not only each child | Adopted: one deadline reaches legacy, retained and palette evaluations. |
+| Preserve copied evidence on budget failure | Adopted: existing input receipt/failure/temporary cleanup path tested. |
+| Promise a hard whole-command wall clock | Rejected: only checked replay/child allowances are claimed. |
+
 ## ID2 own-submission camera receipt and multi-palette CPU replay
 
 The selected Auto Shotgun diagnostic now records its exact latest SOURCE1 camera

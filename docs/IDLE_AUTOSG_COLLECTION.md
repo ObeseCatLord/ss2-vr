@@ -1,5 +1,35 @@
 # Auto Shotgun neutral collection boundary
 
+## Current collection path — 2026-10-10
+
+Own-submission camera receipt and bounded multi-palette CPU replay are now
+implemented; see ID2_PALETTE_COMPANION.md and the newest status. The existing
+collector reports copied content, qualified numerical references, and two-eye
+cohorts separately. Each cohort has at least one independently qualified draw per
+eye with the same request/input/native binding, asset/channel and copied native
+palette identity. It is not a one-to-one material-draw correspondence or a winning
+animation, whole-trace, GPU visibility, grasp or alignment certificate.
+
+The offline collector passes one120-second replay deadline through every existing
+position-evaluator call, capped by its previous10-second per-child limit. Deadline
+failure preserves input receipts/log/index and a failure record. This budget
+covers checked replay and child allowances, not a hard filesystem/scheduling wall
+clock. Native runtime cleanup completes before offline replay begins.
+
+The private wrapper uses the selected sealed receipt and fingerprinted evaluator,
+installs SIGTERM handling before the existing runtime entry, and requires confirmed
+native scene receipts, ID2 preparation and clean owned-process shutdown before
+processing. Missing two-eye evidence remains incomplete. No ID2 runtime grant/equip
+or capture is authorized by this source work, and none has run. Prepare only fresh
+isolated fixtures; old sealed/attempted versions remain preserved.
+
+The initial collection-only implementation record below is historical. Its
+unsupported-ID2 replay description predates the own-camera/palette adapter; it is
+not the current consumer behavior. Production alignment remains limited to the
+already admitted ID1/ID13 conventions until actual ID2 evidence supports a change.
+
+## Historical collection-only implementation
+
 This extends the existing private idle collector to native weapon ID2. It does
 not enable an Auto Shotgun alignment correction or certify physical hand contact.
 Production alignment remains limited to the already admitted ID1/ID13 routes.

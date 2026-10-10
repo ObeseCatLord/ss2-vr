@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import time
 
 from assess_idle_weapon import assess
 from replay_idle_geometry import replay
@@ -28,6 +29,42 @@ def snapshot(path):
     if len(raw) > MAX_BYTES or identity(before) != identity(after) or identity(after) != identity(current):
         raise ValueError('Input changed during collection')
     return raw
+
+
+def palette_diagnostics(result, native_id):
+    """Numerical per-eye evidence only; never a completed trace/grasp gate."""
+    copied=[];references=[];groups={}
+    for row in result['palette_draws']:
+        if row.get('nativeId')!=native_id:raise ValueError('Foreign palette summary weapon')
+        if row['result']!='unique-copied-channel-match':continue
+        copied.append({key:row[key] for key in ('request','eye','hand','nativeId','submission_index','ordinal','candidates')})
+        if row.get('reference_kind')!='id2-owned-cold-native-staged-palette' or \
+           row['position_replay']['position_replay_agrees_with_reference'] is not True:continue
+        b=row['binding'];p=row['palette_identity'];asset=row['candidates'][0]
+        if b['nativeId']!=2 or any(b[k]!=row[k] for k in ('request','eye','hand','nativeId')):
+            raise ValueError('Palette replay binding differs from its original match')
+        if any(row.get(k) is not False for k in ('whole_trace_accepted','api_geometry_coverage_complete',
+                'gpu_execution','positive_grasp_verified','alignment_accepted')):
+            raise ValueError('Palette replay makes unsupported whole-trace/GPU/grasp claim')
+        reference=row['native_reference']
+        if reference['submission_index']!=row['submission_index'] or reference['ordinal']!=row['ordinal'] or \
+           not reference['projection_sequence'] or reference['locals']!=p['canonical']:
+            raise ValueError('Palette replay lost its own submission reference')
+        identity={k:b[k] for k in ('request','input','owner','weapon','model','generation','hand','nativeId')}
+        identity.update(asset_sha256=asset['asset_sha256'],mesh_object=asset['mesh_object'],lod=asset['lod'],
+            channel_index=asset['channel_index'],**p)
+        key=json.dumps(identity,sort_keys=True,separators=(',',':'))
+        observation={**copied[-1],'binding':b,'projection_sequence':reference['projection_sequence'],
+            'reference_kind':row['reference_kind']}
+        references.append(observation)
+        group=groups.setdefault(key,{'identity':identity,'eyes':set(),'draws':[]})
+        group['eyes'].add(row['eye']);group['draws'].append(observation)
+    paired=[{**group,'eyes':sorted(group['eyes'])} for group in groups.values() if group['eyes']=={0,1}]
+    return {'copied_unique_palette_draws':copied,'qualified_palette_reference_draws':references,
+        'same_request_palette_reference_cohorts':paired,
+        'palette_reference_evidence_class':'copied-native-program-cpu-agreement',
+        'palette_api_coverage_complete':False,'palette_gpu_visibility_verified':False,
+        'palette_positive_grasp_verified':False,'palette_alignment_accepted':False}
 
 
 def collect(log, candidates, private_root, output, expected_source, native_id, evaluator, evaluator_sha):
@@ -65,6 +102,7 @@ def collect(log, candidates, private_root, output, expected_source, native_id, e
     (output / 'input.log').write_bytes(log_bytes)
     (output / 'candidate-index.json').write_bytes(index_bytes)
     try:
+        deadline=time.monotonic()+120
         with tempfile.TemporaryDirectory(dir=output, prefix='owned-arithmetic-') as temp:
             temporary = Path(temp)
             # Execute the exact fingerprinted snapshot, not a path which could
@@ -72,7 +110,7 @@ def collect(log, candidates, private_root, output, expected_source, native_id, e
             checked_evaluator = temporary / 'checked-evaluator'
             checked_evaluator.write_bytes(evaluation_bytes)
             checked_evaluator.chmod(0o700)
-            result = replay(evidence, index, candidates.parent, checked_evaluator, temporary)
+            result = replay(evidence, index, candidates.parent, checked_evaluator, temporary,deadline=deadline)
         (output / 'idle-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
         (output / 'position-replay.json').write_text(json.dumps(result, indent=2) + '\n')
         qualified = [row for row in result['draws'] if
@@ -89,6 +127,8 @@ def collect(log, candidates, private_root, output, expected_source, native_id, e
                    'positive_grasp_verified': False, 'alignment_accepted': False,
                    'remaining': ['Confirm the qualified draw is the intended handle-bearing surface and reference assembly.',
                                  'Review model/muzzle/scope integration before activating a correction.']}
+        summary.update(palette_diagnostics(result,native_id))
+        summary['offline_replay_budget_seconds']=120
         (output / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
         return summary
     except BaseException as error:

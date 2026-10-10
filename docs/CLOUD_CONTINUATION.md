@@ -1,5 +1,30 @@
 # Current source continuation
 
+## Current ID2 collection preparation source — 2026-10-10
+
+Existing collector now reports separate copied-content/numerical-reference counts
+and exact same-request two-eye cohorts. It does not establish a draw bijection,
+winning animation, GPU/grasp/alignment or API coverage. One120-second absolute
+replay budget reaches every existing evaluator; deadlines preserve copied inputs
+and failure diagnostics. No hard filesystem/scheduling wall-clock claim.
+
+Bounded Astra/xhigh source/private-wrapper GO after cohort naming correction;
+current local tags verified/backend unattested.11collector/13replay normal/-O
+cases and seven relevant Debug/Release consumer groups pass. Native4products and
+fingerprint98ebe103... IPC11/wire7 remain unchanged (pure offline changes).
+Fresh V46 private package/fixture is staged and seal/preflight checked separately;
+V45 and all old fixtures are preserved, never rerun/resealed. No runtime launched.
+ID2 native grant/equip/save capture still needs explicit authority beyond the
+current sniper-fixture approval. Do not send the user to stale content-only
+collectors or revive unsupported-replay expectations. See private current handoff
+for exact final path/identities and ready versus authorization status.
+
+Next real alignment edge is the loaded ID2 own-camera/program/palette observation.
+Until it exists, no authored candidate offset is applied. Continue remaining full
+weapon/control implementation without guessing geometry or counting offline
+cohorts as gameplay/HMD/MP acceptance. Original installation/WIP/settings/saves
+and immutable attempted fixtures remain protected.
+
 ## Current ID2 receipt/replay source checkpoint — 2026-10-10
 
 Added the minimal own-submission native camera receipt required by the ID2 design

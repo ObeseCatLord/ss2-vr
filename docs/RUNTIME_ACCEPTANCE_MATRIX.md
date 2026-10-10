@@ -23,7 +23,7 @@ public; proprietary scenes/saves/settings/images stay in the private lab.
 | Interruption, death and respawn with held/released controls | Existing lifecycle gates; additional connected native paths remain under investigation | Open |
 | Relevant multiplayer dual-wield weapon/pose/action replication | Reviewed local-owner origin/retained capture plus existing replication/presentation; default-off MP melee observer connected | Open |
 | Physical melee native consumption and observer delivery | Reviewed default-off unique-saw local/authority/observer adapter and wire7 retention; receiver-fenced quiet and real native press/release accounting | Open |
-| Actual vehicle controls and one-/two-hand grab steering | Geometry and native proportional-input evidence incomplete | Open |
+| Actual vehicle controls and one-/two-hand grab steering | Submitted Fighter/Saucer handle geometry and native mode2 heading adapter connected; literal wheels/wider positive-control coverage remain open | User-operated physical controls/transfer/vehicle lifecycle open |
 | Complete native overlays and comfortable threshold-follow panels | Source overlays and anchor comfort policy | Menu transport and ordinary complete native gameplay/UI observed; comfort/variant coverage open |
 | Remote head worker/model lifetime and enablement | Frozen-VR-pair head palette adapter enabled by default; reviewed resource/lifetime extent | User-operated MP appearance/lifecycle open |
 
