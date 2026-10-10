@@ -353,6 +353,57 @@ static PosePacket gesturePose(uint64_t sample, uint8_t down = HandMask, uint64_t
     return p;
 }
 static void observerGestureChecks() {
+    // A replacement intent context may arrive within the same receiver clock
+    // millisecond, still describing the same physical source observation.
+    // An old native callback must not consume that replacement's retained edge.
+    for (unsigned hand = 0; hand < 2; ++hand) {
+        ObserverGestureIntents replaced;
+        auto old = gesturePose(1000); old.gesturePulseMask = HandMask;
+        check(validatePose(old), "receipt replacement starts with a valid decoded pose");
+        replaced.receive(old, old, 5000);
+        PosePacket source;
+        ObserverGestureIntents::Receipt before, other, after;
+        check(replaced.sample(old, hand, 5000, source, before) &&
+              replaced.sample(old, 1 - hand, 5000, source, other),
+              "both hands capture receipts before replacement");
+        auto next = old; ++next.sequence; ++next.intentEpoch[hand];
+        check(validatePose(next), "replacement keeps a valid physical observation in a new intent epoch");
+        replaced.receive(next, next, 5000);
+        check(!replaced.current(next, before, 5000),
+              "old receipt cannot validate a same-millisecond replacement context");
+        check(!replaced.finish(before),
+              "old completion cannot consume a same-millisecond replacement context");
+        check(replaced.current(next, other, 5000) && replaced.finish(other),
+              "replacement preserves the opposite hand's exact receipt");
+        check(replaced.sample(next, hand, 5000, source, after) && replaced.finish(after) &&
+              replaced.current(next, after, 5000) && !replaced.finish(after),
+              "replacement receipt consumes once and retains its admitted interval");
+    }
+    for (unsigned change = 0; change < 3; ++change) {
+        ObserverGestureIntents replaced;
+        auto old = gesturePose(1000); old.gesturePulseMask = HandMask;
+        replaced.receive(old, old, 5000);
+        PosePacket source;
+        ObserverGestureIntents::Receipt before[2];
+        for (unsigned hand = 0; hand < 2; ++hand)
+            check(replaced.sample(old, hand, 5000, source, before[hand]),
+                  "both hands capture before global context replacement");
+        auto next = old; ++next.sequence;
+        if (change == 0) ++next.trackingGeneration;
+        else if (change == 1) ++next.clientNonce;
+        else ++next.serverNonce;
+        check(validatePose(next), "global replacement pulse is a valid decoded pose");
+        replaced.receive(next, next, 5000);
+        for (unsigned hand = 0; hand < 2; ++hand) {
+            check(!replaced.current(next, before[hand], 5000) && !replaced.finish(before[hand]),
+                  "global replacement rejects old receipts despite identical physical stamps and local time");
+            ObserverGestureIntents::Receipt after;
+            check(replaced.sample(next, hand, 5000, source, after) &&
+                  replaced.current(next, after, 5000) && replaced.finish(after) &&
+                  replaced.current(next, after, 5000) && !replaced.finish(after),
+                  "each global replacement receipt has independent consumption and interval ownership");
+        }
+    }
     {
         ObserverGestureIntents single;
         auto released = gesturePose(1000, 0); released.gesturePulseMask = 1;

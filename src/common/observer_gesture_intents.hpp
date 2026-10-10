@@ -6,6 +6,16 @@ namespace ss2vr::network {
 // replacement is not consumption. The owner supplies incarnation/recipient
 // admission and resets this object when either changes.
 class ObserverGestureIntents {
+    struct Context {
+        uint64_t clientNonce = 0, serverNonce = 0;
+        uint32_t trackingGeneration = 0, intentEpoch = 0, gestureGeneration = 0;
+        int16_t nativeWeaponId = -1;
+        bool operator==(const Context &) const = default;
+    };
+    static Context context(const PosePacket &p, unsigned h) noexcept {
+        return {p.clientNonce, p.serverNonce, p.trackingGeneration, p.intentEpoch[h],
+                p.gestureGeneration[h], p.nativeWeaponId[h]};
+    }
     struct Hand {
         PosePacket pulse{};
         uint64_t receivedMs = 0, seenSequence = 0;
@@ -19,9 +29,7 @@ class ObserverGestureIntents {
             p.nativeWeaponId[h] == 0 && !(p.wheelOrEquipBlockedMask & bit) && p.requestedWeapon[h] < 0;
     }
     static bool context(const PosePacket &a, const PosePacket &b, unsigned h) noexcept {
-        return a.clientNonce == b.clientNonce && a.serverNonce == b.serverNonce &&
-            a.trackingGeneration == b.trackingGeneration && a.intentEpoch[h] == b.intentEpoch[h] &&
-            a.nativeWeaponId[h] == b.nativeWeaponId[h] && a.gestureGeneration[h] == b.gestureGeneration[h];
+        return context(a, h) == context(b, h);
     }
   public:
     static constexpr bool level(const PosePacket &pose, unsigned hand, bool retained) noexcept {
@@ -30,8 +38,10 @@ class ObserverGestureIntents {
     struct Receipt {
         const ObserverGestureIntents *owner = nullptr;
         unsigned hand = 2;
-        uint32_t generation = 0;
         uint64_t sequence = 0, receivedMs = 0;
+        // Source stamps and a millisecond receive time can coincide across an
+        // intent replacement. Keep the exact hand context entered by native code.
+        Context context{};
     };
     void cancel(uint8_t mask = HandMask) noexcept {
         for (unsigned h = 0; h < 2; ++h)
@@ -71,7 +81,8 @@ class ObserverGestureIntents {
             slot.pending = false; slot.pulse = {}; return false;
         }
         out = slot.pulse;
-        receipt = {this, h, slot.generation, slot.pulse.gestureSequence[h], slot.receivedMs};
+        receipt = {this, h, slot.pulse.gestureSequence[h], slot.receivedMs,
+                   context(slot.pulse, h)};
         return true;
     }
     // Native high completion or an explicit rejected/discarded probe retires
@@ -79,7 +90,8 @@ class ObserverGestureIntents {
     bool finish(const Receipt &receipt) noexcept {
         if (receipt.owner != this || receipt.hand >= 2) return false;
         auto &slot = hands_[receipt.hand];
-        if (!slot.pending || slot.generation != receipt.generation ||
+        if (!slot.pending || slot.generation != receipt.context.gestureGeneration ||
+            context(slot.pulse, receipt.hand) != receipt.context ||
             slot.pulse.gestureSequence[receipt.hand] != receipt.sequence ||
             slot.receivedMs != receipt.receivedMs) return false;
         slot.pending = false;
@@ -91,7 +103,8 @@ class ObserverGestureIntents {
         if (receipt.owner != this || receipt.hand >= 2) return false;
         const auto &slot = hands_[receipt.hand];
         return eligible(latest, receipt.hand) && context(slot.pulse, latest, receipt.hand) &&
-            slot.generation == receipt.generation && slot.pulse.gestureSequence[receipt.hand] == receipt.sequence &&
+            context(slot.pulse, receipt.hand) == receipt.context &&
+            slot.generation == receipt.context.gestureGeneration && slot.pulse.gestureSequence[receipt.hand] == receipt.sequence &&
             slot.receivedMs == receipt.receivedMs && now >= slot.receivedMs &&
             now - slot.receivedMs <= MaxPoseAgeMs;
     }
