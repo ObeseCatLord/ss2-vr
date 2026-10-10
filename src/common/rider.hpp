@@ -28,6 +28,11 @@ inline bool validNativeBodyPose(const Pose &pose) {
     const float length2 = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
     return std::isfinite(length2) && length2 >= .95f * .95f && length2 <= 1.05f * 1.05f;
 }
+inline bool rideGripPoseEligible(const Input &input,unsigned hand) {
+    return hand<2 && input.headValid && input.gripValid[hand] &&
+        validNativeBodyPose(input.head) && validNativeBodyPose(input.grip[hand]) &&
+        handTranslationValid(input.head.p,input.grip[hand].p);
+}
 inline bool compatibleRiderInput(const RiderIdentity &captured, const RiderIdentity &live,
                                   const Input &input, const Input &latest,
                                   uint32_t generation, uint32_t liveGeneration, uint64_t now) {

@@ -64,6 +64,25 @@ def render_fixture(schema=2,eyes=(-1,),row=0,bank=1,attachment_mapped=1,attachme
     return '\n'.join(lines)
 
 class Checks(unittest.TestCase):
+    def test_grip_submission_boundary_mutations_decline(self):
+        from verify_remote_render_unwind import verify_ride_grip_submission_source
+        root=Path(__file__).resolve().parents[1]
+        host=(root/'src/host/host.cpp').read_text();remote=(root/'src/game/remote_render.cpp').read_text()
+        self.assertTrue(verify_ride_grip_submission_source(host,remote)['finite_submission_guards_checked'])
+        for old,new in [('endResult==XR_SUCCESS','true'),
+                        ('worldPresented && std::find','true && std::find'),
+                        ('std::find(layers.begin(),layers.end(),world)!=layers.end()','true'),
+                        ('worldSubmission.invalidate();\n                publishWorldSubmission();','publishWorldSubmission();')]:
+            with self.subTest(boundary=old):
+                changed=host.replace(old,new);self.assertNotEqual(changed,host)
+                with self.assertRaises(ValueError):verify_ride_grip_submission_source(changed,remote)
+        for old,new in [('rideGripEnabled && stereo && request && rig','rideGripEnabled && request && rig'),
+                        ('selected[eye] || !g.copied','false || !g.copied'),
+                        ('!g.handlePositionAgrees','false')]:
+            with self.subTest(geometry=old):
+                changed=remote.replace(old,new);self.assertNotEqual(changed,remote)
+                with self.assertRaises(ValueError):verify_ride_grip_submission_source(host,changed)
+
     def test_paired_render_source_mutations_decline(self):
         try:
             from verify_remote_render_unwind import verify_ride_frame_source
@@ -89,7 +108,7 @@ class Checks(unittest.TestCase):
                         ('attachmentBefore==attachmentAfter','true'),
                         ('rideObservationOwnerCurrent(owner,RideReadPhase::Retained)','rideObservationOwnerCurrent(owner)'),
                         ('!rideReadPhaseCurrent(frozenPair,phase)','false'),
-                        ('if(committed)publishRideObservation(owner,true);','publishRideObservation(owner,true);'),
+                        ('if(committed)publishRideObservation(owner,true,&request,gripRig);','publishRideObservation(owner,true,&request,gripRig);'),
                         ('if(completed)publishRideObservation(owner,false);','publishRideObservation(owner,false);'),
                         ('childWorldAvailable=0','childWorldAvailable=1')]:
             with self.subTest(old=old):

@@ -1,6 +1,7 @@
 #include "common/ride_control_observation.hpp"
 #include "common/ride_render_observation.hpp"
 #include "common/ride_position.hpp"
+#include "common/ride_grasp.hpp"
 #include "common/presentation_identity.hpp"
 #include <cassert>
 #include <initializer_list>
@@ -206,7 +207,194 @@ static void vehicleRanges() {
     uint32_t next=0;assert(!chargeRideGpuAttempt(next,total,false) && total==64 && next==0);
     total=0;assert(!chargeRideGpuAttempt(next,total,true) && !total && !next);
 }
+
+static RideGripFrame gripFixture() {
+    RideGripFrame f{};f.valid=true;
+    f.request.sequence=7;f.request.session=3;f.request.reference=4;f.request.trackingGeneration=5;
+    f.request.input.session=3;f.request.input.reference=4;f.request.input.tickMs=1000;
+    f.rig.rider={10,11,12,3,true};f.rig.producer=42;f.rig.generation=5;
+    f.rig.revision=6;f.rig.graphics=7;f.profile=RideHandleProfile::Fighter;
+    f.render={1,2,3,4,5,6};f.configuration=10;f.file=11;f.resource=12;f.parameter=13;
+    for(unsigned h=0;h<2;++h) {
+        auto &mesh=f.surfaces[h];mesh.vertices=3;
+        const float x=h?.25f:-.25f;
+        mesh.positions[0]={x-.04f,-.04f,-.4f};mesh.positions[1]={x+.04f,-.04f,-.4f};
+        mesh.positions[2]={x,.04f,-.4f};
+        for(unsigned i=0;i<90;++i)mesh.indices[i]=i%3;
+    }
+    return f;
+}
+static void submissionFeedback() {
+    auto f=gripFixture();WorldSubmissionStream host;RideGripFrames frames;RideGripFrame out;
+    frames.add(f);assert(!frames.submitted(host.value,42,1000,out)); // Ready is not submission.
+    host.sample(42,f.request,true);const auto epoch=host.value.continuity;
+    assert(frames.submitted(host.value,42,1000,out) && out.valid);
+    assert(submittedWorldMatches(host.value,42,f.request,1100));
+    assert(!submittedWorldMatches(host.value,42,f.request,1101));
+    assert(!submittedWorldMatches(host.value,43,f.request,1000));
+    assert(!submittedWorldMatches(host.value,42,f.request,999));
+    for(unsigned fault=0;fault<5;++fault) {
+        auto receipt=host.value;
+        if(fault==0)++receipt.session;if(fault==1)++receipt.reference;
+        if(fault==2)++receipt.trackingGeneration;if(fault==3)++receipt.requestSequence;
+        if(fault==4)++receipt.sourceTickMs;
+        assert(!submittedWorldMatches(receipt,42,f.request,1001));
+    }
+    host.sample(42,f.request,true);assert(host.value.sourceTickMs==1000);
+    assert(!frames.submitted(host.value,42,1101,out)); // Cached resubmit cannot renew original age.
+    host.sample(42,f.request,false);host.sample(42,f.request,true);
+    assert(host.value.continuity!=epoch); // Loss survives skipped latest-value publication.
+    assert(frames.submitted(host.value,42,1001,out));
+    host.sample(42,f.request,false);assert(!frames.submitted(host.value,42,1001,out));
+    for(unsigned fault=0;fault<7;++fault) {
+        auto bad=f.request;
+        if(fault==0)bad.sequence=0;if(fault==1)bad.session=0;if(fault==2)bad.reference=0;
+        if(fault==3)bad.trackingGeneration|=0x80000000u;if(fault==4)bad.reserved=1;
+        if(fault==5)bad.input.session++;if(fault==6)bad.input.reference++;
+        host.sample(42,bad,true);assert(!host.value.active);
+    }
+    host.sample(0,f.request,true);assert(!host.value.active);
+    RideGripFrames missing;
+    for(unsigned i=0;i<3;++i) {auto later=f;later.request.sequence+=i;missing.add(later);}
+    host.sample(42,f.request,true);assert(!missing.submitted(host.value,42,1000,out)); // Evicted candidate.
+    assert(rideGripFrameCurrent(f,f.rig,f.request.input,1000));
+    auto moved=f.rig;moved.anchor.p={100,10,-100};moved.anchor.q=yaw(1.f);
+    assert(rideGripFrameCurrent(f,moved,f.request.input,1000)); // World anchor cancels in both operands.
+    moved.revision++;assert(!rideGripFrameCurrent(f,moved,f.request.input,1000));
+    assert(!rideGripFrameCurrent(f,f.rig,f.request.input,1101));
+}
+static void headingWrapReference() {
+    // Native export/solver static evidence is documented in NATIVE_HOVER_HEADING.
+    // This arithmetic fixture does not execute either native function.
+    const float pi=3.1415927410125732f,turn=6.2831854820251465f;
+    const auto converter=[](float delta,float &out) {out=std::atan2(std::sin(delta),std::cos(delta));return true;};
+    const auto error=[&](float desired,float current) {
+        const float r=std::fmod(desired-current+pi,turn);return (r<0?r+turn:r)-pi;
+    };
+    const auto current=[] {return true;};
+    for(float base:{0.f,.5f,-.5f,pi-.01f,-pi+.01f})
+        for(float delta:{0.f,.2f,-.2f,pi-.001f,pi+.001f,-pi-.001f,turn*4+.2f,-turn*4-.2f}) {
+            float heading=base;assert(commitRideHeading(heading,base,delta,converter,current));
+            float converted=0;converter(delta,converted);
+            const float disparity=error(error(heading,base)-error(base+delta,base),0);
+            assert(std::abs(disparity)<1e-5f);
+            if(delta==0)assert(heading==base);
+            if(std::abs(delta)<1)assert(delta>=0?heading>=base:heading<=base);
+        }
+    // Left-only initial fallback and a transfer near the converter branch cut.
+    float heading=pi-.01f;assert(commitRideHeading(heading,heading,.02f,converter,current));
+    const float returned=heading;
+    assert(commitRideHeading(heading,returned,-.03f,converter,current));
+    assert(std::abs(error(heading,pi-.02f))<1e-5f);
+}
+static void headingReentry() {
+    float heading=10;bool eligible=true;unsigned conversions=0,originals=0;
+    const auto admitted=[&] {return eligible;};
+    const auto convert=[&](float delta,float &out) {++conversions;out=delta;return true;};
+    eligible=false;assert(!commitRideHeading(heading,10,.2f,convert,admitted) && conversions==0 && heading==10);
+    eligible=true;
+    const auto reentrant=[&](float delta,float &out) {++conversions;out=delta;eligible=false;return true;};
+    assert(!commitRideHeading(heading,10,.2f,reentrant,admitted) && conversions==1 && heading==10);
+    eligible=true;const float fallback=heading;
+    const bool intent=commitRideHeading(heading,10,.2f,convert,admitted);assert(intent && heading>10);
+    ++originals;eligible=false; // A normal original return discovers nested rejection.
+    finishRideHeading(heading,fallback,intent,admitted());assert(heading==fallback && originals==1);
+    finishRideHeading(heading,fallback,false,false);assert(heading==fallback);
+}
+static void gripContinuity() {
+    auto f=gripFixture();Input input=f.request.input;
+    input.headValid=1;input.gripValid[0]=input.gripValid[1]=1;
+    input.grip[0].p={-.25f,0,-.4f};input.grip[1].p={.25f,0,-.4f};
+    input.wheelAdmissionMask=3;input.wheelInputEpoch[0]=input.wheelInputEpoch[1]=1;
+    uint32_t poses[2]={1,1};float delta=0,base=0;RideGrasp grasp;
+    auto step=[&](bool fresh=true,bool eligible=true,uint32_t epoch=1) {
+        if(fresh) {++input.sequence;++input.tickMs;}
+        return grasp.sample(f,input,poses,epoch,eligible,10.f,delta,base);
+    };
+    assert(!step());assert(!step());assert(!step()); // Key, epochs, then positive new Low.
+    input.buttons[0]=Wheel;assert(step() && grasp.mask==1 && delta==0 && base==10);
+    input.grip[0].q=yaw(.2f);assert(step() && std::abs(delta-.2f)<1e-5f);
+    assert(step(false) && std::abs(delta-.2f)<1e-5f); // Cached held input never integrates twice.
+    grasp.accept(12.f);input.buttons[1]=Wheel;
+    assert(step() && grasp.mask==3 && delta==0 && base==12.f);
+    input.grip[1].p={.24f,0,-.5f};assert(step() && std::abs(delta)>0.01f);
+    grasp.accept(13.f);input.buttons[0]=0;
+    assert(step() && grasp.mask==2 && delta==0 && base==13.f); // Smooth two -> one transfer.
+    auto animated=f;animated.surfaces[1].positions[0].y+=.01f;f=animated;
+    input.grip[1].q=yaw(.1f);assert(step() && std::abs(delta-.1f)<1e-5f); // Same identity animation keeps baseline.
+    ActionStream poseStream;assert(poseStream.sample(true));poseStream.sample(false);poseStream.sample(true);
+    poses[1]=poseStream.generation;assert(!step() && !grasp.mask);
+    assert(!step() && !grasp.hands[1].armed); // Recovered held cannot stand in for release.
+    input.grip[1].p={.25f,0,-.4f};input.buttons[1]=0;assert(!step() && grasp.hands[1].armed);
+    input.buttons[1]=Wheel;assert(step());
+    assert(!step(true,false));input.buttons[1]=0;
+    assert(!step(false) && !grasp.hands[1].armed); // Cached neutral after interruption cannot rearm.
+    assert(!step());assert(!step());input.buttons[1]=Wheel;assert(step());
+    // A world omission/new epoch cancels acquisition even when consumer missed the omission itself.
+    assert(!step(true,true,2));assert(!step(true,true,2));
+    input.buttons[1]=0;assert(!step(true,true,2));input.buttons[1]=Wheel;assert(step(true,true,2));
+    f.rig.rider.seat++;assert(!step(true,true,2)); // Mount identity replacement cannot inherit grasp.
+    // Outside press consumes arming: moving an already squeezed controller onto handle cannot auto-grab.
+    RideGrasp outside;input.buttons[0]=input.buttons[1]=0;poses[0]=poses[1]=1;
+    auto outsideStep=[&] {++input.sequence;++input.tickMs;return outside.sample(f,input,poses,1,true,10,delta,base);};
+    assert(!outsideStep());assert(!outsideStep());assert(!outsideStep());
+    input.grip[0].p={0,0,-.8f};input.buttons[0]=Wheel;assert(!outsideStep());
+    input.grip[0].p={-.25f,0,-.4f};assert(!outsideStep());
+    input.buttons[0]=0;assert(!outsideStep());input.buttons[0]=Wheel;assert(outsideStep());
+    input.grip[0].q={0,0,0,0};assert(!outsideStep()); // Invalid pose cancels.
+    assert(rideContact(f,{-.25f,0,-.4f})==0);
+    assert(rideContact(f,{10,10,10})==-1);
+    auto invalid=f;invalid.surfaces[0].indices[0]=99;assert(rideContact(invalid,{-.25f,0,-.4f})==-1);
+    assert(std::abs(ridePointTriangle({0,0,.2f},{-1,-1,0},{1,-1,0},{0,1,0})-.04)<1e-6);
+    // Producer eligibility equals consumer eligibility, including losses skipped by latest IPC.
+    for(unsigned failure=0;failure<4;++failure) {
+        auto good=input;good.headValid=1;good.gripValid[0]=1;good.head={};good.grip[0]={};good.grip[0].p={-.25f,0,-.4f};
+        ActionStream stream;assert(stream.sample(rideGripPoseEligible(good,0)));
+        auto lost=good;
+        if(failure==0)lost.head.q={0,0,0,0};
+        if(failure==1)lost.grip[0].q={0,0,0,0};
+        if(failure==2)lost.grip[0].p={100,0,0};
+        if(failure==3)lost.headValid=0;
+        assert(!stream.sample(rideGripPoseEligible(lost,0)));
+        assert(stream.sample(rideGripPoseEligible(good,0)) && stream.generation!=1);
+        RideGrasp recovered;auto neutral=good;neutral.buttons[0]=neutral.buttons[1]=0;
+        uint32_t epoch[2]={1,1};
+        auto run=[&] {++neutral.sequence;++neutral.tickMs;return recovered.sample(f,neutral,epoch,1,true,10,delta,base);};
+        assert(!run());assert(!run());assert(!run());neutral.buttons[0]=Wheel;assert(run());
+        epoch[0]=stream.generation;assert(!run());assert(!run() && !recovered.hands[0].armed);
+        neutral.buttons[0]=0;assert(!run());neutral.buttons[0]=Wheel;assert(run());
+    }
+    // Compact abnormal cleanup invalidates use immediately and establishes a new boundary later.
+    outside.interrupt();outside.interrupt();input.grip[0].q={};input.buttons[0]=0;
+    assert(!outsideStep()); // A newly keyed cached Low is not a release witness.
+    assert(!outside.sample(f,input,poses,1,true,10,delta,base) && !outside.hands[0].armed);
+    input.buttons[0]=Wheel;assert(!outsideStep()); // Recovered-held still cannot acquire.
+    input.buttons[0]=0;assert(!outsideStep());input.buttons[0]=Wheel;assert(outsideStep());
+    // A lost left pose preserves the valid right clutch and uses accepted native heading.
+    RideGrasp transfer;f=gripFixture();input.buttons[0]=input.buttons[1]=0;
+    input.grip[0]={};input.grip[0].p={-.25f,0,-.4f};input.grip[1]={};input.grip[1].p={.25f,0,-.4f};
+    poses[0]=poses[1]=1;
+    auto transferStep=[&] {++input.sequence;++input.tickMs;return transfer.sample(f,input,poses,1,true,10,delta,base);};
+    assert(!transferStep());assert(!transferStep());assert(!transferStep());
+    input.buttons[0]=input.buttons[1]=Wheel;assert(transferStep() && transfer.mask==3);
+    transfer.accept(15);++poses[0];assert(transferStep() && transfer.mask==2 && delta==0 && base==15);
+    assert(!transfer.hands[0].armed && transfer.hands[1].held);
+    input.grip[1].q=yaw(.3f);assert(transferStep() && std::abs(delta-.3f)<1e-5f && base==15);
+    // A vertical one-hand axis has no heading reference; cancel rather than inventing yaw.
+    input.grip[1].q={std::sqrt(.5f),0,0,std::sqrt(.5f)};
+    assert(!transferStep() && !transfer.keyed && !transfer.mask);
+    // Anchor-relative contact is invariant under native vehicle translation and rotation.
+    const Pose origin{yaw(.3f),{.1f,0,.2f}},anchor{yaw(-.7f),{10,2,-5}};
+    Pose head{},hand{};hand.p={.2f,0,-.4f};
+    const auto local=bodyHandTracking(origin,.4f,head,hand);
+    const auto world=worldHandTracking(anchor,origin,.4f,head,hand);
+    const auto recovered=rotate(inverse(anchor.q),world.p-anchor.p);
+    assert(dot(recovered-local.p,recovered-local.p)<1e-10f);
+
+}
+
 int main() {
+    submissionFeedback();headingWrapReference();headingReentry();gripContinuity();
     mainMappings();vehicleRanges();handleGeometry();handlePosition();retainedRideBank();
     for(auto table:{0x2a8558u,0x2b8420u}) {
         auto row=fixture();assert(row.enter(123,456,7));

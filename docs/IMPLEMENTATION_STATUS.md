@@ -1,5 +1,36 @@
 # Implementation status — 2026-10-10
 
+## Physical hover-grip source integration
+
+Connected successfully submitted world-pair handle geometry to the borrowed native
+mode2 look callback. IPC11 appends world-receipt/grip-continuity metadata while
+Input272/Request440 and wire7 remain unchanged. Actual triangle contact, one-/
+two-hand yaw, continuous transfer and causal Low/Down rearm use bounded local
+value copies. Native throttle/aim/fire/physics and ClientAction remain the owners.
+Vehicles.ImmersiveGrips defaults on for admitted Fighter/Saucer handle profiles;
+literal wheels and wider control coverage remain required.
+
+Astra ADAPT source findings are closed; final bounded caller-wiring/relocation
+fixes received GO. Current local Astra/xhigh tags verified per turn; backend
+unattested. Native heading radians/sign/angular wrap are statically established;
+equivalent targets can differ in native wake bookkeeping. See
+VEHICLE_GRIP_INTEGRATION_PLAN.md and NATIVE_HOVER_HEADING.md. This source checkpoint
+is not physical-vehicle or complete-mod runtime acceptance.
+
+All4 products match fingerprint
+46e1a609659bc0c5002ce9cbe2ff14dfa83335f55192670f2ef4352e7c254520,
+IPC11/wire7.82Debug/82assert-enabledRelease groups and relevant normal/-O
+compiled/corruption/artifact gates pass. New checks reject all four actual caller/
+COFF falsepasses discovered by Astra, plus earlier owner/cancellation/reentry
+cases. No runtime, installation or staging occurred.
+
+Next: broaden actual authored vehicle-control coverage without guessed wheel
+geometry, and close the remaining first-use melee/native lifetime, authoritative
+MP origin/body and remote-head gates. The full goal and user-operated hardware/
+shooting/vehicle/MP acceptance remain active. Existing-tool research is recorded
+in EXISTING_SS2_TOOLS.md; use the validated importer and Editor2/Macro authoring
+for the specific remaining geometry/fixture needs.
+
 ## Completed stereo ride-bank handoff fixed
 
 Found and corrected an actual source ordering defect: endEye clears the native

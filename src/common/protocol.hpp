@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <type_traits>
 namespace ss2vr {
-constexpr uint32_t Magic = 0x32565253, Abi = 10, MaxDimension = 2048, WeaponCount = 17;
+constexpr uint32_t Magic = 0x32565253, Abi = 11, MaxDimension = 2048, WeaponCount = 17;
 constexpr size_t EyeBytes = size_t(MaxDimension) * MaxDimension * 4;
 enum Button : uint32_t { Wheel = 1, Use = 2, Jump = 4, Menu = 8, Recenter = 16, Sprint = 32 };
 enum FramePresentation : uint32_t { NativeUiComplete = 1 };
@@ -98,6 +98,13 @@ struct MenuPointer {
     float u = 0, v = 0, trigger = 0;
     uint32_t primaryInputGeneration = 0;
 };
+// Host feedback for an actually successful native WORLD projection submission.
+// Original input time is never renewed by resubmission of a cached pair.
+struct WorldSubmission {
+    uint64_t requestSequence=0,sourceTickMs=0;
+    uint32_t producer=0,session=0,reference=0,trackingGeneration=0;
+    uint32_t continuity=0,active=0;
+};
 struct Shared {
     uint32_t magic = Magic, abi = Abi, bytes = sizeof(Shared), gamePid = 0;
     uint32_t hostPid = 0, width = 0, height = 0, shutdown = 0, rendererReady = 0, error = 0;
@@ -108,6 +115,10 @@ struct Shared {
     Slot slot[2];
     MenuFrame menu;
     MenuPointer pointer;
+    // Appended ABI11 metadata. Grip generations accompany latest under the IPC
+    // mutex; feedback can advance independently after xrEndFrame succeeds.
+    uint32_t gripPoseGeneration[2]{};
+    WorldSubmission worldSubmission;
 };
 #pragma pack(pop)
 static_assert(sizeof(Vec3) == 12 && sizeof(Quat) == 16 && sizeof(Pose) == 28);
@@ -115,4 +126,5 @@ static_assert(std::is_trivially_copyable_v<Request> && std::is_standard_layout_v
 static_assert(offsetof(Shared, latest) == 48);
 static_assert(sizeof(Input) == 272 && sizeof(Request) == 440);
 static_assert(sizeof(MenuPointer) == 64);
+static_assert(sizeof(WorldSubmission)==40);
 } // namespace ss2vr

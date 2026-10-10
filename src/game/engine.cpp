@@ -2,6 +2,7 @@
 #include "common/lab_preparation.hpp"
 #include "common/ride_control_observation.hpp"
 #include "common/ride_model_join.hpp"
+#include "common/ride_grasp.hpp"
 #include "common/presentation_identity.hpp"
 #include "common/ui.hpp"
 #include "common/build_contract.hpp"
@@ -363,6 +364,8 @@ struct Snapshot {
     Input input;
     InputSampleBoundary interruption;
     uint32_t inputProducer = 0;
+    uint32_t gripPoseGeneration[2]{};
+    WorldSubmission submittedWorld;
     Pose origin;
     uint64_t rigRevision = 0;
     float turn = 0;
@@ -1036,11 +1039,15 @@ static void update(void *p) {
     auto s = copySnapshot();
     Input input = s.input;
     uint32_t inputProducer = s.inputProducer;
+    uint32_t gripPoseGeneration[2]{s.gripPoseGeneration[0],s.gripPoseGeneration[1]};
+    WorldSubmission submittedWorld=s.submittedWorld;
     {
         Lock l(channel);
         if (l) {
             input = channel.shared->latest;
             inputProducer = channel.shared->hostPid;
+            std::copy_n(channel.shared->gripPoseGeneration,2,gripPoseGeneration);
+            submittedWorld=channel.shared->worldSubmission;
         }
         if (l && !channel.shared->rendererReady)
             input.session = input.focused = 0;
@@ -1069,6 +1076,8 @@ static void update(void *p) {
         turnLatched = false;
     }
     s.inputProducer = inputProducer;
+    std::copy_n(gripPoseGeneration,2,s.gripPoseGeneration);
+    s.submittedWorld=submittedWorld;
     bool enabled = riderValid && fresh(input) && s.interruption.permits(input, GetTickCount64(), inputProducer) &&
                    trackingEligible(p) && nativeRiderCurrent(p, rider);
     if (enabled != bool(s.ui.gameplay)) {
@@ -3180,7 +3189,12 @@ bool commitStereo(void *p,const Request &request,Slot &slot,uint32_t remoteOwner
             eyeSnapshot.rigRevision==current.rigRevision &&
             fresh(current.input) && trackingEligible(p) && nativeRiderCurrent(p,current.rider) && !weaponPairFault && headVolumeDrawSafe;
         if(eligible)slot.headClearance=eyeHeadClearance;
-        committed=remote_render::commitPair(slot,request,eligible,remoteOwner);
+        const RideGripRig rig{eyeSnapshot.rider,eyeSnapshot.inputProducer,eyeSnapshot.generation,
+            eyeSnapshot.rigRevision,graphicsResourceGeneration(),eyeAnchor,eyeSnapshot.origin,eyeSnapshot.turn};
+        const bool gripCurrent=eligible && eyeWorldVisibility>0 && eyeHeadClearance.mode!=HeadClearanceMode::Opaque &&
+            current.rider==rig.rider && current.inputProducer==rig.producer &&
+            !std::memcmp(&current.origin,&rig.origin,sizeof(Pose)) && current.turn==rig.turn;
+        committed=remote_render::commitPair(slot,request,eligible,remoteOwner,gripCurrent?&rig:nullptr);
     },[&](bool aborted) noexcept {
         if(aborted) nativeUiFault();
         if(held) ReleaseSRWLockShared(&snapshotLock);
@@ -5284,7 +5298,7 @@ bool nativeUiOwnerCurrent(void *player) {
 int nativeWorldEye() noexcept {return eyeIndex;}
 bool copyNativeRideRenderIdentity(uint32_t expectedPlayer,RideRenderIdentity &out) {
     out={};
-    if(!labRideControlConfigured || nativeWorldRenderDepth!=1 || !expectedPlayer ||
+    if((!labRideControlConfigured && !settings.immersiveVehicleGrips) || nativeWorldRenderDepth!=1 || !expectedPlayer ||
        expectedPlayer!=uiOwner.playerHandle || !hooksReady.load(std::memory_order_acquire) ||
        !laserModelInstance || !isAlive || !isLocal || !resolve)return false;
     void *player=resolve(expectedPlayer);
@@ -5295,13 +5309,14 @@ bool copyNativeRideRenderIdentity(uint32_t expectedPlayer,RideRenderIdentity &ou
     // Re-resolve in dependency order. readNativeRider's equality token is not
     // dereferenced; this is a new, reviewed render-extent owner route.
     void *ride=resolve(rider.ride);
-    if(!readableMemory(ride,0x390))return false;
-    uint32_t table=0,operatorBrain=0,renderableHandle=0;
+    if(!readableMemory(ride,0x480))return false;
+    uint32_t table=0,operatorBrain=0,renderableHandle=0,parameter=0;
     std::memcpy(&table,ride,4);
     std::memcpy(&operatorBrain,static_cast<uint8_t*>(ride)+0x38c,4);
     if(!controlsGameBase || (table!=controlsGameBase+0x2a8558 && table!=controlsGameBase+0x2b8420) ||
        operatorBrain!=uiOwner.brainHandle || resolve(operatorBrain)!=uiOwner.brain)return false;
     std::memcpy(&renderableHandle,static_cast<uint8_t*>(ride)+0x120,4);
+    std::memcpy(&parameter,static_cast<uint8_t*>(ride)+0x47c,4);
     void *renderable=renderableHandle?resolve(renderableHandle):nullptr;
     if(!readableMemory(renderable,0x60))return false;
     uint32_t renderableTable=0,owner=0,instanceToken=0;
@@ -5314,16 +5329,17 @@ bool copyNativeRideRenderIdentity(uint32_t expectedPlayer,RideRenderIdentity &ou
     if(!nativeUiOwnerCurrent(player) || resolve(rider.ride)!=ride ||
        !nativeRiderCurrent(player,rider) || resolve(renderableHandle)!=renderable)return false;
     // Bookend every owner edge, including mutations preserving handles.
-    uint32_t afterTable=0,afterOperator=0,afterHandle=0,afterOwner=0,afterInstance=0;
+    uint32_t afterTable=0,afterOperator=0,afterHandle=0,afterOwner=0,afterInstance=0,afterParameter=0;
     std::memcpy(&afterTable,ride,4);
     std::memcpy(&afterOperator,static_cast<uint8_t*>(ride)+0x38c,4);
     std::memcpy(&afterHandle,static_cast<uint8_t*>(ride)+0x120,4);
     std::memcpy(&afterOwner,static_cast<uint8_t*>(renderable)+0x48,4);
     std::memcpy(&afterInstance,static_cast<uint8_t*>(renderable)+0x5c,4);
+    std::memcpy(&afterParameter,static_cast<uint8_t*>(ride)+0x47c,4);
     if(afterTable!=table || afterOperator!=operatorBrain || afterHandle!=renderableHandle ||
-       afterOwner!=owner || afterInstance!=instanceToken)return false;
+       afterOwner!=owner || afterInstance!=instanceToken || afterParameter!=parameter)return false;
     out={expectedPlayer,operatorBrain,rider.ride,rider.seat,uint32_t(table-gameBase),renderableHandle,
-         uint32_t(reinterpret_cast<uintptr_t>(renderable)),instanceToken};
+         uint32_t(reinterpret_cast<uintptr_t>(renderable)),instanceToken,parameter};
     return out.valid();
 }
 bool nativeUiFrameCurrent(void *player,const Request &request) {
@@ -5470,9 +5486,31 @@ struct ControlSample {
     Pose origin;
     float turn = 0;
     bool client = false, enabled = false;
+    uint32_t producer=0;
+    uint64_t rigRevision=0;
+    uint32_t gripPoseGeneration[2]{};
 };
 static ControlSample sampledControls;
 static SRWLOCK controlsLock = SRWLOCK_INIT;
+static RideGripFrames rideGripFrames;
+static RideGrasp rideGrasp;
+// These are this mod's own x86 metadata fields inspected by the finite cleanup
+// verifier. Changing layout requires a new compiled-byte proof, never guessing.
+static_assert(offsetof(RideGrasp,mask)==0x134 && offsetof(RideGrasp,keyed)==0x150);
+struct RideGripBorrow {
+    const Snapshot *snapshot=nullptr;
+    const ControlSample *controls=nullptr;
+    const RideGripFrame *frame=nullptr;
+    void *brain=nullptr;
+    uint32_t brainHandle=0,continuity=0;
+    bool eligible=false,headingIntent=false;
+};
+static thread_local RideGripBorrow *activeRideGrip=nullptr;
+void recordRideGripFrame(const RideGripFrame &frame) {
+    AcquireSRWLockExclusive(&controlsLock);
+    rideGripFrames.add(frame);
+    ReleaseSRWLockExclusive(&controlsLock);
+}
 using LookClamp = void(__thiscall *)(void *, Vec3 &);
 using QuaternionEuler = Vec3 *(__cdecl *)(Vec3 *, const Quat &);
 static LookClamp originalLookClamp = nullptr,originalRideLookClamp=nullptr;
@@ -5541,6 +5579,7 @@ static void *__fastcall observedRideModelInstance(void *ride,void *) {
             join.handle,join.thread,unsigned(join.renderable),unsigned(join.instance),join.calls);
     return result;
 }
+static void applyRideGrip(void *,Vec3 &,const RideControlScalars &);
 static void __fastcall observedRideLookClamp(void *ride,void *,Vec3 &look) {
     auto *observation=activeRideControlObservation;
     if(!observation) {originalRideLookClamp(ride,look);return;}
@@ -5565,6 +5604,7 @@ static void __fastcall observedRideLookClamp(void *ride,void *,Vec3 &look) {
                 }
             }
             observation->copy(row);
+            if(observation->copied && !observation->declined)applyRideGrip(ride,look,row);
         }
         originalRideLookClamp(ride,look); // Exactly one original call, even for rejected sampling.
     },[&](bool aborted) noexcept {
@@ -5763,6 +5803,85 @@ static bool currentControls(int index, const Snapshot &snapshot, const ControlSa
         multiplayer::localPrimaryAllowed(snapshot.player, hand, captured.intentEpoch[hand],
             captured.input.primaryInputGeneration[hand], captured.input.sequence, active);
 }
+static void applyRideGrip(void *ride,Vec3 &look,const RideControlScalars &row) {
+    auto *borrow=activeRideGrip;
+    if(!borrow || !borrow->eligible)return;
+    const auto *observation=activeRideControlObservation;
+    const auto &s=*borrow->snapshot;
+    const auto &c=*borrow->controls;
+    const auto &frame=*borrow->frame;
+    const auto now=GetTickCount64();
+    auto fail=[&] {borrow->eligible=false;rideGrasp.cancel(c.input,c.producer);};
+    if(!settings.immersiveVehicleGrips || row.mode!=2 || !(row.movementAbilities&8u) ||
+       row.classRva!=frame.render.classRva || row.parameterToken!=frame.parameter ||
+       row.renderableToken!=frame.render.renderableHandle || !nativeMainThread || !nativeMainThread() ||
+       !vrSession(s) || !livePlayer(s) || !s.ui.gameplay || s.ui.wheel[0].open || s.ui.wheel[1].open ||
+       frame.render.brain!=borrow->brainHandle ||
+       c.producer!=s.inputProducer || c.rigRevision!=s.rigRevision || !currentControls(0,s,c) ||
+       resolve(c.rider.ride)!=ride || resolve(borrow->brainHandle)!=borrow->brain ||
+       primaryField(s.player,0x38c)!=borrow->brainHandle || primaryField(borrow->brain,0x28)!=s.playerHandle ||
+       primaryField(ride,0x38c)!=borrow->brainHandle) {fail();return;}
+    uint32_t handle=0;void *renderable=nullptr;
+    if(!laserRead32(ride,0x120,handle) || handle!=frame.render.renderableHandle ||
+       !(renderable=resolve(handle)) || !readableMemory(renderable,0x60) ||
+       primaryField(renderable,0)!=controlsGameBase+0x2a4648 ||
+       primaryField(renderable,0x48)!=reinterpret_cast<uintptr_t>(ride) ||
+       primaryField(renderable,0x5c)!=frame.render.instance) {fail();return;}
+    IdleConfigIdentity config;Vec3 stretch;
+    void *instance=laserModelInstance(renderable);
+    if(instance!=reinterpret_cast<void*>(frame.render.instance) ||
+       !remote_render::copyModelConfigurationStretch(instance,laserEngineBase+0x2095b4,config,stretch) ||
+       config.configuration!=frame.configuration || config.file!=frame.file || uint32_t(config.resource)!=frame.resource ||
+       std::memcmp(&stretch,frame.stretch.data(),12)) {fail();return;}
+    const RideGripRig rig{s.rider,s.inputProducer,s.generation,s.rigRevision,graphicsResourceGeneration(),
+        {},c.origin,c.turn};
+    const auto latest=copySnapshot();
+    if(!rideGripFrameCurrent(frame,rig,c.input,now) || !currentControls(0,latest,c) ||
+       !latest.ui.gameplay || latest.ui.wheel[0].open || latest.ui.wheel[1].open ||
+       std::memcmp(&latest.origin,&c.origin,sizeof(Pose)) || latest.turn!=c.turn ||
+       !submittedWorldMatches(latest.submittedWorld,c.producer,frame.request,GetTickCount64()) ||
+       latest.submittedWorld.continuity!=borrow->continuity ||
+       latest.rigRevision!=c.rigRevision || latest.inputProducer!=c.producer ||
+       resolve(borrow->brainHandle)!=borrow->brain ||
+       primaryField(latest.player,0x38c)!=borrow->brainHandle ||
+       primaryField(borrow->brain,0x28)!=latest.playerHandle ||
+       resolve(c.rider.ride)!=ride || resolve(handle)!=renderable ||
+       primaryField(ride,0)!=controlsGameBase+row.classRva ||
+       primaryField(ride,0x38c)!=borrow->brainHandle || primaryField(ride,0x120)!=handle ||
+       primaryField(ride,0x47c)!=row.parameterToken || primaryField(ride,0x4c4)!=row.mode ||
+       primaryField(ride,0x2d8)!=row.executionAbilities || primaryField(ride,0x4cc)!=row.movementAbilities ||
+       primaryField(renderable,0x48)!=reinterpret_cast<uintptr_t>(ride) ||
+       primaryField(renderable,0)!=controlsGameBase+0x2a4648 ||
+       primaryField(renderable,0x5c)!=frame.render.instance ||
+       primaryField(instance,0x18)!=frame.configuration ||
+       primaryField(reinterpret_cast<void*>(frame.configuration),0xc)!=frame.file ||
+       primaryField(reinterpret_cast<void*>(frame.configuration),0x10)!=frame.resource ||
+       std::memcmp(instance,frame.stretch.data(),12) || !nativeInputHealthy()) {fail();return;}
+    const auto stillAdmitted=[&] {
+        return activeRideGrip==borrow && borrow->eligible && observation &&
+            activeRideControlObservation==observation &&
+            activeRideControlObservation->rideToken==reinterpret_cast<uintptr_t>(ride) &&
+            activeRideControlObservation->lookToken==reinterpret_cast<uintptr_t>(&look) &&
+            activeRideControlObservation->copied && !activeRideControlObservation->declined &&
+            !activeRideControlObservation->aborted && activeRideControlObservation->callbackBusy;
+    };
+    if(!stillAdmitted()) {fail();return;}
+    uint32_t poseGeneration[2]{};
+    for(unsigned h=0;h<2;++h)
+        if(c.gripPoseGeneration[h]==latest.gripPoseGeneration[h] &&
+           c.input.wheelInputEpoch[h]==latest.input.wheelInputEpoch[h] &&
+           (latest.input.wheelAdmissionMask&(1u<<h)) && latest.input.gripValid[h])
+            poseGeneration[h]=c.gripPoseGeneration[h];
+    float delta=0,base=0;
+    if(rideGrasp.sample(frame,c.input,poseGeneration,borrow->continuity,true,look.x,delta,base)) {
+        if(commitRideHeading(look.x,base,delta,[&](float radians,float &heading) {
+            Vec3 converted;
+            if(quaternionEuler(&converted,yaw(radians))!=&converted)return false;
+            heading=converted.x;return true;
+        },stillAdmitted))borrow->headingIntent=true;
+        else fail();
+    }
+}
 // Adapt only the local native control producer. The native ClientAction RPC
 // transports the resulting full Vec3 unchanged, including on stock servers.
 // Do not hook the authority's movement consumer or alter its physics state.
@@ -5874,6 +5993,8 @@ static void __fastcall mountedLookClamp(void *brain, void *, Vec3 &look) {
     const auto caller = reinterpret_cast<uintptr_t>(__builtin_return_address(0));
 #endif
     auto *previousObservation=activeRideControlObservation;
+    auto *previousGrip=activeRideGrip;
+    if(previousGrip)previousGrip->eligible=false;
     if(previousObservation) {previousObservation->declined=true;previousObservation->copied=false;}
     void *rideToken=nullptr;
     ControlSample captured;
@@ -5884,7 +6005,7 @@ static void __fastcall mountedLookClamp(void *brain, void *, Vec3 &look) {
     uint32_t brainHandle = 0;
     if (hooksReady.load(std::memory_order_acquire) && caller == mountedClampReturn &&
         nativeMainThread && nativeMainThread() && captured.rider.seated() && quaternionEuler &&
-        currentControls(0, snapshot, captured) && trackedHandCurrent(captured.input, snapshot.input, 1) &&
+        currentControls(0, snapshot, captured) &&
         finite(captured.origin)) {
         brainHandle = pointerHandle(brain);
         uint32_t playerHandle = 0, ownedBrain = 0;
@@ -5898,34 +6019,48 @@ static void __fastcall mountedLookClamp(void *brain, void *, Vec3 &look) {
             const Pose aim = worldHandTracking(anchor, captured.origin, captured.turn,
                 captured.input.head, captured.input.hand[1]);
             Vec3 desired;
-            if (validNativeBodyPose(aim)) {
+            if (trackedHandCurrent(captured.input,snapshot.input,1) && validNativeBodyPose(aim)) {
                 quaternionEuler(&desired, aim.q);
                 desired.z = 0; // Native vehicle control look has heading/pitch, zero bank.
                 void *candidateRideToken=nullptr;
                 if (std::isfinite(desired.x) && std::isfinite(desired.y) &&
-                    nativeRiderCurrent(snapshot.player, captured.rider,labRideControlConfigured?&candidateRideToken:nullptr) && resolve(brainHandle) == brain) {
+                    nativeRiderCurrent(snapshot.player, captured.rider,&candidateRideToken) && resolve(brainHandle) == brain) {
                     look = desired;
                     rideToken=candidateRideToken;
                 }
             }
+            if(!rideToken)nativeRiderCurrent(snapshot.player,captured.rider,&rideToken);
         }
     }
-    if(!labRideControlConfigured || !rideToken || previousObservation ||
+    if((!labRideControlConfigured && !settings.immersiveVehicleGrips) || !rideToken || previousObservation ||
        primaryField(snapshot.player,0)!=swimmingPlayerVtable) {
+        if(caller==mountedClampReturn && nativeMainThread && nativeMainThread())rideGrasp.interrupt();
         originalLookClamp(brain,look);return;
     }
     RideControlObservation observation;
     observation.rideToken=reinterpret_cast<uintptr_t>(rideToken); // Never dereferenced here.
     observation.lookToken=reinterpret_cast<uintptr_t>(&look);
     observation.thread=GetCurrentThreadId();
+    RideGripFrame frame;
+    AcquireSRWLockExclusive(&controlsLock);
+    const bool submitted=rideGripFrames.submitted(snapshot.submittedWorld,snapshot.inputProducer,GetTickCount64(),frame);
+    ReleaseSRWLockExclusive(&controlsLock);
+    RideGripBorrow grip{&snapshot,&captured,&frame,brain,brainHandle,snapshot.submittedWorld.continuity,submitted,false};
+    const float fallbackHeading=look.x;
     withNativeFinally([&] {
         activeRideControlObservation=&observation;
+        activeRideGrip=&grip;
         originalLookClamp(brain,look); // Preserve native clamp/ClientAction exactly once.
+        if(grip.eligible && observation.publishable())rideGrasp.accept(look.x);
+        finishRideHeading(look.x,fallbackHeading,grip.headingIntent,grip.eligible && observation.publishable());
     },[&](bool aborted) noexcept {
         activeRideControlObservation=previousObservation;
+        activeRideGrip=previousGrip;
+        if(aborted || !grip.eligible || observation.declined || !observation.copied)
+            rideGrasp.interrupt();
         observation.finishOuter(aborted);
     });
-    if(observation.publishable()) {
+    if(labRideControlConfigured && observation.publishable() && !grip.headingIntent) {
         auto ordinal=labRideControlRows.load(std::memory_order_relaxed);
         while(ordinal<64 && !labRideControlRows.compare_exchange_weak(ordinal,ordinal+1,std::memory_order_relaxed)) {}
         if(ordinal<64) {
@@ -5982,6 +6117,8 @@ static void __fastcall poll(void *b, void *) {
             priorValues[hand == 1 ? 5 : 6] = 0;
     sampledControls = {s.rider, s.generation, {s.intentEpoch[0], s.intentEpoch[1]},
         s.input, s.origin, s.turn, client, enabled};
+    sampledControls.producer=s.inputProducer;sampledControls.rigRevision=s.rigRevision;
+    std::copy_n(s.gripPoseGeneration,2,sampledControls.gripPoseGeneration);
     std::fill(std::begin(values), std::end(values), 0);
     if (enabled) {
         auto direction = horizontalStickMovement(s.input, s.ui.wheel[0].open,
@@ -6784,16 +6921,16 @@ bool attach(bool headless) {
     wchar_t rideControlFlag[2]{};
     labRideControlConfigured=!headless &&
         GetEnvironmentVariableW(L"SS2VR_LAB_RIDE_CONTROL",rideControlFlag,2)==1 && rideControlFlag[0]==L'1';
-    if(labRideControlConfigured &&
+    if((labRideControlConfigured || (!headless && settings.immersiveVehicleGrips)) &&
        (reinterpret_cast<uintptr_t>(GetProcAddress(g,"?ClampLookDirEulAsRide@CPuppetEntity@SeriousEngine@@UAEXAAVVector3f@2@@Z"))!=reinterpret_cast<uintptr_t>(g)+0x901b0 ||
         primaryField(reinterpret_cast<void*>(swimmingPlayerVtable),0x5a0)!=reinterpret_cast<uintptr_t>(g)+0x901e0))return false;
-    if(labRideControlConfigured &&
+    if((labRideControlConfigured || (!headless && settings.immersiveVehicleGrips)) &&
        (reinterpret_cast<uintptr_t>(GetProcAddress(g,"?GetModelInstance@CBaseEntity@SeriousEngine@@QAEPAVCModelInstance@2@XZ"))!=controlsGameBase+0x450b0 ||
         reinterpret_cast<uintptr_t>(GetProcAddress(g,"?GetToolModelInstance@CBaseEntity@SeriousEngine@@UAEPAVCModelInstance@2@XZ"))!=controlsGameBase+0x450b0 ||
         reinterpret_cast<uintptr_t>(GetProcAddress(g,"?GetModelRenderable@CPuppetEntity@SeriousEngine@@UAEPAVCModelRenderable@2@XZ"))!=controlsGameBase+0x83790 ||
         reinterpret_cast<uintptr_t>(GetProcAddress(e,"?GetModelInstance@CModelRenderable@SeriousEngine@@QAEPAVCModelInstance@2@XZ"))!=reinterpret_cast<uintptr_t>(e)+0x15b220 ||
         primaryField(g,0x294cf0)!=reinterpret_cast<uintptr_t>(e)+0x15b220))return false;
-    if(labRideControlConfigured)
+    if(labRideControlConfigured || (!headless && settings.immersiveVehicleGrips))
         for(auto table:{0x2a8558u,0x2b8420u})
             if(primaryField(reinterpret_cast<void*>(controlsGameBase+table),0xbc)!=controlsGameBase+0x83790 ||
                primaryField(reinterpret_cast<void*>(controlsGameBase+table),0x128)!=controlsGameBase+0x450b0)return false;
@@ -6948,7 +7085,7 @@ bool attach(bool headless) {
           originalThirdPerson);
         H(g, "?ClampLookDirEul@CPlayerBrainEntity@SeriousEngine@@QAEXAAVVector3f@2@@Z", mountedLookClamp,
           originalLookClamp);
-        if(labRideControlConfigured)
+        if(labRideControlConfigured || settings.immersiveVehicleGrips)
             H(g,"?ClampLookDirEulAsRide@CPuppetEntity@SeriousEngine@@UAEXAAVVector3f@2@@Z",
               observedRideLookClamp,originalRideLookClamp);
         if(labRideControlConfigured) {
@@ -7056,7 +7193,8 @@ bool attach(bool headless) {
          ok;
     if (!headless) {
         ok = menus::initialize(g, internalHook) && ok;
-        ok = remote_render::initialize(e, c, g, internalHook, settings.remoteHeadTracking,labRideControlConfigured) && ok;
+        ok = remote_render::initialize(e, c, g, internalHook, settings.remoteHeadTracking,labRideControlConfigured,
+            settings.immersiveVehicleGrips) && ok;
     }
     if (!ok) {
         rollbackNativeHooks();

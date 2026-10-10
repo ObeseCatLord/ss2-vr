@@ -10,9 +10,11 @@
 #include "common/native_ui_finish.hpp"
 #include "common/ipc.hpp"
 #include "common/math.hpp"
+#include "common/rider.hpp"
 #include "common/ui.hpp"
 #include "common/weapon_names.hpp"
 #include "common/win_settings.hpp"
+#include "common/world_submission.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -413,12 +415,13 @@ struct Actions {
         recenter{}, sprint{};
     XrSpace aimSpace[2]{}, gripSpace[2]{};
     XrPath viveProfile = XR_NULL_PATH, currentProfile[2]{};
-    ActionStream primaryStream[2], zoomStream[2];
+    ActionStream primaryStream[2], zoomStream[2], gripPoseStream[2];
     SqueezeAdmission squeeze[2];
     void invalidateStreams() {
         for (unsigned h = 0; h != 2; ++h) {
             primaryStream[h].invalidate();
             zoomStream[h].invalidate();
+            gripPoseStream[h].invalidate();
             squeeze[h].invalidate();
         }
     }
@@ -597,6 +600,7 @@ struct Actions {
             input.focused = 0;
             for (unsigned h = 0; h != 2; ++h) {
                 squeeze[h].sample(0, false, false, false);
+                gripPoseStream[h].sample(false);
                 input.wheelInputEpoch[h] = squeeze[h].epoch;
             }
             return;
@@ -625,6 +629,7 @@ struct Actions {
                 api.log.write(description);
                 primaryStream[h].invalidate();
                 zoomStream[h].invalidate();
+                gripPoseStream[h].invalidate();
                 squeeze[h].invalidate();
             }
             auto info = get(aim, h);
@@ -649,6 +654,7 @@ struct Actions {
                     input.gripValid[h] = 1;
                 }
             }
+            gripPoseStream[h].sample(rideGripPoseEligible(input,h));
             if (!input.focused)
                 continue;
             auto triggerInfo = get(trigger, h);
@@ -955,6 +961,7 @@ struct Host {
     Com<ID3D11DeviceContext> context;
     Com<ID3D11Query> drainQuery;
     Actions actions;
+    WorldSubmissionStream worldSubmission;
     Swapchain eye[2];
     WheelLayer wheels[2];
     WheelLayout wheelLayout;
@@ -1069,6 +1076,9 @@ struct Host {
                 input.session = sessionGeneration;
                 input.reference = referenceGeneration;
                 channel.shared->latest = input;
+                channel.shared->gripPoseGeneration[0]=channel.shared->gripPoseGeneration[1]=0;
+                worldSubmission.invalidate();
+                channel.shared->worldSubmission=worldSubmission.value;
                 channel.shared->pointer = {};
                 if (failed && !channel.shared->error)
                     channel.shared->error = 1;
@@ -1291,6 +1301,7 @@ struct Host {
     }
     void invalidate() {
         actions.invalidateStreams();
+        worldSubmission.invalidate();
         presentedPointer = {};
         feedbackSeeded = false;
         menuAnchor.reset();
@@ -1457,10 +1468,21 @@ struct Host {
         }
         shared.latest =
             quit ? emptyInput() : input; // Independent of render slot availability and renderer readiness.
+        for(unsigned h=0;h<2;++h)shared.gripPoseGeneration[h]=quit?0:actions.gripPoseStream[h].generation;
+        shared.worldSubmission=worldSubmission.value;
         reapLocked();
         snapshot = {shared.width, shared.height, shared.rendererReady != 0, shared.ui,
                     shared.menu.visible && GetTickCount64() - shared.menu.tickMs < 250};
         return true;
+    }
+    void publishWorldSubmission() {
+        Mutex lock(channel,1);
+        if(!lock)return; // The durable epoch survives until the next publication.
+        auto &shared=*channel.shared;
+        if(shared.magic!=Magic || shared.abi!=Abi || shared.bytes!=sizeof(Shared) ||
+           shared.hostPid!=GetCurrentProcessId())
+            throw std::runtime_error("World feedback IPC ownership changed");
+        shared.worldSubmission=worldSubmission.value;
     }
     void eyeChains(uint32_t width, uint32_t height) {
         if (!width || !height || width > MaxDimension || height > MaxDimension)
@@ -1974,6 +1996,8 @@ struct Host {
             Frame frame(api, session, frameState.predictedDisplayTime);
             std::vector<const XrCompositionLayerBaseHeader *> layers;
             if (api.lossPending) {
+                worldSubmission.invalidate();
+                publishWorldSubmission();
                 frame.submit(layers);
                 break;
             }
@@ -2092,6 +2116,9 @@ struct Host {
                 lastSubmittedSequence = cachedRequest.sequence;
             }
             const auto endResult = frame.submit(layers);
+            worldSubmission.sample(GetCurrentProcessId(),cachedRequest,endResult==XR_SUCCESS &&
+                worldPresented && std::find(layers.begin(),layers.end(),world)!=layers.end());
+            publishWorldSubmission();
             if (endResult == XR_SUCCESS) {
                 ++xrEndSuccess;
                 if (worldPresented && std::find(layers.begin(),layers.end(),world)!=layers.end()) {

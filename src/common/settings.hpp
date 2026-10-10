@@ -10,6 +10,7 @@ struct VrSettings {
     float laserDistance = 100.f;
     float scopeEyeRelief = .1f; // Optical presentation parameter, not native zoom timing.
     bool immersiveSwimming = false;
+    bool immersiveVehicleGrips = true;
     bool roomscale = false; // Development gate until controller/replication completion.
     bool physicalMelee = false; // Unique-saw single-player integration gate.
     bool headFade = false;

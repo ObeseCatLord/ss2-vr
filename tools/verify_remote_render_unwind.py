@@ -41,7 +41,7 @@ def verify_ride_frame_source(text):
     commit=region('bool commitPair(', 'void useFrozenPair(')
     mono=region('void completeMonoPresentation(', 'void retirePresentation(')
     require('committed=commitNativeFrame(' in commit and
-            'if(committed)publishRideObservation(owner,true);' in commit and
+            'if(committed)publishRideObservation(owner,true,&request,gripRig);' in commit and
             commit.index('committed=commitNativeFrame(')<commit.index('if(committed)publishRideObservation(') and
             'if(completed)publishRideObservation(owner,false);' in mono,
             'Retained publication must follow successful stereo or normal mono completion')
@@ -72,6 +72,28 @@ def verify_ride_frame_source(text):
             'emitDraw("modelWorld",d.world);emitDraw("actualPalette",d.actualPalette);' in publish,
             'Ride Main draws require bounded inventories and zero geometry/program/control claims')
     return {'paired_main_seat_source_checked':True,'limit':'Finite lexical form, not native execution or general CFG proof.'}
+
+def verify_ride_grip_submission_source(host,remote):
+    """Finite cross-boundary guards, not runtime submission or grasp proof."""
+    def compact(text):
+        return ''.join(re.sub(r'//[^\n]*|/\*.*?\*/','',text,flags=re.S).split())
+    h=compact(host);r=compact(remote)
+    receipt='worldSubmission.sample(GetCurrentProcessId(),cachedRequest,endResult==XR_SUCCESS&&worldPresented&&std::find(layers.begin(),layers.end(),world)!=layers.end());'
+    require(h.count('worldSubmission.sample(')==1 and receipt in h and
+            h.index('constautoendResult=frame.submit(layers);')<h.index(receipt),
+            'World receipt must follow successful actual projection submission')
+    require('if(api.lossPending){worldSubmission.invalidate();publishWorldSubmission();frame.submit(layers);break;}' in h,
+            'Early compositor loss must retire world feedback')
+    start=r.index('staticvoidpublishRideObservation(');end=r.index('enumclassIdleNativeDrawPolicy',start)
+    publish=r[start:end]
+    require('if(!rideObservationOwnerCurrent(owner,RideReadPhase::Retained)' in publish and
+            'if(rideGripEnabled&&stereo&&request&&rig)publishRideGripFrame(*request,*rig);' in publish and
+            publish.index('rideObservationOwnerCurrent(')<publish.index('publishRideGripFrame(*request,*rig)'),
+            'Geometry handoff must stay behind retained-bank stereo admission')
+    require('if(selected[eye]||!g.copied||!g.handles.copied||!g.handlePositionAgrees)returnfalse;' in r,
+            'Production geometry must reject draw ambiguity and unproved positions')
+    return {'finite_submission_guards_checked':True,'runtime_executed':False}
+
 
 def verify_declined_ride_entries(assembly):
     """Actual consumer bytes with the source-reviewed owner gate returning false.
@@ -168,7 +190,7 @@ def verify(obj):
         return int(found[0], 16)
 
     for name in ['palettePass()', 'modelPass()', 'animationEnd(void*)', 'freezePair(unsigned int)',
-                 'commitPair(ss2vr::Slot&, ss2vr::Request const&, bool, unsigned int)']:
+                 'commitPair(ss2vr::Slot&, ss2vr::Request const&, bool, unsigned int, ss2vr::RideGripRig const*)']:
         entry = one('ss2vr::game::remote_render::', name)
         require(entry.count('DISP32\tss2vrNativeFinally') == 1,
                 'Entry must retain one native unwind extent: ' + name)

@@ -105,7 +105,7 @@ def assess(text,expected_source):
             if current['schema']==4 and current['copyLayout']!=1:raise ValueError('Schema4 requires ordinal copies')
             if producer_schema is not None and producer_schema!=current['schema']:raise ValueError('Mixed producer schemas')
             producer_schema=current['schema']
-            if current['ipc']!=10 or current['wire']!=7 or current['historicalBytes'] or current['grasp']:
+            if current['ipc'] not in (10,11) or current['wire']!=7 or current['historicalBytes'] or current['grasp']:
                 raise ValueError('Unsupported layout or provenance/grasp claim')
             if current['stage'] not in range(5) or not 0<=current['contributors']<=16 or not 0<=current['matrices']<=64:
                 raise ValueError('Unbounded idle record')

@@ -18,7 +18,7 @@ constexpr bool rideReadPhaseCurrent(bool drawing,RideReadPhase phase) noexcept {
 // steering input. The native sampler re-establishes every edge in world render.
 struct RideRenderIdentity {
     uint32_t player=0,brain=0,ride=0,seat=0,classRva=0,renderableHandle=0;
-    uint32_t renderable=0,instance=0;
+    uint32_t renderable=0,instance=0,parameter=0;
     bool operator==(const RideRenderIdentity &) const = default;
     bool valid() const noexcept {
         return player && brain && ride && renderableHandle && renderable && instance &&
@@ -44,6 +44,7 @@ struct RideRenderFrameCopy {
     uint32_t skeleton=0,lod=0,definitions=0,definitionCount=0,boneFirst=0,boneCount=0;
     uint32_t canonicalCount=0,cacheRows=0,cacheRowCount=0;
     std::array<uint32_t,12> world{},main{},seat{};
+    std::array<uint32_t,3> stretch{};
     RideAttachmentCopy attachment;
     bool operator==(const RideRenderFrameCopy &) const = default;
 };

@@ -1,5 +1,33 @@
 # Current source continuation
 
+## Current physical hover-grip source checkpoint — 2026-10-10
+
+Actual submitted world geometry now drives the narrowly admitted native mode2
+heading adapter. The host's successful projection-layer receipt and durable
+pose continuity join bounded local geometry, current rider/brain/model/rig
+identity, actual triangle acquisition and one-/two-hand transfer. Current source
+uses IPC11/wire7, preserving Input272/Request440 and the CPU D3D9→D3D11 architecture.
+Vehicles.ImmersiveGrips defaults1; unknown/stale/ambiguous/lost contexts decline.
+
+Astra source ADAPT findings closed; final bounded caller-wiring/relocation fixes
+GO, current local Astra/xhigh tags verified/backend unattested. Full native
+wake-state periodicity is disproved; angular target equivalence is statically
+supported. See VEHICLE_GRIP_INTEGRATION_PLAN.md/NATIVE_HOVER_HEADING.md for limits.
+All4 products fingerprint
+46e1a609659bc0c5002ce9cbe2ff14dfa83335f55192670f2ef4352e7c254520,
+82Debug/82assertRelease and relevant normal/-O compiled/mutation/artifact gates
+pass. No runtime, input, installation or staging. User primarily tests physical
+vehicles, firing, hardware and multiplayer; do not revive agent gameplay probes.
+
+NEXT source work: inspect one actual additional vehicle/control resource using
+existing validated parser/editor evidence, then implement only positively
+established controls. Literal wheels/wider vehicles, first-use melee/native
+lifetime, authoritative MP body/origin settlement, remote head and complete
+Windows/Linux hardware acceptance remain requirements. Do not promote source
+fixtures/counters or this hover-only adapter to full-goal completion. Preserve
+original installation/WIP/fixtures; public source commits require all-history
+empty-email verification, Actions disabled and no game assets/binaries/captures.
+
 ## Current completed ride-bank phase — 2026-10-10
 
 Fixed the previously unreachable stereo observation publication: endEye clears

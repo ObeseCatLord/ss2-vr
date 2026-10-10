@@ -94,6 +94,7 @@ static uint32_t headName = 0;
 static uint32_t scopeName = 0, scopeBoneName = 0;
 static bool headTrackingEnabled = false;
 static bool rideObservationEnabled = false;
+static bool rideGripEnabled=false,rideDiagnosticEnabled=false;
 static uint32_t mainName = 0, seatName = 0;
 static StringId stringId = nullptr;
 static int(__cdecl *isMainThread)() = nullptr;
@@ -870,6 +871,7 @@ static bool copyRidePaletteBookend(RidePaletteBookend &out,bool &selected) {
     if(!idleConfig(instance,config) || config!=frozenRideConfig ||
        !readableMemory(reinterpret_cast<void*>(config.configuration),0x34))return false;
     frame.configuration=config.configuration;frame.file=config.file;frame.resource=uint32_t(config.resource);
+    std::memcpy(frame.stretch.data(),instance,12);
     std::memcpy(&out.skeleton,reinterpret_cast<void*>(config.configuration+0x30),4);
     if(!readableMemory(reinterpret_cast<void*>(out.skeleton),0x38))return false;
     std::memcpy(&out.skeletonFlags,reinterpret_cast<void*>(out.skeleton+4),4);
@@ -1008,13 +1010,58 @@ __attribute__((noinline)) static void observeRidePalette() {
     if(mapped)before.frame.attachment=attachmentBefore.copy;
     rideFrames[index]=before.frame;rideFrameSeen[index]=true;
 }
-__attribute__((noinline)) static void publishRideObservation(uint32_t owner,bool stereo) {
+static bool buildRideGripFrame(const Request &request,const RideGripRig &rig,RideGripFrame &out) {
+    out={};const RideDrawGpuCopy *selected[2]{};const RideMainDrawCopy *draw[2]{};
+    for(unsigned eye=0;eye<2;++eye) {
+        if(rideMainDrawOverflow[eye])return false;
+        for(unsigned i=0;i<rideMainDrawCounts[eye];++i) {
+            const auto &d=rideMainDraws[eye][i];const auto &g=rideMainGpu[eye][i];
+            if(!rideSurfaceSupported(d.layout))continue;
+            if(selected[eye] || !g.copied || !g.handles.copied || !g.handlePositionAgrees)return false;
+            selected[eye]=&g;draw[eye]=&d;
+        }
+        if(!selected[eye])return false;
+    }
+    const auto &left=*selected[0],&right=*selected[1];
+    if(left.handles.profile!=right.handles.profile || draw[0]->identity!=draw[1]->identity ||
+       draw[0]->configuration!=draw[1]->configuration || draw[0]->file!=draw[1]->file ||
+       draw[0]->resource!=draw[1]->resource || !draw[0]->identity.parameter ||
+       rig.rider.player!=draw[0]->identity.player || rig.rider.ride!=draw[0]->identity.ride ||
+       rig.rider.seat!=draw[0]->identity.seat || !validNativeBodyPose(rig.anchor))return false;
+    RideGripFrame next;next.request=request;next.rig=rig;next.render=draw[0]->identity;
+    next.configuration=draw[0]->configuration;next.file=draw[0]->file;next.resource=draw[0]->resource;
+    if(rideFrames[0].stretch!=rideFrames[1].stretch)return false;
+    next.stretch=rideFrames[0].stretch;
+    next.parameter=next.render.parameter;next.profile=left.handles.profile;
+    for(unsigned hand=0;hand<2;++hand) {
+        const auto &a=left.handles.handles[hand],&b=right.handles.handles[hand];
+        if(a.vertices!=b.vertices || a.indices!=b.indices)return false;
+        auto &surface=next.surfaces[hand];surface.vertices=a.vertices;surface.indices=a.indices;
+        for(unsigned v=0;v<a.vertices;++v) {
+            const auto p=left.handleWorld[hand][v],q=right.handleWorld[hand][v],delta=p-q;
+            if(!std::isfinite(dot(delta,delta)) || dot(delta,delta)>.0005f*.0005f)return false;
+            surface.positions[v]=rotate(inverse(rig.anchor.q),p-rig.anchor.p);
+            const auto local=surface.positions[v];
+            if(!std::isfinite(local.x)||!std::isfinite(local.y)||!std::isfinite(local.z))return false;
+        }
+    }
+    next.valid=true;out=next;return true;
+}
+// Called only after retained-bank admission; this stack contains copied values,
+// and its allocation must not move ahead of the publisher's owner gate.
+__attribute__((noinline)) static void publishRideGripFrame(const Request &request,const RideGripRig &rig) {
+    RideGripFrame frame;
+    if(buildRideGripFrame(request,rig,frame))recordRideGripFrame(frame);
+}
+__attribute__((noinline)) static void publishRideObservation(uint32_t owner,bool stereo,
+        const Request *request=nullptr,const RideGripRig *rig=nullptr) {
     // endEye retires native scratch use before stereo Ready. It does not retire
     // the bank owner; only this copied-value publication uses the retained phase.
     if(!rideObservationOwnerCurrent(owner,RideReadPhase::Retained) || !rideObservationEnabled || rideObservationDeclined ||
        !frozenRide.valid() ||
        !rideFrameSeen[0] || (stereo && !rideFrameSeen[1]))return;
-    if(rideObservationRows.load(std::memory_order_relaxed)>=32)return;
+    if(rideGripEnabled && stereo && request && rig)publishRideGripFrame(*request,*rig);
+    if(!rideDiagnosticEnabled || rideObservationRows.load(std::memory_order_relaxed)>=32)return;
     const unsigned row=rideObservationRows.fetch_add(1,std::memory_order_relaxed);
     if(row>=32)return;
     if(stereo) {
@@ -1368,7 +1415,7 @@ static void clearBinding(uint32_t handle) {
 } // namespace
 
 bool initialize(HMODULE engine, HMODULE core, HMODULE sam, HookInstallerRva install, bool enableHeadTracking,
-                bool observeRideControl) {
+                bool observeRideControl,bool produceGrips) {
     if (ready.load(std::memory_order_acquire))
         return true;
     if (!engine || !core || !sam || !install)
@@ -1412,7 +1459,8 @@ bool initialize(HMODULE engine, HMODULE core, HMODULE sam, HookInstallerRva inst
                  reinterpret_cast<void **>(&originalPalettePass)) || !originalPalettePass)
         return false;
     headTrackingEnabled = enableHeadTracking; // Writes require a frozen stereo pair.
-    rideObservationEnabled = observeRideControl;
+    rideObservationEnabled = observeRideControl || produceGrips;
+    rideDiagnosticEnabled=observeRideControl;rideGripEnabled=produceGrips;
     if(idleProbeWeaponSupported(selectedIdleProbeWeapon())) {
         stringId(&idleAnimationName,"Idle");
         if(idleAnimationName==*invalidId ||
@@ -1642,6 +1690,11 @@ __attribute__((noinline)) bool claimRideGpuAttempt(const RideMainDrawCopy &copy)
     if(!rideObservationOwnerCurrent(copy.bank))return false;
     if(!rideDrawBankMatches(copy) || !rideSurfaceSupported(copy.layout))return false;
     const size_t index=copy.eye<0?0:size_t(copy.eye);
+    if(rideGripEnabled && copy.eye>=0) {
+        if(rideGpuAttempts[index])return false;
+        ++rideGpuAttempts[index];return true;
+    }
+    if(!rideDiagnosticEnabled)return false;
     return chargeRideGpuAttempt(rideGpuAttempts[index],rideGpuSessionAttempts,
         rideObservationRows.load(std::memory_order_relaxed)>=32);
 }
@@ -1728,14 +1781,14 @@ uint32_t freezePair(uint32_t localPlayer) {
     return 0;
 }
 
-bool commitPair(Slot &slot, const Request &request, bool localEligible, uint32_t owner) {
+bool commitPair(Slot &slot, const Request &request, bool localEligible, uint32_t owner,const RideGripRig *gripRig) {
     // Both remote locks remain held through Ready; local caller holds snapshotLock.
     bool committed=false;
     withPresentationBindings([&](const auto& guard) {
         committed=commitNativeFrame(slot,request,localEligible &&
             frozenPresentationOwnerMatches(pairOwner.load(std::memory_order_acquire),currentFrozenOwner,owner) &&
             validatePair(guard));
-        if(committed)publishRideObservation(owner,true);
+        if(committed)publishRideObservation(owner,true,&request,gripRig);
     },[&](bool) noexcept {
         invalidateFrozenPresentationOwner(pairOwner,pairInvalid,currentFrozenOwner,owner);
     });

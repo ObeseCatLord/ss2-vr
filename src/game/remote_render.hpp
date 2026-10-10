@@ -4,6 +4,7 @@
 #include "common/scope_pose.hpp"
 #include "common/idle_weapon_trace.hpp"
 #include "common/ride_render_observation.hpp"
+#include "common/ride_grip_frame.hpp"
 #include <cstdint>
 #include <windows.h>
 
@@ -12,7 +13,7 @@ namespace ss2vr::game::remote_render {
 using HookInstallerRva = bool (*)(HMODULE, uint32_t, void *, void **);
 
 bool initialize(HMODULE engine, HMODULE core, HMODULE sam, HookInstallerRva install, bool enableHeadTracking,
-                bool observeRideControl=false);
+                bool observeRideControl=false,bool produceGrips=false);
 
 // Pin before native simulation; check lifecycle entries before native mutation.
 void noteSimulationThread();
@@ -54,6 +55,7 @@ bool presentationSuppressionCurrent() noexcept;
 void invalidatePresentationForReset(bool activeDraw) noexcept;
 void restorePresentationSuppression(bool previous) noexcept;
 // Caller owns IPC slot and snapshot lock; validates remote identity through Ready.
-bool commitPair(Slot &slot, const Request &request, bool localEligible, uint32_t owner);
+bool commitPair(Slot &slot, const Request &request, bool localEligible, uint32_t owner,
+                const RideGripRig *gripRig=nullptr);
 
 } // namespace ss2vr::game::remote_render

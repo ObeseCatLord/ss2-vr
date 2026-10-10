@@ -2,6 +2,7 @@
 #include "common/ipc.hpp"
 #include "common/math.hpp"
 #include "common/ride_render_observation.hpp"
+#include "common/ride_grip_frame.hpp"
 #include <atomic>
 #include <d3d9.h>
 namespace ss2vr::game {
@@ -48,6 +49,8 @@ bool copyExecutedUiProjection(void *player, const Request &, int index, Matrix44
 // Value-only current root camera for a borrowed stereo vehicle draw. Mono,
 // nested views, weapon passes and retired graphics owners decline.
 bool copyExecutedRideCamera(uint32_t player,uint64_t generation,int eye,RideCameraCopy &out);
+// Caller holds the native snapshot/bank owner. Value-copy only; no native getter.
+void recordRideGripFrame(const RideGripFrame &);
 bool nativeUiFrameCurrent(void *player, const Request &);
 bool nativeUiOwnerCurrent(void *player);
 // Fresh reciprocal ownership within the current original Render3D extent.

@@ -686,6 +686,10 @@ class Checks(unittest.TestCase):
         r=assess(DRAW.replace('stage=4','stage=3'),SOURCE)
         self.assertFalse(r['copied_event_pose_observations'])
         self.assertEqual(len(r['rejected_or_missing_observations']),1)
+    def test_accepts_legacy_and_current_ipc_with_wire7_only(self):
+        self.assertEqual(len(assess(VALID,SOURCE)['copied_event_pose_observations']),1)
+        self.assertEqual(len(assess(VALID.replace('ipc=10','ipc=11'),SOURCE)['copied_event_pose_observations']),1)
+        with self.assertRaises(ValueError):assess(VALID.replace('ipc=10','ipc=12'),SOURCE)
     def test_native_numeric_boundaries(self):
         r=assess(VALID.replace('request=100','request=18446744073709551615')
             .replace('file=30','file=4294967295').replace('resource=5','resource=-2147483648')

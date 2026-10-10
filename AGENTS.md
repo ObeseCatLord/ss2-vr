@@ -132,7 +132,8 @@ gate needs a concrete next source/probe operation or precise missing input.
 C++20; explicit x86 native calling conventions; pointer-free fixed-width IPC;
 bounded waits; pinned dependencies/licenses. Build x86 game/server and x64
 host/official loader. Rebuild ALL products after src/cmake/CMakeLists changes
-before packaging. Check current compiled fingerprints and IPC10/wire7 layouts.
+before packaging. Check current compiled fingerprints and IPC11/wire7 layouts.
+Historical IPC10 builds/fixtures retain their recorded identities; never mix products.
 Pure offline-tool changes require their meaningful consumer/regression checks
 and product-contract verification, not an invented native rebuild requirement.
 

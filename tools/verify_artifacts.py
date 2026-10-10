@@ -102,7 +102,7 @@ def verify(game):
     for name in re.findall(r'"(\?[^"\n]+)"',plugin):
         if name not in symbols['Core.dll']:raise ValueError('Missing server startup API: '+name)
     layouts=[]
-    expected=(0x32565253,10,272,440,352,33554928,83887840,48,672,67110528)
+    expected=(0x32565253,11,272,440,352,33554928,83887888,48,672,67110528)
     for prefix,folder in [('i686','build-game'),('x86_64','build-host')]:
         # Concurrent normal/optimized checks must not truncate each other's
         # compiler output between compile and objcopy. Only owned scratch files
