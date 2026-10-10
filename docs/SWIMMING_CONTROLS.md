@@ -1,5 +1,23 @@
 # Swimming control choice
 
+## Grip continuity correction — 2026-10-10
+
+Optional strokes now consume the existing per-hand grip continuity generations.
+A tracking loss omitted by latest-value input delivery cannot bridge two valid
+positions into thrust: either generation change reseeds the baseline, and zero
+generations decline. Captured/current generations must agree before sampling
+and before committing a nonzero stroke after the native direction getters.
+Head-directed joystick swimming and the default `Immersive=0` remain unchanged.
+
+The pre-fix portable counterexample produced full stroke input from a3cm recovery
+jump. New producer-to-consumer regressions cover skipped left/right/both-hand
+loss, recovery/duplicate reseeding, subsequent continuous pulls, late generation
+mismatch and producer exhaustion to zero. Late checks exercise the shared
+predicate, not actual native callback execution. Astra returned bounded source
+GO; current local Astra/xhigh tags were verified, backend attestation unavailable.
+Build/compiled/portable results are recorded in IMPLEMENTATION_STATUS.md; actual
+water displacement and headset comfort remain user acceptance.
+
 ## User-facing behavior implemented in source
 
 `config/SS2VR.ini` contains `[Swimming] Immersive=0` by default. In water,

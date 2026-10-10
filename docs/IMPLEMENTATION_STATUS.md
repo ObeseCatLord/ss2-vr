@@ -1,5 +1,30 @@
 # Implementation status — 2026-10-10
 
+## Optional swimming: skipped tracking-loss correction
+
+Fixed a demonstrated cross-feature continuity defect: recovered grip positions
+could generate arm-pull input when the game missed the intervening tracking-loss
+sample. Swimming now uses the existing per-hand grip generations, reseeds on
+either change, rejects zero and checks captured/current agreement before and
+after native direction preparation. No new IPC, transport or physics path.
+Joystick priority/head-directed fallback and default Immersive=0 are preserved.
+
+Astra identified the source chain; main reproduced the pre-fix portable output1,
+then added skipped-loss producer/consumer and late-generation regressions.
+Bounded patch source GO, local current Astra/xhigh tags verified; backend
+unattested. A subsequent exhaustion-to-zero regression covers the existing
+producer boundary. This is not a native swimming or headset pass.
+
+All4 products rebuilt; native contract9f73c429305371d11581e68f79d23fc228036c042f3690680c104ffb1c45d790,
+IPC11/wire7 unchanged.82Debug and82assert-enabledRelease groups pass. Three
+Release Python groups initially lacked the existing dependency environment;
+all three passed when rerun with the correct PYTHONPATH. Native/compiled water
+ABI checks pass normal/-O; artifact/product contracts pass. Exact product hashes
+and counterexample remain private. No game/runtime, firing/movement or vehicle
+probe, installation or capture occurred. The old prepared V46 collection products
+are now stale against current source; preserve them and stage a fresh matched
+package/fixture before any authorized capture. ID2 authority remains pending.
+
 ## ID2 collection evidence connected and replay budget bounded
 
 The existing offline collector now consumes the separate palette replay output.

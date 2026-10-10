@@ -1,5 +1,22 @@
 # Current source continuation
 
+## Current swimming continuity correction — 2026-10-10
+
+Optional arm pulls now consume existing durable grip generations, preventing a
+skipped loss/recovery interval from becoming thrust. Either-hand changes reseed;
+zero declines; native getter-time mismatch withdraws nonzero stroke. No new
+movement/IPC/physics implementation; joystick fallback/default Immersive=0 intact.
+Bounded Astra source GO, local current routing verified/backend unattested.
+See IMPLEMENTATION_STATUS/SWIMMING_CONTROLS for counterexample and test limits.
+
+All4 products now match native fingerprint9f73c429305371d11581e68f79d23fc228036c042f3690680c104ffb1c45d790,
+IPC11/wire7.82Debug/82assertRelease and normal/-O native/compiled water checks,
+artifact/product contracts pass. No runtime/capture/install. Prepared V46 is
+preserved but stale after these src changes: a fresh matched package/fixture is
+required before launch. The ID2 native grant/equip/save authority question still
+has no answer. Do not run old fixtures or treat this fix as all-weapon alignment
+or full-goal completion. Main remains sole integration owner.
+
 ## Current ID2 collection preparation source — 2026-10-10
 
 Existing collector now reports separate copied-content/numerical-reference counts

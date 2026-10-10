@@ -1,5 +1,6 @@
 #include "common/swimming_input.hpp"
 #include "common/settings.hpp"
+#include "common/controls.hpp"
 #include <cassert>
 #include <limits>
 using namespace ss2vr;
@@ -14,6 +15,7 @@ int main() {
     assert(!swimmingJoystickIdle({0,1,0}));
     assert(!swimmingJoystickIdle({0,0,-1}));
     assert(!swimmingJoystickIdle({0,std::numeric_limits<float>::quiet_NaN(),0}));
+    uint32_t generations[2]{1,1};
     SwimmingStrokes stroke;
     Input sample{};
     sample.session = 1; sample.reference = 2; sample.sequence = 1; sample.tickMs = 1000;
@@ -23,55 +25,104 @@ int main() {
         ++sample.sequence; sample.tickMs += 20;
         for (auto &hand : sample.grip) hand.p.z += distance;
     };
-    assert(stroke.sample(sample,1,1,3,1000,false)==0); // Disabled never seeds.
-    assert(stroke.sample(sample,1,1,3,1000,true)==0);
+    assert(stroke.sample(sample,generations,1,1,3,1000,false)==0); // Disabled never seeds.
+    assert(stroke.sample(sample,generations,1,1,3,1000,true)==0);
     pull(.03f);
-    assert(stroke.sample(sample,1,1,3,sample.tickMs,true)==1);
-    assert(stroke.sample(sample,1,1,3,sample.tickMs,true)==1); // Duplicate, no accumulation.
+    assert(stroke.sample(sample,generations,1,1,3,sample.tickMs,true)==1);
+    assert(stroke.sample(sample,generations,1,1,3,sample.tickMs,true)==1); // Duplicate, no accumulation.
     pull(-.03f);
-    assert(stroke.sample(sample,1,1,3,sample.tickMs,true)==0); // Recovery motion is not thrust.
+    assert(stroke.sample(sample,generations,1,1,3,sample.tickMs,true)==0); // Recovery motion is not thrust.
     pull(.03f); sample.head.p.z += .03f;
-    assert(stroke.sample(sample,1,1,3,sample.tickMs,true)==0); // Whole rig translation.
+    assert(stroke.sample(sample,generations,1,1,3,sample.tickMs,true)==0); // Whole rig translation.
     pull(.03f);
-    assert(stroke.sample(sample,1,1,3,sample.tickMs,true)==1);
+    assert(stroke.sample(sample,generations,1,1,3,sample.tickMs,true)==1);
     sample.gripValid[0] = 0;
-    assert(stroke.sample(sample,1,1,3,sample.tickMs,true)==0);
+    assert(stroke.sample(sample,generations,1,1,3,sample.tickMs,true)==0);
     sample.gripValid[0] = 1; pull(.03f);
-    assert(stroke.sample(sample,1,1,3,sample.tickMs,true)==0); // Loss/recovery reseeds.
+    assert(stroke.sample(sample,generations,1,1,3,sample.tickMs,true)==0); // Loss/recovery reseeds.
     pull(.03f); ++sample.reference;
-    assert(stroke.sample(sample,1,1,3,sample.tickMs,true)==0);
+    assert(stroke.sample(sample,generations,1,1,3,sample.tickMs,true)==0);
     pull(.03f);
-    assert(stroke.sample(sample,1,1,4,sample.tickMs,true)==0); // Surface/dive transition.
+    assert(stroke.sample(sample,generations,1,1,4,sample.tickMs,true)==0); // Surface/dive transition.
     pull(.03f); sample.buttons[1] = Wheel;
-    assert(stroke.sample(sample,1,1,4,sample.tickMs,true)==0);
+    assert(stroke.sample(sample,generations,1,1,4,sample.tickMs,true)==0);
     sample.buttons[1] = 0; pull(.03f);
-    assert(stroke.sample(sample,1,1,4,sample.tickMs,true)==0);
+    assert(stroke.sample(sample,generations,1,1,4,sample.tickMs,true)==0);
     pull(.7f);
-    assert(stroke.sample(sample,1,1,4,sample.tickMs,true)==0); // Tracking discontinuity.
+    assert(stroke.sample(sample,generations,1,1,4,sample.tickMs,true)==0); // Tracking discontinuity.
     pull(.03f);
-    assert(stroke.sample(sample,1,1,4,sample.tickMs,true)==1);
+    assert(stroke.sample(sample,generations,1,1,4,sample.tickMs,true)==1);
     Input replay = sample; --replay.sequence; replay.tickMs -= 10;
-    assert(stroke.sample(replay,1,1,4,sample.tickMs,true)==0);
-    assert(stroke.sample(sample,1,1,4,sample.tickMs,true)==0);
+    assert(stroke.sample(replay,generations,1,1,4,sample.tickMs,true)==0);
+    assert(stroke.sample(sample,generations,1,1,4,sample.tickMs,true)==0);
     pull(.03f);
-    assert(stroke.sample(sample,1,1,4,sample.tickMs+101,true)==0);
-    assert(stroke.sample(sample,1,1,4,sample.tickMs,true)==0);
+    assert(stroke.sample(sample,generations,1,1,4,sample.tickMs+101,true)==0);
+    assert(stroke.sample(sample,generations,1,1,4,sample.tickMs,true)==0);
     pull(.03f);
-    assert(stroke.sample(sample,1,1,4,sample.tickMs,true)==1);
-    assert(stroke.sample(sample,1,1,4,sample.tickMs,false)==0);
-    assert(stroke.sample(sample,1,1,4,sample.tickMs,true)==0);
+    assert(stroke.sample(sample,generations,1,1,4,sample.tickMs,true)==1);
+    assert(stroke.sample(sample,generations,1,1,4,sample.tickMs,false)==0);
+    assert(stroke.sample(sample,generations,1,1,4,sample.tickMs,true)==0);
     ++sample.sequence; sample.tickMs += 20; sample.grip[0].p.z += .03f;
-    assert(stroke.sample(sample,1,1,4,sample.tickMs,true)==.5f);
+    assert(stroke.sample(sample,generations,1,1,4,sample.tickMs,true)==.5f);
     pull(.03f);
-    assert(stroke.sample(sample,2,1,4,sample.tickMs,true)==0);
+    assert(stroke.sample(sample,generations,2,1,4,sample.tickMs,true)==0);
     pull(.03f);
-    assert(stroke.sample(sample,2,2,4,sample.tickMs,true)==0);
+    assert(stroke.sample(sample,generations,2,2,4,sample.tickMs,true)==0);
     pull(.03f); sample.head.q.w = 2;
-    assert(stroke.sample(sample,2,2,4,sample.tickMs,true)==0);
+    assert(stroke.sample(sample,generations,2,2,4,sample.tickMs,true)==0);
     sample.head.q.w = 1;
-    assert(stroke.sample(sample,2,2,4,sample.tickMs,true)==0);
+    assert(stroke.sample(sample,generations,2,2,4,sample.tickMs,true)==0);
     pull(.03f);
-    assert(stroke.sample(sample,2,2,4,sample.tickMs-1,true)==0);
+    assert(stroke.sample(sample,generations,2,2,4,sample.tickMs-1,true)==0);
+    // The host sees loss/recovery, but latest-value IPC delivers only valid A/C.
+    // Differencing across either stream boundary must not create a stroke.
+    for (unsigned lostMask : {1u,2u,3u}) {
+        ActionStream streams[2];
+        uint32_t epochs[2]{};
+        Input current{};
+        current.session=1; current.reference=2; current.sequence=1; current.tickMs=1000;
+        current.focused=current.headValid=current.gripValid[0]=current.gripValid[1]=1;
+        current.grip[0].p={-.3f,-.2f,-.5f}; current.grip[1].p={.3f,-.2f,-.5f};
+        for(unsigned hand=0;hand<2;++hand) {
+            assert(streams[hand].sample(true)); epochs[hand]=streams[hand].generation;
+        }
+        SwimmingStrokes missed;
+        assert(missed.sample(current,epochs,1,1,3,1000,true)==0);
+        for(unsigned hand=0;hand<2;++hand) {
+            if(lostMask&(1u<<hand)) assert(!streams[hand].sample(false));
+            assert(streams[hand].sample(true)); epochs[hand]=streams[hand].generation;
+            current.grip[hand].p.z+=.03f;
+        }
+        current.sequence=3; current.tickMs=1020;
+        assert(missed.sample(current,epochs,1,1,3,1020,true)==0);
+        assert(missed.sample(current,epochs,1,1,3,1020,true)==0);
+        ++current.sequence; current.tickMs+=20;
+        for(auto &hand:current.grip) hand.p.z+=.03f;
+        assert(missed.sample(current,epochs,1,1,3,1040,true)==1);
+        // Native basis getters can run after stroke calculation; a newly
+        // published stream loss must invalidate that calculated contribution.
+        uint32_t latest[2]{epochs[0],epochs[1]};
+        assert(swimmingGripStreamsMatch(epochs,latest));
+        for(unsigned hand=0;hand<2;++hand) {
+            if(lostMask&(1u<<hand)) { streams[hand].sample(false); latest[hand]=streams[hand].generation; }
+        }
+        assert(!swimmingGripStreamsMatch(epochs,latest));
+        for(unsigned hand=0;hand<2;++hand) {
+            uint32_t unavailable[2]{epochs[0],epochs[1]}; unavailable[hand]=0;
+            assert(!swimmingGripStreamsMatch(unavailable,unavailable));
+            assert(missed.sample(current,unavailable,1,1,3,1040,true)==0);
+            assert(!missed.seeded);
+        }
+    }
+    ActionStream exhausted;
+    exhausted.generation=UINT32_MAX;
+    assert(exhausted.sample(true));
+    assert(!exhausted.sample(false));
+    assert(exhausted.generation==0 && !exhausted.sample(true));
+    uint32_t retired[2]{exhausted.generation,1};
+    assert(!swimmingGripStreamsMatch(retired,retired));
+    SwimmingStrokes retiredStroke;
+    assert(retiredStroke.sample(sample,retired,2,2,4,sample.tickMs,true)==0 && !retiredStroke.seeded);
     const std::array<Vec3,3> identity{{{1,0,0},{0,1,0},{0,0,1}}};
     Vec3 out{7,8,9};
     assert(swimmingInputInBasis(identity, {0,.5f,-.5f}, out));

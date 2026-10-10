@@ -12,6 +12,9 @@ inline bool nativeWaterInputMode(uint32_t movementFlags, uint32_t puppetPose) {
 inline bool swimmingJoystickIdle(Vec3 value) {
     return value.x == 0.f && value.y == 0.f && value.z == 0.f;
 }
+inline bool swimmingGripStreamsMatch(const uint32_t (&captured)[2], const uint32_t (&current)[2]) {
+    return captured[0] && captured[1] && captured[0] == current[0] && captured[1] == current[1];
+}
 // Optional pull-stroke input. Hands are sampled relative to head translation in
 // tracking LOCAL space, so moving the whole tracked rig is not a swim stroke.
 // It produces a bounded forward control value, never velocity or displacement.
@@ -19,16 +22,19 @@ struct SwimmingStrokes {
     uint32_t player = 0, generation = 0, session = 0, reference = 0, pose = 0;
     uint64_t sequence = 0, tick = 0;
     std::array<Vec3, 2> previous{};
+    std::array<uint32_t, 2> gripGeneration{};
     bool seeded = false;
     float cached = 0;
     void reset() { *this = {}; }
-    float sample(const Input &input, uint32_t owner, uint32_t rig, uint32_t waterPose,
+    float sample(const Input &input, const uint32_t (&gripPoseGeneration)[2],
+                 uint32_t owner, uint32_t rig, uint32_t waterPose,
                  uint64_t now, bool enabled) {
         const auto validPosition = [](Pose value) {
             return finite(value) && std::abs(value.p.x) < 100000.f &&
                 std::abs(value.p.y) < 100000.f && std::abs(value.p.z) < 100000.f;
         };
         if (!enabled || !owner || !rig || !input.session || !input.sequence || !input.tickMs ||
+            !gripPoseGeneration[0] || !gripPoseGeneration[1] ||
             !input.focused || !input.headValid || !validPosition(input.head) ||
             now < input.tickMs || now - input.tickMs > 100 ||
             !input.gripValid[0] || !input.gripValid[1] ||
@@ -41,9 +47,11 @@ struct SwimmingStrokes {
         const double norm = double(q.x)*q.x+double(q.y)*q.y+double(q.z)*q.z+double(q.w)*q.w;
         if (norm < .99 || norm > 1.01) { reset(); return 0; }
         if (player != owner || generation != rig || session != input.session ||
-            reference != input.reference || pose != waterPose) {
+            reference != input.reference || pose != waterPose ||
+            gripGeneration[0] != gripPoseGeneration[0] || gripGeneration[1] != gripPoseGeneration[1]) {
             reset(); player = owner; generation = rig; session = input.session;
             reference = input.reference; pose = waterPose;
+            gripGeneration = {gripPoseGeneration[0], gripPoseGeneration[1]};
         }
         if (seeded && input.sequence == sequence && input.tickMs == tick) return cached;
         if (seeded && (input.sequence <= sequence || input.tickMs <= tick)) {

@@ -5964,8 +5964,9 @@ static void __fastcall waterPlayerControls(void *brain, void *, uint8_t fire, Ve
                 Vec3 local = rotate(yaw(-captured.turn), move);
                 const bool joystickActive = !swimmingJoystickIdle(local);
                 const bool currentHands = snapshot.input.gripValid[0] && snapshot.input.gripValid[1] &&
-                    finite(snapshot.input.grip[0]) && finite(snapshot.input.grip[1]);
-                const float stroke = swimmingStrokes.sample(captured.input, captured.rider.player,
+                    finite(snapshot.input.grip[0]) && finite(snapshot.input.grip[1]) &&
+                    swimmingGripStreamsMatch(captured.gripPoseGeneration, snapshot.gripPoseGeneration);
+                const float stroke = swimmingStrokes.sample(captured.input, captured.gripPoseGeneration, captured.rider.player,
                     captured.generation, pose, GetTickCount64(), settings.immersiveSwimming &&
                     !joystickActive && currentHands && !snapshot.ui.wheel[0].open && !snapshot.ui.wheel[1].open);
                 local.z -= stroke;
@@ -5981,6 +5982,7 @@ static void __fastcall waterPlayerControls(void *brain, void *, uint8_t fire, Ve
                 const bool strokeStillValid = stroke == 0 ||
                     (latest.input.gripValid[0] && latest.input.gripValid[1] &&
                      finite(latest.input.grip[0]) && finite(latest.input.grip[1]) &&
+                     swimmingGripStreamsMatch(captured.gripPoseGeneration, latest.gripPoseGeneration) &&
                      !latest.ui.wheel[0].open && !latest.ui.wheel[1].open);
                 if (livePlayer(latest) && latest.ui.gameplay && strokeStillValid && returned && swimmingInputInBasis(basis, desired, mapped) &&
                     waterState(finalFlags, finalPose) && finalFlags == flags && finalPose == pose &&
