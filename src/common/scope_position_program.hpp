@@ -11,6 +11,18 @@ namespace ss2vr {
 namespace scope_position {
 struct Scalar { float value = 0; bool known = false; };
 using Vector = std::array<Scalar,4>;
+// Optional COPIED rigid input for offline multi-palette assessment. This is not
+// native draw admission or a skin/animation replacement. Legacy callers retain
+// their exact zero-index/one-weight inputs by leaving this pointer null.
+struct RigidPaletteInput {
+    std::array<uint8_t,4> indices{},weights{255,0,0,0};
+    uint32_t paletteCount=0;
+    bool valid() const noexcept {
+        return paletteCount>=1 && paletteCount<=3 && indices[0]<paletteCount &&
+               !indices[1] && !indices[2] && !indices[3] &&
+               weights==std::array<uint8_t,4>{255,0,0,0};
+    }
+};
 inline Scalar value(float v) noexcept { return {v,std::isfinite(v)}; }
 inline Scalar add(Scalar a,Scalar b) noexcept { return a.known && b.known ? value(a.value+b.value) : Scalar{}; }
 inline Scalar mul(Scalar a,Scalar b) noexcept { return a.known && b.known ? value(a.value*b.value) : Scalar{}; }
@@ -19,8 +31,11 @@ inline Vector constant(const std::array<float,4> &v) noexcept {
 }
 inline bool position(std::span<const uint32_t> words,std::span<const std::array<float,4>> uploaded,
                      Vec3 p,std::array<float,2> uv,bool weightsBound,std::array<float,4> &out,
-                     GeometryInputLayout layout=GeometryInputLayout::Legacy56) noexcept {
+                     GeometryInputLayout layout=GeometryInputLayout::Legacy56,
+                     const RigidPaletteInput *copiedRigid=nullptr) noexcept {
     using namespace scope_program;
+    if(uploaded.size()>256 || (copiedRigid && (!weightsBound || !copiedRigid->valid() ||
+                                            !vertexPositionProgram(words))))return false;
     if(layout!=GeometryInputLayout::Legacy56 && layout!=GeometryInputLayout::Observed78 &&
        layout!=GeometryInputLayout::NoUV56 && layout!=GeometryInputLayout::ObservedMultiUV78 &&
        layout!=GeometryInputLayout::NoUV78)return false;
@@ -53,6 +68,14 @@ inline bool position(std::span<const uint32_t> words,std::span<const std::array<
                       layout==GeometryInputLayout::NoUV78;
     const unsigned local=uses78?7:5,weight=uses78?8:6;
     inputs[local]=constant({0,0,0,0}); // Exact hashed first-local-palette indices, UBYTE4N.
+    if(copiedRigid) {
+        // D3DDECLTYPE_UBYTE4N is component-order byte/255, not D3DCOLOR's swizzle.
+        // Fractional/unavailable shader addresses still decline below; no GPU
+        // conversion/rounding rule or native transform reference is invented.
+        std::array<float,4> normalized{};
+        for(unsigned i=0;i<4;++i)normalized[i]=float(copiedRigid->indices[i])/255.f;
+        inputs[local]=constant(normalized);
+    }
     if (weightsBound) inputs[weight]=constant({1,0,0,0}); // Exact 255/0/0/0 UBYTE4N weights.
     Scalar address;
     Vector clip{};

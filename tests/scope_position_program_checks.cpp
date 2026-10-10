@@ -41,6 +41,94 @@ int main(int argc,char **argv) {
     for (unsigned i=0;i<4;++i) for (unsigned j=0;j<4;++j) constants[i+1][j]=expected.m[i*4+j];
     assert(scopeCapPosition(fixture(false),constants,cap,false,expected));
     const auto program=fixture(true);
+    {
+        // Explicit two-stage normalized-byte conversion yields integral palette
+        // row addresses. The VM must use the copied index, not always palette0.
+        auto indexed=program;
+        const auto mul=std::find(indexed.begin(),indexed.end(),5u);
+        assert(mul!=indexed.end());
+        const size_t start=size_t(mul-indexed.begin());
+        indexed[start+3]=0xa00000fe; // c254.x =255, first normalize-back stage.
+        indexed.insert(indexed.begin()+std::ptrdiff_t(start+4),
+                       {5,0x80010000,0x80000000,0xa05500fe}); // c254.y =3 rows.
+        std::array<std::array<float,4>,256> uploaded{};
+        uploaded[254]={255,3,0,0};
+        for(unsigned r=0;r<4;++r)uploaded[1+r][r]=1;
+        for(unsigned palette=0;palette<3;++palette) {
+            for(unsigned r=0;r<3;++r)uploaded[21+palette*3+r][r]=1;
+            uploaded[21+palette*3][3]=float(palette)*10;
+        }
+        const Vec3 vertex{1,2,3};
+        std::array<float,4> actual{},legacy{};
+        assert(scope_position::position(indexed,uploaded,vertex,{0,0},true,legacy));
+        for(unsigned palette=0;palette<3;++palette) {
+            scope_position::RigidPaletteInput copied{{uint8_t(palette),0,0,0},{255,0,0,0},3};
+            assert(copied.valid() && scope_position::position(indexed,uploaded,vertex,{0,0},true,actual,
+                   GeometryInputLayout::Legacy56,&copied));
+            assert(actual[0]==1+float(palette)*10 && actual[1]==2 && actual[2]==3 && actual[3]==1);
+        }
+        assert(legacy[0]==1 && legacy[1]==2 && legacy[2]==3 && legacy[3]==1);
+        scope_position::RigidPaletteInput copied{{2,0,0,0},{255,0,0,0},3};
+        assert(!scope_position::position(indexed,uploaded,vertex,{0,0},false,actual,
+                GeometryInputLayout::Legacy56,&copied));
+        copied.paletteCount=2;
+        assert(!scope_position::position(indexed,uploaded,vertex,{0,0},true,actual,
+                GeometryInputLayout::Legacy56,&copied));
+        copied.paletteCount=3;copied.indices[1]=1;
+        assert(!scope_position::position(indexed,uploaded,vertex,{0,0},true,actual,
+                GeometryInputLayout::Legacy56,&copied));
+        copied.indices[1]=0;copied.weights={127,128,0,0};
+        assert(!scope_position::position(indexed,uploaded,vertex,{0,0},true,actual,
+                GeometryInputLayout::Legacy56,&copied));
+        copied.weights={255,0,0,0};
+        for(uint32_t count:{0u,4u}) {
+            copied.paletteCount=count;
+            assert(!scope_position::position(indexed,uploaded,vertex,{0,0},true,actual,
+                    GeometryInputLayout::Legacy56,&copied));
+        }
+        copied.paletteCount=3;
+        // The 7/8 family must seed the declared local-index register for its
+        // actual layout, rather than accidentally continuing to use v5/v6.
+        auto observed78=indexed;
+        observed78[8]=0x80070005;observed78[9]=0x900f0007;
+        observed78[11]=0x80080005;observed78[12]=0x900f0008;
+        observed78[start+2]=0x90000007;
+        // Consume v8.x as well: the rigid weight must be one in this layout.
+        observed78.insert(observed78.end()-1,{5,0xc00f0000,0x80e40001,0x90000008});
+        for(auto layout:{GeometryInputLayout::Observed78,GeometryInputLayout::ObservedMultiUV78,
+                         GeometryInputLayout::NoUV78}) {
+            assert(scope_position::position(observed78,uploaded,vertex,{0,0},true,actual,layout,&copied));
+            assert(actual[0]==21 && actual[1]==2 && actual[2]==3 && actual[3]==1);
+        }
+        assert(!scope_position::position(observed78,uploaded,vertex,{0,0},true,actual,
+                GeometryInputLayout::Legacy56,&copied)); // v7 stays unknown in the 5/6 layout.
+        auto undeclared=indexed;
+        undeclared.erase(undeclared.begin()+7,undeclared.begin()+10);
+        assert(!scope_position::position(undeclared,uploaded,vertex,{0,0},true,actual,
+                GeometryInputLayout::Legacy56,&copied));
+        auto unavailable=indexed;
+        unavailable[start+3]=0xa00000fe;
+        assert(!scope_position::position(unavailable,std::span(uploaded).first(254),vertex,{0,0},true,actual,
+                GeometryInputLayout::Legacy56,&copied)); // c254 has no copied upload or DEF.
+        auto missingRows=indexed;
+        missingRows.insert(missingRows.begin()+13,{81,0xa00f00fe,0x437f0000,0x40400000,0,0});
+        assert(vertexPositionProgram(missingRows));
+        assert(scope_position::position(missingRows,uploaded,vertex,{0,0},true,actual,
+                GeometryInputLayout::Legacy56,&copied));
+        assert(!scope_position::position(missingRows,std::span(uploaded).first(27),vertex,{0,0},true,actual,
+                GeometryInputLayout::Legacy56,&copied)); // Address exists; selected palette rows do not.
+        for(size_t words=0;words<indexed.size();++words)
+            assert(!scope_position::position(std::span(indexed).first(words),uploaded,vertex,{0,0},true,
+                                            actual,GeometryInputLayout::Legacy56,&copied));
+        auto fractional=indexed;
+        fractional[start+3]=0xa05500fe; // byte/255 *3 is not integral; no guessed rounding.
+        copied.indices[0]=1;
+        assert(!scope_position::position(fractional,uploaded,vertex,{0,0},true,actual,
+                GeometryInputLayout::Legacy56,&copied));
+        std::array<std::array<float,4>,257> oversized{};
+        assert(!scope_position::position(indexed,oversized,vertex,{0,0},true,actual,
+                GeometryInputLayout::Legacy56,&copied));
+    }
     for (unsigned i=0;i<4;++i) for (unsigned j=0;j<4;++j) constants[i+1][j]=worldClip.m[i*4+j];
     for (unsigned i=0;i<3;++i) for (unsigned j=0;j<4;++j) constants[21+i][j]=affine.m[i*4+j];
     assert(scopeCapPosition(program,constants,cap,false,expected));

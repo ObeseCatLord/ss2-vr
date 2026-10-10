@@ -4,6 +4,18 @@ This extends the existing private idle collector to native weapon ID2. It does
 not enable an Auto Shotgun alignment correction or certify physical hand contact.
 Production alignment remains limited to the already admitted ID1/ID13 routes.
 
+An optional copied rigid-input interface now lets the bounded offline position
+VM evaluate explicitly supplied palette indices0/1/2, with strict rigid weights
+and component-order normalized bytes. Legacy callers keep their original inputs.
+Tests distinguish three palettes and cover the v5/v6 and v7/v8 families, missing
+declarations/constants/rows, truncation and invalid palette bounds. Fractional
+address calculations still decline. Microsoft documents nearest conversion for
+[VS1.1 MOV into a0](https://learn.microsoft.com/en-us/windows/win32/direct3dhlsl/mov---vs),
+but no guessed rounding uncertainty or GPU arithmetic agreement is introduced.
+This does not relax native single-palette admission or enable ID2 replay. The
+next source slice needs the actual draw-local palette/program upload association
+and independent per-palette reference before that admission can change.
+
 ## Native preparation
 
 `prepare_idle_fixture: true` requires an explicit neutral `idle_native_id` of
