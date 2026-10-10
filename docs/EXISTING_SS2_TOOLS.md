@@ -1,5 +1,24 @@
 # Existing Serious Sam 2 tools — research, 2026-10-09
 
+## Follow-up: editor mod isolation
+
+A separate read-only public-source investigation checked the remaining editor,
+SDK and authoring leads against the current project. Croteam's
+[July 31, 2015 patch notes](https://store.steampowered.com/news/posts/?appids=204340&enddate=1439488115)
+document a "Change active mod" file-menu item and dialog in Serious Editor 2.
+The integration owner checked that primary page. This is an additional candidate
+for isolating a future authored alignment/control fixture from base content;
+its current filesystem behavior and export fidelity have not been exercised.
+It is not a native plugin API or proof of mixed desktop/VR network compatibility.
+
+The follow-up found no additional verified SS2 native SDK, plugin headers, symbols
+or official scripting contract in its bounded primary-source search. Continue
+using the already compared standalone parser for authored relationships and the
+existing native observer for the actual loaded instance and evaluated palette.
+The smallest editor evaluation is one characterized resource in a private copy,
+checking names, transforms, bounds and animation channels against parser results.
+No new download, installation, editor launch or runtime test was performed.
+
 The most useful candidate is the bundled Serious Editor 2 with the official
 Edit Data released on October 27, 2025. Croteam documents direct editing of
 meshes, animations and skeletons. This can reduce authored asset decoding for

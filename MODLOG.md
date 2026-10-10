@@ -1,5 +1,20 @@
 # Mod journal
 
+## 2026-10-09 — combat-only receipt integration and tools follow-up
+
+Applied the independently reviewed three-path combat delivery after exact
+scope/hash/applicability checks against d1d442b; held reference/composite contributions
+were excluded. Final Astra/xhigh source review confirms stale context rejection,
+post-finish interval validity and hand independence; local routing verified,
+backend unattested. Four-product rebuild, 82 Debug/82 assertion-enabled Release
+groups and 12 relevant normal/-O compiled/artifact reports pass. No game/editor,
+shooting/vehicle/network or staging operation. Native melee and MP acceptance open.
+
+Read-only delegated primary-source research confirmed Serious Editor 2's active-mod
+dialog as an isolation candidate; no additional verified SS2 SDK/plugin contract
+was found. Existing compared parser remains useful for authored relationships.
+Vehicle geometry-to-current-draw association remains the next native boundary.
+
 ## 2026-10-09 — optional native seat-to-flat-child mapping
 
 Implemented a bounded metadata copy through the existing render bank. Pending

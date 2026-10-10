@@ -1,5 +1,29 @@
 # Current source continuation
 
+## Integrated observer gesture receipt fix
+
+Combat-only delivery 5a260c72 was integrated as ec6271f29c188757987af6d7b85da829e1d806d3
+after exact transfer/source hashes, unchanged target paths, current applicability
+and anonymous ancestry passed. Only the three declared combat paths were imported;
+the separate reference toolchain/composite remains held. The production helper
+now binds each receipt to the six-field context captured by sample, preventing an
+old same-millisecond receipt from consuming or validating a replacement edge.
+Post-completion current intervals and independent hands retain existing behavior.
+
+Final integrated Astra/xhigh source GO: current local routing verified, backend
+unattested. All four products rebuilt with source fingerprint
+f8eb2b3474a1bcf1c982d9e4fcae1b767d2b3420921f0d383a82ce6af3d8fc87,
+IPC10/wire7. All 82 Debug and 82 assertion-enabled Release groups and 12 relevant
+compiled/artifact reports normal/-O pass. No gameplay, headset, editor, shooting,
+vehicle or network launch, installation or package staging occurred. Native
+first-use/copy/release/contact and multiplayer acceptance remain user-operated
+gates; this fix is not full melee or full multiplayer completion.
+
+Public-source tools follow-up confirmed the editor's documented active-mod dialog
+as a candidate fixture-isolation aid; no verified replacement native SDK was found.
+See EXISTING_SS2_TOOLS.md. The vehicle critical path remains verified grip geometry
+to current mesh/resource/palette/LOD, then input ownership, rearm and transfer.
+
 ## Optional live flat attachment metadata
 
 The existing ride observer now optionally maps the current native occupied-seat

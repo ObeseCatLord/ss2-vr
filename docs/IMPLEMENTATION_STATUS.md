@@ -1,5 +1,19 @@
 # Implementation status — 2026-10-09
 
+## Observer gesture receipt context repair
+
+Integrated combat-only source ec6271f29c188757987af6d7b85da829e1d806d3 prevents a
+captured receipt from validating or consuming a replacement physical-melee edge
+with coincident sequence/generation/millisecond stamps but different hand context.
+Native wrappers, wire layout, damage/release history and per-hand dispatch are
+unchanged. Final Astra/xhigh bounded source GO; local routing verified, backend
+unattested. All four products rebuilt at fingerprint
+f8eb2b3474a1bcf1c982d9e4fcae1b767d2b3420921f0d383a82ce6af3d8fc87,
+IPC10/wire7; 82 Debug and 82 assertion-enabled Release groups plus 12 relevant
+compiled/artifact reports normal/-O pass. No runtime or staging. Actual native
+interleaving, first-use/copy/release/contact and multiplayer gameplay remain open.
+See OBSERVER_GESTURE_RECEIPTS.md. Other held reference contributions were not imported.
+
 ## Optional live flat attachment metadata
 
 The existing ride observer now optionally maps the current native occupied-seat

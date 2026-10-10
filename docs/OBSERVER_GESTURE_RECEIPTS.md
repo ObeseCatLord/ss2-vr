@@ -76,3 +76,22 @@ product identities and compiled-check receipts accompany the worker handoff.
 These are source, portable and compile-time results. No game, headset, shooting,
 vehicle or network session was run. Native first-use/copy/release/contact,
 dual-wield feel and multiplayer gameplay acceptance remain user-operated gates.
+
+## Final owner integration
+
+The owner integrated only this three-path delivery as ec6271f29c188757987af6d7b85da829e1d806d3
+on the newer native source. A fresh Astra/xhigh read-only source review returned
+GO for that exact integrated change and its existing native consumers. Current
+local model/effort tags were verified; independent backend attestation remains
+unavailable. All four owner products rebuilt at fingerprint
+f8eb2b3474a1bcf1c982d9e4fcae1b767d2b3420921f0d383a82ce6af3d8fc87,
+IPC10/wire7. Owner checks passed all 82 Debug and 82 assertion-enabled Release
+groups and 12 relevant compiled/artifact reports normally and with Python
+optimization. No native runtime or deployment was performed.
+
+| Final review recommendation | Disposition |
+| --- | --- |
+| Preserve captured six-field identity in both receipt predicates | Adopted unchanged |
+| Preserve post-finish interval validity and independent hands | Verified in integrated tests and source |
+| Rebuild internal receipt consumers after the layout change | Completed for all four products |
+| Keep source correctness separate from native callback/gameplay acceptance | Retained as an open user-operated gate |
