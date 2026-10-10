@@ -63,33 +63,45 @@ def assess_render(text,expected_source):
         v=int(raw,16 if hexadecimal else 10)
         if v>0xffffffff:raise ValueError('Ride-render field exceeds native width')
         return v
+    def complete(r):
+        wanted={'modelWorld','MainCanonical'}|({'SeatCanonical'} if r['schema']>=2 else set())
+        return r['binding'] is not None and set(r['raw_matrices'])==wanted and \
+               (r['schema']!=3 or not r['attachmentMapped'] or
+                (r['attachment_metadata'] is not None and r['raw_attachment_pose'] is not None))
     for line in text.splitlines():
         if not re.match(r'^Lab\s+ride\s+render',line):continue
         if not line.startswith('Lab ride render '):raise ValueError('Malformed reserved ride-render prefix')
         parts=line.split();kind='identity'
-        if len(parts)>3 and parts[3] in ('binding','matrix'):kind=parts.pop(3)
+        if len(parts)>3 and parts[3] in ('binding','matrix','attachment','attachmentPose'):kind=parts.pop(3)
         pairs=[p.split('=') for p in parts[3:]]
         if any(len(p)!=2 for p in pairs):raise ValueError('Malformed ride-render record')
         f=dict(pairs)
         if len(f)!=len(pairs) or not base.issubset(f):raise ValueError('Duplicate/missing ride-render fields')
         schema=unsigned(f['schema']);row=unsigned(f['row']);bank=unsigned(f['bank'])
-        if f['eye'] not in ('-1','0','1') or schema not in (1,2) or row>=32 or not bank:
+        if schema not in (1,2,3):raise ValueError('Unknown ride-render schema operation')
+        if f['eye'] not in ('-1','0','1') or row>=32 or not bank:
             raise ValueError('Unsupported ride-render owner/budget')
         eye=int(f['eye']);key=(row,bank,eye)
-        wanted=base|(identity if kind=='identity' else binding if kind=='binding' else {'kind','words'})
-        if kind=='identity' and schema==2:wanted|={'source','seatBone','seatDefinition'}
+        attachment={'parameter','parameterFlags','seatData','attachment','childState','childArray','childCount',
+                    'descriptor','parentName','childFlags','childRecordPresent','childRecord','childWorldAvailable','flatTree'}
+        wanted=base|(identity if kind=='identity' else binding if kind=='binding' else
+                     {'kind','words'} if kind=='matrix' else attachment if kind=='attachment' else {'pose','scale'})
+        if kind=='identity' and schema>=2:wanted|={'source','seatBone','seatDefinition'}
+        if kind=='identity' and schema==3:wanted|={'attachmentMapped'}
         if set(f)!=wanted:raise ValueError('Ride-render schema mismatch')
         if kind=='identity':
-            if key in copies or (active is not None and key<=active):raise ValueError('Duplicate/out-of-order ride-render owner')
-            if schema==2 and f['source']!=expected_source:raise ValueError('Ride-render source mismatch')
+            if key in copies or (active is not None and (key<=active or not complete(copies[active]))):raise ValueError('Duplicate/out-of-order/interleaved ride-render owner')
+            if schema>=2 and f['source']!=expected_source:raise ValueError('Ride-render source mismatch')
             r={k:unsigned(f[k],k=='class') for k in wanted-{'source','eye'}};r['eye']=eye
             if any(not r[k] for k in ('player','brain','ride','renderableHandle','renderable','instance','cfg','modelRecord','evaluated','matrices','definition')) or \
                     r['class'] not in (0x2a8558,0x2b8420) or \
                     any(r[k] for k in ('resourceClaim','seatClaim','graspClaim','steeringClaim')):
                 raise ValueError('Ride-render identity/claim mismatch')
-            if schema==2 and (not r['seatDefinition'] or r['definition']==r['seatDefinition'] or r['mainBone']==r['seatBone']):
+            if schema>=2 and (not r['seatDefinition'] or r['definition']==r['seatDefinition'] or r['mainBone']==r['seatBone']):
                 raise ValueError('Ride-render Main/Seat definitions are not distinct')
-            r.update(source_fingerprint=f.get('source'),source_matches_expected=schema==2,binding=None,raw_matrices={})
+            if schema==3 and r['attachmentMapped'] not in (0,1):raise ValueError('Ride-render attachment mapping mismatch')
+            r.update(source_fingerprint=f.get('source'),source_matches_expected=schema>=2,binding=None,raw_matrices={},
+                     attachment_metadata=None,raw_attachment_pose=None)
             copies[key]=r;active=key
         else:
             r=copies.get(key)
@@ -101,31 +113,60 @@ def assess_render(text,expected_source):
                         b['cacheRowCount']>2048 or r['modelRecord']>=b['cacheRowCount'] or \
                         b['boneFirst']+b['boneCount']>b['canonicalCount']:
                     raise ValueError('Ride-render cache bounds mismatch')
-                for name in ('main','seat') if schema==2 else ('main',):
+                for name in ('main','seat') if schema>=2 else ('main',):
                     bone=r[name+'Bone'];definition=r['definition' if name=='main' else 'seatDefinition']
                     if not b['boneFirst']<=bone<b['boneFirst']+b['boneCount'] or definition<b['definitions'] or \
                             (definition-b['definitions'])%0x78 or (definition-b['definitions'])//0x78>=b['definitionCount']:
                         raise ValueError('Ride-render bone does not belong to selected model/LOD')
                 r['binding']=b
-            else:
+            elif kind=='matrix':
                 if r['binding'] is None:raise ValueError('Ride-render matrices without binding')
-                channel=f['kind'];inventory={'modelWorld','MainCanonical'}|({'SeatCanonical'} if schema==2 else set())
+                channel=f['kind'];inventory={'modelWorld','MainCanonical'}|({'SeatCanonical'} if schema>=2 else set())
                 v=f['words'].split(',')
                 if channel not in inventory or channel in r['raw_matrices'] or len(v)!=12 or \
                         any(not re.fullmatch('[0-9a-f]{8}',x) for x in v):raise ValueError('Invalid ride-render raw matrix inventory')
                 r['raw_matrices'][channel]=[int(x,16) for x in v]
+            elif kind=='attachment':
+                inventory={'modelWorld','MainCanonical','SeatCanonical'}
+                if schema!=3 or not r['attachmentMapped'] or r['binding'] is None or set(r['raw_matrices'])!=inventory or \
+                        r['attachment_metadata'] is not None:
+                    raise ValueError('Invalid ride-render attachment inventory')
+                a={k:unsigned(f[k]) for k in attachment}
+                if any(not a[k] for k in ('parameter','seatData','childState','childArray','descriptor')) or \
+                        a['parameterFlags']&1 or not 1<=a['childCount']<=32 or a['flatTree']!=1 or \
+                        a['childWorldAvailable']!=0 or a['childRecordPresent'] not in (0,1) or \
+                        (not a['childRecordPresent'] and a['childRecord']!=0) or \
+                        (a['childRecordPresent'] and (not 1<=a['childRecord']<r['binding']['cacheRowCount'] or a['childRecord']==r['modelRecord'])):
+                    raise ValueError('Ride-render attachment metadata mismatch')
+                r['attachment_metadata']=a
+            else:
+                if schema!=3 or r['attachment_metadata'] is None or r['raw_attachment_pose'] is not None:
+                    raise ValueError('Invalid ride-render attachment pose inventory')
+                pose=f['pose'].split(',');scale=f['scale'].split(',')
+                if len(pose)!=7 or len(scale)!=3 or any(not re.fullmatch('[0-9a-f]{8}',x) for x in pose+scale):
+                    raise ValueError('Invalid ride-render attachment pose')
+                r['raw_attachment_pose']={'pose':[int(x,16) for x in pose],'scale':[int(x,16) for x in scale]}
     groups={}
     for key,r in copies.items():
-        wanted={'modelWorld','MainCanonical'}|({'SeatCanonical'} if r['schema']==2 else set())
-        if r['binding'] is None or set(r['raw_matrices'])!=wanted:raise ValueError('Truncated ride-render copy')
+        wanted={'modelWorld','MainCanonical'}|({'SeatCanonical'} if r['schema']>=2 else set())
+        if not complete(r):raise ValueError('Truncated ride-render copy')
         group=groups.setdefault(key[0],[]);group.append(r)
-        r.update(seat_canonical_copied=r['schema']==2,operated_seat_attachment_verified=False,
+        r.update(seat_canonical_copied=r['schema']>=2,attachment_mapping_copied=r['schema']==3 and bool(r['attachmentMapped']),
+                 operated_seat_attachment_verified=False,
                  source_provenance_authenticated=False,simulation_time_freshness_verified=False,physical_steering_verified=False)
     shared={'schema','bank','player','brain','ride','seat','class','renderableHandle','renderable','instance','cfg','file','resource','source_fingerprint'}
     for group in groups.values():
         if {r['eye'] for r in group} not in ({-1},{0,1}) or len(group) not in (1,2):raise ValueError('Incomplete/mixed ride-render eye group')
-        if any(any(r[k]!=group[0][k] for k in shared) for r in group[1:]):raise ValueError('Crossed ride-render stereo owners')
-    rows=list(copies.values());observed=expected_source if rows and all(r['schema']==2 for r in rows) else None
+        if any(r['schema']!=group[0]['schema'] for r in group[1:]) or \
+                any(any(r[k]!=group[0][k] for k in shared) for r in group[1:]) or \
+                (group[0]['schema']==3 and any(r['attachmentMapped']!=group[0]['attachmentMapped'] for r in group[1:])):
+            raise ValueError('Crossed ride-render stereo owners')
+        if len(group)==2 and group[0]['schema']==3 and group[0]['attachmentMapped']:
+            a,b=group
+            if any(a['attachment_metadata'][k]!=b['attachment_metadata'][k] for k in attachment-{'childRecordPresent','childRecord'}) or \
+                    a['raw_attachment_pose']!=b['raw_attachment_pose']:
+                raise ValueError('Crossed ride-render stereo attachment')
+    rows=list(copies.values());observed=expected_source if rows and all(r['schema']>=2 for r in rows) else None
     return {'schema':1,'observed_source_fingerprint':observed,'source_matches_expected':observed is not None,
             'observations':rows,'evidence_scope':'emitter-reported-completed-native-render-copies',
             'seat_frame_copies_present':any(r['seat_canonical_copied'] for r in rows),

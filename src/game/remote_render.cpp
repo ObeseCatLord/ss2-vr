@@ -109,6 +109,7 @@ static ChildName getChildName = nullptr;
 static ChildOffset getChildOffset = nullptr;
 static ChildInstance getChildInstance = nullptr;
 static uintptr_t engineBase = 0;
+static uintptr_t seatGameBase = 0;
 using ProjectionSlots = void(__cdecl *)(const int32_t *);
 using ProjectionFog = void *(__cdecl *)(void *);
 static ProjectionSlots originalProjectionSlots=nullptr;
@@ -905,6 +906,79 @@ static bool copyRidePaletteBookend(RidePaletteBookend &out,bool &selected) {
     frame.canonicalCount=out.canonicalCount;frame.cacheRows=out.cacheRows[1];frame.cacheRowCount=out.cacheRows[2];
     return true;
 }
+struct RideAttachmentBookend {
+    RideAttachmentCopy copy;
+    std::array<uint32_t,3> seatArray{},childArray{};
+    // Complete membership/selection/flatness inputs. Numeric tokens only.
+    std::array<std::array<uint32_t,4>,32> seats{};
+    std::array<std::array<uint32_t,6>,32> children{};
+    bool operator==(const RideAttachmentBookend &) const = default;
+};
+__attribute__((noinline,optimize("no-tree-vectorize","no-tree-loop-distribute-patterns")))
+static bool copyRideAttachmentBookend(const RidePaletteBookend &frame,RideAttachmentBookend &out) {
+    if(!rideObservationOwnerCurrent(currentFrozenOwner))return false;
+    RideRenderIdentity current;
+    if(!copyNativeRideRenderIdentity(frame.frame.identity.player,current) || current!=frame.frame.identity)return false;
+    out={};
+    auto &copy=out.copy;
+    void *ride=resolve(current.ride);
+    if(!seatGameBase || !readableMemory(ride,0x480))return false;
+    std::memcpy(&copy.parameter,static_cast<uint8_t*>(ride)+0x47c,4);
+    if(!readableMemory(reinterpret_cast<void*>(copy.parameter),0x1a0))return false;
+    std::memcpy(&copy.parameterFlags,reinterpret_cast<void*>(copy.parameter+4),4);
+    // Native access would replace a pending shared resource. Its old array is
+    // not the native selection even if two readable copies happen to agree.
+    if(copy.parameterFlags&1)return false;
+    std::memcpy(out.seatArray.data(),reinterpret_cast<void*>(copy.parameter+0x194),12);
+    const auto count=out.seatArray[2],data=out.seatArray[1];
+    if(!count || count>out.seats.size() || out.seatArray[0]>INT32_MAX || out.seatArray[0]<count || !data ||
+       !readableMemory(reinterpret_cast<void*>(data),size_t(count)*4))return false;
+    unsigned selected=0;
+    for(size_t i=0;i<count;++i) {
+        auto &row=out.seats[i];std::memcpy(&row[0],reinterpret_cast<void*>(data+i*4),4);
+        if(!readableMemory(reinterpret_cast<void*>(row[0]),12))return false;
+        std::memcpy(row.data()+1,reinterpret_cast<void*>(row[0]),12);
+        if(row[1]!=seatGameBase+0x297a74)return false;
+        if(row[2]==current.seat) {++selected;copy.seatData=row[0];copy.attachment=row[3];}
+    }
+    if(selected!=1 || !invalidId || copy.attachment==*invalidId)return false;
+    if(!readableMemory(reinterpret_cast<void*>(current.instance),0x28))return false;
+    std::memcpy(&copy.childState,reinterpret_cast<void*>(current.instance+0x24),4);
+    if(!readableMemory(reinterpret_cast<void*>(copy.childState),0x1c))return false;
+    std::memcpy(out.childArray.data(),reinterpret_cast<void*>(copy.childState+0x10),12);
+    copy.childArray=out.childArray[1];copy.childCount=out.childArray[2];
+    if(!copy.childCount || copy.childCount>out.children.size() || !copy.childArray ||
+       !readableMemory(reinterpret_cast<void*>(copy.childArray),size_t(copy.childCount)*4))return false;
+    selected=0;
+    for(size_t i=0;i<copy.childCount;++i) {
+        auto &row=out.children[i];std::memcpy(&row[0],reinterpret_cast<void*>(copy.childArray+i*4),4);
+        if(!readableMemory(reinterpret_cast<void*>(row[0]),0x50))return false;
+        std::memcpy(row.data()+1,reinterpret_cast<void*>(row[0]),12);
+        std::memcpy(&row[4],reinterpret_cast<void*>(row[0]+0x40),4); // embedded configuration
+        std::memcpy(&row[5],reinterpret_cast<void*>(row[0]+0x4c),4); // embedded children
+        if(row[4] || row[5])return false; // Prove this actual query tree is flat.
+        if(row[1]==copy.attachment) {
+            ++selected;copy.descriptor=row[0];copy.childFlags=row[2];copy.parentName=row[3];
+            std::memcpy(copy.pose.data(),reinterpret_cast<void*>(row[0]+0xc),28);
+            std::memcpy(copy.scale.data(),reinterpret_cast<void*>(row[0]+0x28),12);
+        }
+    }
+    uint32_t parentName=0;
+    std::memcpy(&parentName,reinterpret_cast<void*>(frame.frame.seatDefinition),4);
+    if(selected!=1 || copy.parentName!=parentName)return false; // IDENT, not global index.
+    std::span<NativeModelRecord> records;
+    if(!rendererArray(0x2eac20,MaxModelRecords,records) || records.size()!=frame.frame.cacheRowCount)return false;
+    selected=0;
+    for(size_t i=1;i<records.size();++i) {
+        if(reinterpret_cast<uintptr_t>(records[i].descriptor)!=copy.descriptor)continue;
+        if(records[i].parent!=int32_t(frame.frame.modelRecord) || records[i].unused!=frame.frame.seatBone ||
+           reinterpret_cast<uintptr_t>(records[i].instance)!=copy.descriptor+0x28)return false;
+        ++selected;copy.childRecord=uint32_t(i);
+    }
+    if(selected>1)return false;
+    copy.childRecordPresent=selected;copy.mapped=true;
+    return true;
+}
 __attribute__((noinline)) static void observeRidePalette() {
     if(!rideObservationOwnerCurrent(currentFrozenOwner) || !rideObservationEnabled ||
        !frozenRide.valid() || rideObservationDeclined)return;
@@ -917,9 +991,14 @@ __attribute__((noinline)) static void observeRidePalette() {
         if(selected)rideObservationDeclined=true;
         return; // Other model production is ordinary visibility absence.
     }
+    RideAttachmentBookend attachmentBefore,attachmentAfter;
+    const bool mapped=copyRideAttachmentBookend(before,attachmentBefore) &&
+                      copyRideAttachmentBookend(before,attachmentAfter) && attachmentBefore==attachmentAfter;
     if(rideFrameSeen[index] || !copyRidePaletteBookend(after,afterSelected) || before!=after) {
         rideObservationDeclined=true;return;
     }
+    // Optional metadata failure never suppresses the original Main/Seat copy.
+    if(mapped)before.frame.attachment=attachmentBefore.copy;
     rideFrames[index]=before.frame;rideFrameSeen[index]=true;
 }
 __attribute__((noinline)) static void publishRideObservation(uint32_t owner,bool stereo) {
@@ -929,20 +1008,34 @@ __attribute__((noinline)) static void publishRideObservation(uint32_t owner,bool
     if(rideObservationRows.load(std::memory_order_relaxed)>=32)return;
     const unsigned row=rideObservationRows.fetch_add(1,std::memory_order_relaxed);
     if(row>=32)return;
+    if(stereo) {
+        auto a=rideFrames[0].attachment,b=rideFrames[1].attachment;
+        a.childRecordPresent=b.childRecordPresent=0;a.childRecord=b.childRecord=0;
+        if(a!=b) {rideFrames[0].attachment={};rideFrames[1].attachment={};}
+    }
     for(unsigned eye=0;eye<(stereo?2u:1u);++eye) {
         const auto &frame=rideFrames[eye];const auto &id=frame.identity;
-        log("Lab ride render schema=2 source=%.*s row=%u bank=%u eye=%d player=%u brain=%u ride=%u seat=%u class=%x renderableHandle=%u renderable=%u instance=%u cfg=%u file=%u resource=%u modelRecord=%u evaluated=%u matrices=%u mainBone=%u definition=%u seatBone=%u seatDefinition=%u resourceClaim=0 seatClaim=0 graspClaim=0 steeringClaim=0",
+        const auto &a=frame.attachment;
+        log("Lab ride render schema=3 source=%.*s row=%u bank=%u eye=%d player=%u brain=%u ride=%u seat=%u class=%x renderableHandle=%u renderable=%u instance=%u cfg=%u file=%u resource=%u modelRecord=%u evaluated=%u matrices=%u mainBone=%u definition=%u seatBone=%u seatDefinition=%u attachmentMapped=%u resourceClaim=0 seatClaim=0 graspClaim=0 steeringClaim=0",
             64,ss2vrBuildContract.sourceFingerprint.data(),row,owner,stereo?int(eye):-1,id.player,id.brain,id.ride,id.seat,id.classRva,id.renderableHandle,
             id.renderable,id.instance,frame.configuration,frame.file,frame.resource,frame.modelRecord,
-            frame.evaluated,frame.matrices,frame.mainBone,frame.boneDefinition,frame.seatBone,frame.seatDefinition);
-        log("Lab ride render binding schema=2 row=%u bank=%u eye=%d skeleton=%u lod=%u definitions=%u definitionCount=%u boneFirst=%u boneCount=%u canonicalCount=%u cacheRows=%u cacheRowCount=%u",
+            frame.evaluated,frame.matrices,frame.mainBone,frame.boneDefinition,frame.seatBone,frame.seatDefinition,unsigned(a.mapped));
+        log("Lab ride render binding schema=3 row=%u bank=%u eye=%d skeleton=%u lod=%u definitions=%u definitionCount=%u boneFirst=%u boneCount=%u canonicalCount=%u cacheRows=%u cacheRowCount=%u",
             row,owner,stereo?int(eye):-1,frame.skeleton,frame.lod,frame.definitions,frame.definitionCount,
             frame.boneFirst,frame.boneCount,frame.canonicalCount,frame.cacheRows,frame.cacheRowCount);
         const auto emit=[&](const char *kind,const std::array<uint32_t,12> &m) {
-            log("Lab ride render matrix schema=2 row=%u bank=%u eye=%d kind=%s words=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x",
+            log("Lab ride render matrix schema=3 row=%u bank=%u eye=%d kind=%s words=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x",
                 row,owner,stereo?int(eye):-1,kind,m[0],m[1],m[2],m[3],m[4],m[5],m[6],m[7],m[8],m[9],m[10],m[11]);
         };
         emit("modelWorld",frame.world);emit("MainCanonical",frame.main);emit("SeatCanonical",frame.seat);
+        if(a.mapped) {
+            log("Lab ride render attachment schema=3 row=%u bank=%u eye=%d parameter=%u parameterFlags=%u seatData=%u attachment=%u childState=%u childArray=%u childCount=%u descriptor=%u parentName=%u childFlags=%u childRecordPresent=%u childRecord=%u childWorldAvailable=0 flatTree=1",
+                row,owner,stereo?int(eye):-1,a.parameter,a.parameterFlags,a.seatData,a.attachment,a.childState,
+                a.childArray,a.childCount,a.descriptor,a.parentName,a.childFlags,a.childRecordPresent,a.childRecord);
+            log("Lab ride render attachmentPose schema=3 row=%u bank=%u eye=%d pose=%08x,%08x,%08x,%08x,%08x,%08x,%08x scale=%08x,%08x,%08x",
+                row,owner,stereo?int(eye):-1,a.pose[0],a.pose[1],a.pose[2],a.pose[3],a.pose[4],a.pose[5],a.pose[6],
+                a.scale[0],a.scale[1],a.scale[2]);
+        }
     }
 }
 enum class IdleNativeDrawPolicy { SingleAffine,Id2Palette };
@@ -1211,6 +1304,7 @@ bool initialize(HMODULE engine, HMODULE core, HMODULE sam, HookInstallerRva inst
 #undef S
     toolFileStemId = reinterpret_cast<ToolFileStemId>(reinterpret_cast<uintptr_t>(sam) + 0x1fd4f0);
     engineBase = reinterpret_cast<uintptr_t>(engine);
+    seatGameBase = reinterpret_cast<uintptr_t>(sam);
     if (!ok || !toolFileStemId ||
         !install(engine, 0xdbc90, reinterpret_cast<void *>(modelPass), reinterpret_cast<void **>(&originalModelPass)) ||
         !originalModelPass)

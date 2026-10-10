@@ -39,6 +39,30 @@ ride-part names against the independent decoder for three Fighter parameter
 variants and Saucer. Loaded resource/seat correspondence, actual evaluated child
 attachment and input-time freshness remain unfinished. No vehicle was launched.
 
+## Null-model attachment selection and native caller limits
+
+Focused static Engine evidence
+`ev_ab39a76eadb2075f3245d8ee248ac3d13722a5c5ad974c862a1f441a1f36bba6`
+confirms that the attachment query produces and searches model-child records.
+Independent decoding binds descriptor-name lookup at DB060 and child inventory
+from instance+24, data/count at child-state+14/+18. A null configuration child is
+skipped by ordinary traversal when native mode2C7F9C is nonzero; its static initial
+value is 1. Both inspected Seat attachments have null model configuration. Requiring
+an ordinary rendered child matrix is therefore the wrong prerequisite.
+
+The optional source mapping instead copies actual flat descriptor membership and
+raw declared offsets through the existing borrow; it does not evaluate a child or
+add native queries. See RIDE_RENDER_OBSERVATION.md. The external parser matched all 20
+Fighter/Saucer child descriptors against the independent decoder, including raw pose
+and scale words; no editor/game was launched.
+
+CLeggedPuppetEntity LerpRiderOntoSeat is a no-argument thiscall. Its call instruction
+is62E32, with return62E38. That routine uses its own ride/seat fields+204/+208;
+these alone do not prove that its receiver is the current CPuppet snapshot player.
+Do not introduce a query observer by assuming that receiver identity or by using a
+call instruction address as a return-address gate. The smaller current native body
+anchor remains unchanged.
+
 ## Proven narrow pose seam
 
 The local rider carries the current ride handle at `+0x544`, ride state at `+0x548`, and seat IDENT at `+0x54C`. `RegisterForRide` (`0x9AA30..0x9AAD8`) stores handle/IDENT/index at `+544/+54C/+550`; `DoStartRiding` (`0x7EE70..0x7EE7A`) sets state `3`; `UnregisterFromRide` (`0xA95C0..0xA9625`) clears the handle, resets state to `0`, and invalidates seat/index. Resolve afresh each simulation/render transaction; do not retain a vehicle pointer.

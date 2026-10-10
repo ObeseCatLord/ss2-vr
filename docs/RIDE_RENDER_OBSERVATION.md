@@ -143,3 +143,60 @@ pass. All four products match source fingerprint
 1a453f2210cbefa6199c866aaac2f14317fbb106bc2cfc6d79e978fb0b17aec2,
 IPC10/wire7. Local reviewer routing was Astra/xhigh; backend unattested.
 No vehicle/runtime acceptance follows from this passive source change.
+
+
+## Optional flat occupied-seat mapping
+
+Schema3 adds optional declared attachment metadata to the existing frame copy.
+The sampler first re-establishes the same native render owner and reciprocal ride
+identity. It reads the ride's managed parameter reference and declines bit0 pending
+resources before inspecting their seat array. Native getters would replace those
+resources; agreement between old raw copies alone would not establish the native
+selection. The selected native seat datum must have the pinned class and a unique
+name matching the current rider's seat; its attachment IDENT is copied separately.
+
+The current model instance owns the child-descriptor array. Every admitted member
+must have null embedded configuration and child-state pointers, making this actual
+attachment tree flat. The selected descriptor must uniquely match the native
+attachment IDENT, and its parent-bone IDENT must equal the selected Seat definition's
+name. Numeric global bone indices are used only for an existing record's parent
+binding. Both complete raw memberships and selected pose/scale words are compared;
+these optional reads sit between the original core frame bookends.
+
+The parameter and child arrays are bounded to 32 members. This covers the inspected
+nine Fighter and eleven Saucer descriptors, without claiming wider resource support.
+The optional mapping may decline; the existing Main/Seat observation still publishes.
+Normal rendering can omit null-model attachments, while the native attachment query
+includes them. Record presence is reported from the admitted produced record array;
+no evaluated child world is synthesized, and childWorldAvailable remains0.
+
+Schema3 identity adds attachmentMapped. Successful mappings add exactly one attachment
+record and one attachmentPose record (seven raw pose and three raw scale words).
+Stereo requires shared mapping identity/pose/scale agreement; disagreement clears
+both optional mappings. Per-eye record presence/index may differ. The assessor retains
+schemas1/2, rejects incomplete or crossed schema3 records, and keeps all authority,
+resource, grasp, steering, input-freshness and source-authentication claims false.
+
+Astra/xhigh design and source GO, current local tags verified and backend unattested.
+The actual fourth compiled guard consumer uses JNE to admission and a false fallthrough
+to scalar return. The verifier walks that false path; polarity/target/test-register
+mutations remain rejected. Both raw-copy helpers are checked for absence of FP/SIMD
+instructions. Finite lexical checks are explicitly not general CFG/lifetime proofs.
+
+| Review recommendation | Disposition |
+| --- | --- |
+| Reject pending parameter resources before reading seats | Adopted. |
+| Resolve native lookup ambiguity, including possible descendants | Adapted: prove every current member is a flat leaf and select a unique name. No shadow traversal. |
+| Require a normal rendered child world | Removed: it would suppress these null-model seats. |
+| Add simulation-query TLS or another attachment query | Removed; the existing managed references/render borrow suffice for metadata. |
+| Keep metadata failure independent of Main-based grips | Adopted; optional mapping never becomes a new physical-control gate. |
+| Copy parent-bone IDENT separately from canonical index | Adopted. |
+| Extend scalar compiled checks to the new helper | Adopted. |
+
+The physical-control critical path is actual grip geometry associated with the
+current resource, mesh/palette and applicable LOD, followed by a valid input-consumption
+interval and lifecycle/rearm handling. ModelWorld times MainCanonical is a bone-frame
+basis for verified Main-bone-local geometry; raw authored model vertices may need
+native inverse bind. Neither these matrices nor attachment metadata alone admit a
+physical grasp. Existing native body/view placement, mode-specific ClientAction and
+physics remain reusable. No vehicle/input/runtime test or controls activation occurred.

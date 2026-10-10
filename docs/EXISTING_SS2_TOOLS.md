@@ -111,3 +111,10 @@ Next use is authored resource/reference inspection through the existing parser,
 then comparison with the current loaded model and occupied native seat. An editor
 preview or authored name match cannot supply that live association. Keep native
 draw/animation ownership evidence and the current D3D9-to-D3D11 architecture.
+
+
+The same unchanged standalone parser also matched all 20 Fighter/Saucer child
+configuration descriptors, including exact pose/scale words and null configuration
+references. This exposed why a normal rendered-seat-child requirement would be
+nonfunctional for these assets. The source uses declared flat metadata instead;
+no Blender conversion, native child evaluation or physical controls pass is implied.

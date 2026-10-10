@@ -33,8 +33,22 @@ def verify_ride_frame_source(text):
     require('!rideFrameSeen[0]||(stereo&&!rideFrameSeen[1])' in publish and
             'emit("SeatCanonical",frame.seat);' in publish and
             'resourceClaim=0seatClaim=0graspClaim=0steeringClaim=0' in publish and
-            'schema=2source=%.*s' in publish,
+            'schema=3source=%.*s' in publish,
             'Ride frame output lacks completion/source/claim limits')
+    attachment=region('static bool copyRideAttachmentBookend(', '__attribute__((noinline)) static void observeRidePalette(')
+    require('if(copy.parameterFlags&1)returnfalse;' in attachment and
+            attachment.index('if(copy.parameterFlags&1)')<attachment.index('out.seatArray.data()') and
+            'readableMemory(ride,0x480)' in attachment,
+            'Ride mapping must decline pending parameters before reading seat membership')
+    require('if(row[4]||row[5])returnfalse;' in attachment and
+            'if(selected!=1||copy.parentName!=parentName)returnfalse;' in attachment and
+            'attachmentBefore==attachmentAfter' in observe and
+            'if(mapped)before.frame.attachment=attachmentBefore.copy;' in observe,
+            'Ride mapping must retain flatness, declared bone name and optional raw bookends')
+    require('childWorldAvailable=0flatTree=1' in publish and
+            'a.childRecordPresent=b.childRecordPresent=0;' in publish and
+            'if(a!=b){rideFrames[0].attachment={};rideFrames[1].attachment={};}' in publish,
+            'Ride mapping output must deny child world and clear crossed stereo metadata')
     require('stringId(&seatName,"Seat");' in text and
             'seatName==*invalidId||mainName==seatName' in ''.join(text.split()),
             'Seat IDENT initialization must be distinct and valid')
@@ -55,7 +69,7 @@ def verify_declined_ride_entries(assembly):
         return decoded_nodes(found[0])
     gate=selected('::rideObservationOwnerCurrent(unsigned int)')[0][0]
     checked=0
-    for name in ('::copyRidePaletteBookend(', '::observeRidePalette()', '::publishRideObservation('):
+    for name in ('::copyRidePaletteBookend(', '::copyRideAttachmentBookend(', '::observeRidePalette()', '::publishRideObservation('):
         nodes=selected(name)
         calls=[i for i,(_,mn,op,_) in enumerate(nodes) if mn=='call' and op==hex(gate)]
         require(len(calls)==1,'Ride consumer lost unique exact owner-gate call')
@@ -71,9 +85,14 @@ def verify_declined_ride_entries(assembly):
                         'Ride entry branch bypasses owner admission')
         index=call+1
         if nodes[index][1:3]==('mov','edx, eax'):index+=1
-        require(nodes[index][1:3]==('test','al, al') and nodes[index+1][1]=='je',
+        require(nodes[index][1:3]==('test','al, al') and nodes[index+1][1] in ('je','jne'),
                 'Ride owner false result is not the inspected rejection branch')
-        address=int(nodes[index+1][2],16)
+        # Actual new consumer uses JNE to the admitted body, with false falling
+        # through to scalar return. Existing consumers use JE to rejection.
+        if nodes[index+1][1]=='je':address=int(nodes[index+1][2],16)
+        else:
+            require(index+2<len(nodes),'Missing fall-through rejection')
+            address=nodes[index+2][0]
         by_address={row[0]:i for i,row in enumerate(nodes)}
         visited=set()
         while True:
@@ -133,10 +152,11 @@ def verify(obj):
         require(entry.count('DISP32\tss2vrNativeFinally') == 1,
                 'Entry must retain one native unwind extent: ' + name)
 
-    ride_copy = one('::copyRidePaletteBookend(', ')')
-    require(not any(re.match(r'f[a-z]', i) or re.search(r'\b(?:xmm|ymm|zmm)[0-9]', i)
-                    for i in code(ride_copy)),
-            'Ride raw-word snapshot body gained floating/SIMD instructions')
+    for sampler in ('::copyRidePaletteBookend(', '::copyRideAttachmentBookend('):
+        ride_copy = one(sampler, ')')
+        require(not any(re.match(r'f[a-z]', i) or re.search(r'\b(?:xmm|ymm|zmm)[0-9]', i)
+                        for i in code(ride_copy)),
+                'Ride raw-word snapshot body gained floating/SIMD instructions')
 
     cleanup_names = ['palettePass()', 'modelPass()', 'animationEnd(void*)', 'freezePair(unsigned int)', 'commitPair(',
                      'postModelPass()', 'postPalette()', 'observeLocalScope()']

@@ -7,16 +7,27 @@ from assess_ride_control import assess,assess_join,assess_render
 SOURCE='a'*64
 RECORD=f'Lab rideControl schema=1 source={SOURCE} ordinal=1 input=12 generation=2 session=3 reference=4 player=5 ride=6 seat=7 brain=8 thread=9 class=2786648 mode=2 executionAbilities=4 movementAbilities=41 parameterToken=0 renderableToken=0 callbackCalls=1 callbackReturned=1 resourceAssociated=0 frameAssociated=0 steeringApplied=0'
 JOIN=f'Lab rideModelJoin schema=1 source={SOURCE} invocation=1 receiver=2 class=2786648 handle=3 thread=4 renderableToken=5 instanceToken=6 innerCalls=1 innerReturned=1 borrowedJoin=1 localRiderAssociated=0 operatedSeatAssociated=0 resourceAssociated=0 frameAssociated=0 steeringApplied=0'
-def render_fixture(schema=2,eyes=(-1,),row=0,bank=1):
+def render_fixture(schema=2,eyes=(-1,),row=0,bank=1,attachment_mapped=1,attachment_overrides=None,
+                   cache_row_count=2,pose_words=None,scale_words=None):
     lines=[];words=','.join(['00000000']*12)
+    attachment={'parameter':9,'parameterFlags':0,'seatData':10,'attachment':11,'childState':12,'childArray':13,
+                'childCount':1,'descriptor':14,'parentName':15,'childFlags':0,'childRecordPresent':0,'childRecord':0,
+                'childWorldAvailable':0,'flatTree':1}
+    if attachment_overrides:attachment.update(attachment_overrides)
+    pose_words=pose_words or ['00000000']*7;scale_words=scale_words or ['00000000']*3
     for eye in eyes:
         key=f'schema={schema} row={row} bank={bank} eye={eye}'
-        source=f' source={SOURCE}' if schema==2 else ''
-        extra=' seatBone=3 seatDefinition=1120' if schema==2 else ''
-        lines.append('Lab ride render '+key+source+' player=1 brain=2 ride=3 seat=0 class=2a8558 renderableHandle=4 renderable=5 instance=6 cfg=7 file=8 resource=0 modelRecord=1 evaluated=9 matrices=10 mainBone=2 definition=1000'+extra+' resourceClaim=0 seatClaim=0 graspClaim=0 steeringClaim=0')
-        lines.append('Lab ride render binding '+key+' skeleton=11 lod=12 definitions=1000 definitionCount=4 boneFirst=2 boneCount=2 canonicalCount=4 cacheRows=13 cacheRowCount=2')
-        for kind in ('modelWorld','MainCanonical')+(('SeatCanonical',) if schema==2 else ()):
+        source=f' source={SOURCE}' if schema>=2 else ''
+        extra=' seatBone=3 seatDefinition=1120' if schema>=2 else ''
+        mapped=f' attachmentMapped={attachment_mapped}' if schema==3 else ''
+        lines.append('Lab ride render '+key+source+' player=1 brain=2 ride=3 seat=0 class=2a8558 renderableHandle=4 renderable=5 instance=6 cfg=7 file=8 resource=0 modelRecord=1 evaluated=9 matrices=10 mainBone=2 definition=1000'+extra+mapped+' resourceClaim=0 seatClaim=0 graspClaim=0 steeringClaim=0')
+        lines.append('Lab ride render binding '+key+f' skeleton=11 lod=12 definitions=1000 definitionCount=4 boneFirst=2 boneCount=2 canonicalCount=4 cacheRows=13 cacheRowCount={cache_row_count}')
+        for kind in ('modelWorld','MainCanonical')+(('SeatCanonical',) if schema>=2 else ()):
             lines.append('Lab ride render matrix '+key+f' kind={kind} words={words}')
+        if schema==3 and attachment_mapped:
+            fields=' '.join(f'{name}={value}' for name,value in attachment.items())
+            lines.append('Lab ride render attachment '+key+' '+fields)
+            lines.append('Lab ride render attachmentPose '+key+' pose='+','.join(pose_words)+' scale='+','.join(scale_words))
     return '\n'.join(lines)
 
 class Checks(unittest.TestCase):
@@ -28,7 +39,12 @@ class Checks(unittest.TestCase):
                         ('frame.matrices+frame.seatBone*48','frame.matrices+(frame.seatBone-frame.boneFirst)*48'),
                         ('before!=after','false'),('emit("SeatCanonical",frame.seat);',''),
                         ('seatClaim=0','seatClaim=1'),('stringId(&seatName,"Seat");',''),
-                        ('schema=2 source=%.*s','schema=2 source=unknown')]:
+                        ('schema=3 source=%.*s','schema=3 source=unknown'),
+                        ('if(copy.parameterFlags&1)return false;',''),
+                        ('if(row[4] || row[5])return false;','if(row[4])return false;'),
+                        ('copy.parentName!=parentName','copy.parentName!=frame.frame.seatBone'),
+                        ('attachmentBefore==attachmentAfter','true'),
+                        ('childWorldAvailable=0','childWorldAvailable=1')]:
             with self.subTest(old=old):
                 bad=text.replace(old,new);self.assertNotEqual(bad,text)
                 with self.assertRaises(ValueError):verify_ride_frame_source(bad)
@@ -63,7 +79,7 @@ class Checks(unittest.TestCase):
         self.assertEqual(assess_render(raw,SOURCE)['observations'][0]['raw_matrices']['SeatCanonical'][0],0x7fc00001)
     def test_render_complete_groups_owner_bounds_and_claim_mutations(self):
         text=render_fixture()
-        changes=(('source='+SOURCE,'source='+'b'*64),('schema=2','schema=3'),('row=0','row=32'),
+        changes=(('source='+SOURCE,'source='+'b'*64),('schema=2','schema=4'),('row=0','row=32'),
                  ('bank=1','bank=0'),('class=2a8558','class=2a4648'),('player=1','player=0'),
                  ('mainBone=2','mainBone=4'),('seatBone=3','seatBone=2'),('seatDefinition=1120','seatDefinition=1121'),
                  ('seatDefinition=1120','seatDefinition=1480'),('boneCount=2','boneCount=3'),
@@ -87,6 +103,47 @@ class Checks(unittest.TestCase):
         with self.assertRaises(ValueError):assess_render(all_rows+'\n'+render_fixture(row=32,bank=33),SOURCE)
         mixed=render_fixture(schema=1)+ '\n'+render_fixture(schema=2,row=1,bank=2)
         r=assess_render(mixed,SOURCE);self.assertFalse(r['source_matches_expected']);self.assertIsNone(r['observed_source_fingerprint'])
+
+    def test_render_schema3_flat_attachment_inventory_and_stereo_rules(self):
+        text=render_fixture(schema=3)
+        result=assess_render(text,SOURCE);copy=result['observations'][0]
+        self.assertTrue(result['source_matches_expected'])
+        self.assertTrue(copy['attachment_mapping_copied'])
+        self.assertEqual(copy['attachment_metadata']['parameter'],9)
+        self.assertEqual(len(copy['raw_attachment_pose']['pose']),7)
+        self.assertEqual(len(copy['raw_attachment_pose']['scale']),3)
+        raw=render_fixture(schema=3,pose_words=['7fc00001']+['00000000']*6,
+                           scale_words=['7fa00001']+['00000000']*2)
+        raw_copy=assess_render(raw,SOURCE)['observations'][0]
+        self.assertEqual(raw_copy['raw_attachment_pose']['pose'][0],0x7fc00001)
+        self.assertEqual(raw_copy['raw_attachment_pose']['scale'][0],0x7fa00001)
+        for key in ('source_provenance_authenticated','operated_seat_attachment_verified',
+                    'physical_steering_verified'):
+            self.assertFalse(copy[key])
+        unmapped=render_fixture(schema=3,attachment_mapped=0)
+        unmapped_copy=assess_render(unmapped,SOURCE)['observations'][0]
+        self.assertFalse(unmapped_copy['attachment_mapping_copied'])
+        self.assertIsNone(unmapped_copy['attachment_metadata'])
+        self.assertIsNone(unmapped_copy['raw_attachment_pose'])
+        with self.assertRaises(ValueError):assess_render(text.replace('parameterFlags=0','parameterFlags=1'),SOURCE)
+        with self.assertRaises(ValueError):assess_render(text.replace('childWorldAvailable=0','childWorldAvailable=1'),SOURCE)
+        with self.assertRaises(ValueError):assess_render(text.replace('childCount=1','childCount=33'),SOURCE)
+        with self.assertRaises(ValueError):assess_render(text.replace('childRecordPresent=0','childRecordPresent=1'),SOURCE)
+        self.assertEqual(assess_render(render_fixture(schema=3,attachment_overrides={'childCount':32}),SOURCE)['observations'][0]['attachment_metadata']['childCount'],32)
+        with self.assertRaises(ValueError):assess_render(text.replace('words=00000000','words=0'),SOURCE)
+        attachment=next(line for line in text.splitlines() if line.startswith('Lab ride render attachment '))
+        with self.assertRaises(ValueError):assess_render(text+'\n'+attachment,SOURCE)
+        with self.assertRaises(ValueError):assess_render('\n'.join(text.splitlines()[:-1]),SOURCE)
+        with self.assertRaises(ValueError):assess_render(text.replace('pose='+','.join(['00000000']*7),'pose='+','.join(['00000000']*6)),SOURCE)
+        with self.assertRaises(ValueError):assess_render(unmapped+'\n'+attachment,SOURCE)
+        paired=render_fixture(schema=3,eyes=(0,1))
+        at=paired.index('Lab ride render schema=3 row=0 bank=1 eye=1')
+        crossed=paired[:at]+paired[at:].replace('parameter=9','parameter=10',1)
+        with self.assertRaises(ValueError):assess_render(crossed,SOURCE)
+        half=render_fixture(schema=3,eyes=(0,),attachment_mapped=1)+'\n'+render_fixture(schema=3,eyes=(1,),attachment_mapped=0)
+        with self.assertRaises(ValueError):assess_render(half,SOURCE)
+        varied=render_fixture(schema=3,eyes=(0,),attachment_overrides={'childRecordPresent':1,'childRecord':2},cache_row_count=3)+'\n'+render_fixture(schema=3,eyes=(1,),attachment_overrides={'childRecordPresent':0,'childRecord':0},cache_row_count=3)
+        self.assertEqual(len(assess_render(varied,SOURCE)['observations']),2)
 
     def test_scalar_scope_and_nullable_association(self):
         result=assess(RECORD,SOURCE)

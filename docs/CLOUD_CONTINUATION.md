@@ -1,5 +1,33 @@
 # Current source continuation
 
+## Optional live flat attachment metadata
+
+The existing ride observer now optionally maps the current native occupied-seat
+name to its attachment descriptor. It declines pending parameter resources, proves
+actual flat child membership, copies declared pose/scale through complete bookends
+and preserves the existing Main/Seat copy on mapping failure. Schema3 reports normal
+child-record presence separately and never synthesizes child world. Crossed stereo
+metadata clears both optional copies. Astra/xhigh design/source GO; current local
+routing verified, backend unattested. See RIDE_RENDER_OBSERVATION.md.
+
+All4 products rebuilt with source fingerprint
+03892dd28f8ceaaecfe40973aef873ede6652b68ab7839207f0b0446ab8758ed,
+IPC10/wire7.82Debug/82assert-enabledRelease groups,10reader cases normal/-O and
+54compiled/artifact/mutation reports pass. Final scalar checks also cover both raw
+samplers and all four owner-gate consumers. Initial CTest failed one stale schema2
+source-mutation literal while the reader worker was editing; the corrected checks
+pass. New consumer JNE rejection fallthrough is verified against actual bytes.
+No game/editor/vehicle/input/runtime launch, package staging or controls activation.
+
+The external parser matched20 authored child descriptors across Fighter/Saucer;
+normal rendering omits their null-model Seat children. Native original query/TLS
+scaffolding and mandatory childWorld were therefore removed from the design.
+Actual grip geometry needs current mesh/palette/LOD/resource association, then
+input-interval/lifecycle/rearm integration. MainCanonical is a bone-frame basis,
+not direct proof of raw authored vertices or native inverse bind. Physical controls,
+full alignment, melee lifetime/release and authoritative MP settlement remain open;
+the full goal and user/device acceptance are unchanged.
+
 ## Existing-tool adoption and occupied-seat mapping
 
 Follow-up research identifies official editor Entity IDs/debug variables and an

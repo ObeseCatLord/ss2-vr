@@ -1,5 +1,18 @@
 # Mod journal
 
+## 2026-10-09 — optional native seat-to-flat-child mapping
+
+Implemented a bounded metadata copy through the existing render bank. Pending
+parameters and non-flat/ambiguous arrays decline only the optional mapping; native
+core frame copies persist. Source investigation and external parser exposed null
+Seat children skipped by normal rendering, eliminating a nonfunctional ChildWorld
+requirement and proposed query/TLS scaffolding. Astra design/source GO followed
+actual ownership/field checks. Schema3 reader keeps exact inventories and false
+feature claims. All4rebuilt;82Debug/82assert-enabledRelease and50compiled reports
+pass. Initial concurrent reader literal failure and new JNE guard layout were
+corrected; scalar gate includes the new helper. No controls or runtime activated.
+Next is grip geometry-to-current native mesh/palette and input interval integration.
+
 ## 2026-10-09 — native occupied-seat mapping and tool adoption
 
 External unchanged SE2 parser now decodes four characterized hovercraft parameter

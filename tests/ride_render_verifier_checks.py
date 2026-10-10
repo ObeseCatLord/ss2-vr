@@ -17,18 +17,18 @@ class Checks(unittest.TestCase):
         cls.table=bodies(cls.assembly)
 
     def test_actual_consumers(self):
-        self.assertEqual(verify_declined_ride_entries(self.assembly),3)
+        self.assertEqual(verify_declined_ride_entries(self.assembly),4)
 
     def test_owner_call_test_and_rejection_branch(self):
         for name,body in self.table.items():
             if 'clone' in name or not any(n in name for n in
-                    ('::copyRidePaletteBookend(', '::observeRidePalette()', '::publishRideObservation(')):continue
+                    ('::copyRidePaletteBookend(', '::copyRideAttachmentBookend(', '::observeRidePalette()', '::publishRideObservation(')):continue
             nodes=decoded_nodes(body)
             call=next(i for i,(_,mn,op,_) in enumerate(nodes) if mn=='call')
             test=call+1
             if nodes[test][1:3]==('mov','edx, eax'):test+=1
             self.assertEqual(nodes[test][1:3],('test','al, al'))
-            self.assertEqual(nodes[test+1][1],'je')
+            self.assertIn(nodes[test+1][1],('je','jne'))
             for index,kind in ((call,'call'),(test,'test'),(test+1,'branch')):
                 address=nodes[index][0]
                 m=re.search(r'(^\s*'+format(address,'x')+r':\s+)((?:[0-9a-f]{2} )+)',body,re.M)
@@ -36,9 +36,9 @@ class Checks(unittest.TestCase):
                 raw=bytearray.fromhex(m[2])
                 if kind=='call':raw[1]^=1 # Changes the actual local target.
                 elif kind=='test':raw[:]=bytes.fromhex('84 d2') # TEST DL, not returned AL.
-                elif raw[0]==0x74:raw[0]=0x75
+                elif raw[0] in (0x74,0x75):raw[0]^=1
                 else:
-                    self.assertEqual(raw[:2],bytes.fromhex('0f 84'));raw[1]=0x85
+                    self.assertIn(raw[:2],(bytes.fromhex('0f 84'),bytes.fromhex('0f 85')));raw[1]^=1
                 changed=body[:m.start(2)]+raw.hex(' ')+' '+body[m.end(2):]
                 with self.assertRaises(ValueError):
                     verify_declined_ride_entries(self.assembly.replace(body,changed))
