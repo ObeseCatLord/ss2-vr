@@ -1,5 +1,39 @@
 # Current source continuation
 
+## Current vehicle Main draw source — 2026-10-10
+
+The existing passive ride observer now connects the occupied Main/Seat frame to
+actual native indexed draw/resource/selected LOD and actual Main palette slot.
+Source schema4 has eight records per eye with explicit overflow, channel/API/raw
+matrix copies and old1–3 reader compatibility. Zero/asymmetric eye inventories
+preserve core evidence. It neither reads bound GPU bytes nor proves program
+consumption, grasp, input-time freshness or completed physical steering.
+
+The earlier SingleAffine-next assumption below is superseded: Saucer's positive
+handles lie in a15-bone surface. Fighter's one-bone2806-triangle surface exceeds
+the2673-triangle idle capacity. Do not substitute an authored slot, expand ID2's
+three-entry policy or borrow a weapon ID. Adapt the existing ProbeOwner/buffer-lock/
+program-copy boundary with an explicit vehicle range/capacity policy and actual
+indexed Main-weighted subset evidence, then join fresh native mode2 look/movement
+or mode3 sign/limit input with rearm and smooth hand transfer. Keep physics and
+original ClientAction. No new collector service/query or inactive grip helper.
+
+All four products rebuilt at fingerprint
+fe0b725923e0e08543d6ccf134ba7bdb54a86e1bf58a83dfdbc83b76fc9d92ae,
+IPC10/wire7;82Debug/82assert-enabledRelease groups and relevant normal/-O compiled,
+reader/native mutation gates pass. Astra/xhigh design ADAPT and source GO, local
+routing verified/backend unattested. Cleanup samples owner after every Release,
+then fresh reentry/generation/routing flags; immutable publication follows normal
+native-finally return. Seven actual compiled gate consumers reject false before
+bank reads. The pinned Core query/export/import/executable dependency proof is
+finite and assumes ordinary loader lifetime; sentinel is not initialized-thread
+proof. See RIDE_RENDER_OBSERVATION.md for exact limitations and disposition.
+
+No editor/game/headset/firing/vehicle/input/network test, installation or staging
+occurred. User primarily tests gameplay; existing narrow neutral-capture authority
+is unchanged. Full melee lifetime/release, authoritative MP settlement, complete
+alignment/vehicles and real-device Windows/Linux acceptance remain open.
+
 ## Corrected vehicle matrix contract
 
 Pinned native DDE30 copies global canonical P directly into a draw palette slot.

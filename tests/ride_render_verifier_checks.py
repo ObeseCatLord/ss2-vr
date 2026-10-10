@@ -17,12 +17,13 @@ class Checks(unittest.TestCase):
         cls.table=bodies(cls.assembly)
 
     def test_actual_consumers(self):
-        self.assertEqual(verify_declined_ride_entries(self.assembly),4)
+        self.assertEqual(verify_declined_ride_entries(self.assembly),7)
 
     def test_owner_call_test_and_rejection_branch(self):
         for name,body in self.table.items():
-            if 'clone' in name or not any(n in name for n in
-                    ('::copyRidePaletteBookend(', '::copyRideAttachmentBookend(', '::observeRidePalette()', '::publishRideObservation(')):continue
+            if 'clone' in name or 'withNativeFinally<' in name or '{lambda' in name or not any(n in name for n in
+                    ('::copyRidePaletteBookend(', '::copyRideAttachmentBookend(', '::observeRidePalette()', '::publishRideObservation(',
+                     '::copyCurrentRideMainDraw(', '::rideMainDrawCurrent(', '::recordRideMainDraw(')):continue
             nodes=decoded_nodes(body)
             call=next(i for i,(_,mn,op,_) in enumerate(nodes) if mn=='call')
             test=call+1

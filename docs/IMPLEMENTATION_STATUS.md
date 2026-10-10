@@ -1,4 +1,35 @@
-# Implementation status — 2026-10-09
+# Implementation status — 2026-10-10
+
+## Vehicle actual Main draw association implemented
+
+The existing default-off observer now binds the occupied ride's Main/Seat frame
+to an actual native indexed draw with exact root/model/configuration/resource/LOD
+and Main-definition ownership. It records the actual local Main slot on a bounded
+multi-bone surface; no whole-draw affine or authored slot is invented. Original
+successful forwarding and complete pre/post bookends precede certification after
+all COM Releases. Fresh reentry/generation/routing and owner checks gate normal
+native-finally publication of an immutable receipt into the existing bank.
+
+Schema4 adds up to eight draw copies per eye and explicit overflow, raw actual
+palette/world matrices, API arguments and channel descriptors. Zero/asymmetric
+eye inventories preserve Main/Seat. Schemas1–3 remain readable. Declared inventory
+completeness is not native draw coverage, GPU/program evidence, grasp or controls.
+See RIDE_RENDER_OBSERVATION.md and IMMERSIVE_STEERING.md.
+
+The Saucer handles belong to a15-bone surface, so SingleAffine is insufficient.
+Fighter's one-bone surface has2806 triangles versus existing2673-triangle idle
+storage. Next adapt existing bounded buffer/program plumbing with an explicit
+vehicle policy and indexed Main-weighted subsets; ID2's three-entry policy stays
+unchanged. Physical controls and input-time freshness remain unimplemented.
+
+Astra/xhigh design ADAPT and final source GO; local routing verified, backend
+unattested. All four products rebuilt at fingerprint
+fe0b725923e0e08543d6ccf134ba7bdb54a86e1bf58a83dfdbc83b76fc9d92ae,
+IPC10/wire7.82Debug and82assert-enabledRelease groups,12reader cases normal/-O,
+relevant compiled owner/forwarding/unwind/dispatch checks and16 Core-query mutation
+controls normal/-O pass. The finite Core proof assumes pinned unmodified code/imports
+and normal loader lifetime; its sentinel is not initialized-main-thread proof.
+No game, editor, vehicle, input, headset or network runtime, installation or staging.
 
 ## Vehicle matrix semantics corrected
 

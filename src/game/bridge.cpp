@@ -547,6 +547,9 @@ uint32_t traceChainPresent(IDirect3DSwapChain9 *chain, uintptr_t caller, HWND ov
 void scopeGpuOutput(IDirect3DDevice9 *d) noexcept {
     if (scopeTransaction && d == uiFrame.device) scopeInterference = true;
 }
+bool scopeGpuMappingObservationCurrent(IDirect3DDevice9 *d) noexcept {
+    return !uiHalted && !eyeInvalid && !uiFrame.fault && scopeGpuRoutingCurrent(d);
+}
 bool scopeGpuTransactionBegin(IDirect3DDevice9 *d) noexcept {
     if (scopeTransaction) { scopeInterference = true; return false; }
     if (!scopeGpuRoutingCurrent(d) || uiFrame.device != d || uiFrame.slot < 0 ||

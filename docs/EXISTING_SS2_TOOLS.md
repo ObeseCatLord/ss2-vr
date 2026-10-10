@@ -1,5 +1,42 @@
 # Existing Serious Sam 2 tools — research, 2026-10-09
 
+## Targeted follow-up — 2026-10-10
+
+A separate read-only subagent researched existing tools against the new vehicle
+draw-association boundary while the integration owner continued native work.
+No tool installation, editor/game execution or proprietary download occurred.
+The integration owner checked the importer author's current documentation and
+the two maintainer repositories below. Findings are research, not tool/runtime
+acceptance.
+
+The already evaluated other1/Andrey importer explicitly covers binary .bmf,
+.skl and .ans content embedded inside .mdl or other resource files without Edit
+Data, in addition to ASCII .amf/.asf/.aaf. The author requires Blender2.80 or newer;
+this is not verified compatibility with every later Blender version. The2023
+release page and2025 user activity are not a maintained version history or a
+redistribution license. Continue using the pinned unchanged standalone parser
+with independent byte/count/channel checks rather than writing another decoder.
+[Author documentation](https://www.serioussite.ru/load/raznoe/serious_engine_2_import_ehksport_dlja_blender/10-1-0-3143).
+
+| Additional candidate | Maintainer evidence | Decision for this port |
+| --- | --- | --- |
+| SeriousSaveEditor | Its compatibility table marks Serious Sam2 unsupported; current documented support is The Talos Principle. | Do not use it to edit the isolated SS2 save fixture. [Repository](https://github.com/widberg/SeriousSaveEditor). |
+| SeriousSkaConverter | MIT; limited SE2+ ASCII skeleton/animation conversion, mainly to/from classic SE1 SKA. | Optional authored interchange only; not a binary SS2 model extractor, native SDK or runtime animation evaluator. [Repository](https://github.com/DreamyCecil/SeriousSkaConverter). |
+
+The bundled Editor2 and official Edit Data remain the strongest future private
+fixture/authoring candidate; active-mod filesystem isolation and export fidelity
+must be checked before adoption. They do not replace the already validated
+parser or event-time native draw evidence. Do not import classic SE1, HD or Fusion
+ABIs into SS2 because a tool shares the Serious Engine name.
+
+For the current handles, authored inspection establishes the Saucer's15-bone
+surface and Fighter's single-bone surface. The new schema4 observer copies actual
+Main mapping/resource/LOD/API descriptors; indexed GPU bytes and position-program
+consumption remain separate. No researched tool proves live palette-slot identity,
+input freshness, release/rearm, grasp or multiplayer ownership. Continue the
+minimal existing buffer/program adapter; a new editor fixture is an optional
+static cross-check, not a reason to block native source progress.
+
 ## Follow-up: editor mod isolation
 
 A separate read-only public-source investigation checked the remaining editor,

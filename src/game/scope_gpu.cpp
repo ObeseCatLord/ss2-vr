@@ -3,6 +3,7 @@
 #include "idle_observer.hpp"
 #include "game.hpp"
 #include "native_finally.hpp"
+#include "remote_render.hpp"
 #include "common/scope_buffer_layout.hpp"
 #include "common/scope_lock.hpp"
 #include "common/scope_program.hpp"
@@ -63,6 +64,8 @@ struct ProbeOwner {
     unsigned paletteApiSlot=IdleWeaponTrace::MaxPaletteApiPayloads;
     BoundInputs bindings[3]; // Original/pre/post observations; one existing cleanup owner.
     bool streamReentered=false;
+    RideMainDrawCopy rideBefore{},rideAfter{};
+    bool rideReentered=false,rideOriginalReturned=false,rideMatched=false,rideReady=false;
     ScopeLockLedger lock;
     IDirect3DVertexBuffer9 *lockedVertex = nullptr;
     IDirect3DIndexBuffer9 *lockedIndex = nullptr;
@@ -174,6 +177,16 @@ static void cleanup(bool aborted) noexcept {
     probe.submissionOwner=nullptr;probe.submissionSlot=IdleSubmissionTrace::NoSlot;
     probe.paletteApiSlot=IdleWeaponTrace::MaxPaletteApiPayloads;
     probe.sourceView = {}; probe.imageConstants = {};
+    // No transaction is required for this value-only mapping observation. Its
+    // own tail checks run AFTER every Release and retain the sticky reentry bit.
+    // `device` is only compared numerically after its invocation reference retires.
+    const bool rideOwnerCurrent=probe.rideMatched && remote_render::rideMainDrawCurrent(probe.rideAfter);
+    // Native owner admission precedes the FINAL reentry/generation checks, not
+    // the reverse; even an unexpected query callback cannot lend its old result.
+    probe.rideReady=rideOwnerCurrent && !aborted && !retired && !probe.rideReentered && !probe.split &&
+        probe.rideOriginalReturned && probe.rideMatched &&
+        probe.generation==graphicsResourceGeneration() && scopeGpuForwardingAllowed() &&
+        scopeGpuMappingObservationCurrent(device);
     probe.transaction = probe.split = probe.imageChanged = probe.imageRestoreFailed = false;
     probe.cap = {}; probe.uvRows={}; probe.program={}; probe.colorProgram={};
     probe.idleTrace=nullptr;probe.idleNativeId=-1;
@@ -749,6 +762,7 @@ static bool drawImage(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base,UINT mi
 }
 static HRESULT probeScopeDraw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base,UINT minimum,UINT vertices,
                      UINT start,UINT primitives,uintptr_t caller,ScopeIndexedForward forward) noexcept {
+    if(probe.busy)probe.rideReentered=true;
     if (!scopeGpuForwardingAllowed()) return D3DERR_INVALIDCALL;
     const auto gfx=reinterpret_cast<uintptr_t>(GetModuleHandleW(L"GfxD3D.dll"));
     if(probe.busy && probe.idleTrace)probe.idleTrace->reject(IdleWeaponTrace::Rejection::GpuReentry);
@@ -762,6 +776,8 @@ static HRESULT probeScopeDraw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base
     probe.generation=graphicsResourceGeneration();
     probe.programWords=0;
     probe.streamReentered=false;
+    probe.rideBefore={};probe.rideAfter={};
+    probe.rideReentered=false;probe.rideOriginalReturned=false;probe.rideMatched=false;probe.rideReady=false;
     probe.paletteApiSlot=IdleWeaponTrace::MaxPaletteApiPayloads;
     HRESULT result=D3DERR_INVALIDCALL;
     withNativeFinally([&] {
@@ -779,6 +795,8 @@ static HRESULT probeScopeDraw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base
         probe.idleNativeId=idleCandidate?probe.idleTrace->nativeId:-1;
         // Exclude every prior scope/legacy collection attempt, even an early failure.
         const bool paletteContentEligible=!admitted && !probe.raster.pose.valid && !idleCandidate;
+        if(paletteContentEligible && remote_render::copyCurrentRideMainDraw(probe.rideBefore))
+            probe.rideBefore.api={uint32_t(type),base,minimum,vertices,start,primitives};
         probe.device = d; d->AddRef();
         if (admitted) probe.transaction = scopeGpuTransactionBegin(d);
         if (admitted) {
@@ -863,6 +881,12 @@ static HRESULT probeScopeDraw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base
             if(probe.idleTrace && probe.idleTrace->streamProbe.selected)
                 probe.idleTrace->streamProbe.flags|=IdleWeaponTrace::StreamProbe::ForwardCalled;
             result=forward(d,type,base,minimum,vertices,start,primitives);
+            probe.rideOriginalReturned=true;
+            if(probe.rideBefore.bank && SUCCEEDED(result) &&
+               remote_render::copyCurrentRideMainDraw(probe.rideAfter)) {
+                probe.rideAfter.api={uint32_t(type),base,minimum,vertices,start,primitives};
+                probe.rideMatched=probe.rideBefore==probe.rideAfter;
+            }
             IdlePaletteCopy paletteAfter;
             const bool paletteCopied=paletteBefore && finishPaletteApi(d,owner,slot,api,paletteAfter);
             if(idleAdmitted && paletteBefore && !paletteApiOwnerCurrent(d,owner,slot,api)) {
@@ -896,10 +920,17 @@ static HRESULT probeScopeDraw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base
             else recordScopeGeometry(probe.raster,probe.cap,ScopeUvTransform{probe.uvRows},colorCandidate);
         }
     },[](bool aborted) noexcept { cleanup(aborted); });
+    // A foreign unwind never reaches this point. Local failure/reentry/Release
+    // retirement denies ready; the existing bank rechecks the captured owner.
+    const auto completedRide=probe.rideAfter;
+    const bool rideReady=probe.rideReady;
+    probe.rideReady=false;
+    if(rideReady)remote_render::recordRideMainDraw(completedRide);
     return result;
 }
 HRESULT scopeGpuDraw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base,UINT minimum,UINT vertices,
                      UINT start,UINT primitives,uintptr_t caller,ScopeIndexedForward forward) noexcept {
+    if(probe.busy)probe.rideReentered=true;
     scopeGpuOutput(d);
     if (!scopeGpuForwardingAllowed()) return D3DERR_INVALIDCALL;
     return withScopeDrawCoverage(scopeGpuRoutingCurrent(d),

@@ -1,5 +1,23 @@
 # Mod journal
 
+## 2026-10-10 — occupied vehicle actual Main draw mapping
+
+Connected the existing render bank and GPU probe owner to a bounded multi-bone
+Main mapping observation. Exact root/config/resource/LOD/Main bookends surround
+the original successful indexed call. Certification follows every COM Release,
+the owner query and fresh reentry/generation/routing checks; normal native-finally
+return publishes an immutable value through the existing owner gate. Schema4
+records actual Main slot, channel/API descriptors and raw actual palette/world,
+with eight copies per eye, overflow, old-reader compatibility and no feature claims.
+
+Static resource comparison exposed Saucer's15-bone surface and Fighter's2806
+triangles versus2673 idle capacity. Whole-draw SingleAffine/weapon-ID substitution
+was rejected. Existing buffer/program plumbing remains the next adapter boundary.
+Astra design ADAPT/source GO, local Astra/xhigh routing verified/backend unattested.
+All four products rebuilt;82Debug/82assert-enabledRelease,12reader cases normal/-O
+and relevant compiled/native/mutation gates pass. No game/editor/input/vehicle/
+network/runtime/staging operation; physical grasp and controls remain open.
+
 ## 2026-10-09 — native vehicle palette versus bone placement
 
 REA and independent pinned-byte inspection resolved a misleading MainCanonical

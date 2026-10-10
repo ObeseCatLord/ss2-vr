@@ -8,6 +8,9 @@ HRESULT scopeGpuDraw(IDirect3DDevice9 *,D3DPRIMITIVETYPE,INT,UINT,UINT,UINT,UINT
                      uintptr_t caller,ScopeIndexedForward) noexcept;
 bool scopeGpuForwardingAllowed() noexcept;
 bool scopeGpuRoutingCurrent(IDirect3DDevice9 *) noexcept;
+// Numeric-only observation check, including pair faults; safe after the
+// invocation's device reference retires. Never calls the released device.
+bool scopeGpuMappingObservationCurrent(IDirect3DDevice9 *) noexcept;
 // Partial successful outputs are owned references; the caller retains them
 // above NativeFinally and releases them on every path.
 bool scopeGpuEyeOwner(IDirect3DDevice9 *, IUnknown *&color, IUnknown *&depth,

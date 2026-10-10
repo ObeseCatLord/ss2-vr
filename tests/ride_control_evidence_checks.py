@@ -8,7 +8,9 @@ SOURCE='a'*64
 RECORD=f'Lab rideControl schema=1 source={SOURCE} ordinal=1 input=12 generation=2 session=3 reference=4 player=5 ride=6 seat=7 brain=8 thread=9 class=2786648 mode=2 executionAbilities=4 movementAbilities=41 parameterToken=0 renderableToken=0 callbackCalls=1 callbackReturned=1 resourceAssociated=0 frameAssociated=0 steeringApplied=0'
 JOIN=f'Lab rideModelJoin schema=1 source={SOURCE} invocation=1 receiver=2 class=2786648 handle=3 thread=4 renderableToken=5 instanceToken=6 innerCalls=1 innerReturned=1 borrowedJoin=1 localRiderAssociated=0 operatedSeatAssociated=0 resourceAssociated=0 frameAssociated=0 steeringApplied=0'
 def render_fixture(schema=2,eyes=(-1,),row=0,bank=1,attachment_mapped=1,attachment_overrides=None,
-                   cache_row_count=2,pose_words=None,scale_words=None):
+                   cache_row_count=2,pose_words=None,scale_words=None,main_draw_count=0,
+                   main_draw_overflow=0,palette_first=10,palette_count=15,local_main_slot=3,
+                   actual_palette_words=None):
     lines=[];words=','.join(['00000000']*12)
     attachment={'parameter':9,'parameterFlags':0,'seatData':10,'attachment':11,'childState':12,'childArray':13,
                 'childCount':1,'descriptor':14,'parentName':15,'childFlags':0,'childRecordPresent':0,'childRecord':0,
@@ -19,15 +21,23 @@ def render_fixture(schema=2,eyes=(-1,),row=0,bank=1,attachment_mapped=1,attachme
         key=f'schema={schema} row={row} bank={bank} eye={eye}'
         source=f' source={SOURCE}' if schema>=2 else ''
         extra=' seatBone=3 seatDefinition=1120' if schema>=2 else ''
-        mapped=f' attachmentMapped={attachment_mapped}' if schema==3 else ''
-        lines.append('Lab ride render '+key+source+' player=1 brain=2 ride=3 seat=0 class=2a8558 renderableHandle=4 renderable=5 instance=6 cfg=7 file=8 resource=0 modelRecord=1 evaluated=9 matrices=10 mainBone=2 definition=1000'+extra+mapped+' resourceClaim=0 seatClaim=0 graspClaim=0 steeringClaim=0')
+        mapped=f' attachmentMapped={attachment_mapped}' if schema>=3 else ''
+        main=f' mainDrawCount={main_draw_count} mainDrawOverflow={main_draw_overflow}' if schema==4 else ''
+        lines.append('Lab ride render '+key+source+' player=1 brain=2 ride=3 seat=0 class=2a8558 renderableHandle=4 renderable=5 instance=6 cfg=7 file=8 resource=0 modelRecord=1 evaluated=9 matrices=10 mainBone=2 definition=1000'+extra+mapped+main+' resourceClaim=0 seatClaim=0 graspClaim=0 steeringClaim=0')
         lines.append('Lab ride render binding '+key+f' skeleton=11 lod=12 definitions=1000 definitionCount=4 boneFirst=2 boneCount=2 canonicalCount=4 cacheRows=13 cacheRowCount={cache_row_count}')
         for kind in ('modelWorld','MainCanonical')+(('SeatCanonical',) if schema>=2 else ()):
             lines.append('Lab ride render matrix '+key+f' kind={kind} words={words}')
-        if schema==3 and attachment_mapped:
+        if schema>=3 and attachment_mapped:
             fields=' '.join(f'{name}={value}' for name,value in attachment.items())
             lines.append('Lab ride render attachment '+key+' '+fields)
             lines.append('Lab ride render attachmentPose '+key+' pose='+','.join(pose_words)+' scale='+','.join(scale_words))
+        if schema==4:
+            actual_palette_words=actual_palette_words or ['00000000']*12
+            for ordinal in range(main_draw_count):
+                lines.append('Lab ride render mainDraw '+key+f' ordinal={ordinal} model=1 draw={ordinal} surface=9 instance=6 name=0 bone=2 definition=1000 cfg=7 file=8 resource=0 lod=12 paletteFirst={palette_first} paletteCount={palette_count} localMainSlot={local_main_slot} topology=4 base=-1 minimum=0 vertices=20 start=0 primitives=10 buffersClaim=0 positionProgramClaim=0 graspClaim=0 steeringClaim=0 originalSucceeded=1 cleanupCurrent=1')
+                lines.append('Lab ride render mainDrawLayout '+key+f' ordinal={ordinal} vertices=20 triangles=10 positions=2,1,0 indices=101,2,4 weights=8,3,8 localIndices=8,4,12')
+                lines.append('Lab ride render mainDrawMatrix '+key+f' ordinal={ordinal} kind=modelWorld words={words}')
+                lines.append('Lab ride render mainDrawMatrix '+key+f' ordinal={ordinal} kind=actualPalette words='+','.join(actual_palette_words))
     return '\n'.join(lines)
 
 class Checks(unittest.TestCase):
@@ -39,7 +49,7 @@ class Checks(unittest.TestCase):
                         ('frame.matrices+frame.seatBone*48','frame.matrices+(frame.seatBone-frame.boneFirst)*48'),
                         ('before!=after','false'),('emit("SeatCanonical",frame.seat);',''),
                         ('seatClaim=0','seatClaim=1'),('stringId(&seatName,"Seat");',''),
-                        ('schema=3 source=%.*s','schema=3 source=unknown'),
+                        ('schema=4 source=%.*s','schema=4 source=unknown'),
                         ('if(copy.parameterFlags&1)return false;',''),
                         ('if(row[4] || row[5])return false;','if(row[4])return false;'),
                         ('copy.parentName!=parentName','copy.parentName!=frame.frame.seatBone'),
@@ -150,6 +160,68 @@ class Checks(unittest.TestCase):
         with self.assertRaises(ValueError):assess_render(half,SOURCE)
         varied=render_fixture(schema=3,eyes=(0,),attachment_overrides={'childRecordPresent':1,'childRecord':2},cache_row_count=3)+'\n'+render_fixture(schema=3,eyes=(1,),attachment_overrides={'childRecordPresent':0,'childRecord':0},cache_row_count=3)
         self.assertEqual(len(assess_render(varied,SOURCE)['observations']),2)
+
+    def test_render_schema4_main_draw_copies_remain_observations(self):
+        text=render_fixture(schema=4,main_draw_count=1,actual_palette_words=['7fc00001']+['00000000']*11)
+        result=assess_render(text,SOURCE);copy=result['observations'][0];draw=copy['main_draws'][0]
+        self.assertEqual((draw['paletteFirst'],draw['paletteCount'],draw['localMainSlot']),(10,15,3))
+        self.assertEqual(draw['raw_matrices']['actualPalette'][0],0x7fc00001)
+        self.assertEqual(draw['raw_matrices']['modelWorld'],copy['raw_matrices']['modelWorld'])
+        self.assertTrue(result['draw_mapping_copies_present'])
+        self.assertTrue(result['declared_draw_inventory_complete'])
+        for key in ('draw_palette_mapping_verified','installed_resource_association_verified',
+                    'evaluated_control_frame_verified','authentication_verified',
+                    'simulation_time_freshness_verified','buffers_verified','position_program_verified',
+                    'grasp_verified','physical_steering_verified'):
+            self.assertFalse(result[key])
+        empty=assess_render(render_fixture(schema=4),SOURCE)
+        self.assertEqual(len(empty['observations'][0]['main_draws']),0)
+        self.assertTrue(empty['seat_frame_copies_present'])
+        self.assertFalse(empty['draw_mapping_copies_present'])
+        self.assertTrue(empty['declared_draw_inventory_complete'])
+        overflow=assess_render(render_fixture(schema=4,main_draw_count=8,main_draw_overflow=1),SOURCE)
+        self.assertEqual(len(overflow['observations'][0]['main_draws']),8)
+        self.assertTrue(overflow['observations'][0]['overflow'])
+        self.assertFalse(overflow['declared_draw_inventory_complete'])
+        stereo=(render_fixture(schema=4,eyes=(0,),main_draw_count=1)+'\n'+
+                render_fixture(schema=4,eyes=(1,),main_draw_count=2))
+        self.assertEqual([len(row['main_draws']) for row in assess_render(stereo,SOURCE)['observations']],[1,2])
+
+    def test_render_schema4_main_draw_inventory_rejects_bait(self):
+        text=render_fixture(schema=4,main_draw_count=1)
+        lines=text.splitlines()
+        main=next(line for line in lines if line.startswith('Lab ride render mainDraw '))
+        layout=next(line for line in lines if line.startswith('Lab ride render mainDrawLayout '))
+        actual=next(line for line in lines if 'mainDrawMatrix ' in line and 'kind=actualPalette' in line)
+        changes=(
+            (text+'\n'+main,'duplicate'),
+            ('\n'.join(line for line in lines if line!=actual),'truncated'),
+            (text.replace('mainDrawMatrix schema=4 row=0 bank=1 eye=-1 ordinal=0 kind=modelWorld',
+                          'mainDrawMatrix schema=4 row=0 bank=2 eye=-1 ordinal=0 kind=modelWorld'),'crossed'),
+            (text.replace('model=1 draw=0','model=2 draw=0'),'model'),
+            (text.replace('bone=2 definition=1000','bone=3 definition=1000'),'bone'),
+            (text.replace('lod=12 paletteFirst=10','lod=13 paletteFirst=10'),'lod'),
+            (text.replace('mainDraw schema=4','mainDraw schema=3'),'schema'),
+            (text.replace('buffersClaim=0','buffersClaim=1'),'buffer claim'),
+            (text.replace('positionProgramClaim=0','positionProgramClaim=1'),'program claim'),
+            (text.replace('graspClaim=0 steeringClaim=0 originalSucceeded=1',
+                          'graspClaim=1 steeringClaim=0 originalSucceeded=1'),'grasp claim'),
+            (text.replace('steeringClaim=0 originalSucceeded=1','steeringClaim=1 originalSucceeded=1'),'steering claim'),
+            (text.replace('originalSucceeded=1 cleanupCurrent=1','originalSucceeded=0 cleanupCurrent=1'),'original'),
+            (text.replace('cleanupCurrent=1','cleanupCurrent=0'),'cleanup'),
+            (text.replace('paletteFirst=10 paletteCount=15','paletteFirst=32767 paletteCount=2'),'palette bounds'),
+            (text.replace('mainDrawOverflow=0','mainDrawOverflow=1'),'overflow count'),
+            (text.replace('positions=2,1,0','positions=256,1,0'),'layout bounds'),
+            (text.replace('vertices=20 triangles=10 positions','vertices=2147483648 triangles=10 positions'),'signed layout'),
+            (text.replace('mainDrawMatrix schema=4 row=0 bank=1 eye=-1 ordinal=0 kind=actualPalette',
+                          'mainDrawMatrix schema=4 row=0 bank=1 eye=-1 ordinal=0 kind=modelWorld'),'matrix duplicate'),
+            (text.replace('mainDrawMatrix schema=4 row=0 bank=1 eye=-1 ordinal=0 kind=modelWorld words=00000000',
+                          'mainDrawMatrix schema=4 row=0 bank=1 eye=-1 ordinal=0 kind=modelWorld words=00000001'),'world mismatch'),
+            (text.replace(layout,main),'layout duplicate'))
+        for bad,label in changes:
+            with self.subTest(label=label),self.assertRaises(ValueError):assess_render(bad,SOURCE)
+        accepted=render_fixture(schema=4,main_draw_count=1,palette_first=32767,palette_count=1,local_main_slot=0)
+        self.assertEqual(assess_render(accepted,SOURCE)['observations'][0]['main_draws'][0]['paletteFirst'],32767)
 
     def test_scalar_scope_and_nullable_association(self):
         result=assess(RECORD,SOURCE)

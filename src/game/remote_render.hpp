@@ -3,6 +3,7 @@
 #include "common/protocol.hpp"
 #include "common/scope_pose.hpp"
 #include "common/idle_weapon_trace.hpp"
+#include "common/ride_render_observation.hpp"
 #include <cstdint>
 #include <windows.h>
 
@@ -27,6 +28,11 @@ bool copyIdleRaster(void *instance,IdleRasterCopy &out);
 // ID2-only policy selected by the current submission owner; copies raw values
 // without changing the single-affine raster/geometry admission policy.
 bool copyIdlePalette(void *instance,IdlePaletteCopy &out);
+// Existing render bank and actual DIP borrow only. No buffer/program, whole-draw
+// affine or physical-grip admission is supplied by this Main mapping observation.
+bool copyCurrentRideMainDraw(RideMainDrawCopy &out);
+bool rideMainDrawCurrent(const RideMainDrawCopy &copy) noexcept;
+void recordRideMainDraw(const RideMainDrawCopy &copy) noexcept;
 ScopeRasterStatus copyScopeRaster(void *instance, Matrix34 &affine, ScopeSurfaceLayout &layout);
 
 // Called on the simulation thread after the original CPlayerOnStep.

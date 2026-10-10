@@ -33,7 +33,7 @@ def verify_ride_frame_source(text):
     require('!rideFrameSeen[0]||(stereo&&!rideFrameSeen[1])' in publish and
             'emit("SeatCanonical",frame.seat);' in publish and
             'resourceClaim=0seatClaim=0graspClaim=0steeringClaim=0' in publish and
-            'schema=3source=%.*s' in publish,
+            'schema=4source=%.*s' in publish,
             'Ride frame output lacks completion/source/claim limits')
     attachment=region('static bool copyRideAttachmentBookend(', '__attribute__((noinline)) static void observeRidePalette(')
     require('if(copy.parameterFlags&1)returnfalse;' in attachment and
@@ -52,6 +52,10 @@ def verify_ride_frame_source(text):
     require('stringId(&seatName,"Seat");' in text and
             'seatName==*invalidId||mainName==seatName' in ''.join(text.split()),
             'Seat IDENT initialization must be distinct and valid')
+    require('mainDrawCount=%umainDrawOverflow=%u' in publish and
+            'buffersClaim=0positionProgramClaim=0graspClaim=0steeringClaim=0originalSucceeded=1cleanupCurrent=1' in publish and
+            'emitDraw("modelWorld",d.world);emitDraw("actualPalette",d.actualPalette);' in publish,
+            'Ride Main draws require bounded inventories and zero geometry/program/control claims')
     return {'paired_main_seat_source_checked':True,'limit':'Finite lexical form, not native execution or general CFG proof.'}
 
 def verify_declined_ride_entries(assembly):
@@ -64,12 +68,14 @@ def verify_declined_ride_entries(assembly):
     """
     table=decoded_bodies(assembly)
     def selected(fragment):
-        found=[b for n,b in table.items() if fragment in n and 'clone' not in n]
+        found=[b for n,b in table.items() if fragment in n and 'clone' not in n and
+               'withNativeFinally<' not in n and '{lambda' not in n]
         require(len(found)==1,'Missing unique ride guard consumer: '+fragment)
         return decoded_nodes(found[0])
     gate=selected('::rideObservationOwnerCurrent(unsigned int)')[0][0]
     checked=0
-    for name in ('::copyRidePaletteBookend(', '::copyRideAttachmentBookend(', '::observeRidePalette()', '::publishRideObservation('):
+    for name in ('::copyRidePaletteBookend(', '::copyRideAttachmentBookend(', '::observeRidePalette()', '::publishRideObservation(',
+                 '::copyCurrentRideMainDraw(', '::rideMainDrawCurrent(', '::recordRideMainDraw('):
         nodes=selected(name)
         calls=[i for i,(_,mn,op,_) in enumerate(nodes) if mn=='call' and op==hex(gate)]
         require(len(calls)==1,'Ride consumer lost unique exact owner-gate call')

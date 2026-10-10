@@ -134,6 +134,9 @@ static thread_local bool reentrant = false, modelInvalidated = false, presentati
 static RideRenderIdentity frozenRide;
 static IdleConfigIdentity frozenRideConfig;
 static std::array<RideRenderFrameCopy,2> rideFrames;
+static std::array<std::array<RideMainDrawCopy,RideMainDrawCapacity>,2> rideMainDraws;
+static std::array<uint32_t,2> rideMainDrawCounts{};
+static std::array<bool,2> rideMainDrawOverflow{};
 static std::array<bool,2> rideFrameSeen{};
 static std::atomic<bool> rideObservationDeclined=false;
 static std::atomic<unsigned> rideObservationRows=0;
@@ -1016,31 +1019,49 @@ __attribute__((noinline)) static void publishRideObservation(uint32_t owner,bool
     for(unsigned eye=0;eye<(stereo?2u:1u);++eye) {
         const auto &frame=rideFrames[eye];const auto &id=frame.identity;
         const auto &a=frame.attachment;
-        log("Lab ride render schema=3 source=%.*s row=%u bank=%u eye=%d player=%u brain=%u ride=%u seat=%u class=%x renderableHandle=%u renderable=%u instance=%u cfg=%u file=%u resource=%u modelRecord=%u evaluated=%u matrices=%u mainBone=%u definition=%u seatBone=%u seatDefinition=%u attachmentMapped=%u resourceClaim=0 seatClaim=0 graspClaim=0 steeringClaim=0",
+        log("Lab ride render schema=4 source=%.*s row=%u bank=%u eye=%d player=%u brain=%u ride=%u seat=%u class=%x renderableHandle=%u renderable=%u instance=%u cfg=%u file=%u resource=%u modelRecord=%u evaluated=%u matrices=%u mainBone=%u definition=%u seatBone=%u seatDefinition=%u attachmentMapped=%u mainDrawCount=%u mainDrawOverflow=%u resourceClaim=0 seatClaim=0 graspClaim=0 steeringClaim=0",
             64,ss2vrBuildContract.sourceFingerprint.data(),row,owner,stereo?int(eye):-1,id.player,id.brain,id.ride,id.seat,id.classRva,id.renderableHandle,
             id.renderable,id.instance,frame.configuration,frame.file,frame.resource,frame.modelRecord,
-            frame.evaluated,frame.matrices,frame.mainBone,frame.boneDefinition,frame.seatBone,frame.seatDefinition,unsigned(a.mapped));
-        log("Lab ride render binding schema=3 row=%u bank=%u eye=%d skeleton=%u lod=%u definitions=%u definitionCount=%u boneFirst=%u boneCount=%u canonicalCount=%u cacheRows=%u cacheRowCount=%u",
+            frame.evaluated,frame.matrices,frame.mainBone,frame.boneDefinition,frame.seatBone,frame.seatDefinition,unsigned(a.mapped),rideMainDrawCounts[eye],unsigned(rideMainDrawOverflow[eye]));
+        log("Lab ride render binding schema=4 row=%u bank=%u eye=%d skeleton=%u lod=%u definitions=%u definitionCount=%u boneFirst=%u boneCount=%u canonicalCount=%u cacheRows=%u cacheRowCount=%u",
             row,owner,stereo?int(eye):-1,frame.skeleton,frame.lod,frame.definitions,frame.definitionCount,
             frame.boneFirst,frame.boneCount,frame.canonicalCount,frame.cacheRows,frame.cacheRowCount);
         const auto emit=[&](const char *kind,const std::array<uint32_t,12> &m) {
-            log("Lab ride render matrix schema=3 row=%u bank=%u eye=%d kind=%s words=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x",
+            log("Lab ride render matrix schema=4 row=%u bank=%u eye=%d kind=%s words=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x",
                 row,owner,stereo?int(eye):-1,kind,m[0],m[1],m[2],m[3],m[4],m[5],m[6],m[7],m[8],m[9],m[10],m[11]);
         };
         emit("modelWorld",frame.world);emit("MainCanonical",frame.main);emit("SeatCanonical",frame.seat);
         if(a.mapped) {
-            log("Lab ride render attachment schema=3 row=%u bank=%u eye=%d parameter=%u parameterFlags=%u seatData=%u attachment=%u childState=%u childArray=%u childCount=%u descriptor=%u parentName=%u childFlags=%u childRecordPresent=%u childRecord=%u childWorldAvailable=0 flatTree=1",
+            log("Lab ride render attachment schema=4 row=%u bank=%u eye=%d parameter=%u parameterFlags=%u seatData=%u attachment=%u childState=%u childArray=%u childCount=%u descriptor=%u parentName=%u childFlags=%u childRecordPresent=%u childRecord=%u childWorldAvailable=0 flatTree=1",
                 row,owner,stereo?int(eye):-1,a.parameter,a.parameterFlags,a.seatData,a.attachment,a.childState,
                 a.childArray,a.childCount,a.descriptor,a.parentName,a.childFlags,a.childRecordPresent,a.childRecord);
-            log("Lab ride render attachmentPose schema=3 row=%u bank=%u eye=%d pose=%08x,%08x,%08x,%08x,%08x,%08x,%08x scale=%08x,%08x,%08x",
+            log("Lab ride render attachmentPose schema=4 row=%u bank=%u eye=%d pose=%08x,%08x,%08x,%08x,%08x,%08x,%08x scale=%08x,%08x,%08x",
                 row,owner,stereo?int(eye):-1,a.pose[0],a.pose[1],a.pose[2],a.pose[3],a.pose[4],a.pose[5],a.pose[6],
                 a.scale[0],a.scale[1],a.scale[2]);
         }
+        for(uint32_t ordinal=0;ordinal<rideMainDrawCounts[eye];++ordinal) {
+            const auto &d=rideMainDraws[eye][ordinal];
+            log("Lab ride render mainDraw schema=4 row=%u bank=%u eye=%d ordinal=%u model=%u draw=%u surface=%u instance=%u name=%u bone=%u definition=%u cfg=%u file=%u resource=%u lod=%u paletteFirst=%u paletteCount=%u localMainSlot=%u topology=%u base=%d minimum=%u vertices=%u start=%u primitives=%u buffersClaim=0 positionProgramClaim=0 graspClaim=0 steeringClaim=0 originalSucceeded=1 cleanupCurrent=1",
+                row,owner,stereo?int(eye):-1,ordinal,d.modelRecord,d.drawRecord,d.surface,d.instance,d.surfaceName,d.bone,d.definition,
+                d.configuration,d.file,d.resource,d.lod,d.paletteFirst,d.paletteCount,d.localMainSlot,
+                d.api.topology,d.api.base,d.api.minimum,d.api.vertices,d.api.start,d.api.primitives);
+            const auto &c=d.layout.channels;
+            log("Lab ride render mainDrawLayout schema=4 row=%u bank=%u eye=%d ordinal=%u vertices=%d triangles=%d positions=%u,%u,%u indices=%u,%u,%u weights=%u,%u,%u localIndices=%u,%u,%u",
+                row,owner,stereo?int(eye):-1,ordinal,d.layout.vertices,d.layout.triangles,
+                unsigned(c[0].format),unsigned(c[0].buffer),c[0].offset,unsigned(c[1].format),unsigned(c[1].buffer),c[1].offset,
+                unsigned(c[2].format),unsigned(c[2].buffer),c[2].offset,unsigned(c[3].format),unsigned(c[3].buffer),c[3].offset);
+            const auto emitDraw=[&](const char *kind,const std::array<uint32_t,12> &m) {
+                log("Lab ride render mainDrawMatrix schema=4 row=%u bank=%u eye=%d ordinal=%u kind=%s words=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x",
+                    row,owner,stereo?int(eye):-1,ordinal,kind,m[0],m[1],m[2],m[3],m[4],m[5],m[6],m[7],m[8],m[9],m[10],m[11]);
+            };
+            emitDraw("modelWorld",d.world);emitDraw("actualPalette",d.actualPalette);
+        }
     }
 }
-enum class IdleNativeDrawPolicy { SingleAffine,Id2Palette };
+enum class IdleNativeDrawPolicy { SingleAffine,Id2Palette,RideMainMapping };
 static bool readIdleNativeDraw(void *instance,IdleRasterCopy &out,IdleRasterStorage &storage,
-                               IdleNativeDrawPolicy policy,IdlePaletteCopy *companion=nullptr) {
+                               IdleNativeDrawPolicy policy,IdlePaletteCopy *companion=nullptr,
+                               int32_t requestedMain=-1,RideMainDrawCopy *rideDraw=nullptr) {
     out={};
     if(companion)*companion={};
     if(!instance || !hooksReady.load(std::memory_order_acquire) || !ready.load(std::memory_order_acquire) ||
@@ -1097,6 +1118,23 @@ static bool readIdleNativeDraw(void *instance,IdleRasterCopy &out,IdleRasterStor
         out.factors.paletteIndex=uint32_t(draw.first);out.factors.modelCopied=true;
         out.bone=mapping.bone;
         std::memcpy(&out.boneName,bones[size_t(mapping.bone)].definition,4);
+    } else if(policy==IdleNativeDrawPolicy::RideMainMapping) {
+        // Observe one Main map in a potentially multi-bone draw. No invented
+        // whole-draw affine and no change to either weapon policy above/below.
+        uint32_t slot=0;
+        if(!rideDraw || !selectRideMainMapping(maps,palette.size(),int32_t(drawIndex),draw.first,draw.count,
+            requestedMain,[&](int32_t bone) {
+                return size_t(bone)<bones.size() && bones[size_t(bone)].owner==int32_t(modelIndex) &&
+                    readableMemory(bones[size_t(bone)].definition,4);
+            },slot) || !idleConfig(instance,out.rootConfig) || !idleConfig(model.instance,out.renderConfig))return false;
+        const size_t index=size_t(draw.first)+slot;
+        out.bone=requestedMain;
+        std::memcpy(&out.boneName,bones[size_t(requestedMain)].definition,4);
+        rideDraw->paletteFirst=uint32_t(draw.first);rideDraw->paletteCount=uint32_t(draw.count);
+        rideDraw->localMainSlot=slot;
+        rideDraw->definition=uint32_t(reinterpret_cast<uintptr_t>(bones[size_t(requestedMain)].definition));
+        std::memcpy(rideDraw->world.data(),model.world.m,48);
+        std::memcpy(rideDraw->actualPalette.data(),palette[index].m,48);
     } else {
         if(!companion || draw.count<1 || draw.count>int32_t(IdlePaletteCopy::MaxPalette) ||
            !validPaletteSpan(draw.first,draw.count,maps.size()) ||
@@ -1513,6 +1551,52 @@ bool copyIdlePalette(void *instance,IdlePaletteCopy &out) {
     if(!observed)out={};
     return observed;
 }
+__attribute__((noinline)) bool copyCurrentRideMainDraw(RideMainDrawCopy &out) {
+    if(!rideObservationOwnerCurrent(currentFrozenOwner))return false;
+    out={};
+    const int eye=nativeWorldEye();
+    if(eye < -1 || eye > 1 || !frozenRide.valid() || rideObservationDeclined)return false;
+    const size_t index=eye<0?0:size_t(eye);
+    if(!rideFrameSeen[index])return false;
+    std::optional<IdleRasterStorage> storage(std::in_place);bool copied=false;
+    withNativeFinally([&] {
+        RidePaletteBookend before,after;bool selected=false,afterSelected=false;
+        if(!copyRidePaletteBookend(before,selected))return;
+        IdleRasterCopy raster;
+        if(!readIdleNativeDraw(reinterpret_cast<void*>(before.frame.identity.instance),raster,*storage,
+             IdleNativeDrawPolicy::RideMainMapping,nullptr,int32_t(before.frame.mainBone),&out))return;
+        out.bank=currentFrozenOwner;out.eye=eye;out.identity=before.frame.identity;
+        out.configuration=raster.renderConfig.configuration;out.file=raster.renderConfig.file;
+        out.resource=uint32_t(raster.renderConfig.resource);out.modelRecord=raster.modelRecord;
+        std::memcpy(&out.lod,reinterpret_cast<void*>(raster.projectionModelAddress+0x5c),4);
+        out.drawRecord=raster.drawRecord;out.surface=raster.surface;out.surfaceName=raster.surfaceName;
+        out.instance=raster.instance;out.bone=uint32_t(raster.bone);out.layout=raster.layout;
+        if(raster.rootConfig!=raster.renderConfig ||
+           !rideMainDrawLinked(out,before.frame) ||
+           !copyRidePaletteBookend(after,afterSelected) || before!=after ||
+           !rideMainDrawLinked(out,rideFrames[index]))return;
+        copied=true;
+    },[&](bool aborted) noexcept {storage.reset();if(aborted)copied=false;});
+    if(!copied)out={};
+    return copied;
+}
+static bool rideDrawBankMatches(const RideMainDrawCopy &copy) noexcept {
+    if(copy.eye < -1 || copy.eye > 1 || copy.eye!=nativeWorldEye() || rideObservationDeclined)return false;
+    const size_t index=copy.eye<0?0:size_t(copy.eye);
+    return rideFrameSeen[index] && copy.identity==frozenRide && rideMainDrawLinked(copy,rideFrames[index]);
+}
+__attribute__((noinline)) bool rideMainDrawCurrent(const RideMainDrawCopy &copy) noexcept {
+    if(!rideObservationOwnerCurrent(copy.bank))return false;
+    return rideDrawBankMatches(copy);
+}
+__attribute__((noinline)) void recordRideMainDraw(const RideMainDrawCopy &copy) noexcept {
+    if(!rideObservationOwnerCurrent(copy.bank))return;
+    if(!rideDrawBankMatches(copy))return;
+    const size_t index=copy.eye<0?0:size_t(copy.eye);
+    auto &count=rideMainDrawCounts[index];
+    if(count==RideMainDrawCapacity) {rideMainDrawOverflow[index]=true;return;}
+    rideMainDraws[index][count++]=copy;
+}
 bool idleProjectionConfigured() noexcept {
     return ready.load(std::memory_order_acquire) && projectionShaderBase &&
         originalProjectionSlots && originalProjectionFog;
@@ -1541,6 +1625,7 @@ uint32_t freezePair(uint32_t localPlayer) {
         currentFrozenOwner=issued;
         frozen = {};
         frozenRide={};frozenRideConfig={};rideFrames={};rideFrameSeen={};rideObservationDeclined=false;
+        rideMainDraws={};rideMainDrawCounts={};rideMainDrawOverflow={};
         pairThread = GetCurrentThreadId();
         pairInvalid.store(false, std::memory_order_release);
         pairOwner.store(issued,std::memory_order_release);

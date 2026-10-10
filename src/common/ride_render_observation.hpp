@@ -1,6 +1,8 @@
 #pragma once
 #include <array>
 #include <cstdint>
+#include "head_palette.hpp"
+#include "scope_buffer_layout.hpp"
 
 namespace ss2vr {
 // Copied identities only. These numbers never authorize a later dereference or
@@ -36,4 +38,45 @@ struct RideRenderFrameCopy {
     RideAttachmentCopy attachment;
     bool operator==(const RideRenderFrameCopy &) const = default;
 };
+// One actual native Main mapping, not a whole-draw affine or verified vertex
+// subset. All identities are value-only event keys, never pointer leases.
+struct RideMainDrawCopy {
+    uint32_t bank=0;
+    int32_t eye=-2;
+    RideRenderIdentity identity;
+    uint32_t configuration=0,file=0,resource=0,modelRecord=0,lod=0;
+    uint32_t drawRecord=0,surface=0,surfaceName=0,instance=0,bone=0,definition=0;
+    uint32_t paletteFirst=0,paletteCount=0,localMainSlot=0;
+    ScopeSurfaceLayout layout;
+    ScopeIndexedDraw api;
+    std::array<uint32_t,12> world{},actualPalette{};
+    bool operator==(const RideMainDrawCopy &) const = default;
+};
+constexpr uint32_t RideMainDrawCapacity=8, RideMainMappingBudget=32;
+// Select the actual map position, not a serialized palette ordinal/name or a
+// model-relative bone index. The budget is diagnostic capacity, not a native limit.
+template<class BoneOwned> bool selectRideMainMapping(std::span<const PaletteMap> maps,
+        size_t paletteSize,int32_t draw,int32_t first,int32_t count,int32_t main,
+        BoneOwned owned,uint32_t &slot) {
+    slot=UINT32_MAX;
+    if(draw<0 || main<0 || first<0 || count<1 || uint32_t(count)>RideMainMappingBudget ||
+       size_t(first)>maps.size() || size_t(count)>maps.size()-size_t(first) ||
+       size_t(first)>paletteSize || size_t(count)>paletteSize-size_t(first))return false;
+    uint32_t found=0,candidate=0;
+    for(int32_t i=0;i<count;++i) {
+        const auto &m=maps[size_t(first)+size_t(i)];
+        if(m.draw!=draw || m.bone<0 || !owned(m.bone))return false;
+        if(m.bone==main) {++found;candidate=uint32_t(i);}
+    }
+    if(found!=1)return false;
+    slot=candidate;return true;
+}
+inline bool rideMainDrawLinked(const RideMainDrawCopy &draw,const RideRenderFrameCopy &frame) {
+    return frame.identity.valid() && frame.modelRecord && frame.lod && frame.mainBone && frame.boneDefinition &&
+        draw.identity==frame.identity && draw.instance==frame.identity.instance &&
+        draw.configuration==frame.configuration && draw.file==frame.file && draw.resource==frame.resource &&
+        draw.modelRecord==frame.modelRecord && draw.lod==frame.lod &&
+        draw.bone==frame.mainBone && draw.definition==frame.boneDefinition && draw.world==frame.world &&
+        draw.paletteCount && draw.paletteCount<=RideMainMappingBudget && draw.localMainSlot<draw.paletteCount;
+}
 } // namespace ss2vr

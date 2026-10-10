@@ -10,6 +10,8 @@ import pefile
 
 PIN = '5628b4ed30a966f10c8e8ea46bf0789257a35ea80127bacacebe28b1ce5303df'
 ENGINE_PIN = 'da6efc9f72637eb3b6f48eadca2107be89b09c00618b6e72d5d3632938a7d851'
+CORE_PIN = '7a1bd56b9bfa3edfbb23f4d3c96490e40a7c0b031b85e797e1af91b2ba3cf207'
+EXE_PIN = '727901f161133ff653fcdc196858335b991b743e67deb448c03c808e5b33e28b'
 
 
 def require(condition, message):
@@ -95,6 +97,41 @@ def verify_draw_palette_reference(pe):
             'actual_draw_mapping_verified': False,
             'sampling_query_authorized': False, 'runtime_executed': False,
             'limits': 'finite pinned instruction/import check; no general CFG, loaded content, draw shader, grasp or input lifetime proof'}
+
+
+def verify_thread_query(core, executable):
+    """Finite pinned query body; no native execution or arbitrary unload census.
+
+    The primary executable imports Core, establishing ordinary loader residency
+    while the process executes. The getter has no engine callback/object access:
+    its helper returns a sentinel or tail-calls Kernel32 GetCurrentThreadId.
+    This assumes unmodified native code/IATs and normal import-loader lifetime.
+    """
+    require(core.OPTIONAL_HEADER.ImageBase==0x10000000 and core.FILE_HEADER.Machine==0x14c,
+            'Unsupported native thread-query ABI')
+    exports={e.name:e.address for e in core.DIRECTORY_ENTRY_EXPORT.symbols if e.name}
+    require(exports.get(b'?thrIsThisMainThread@SeriousEngine@@YAHXZ')==0x63ba0,
+            'Native thread-query export changed')
+    imports={i.address:(d.dll.lower(),i.name) for d in core.DIRECTORY_ENTRY_IMPORT for i in d.imports}
+    require(imports.get(0x1008008c)==(b'kernel32.dll',b'GetCurrentThreadId'),
+            'Native thread-query OS import changed')
+    require(b'core.dll' in {d.dll.lower() for d in executable.DIRECTORY_ENTRY_IMPORT},
+            'Primary executable lost Core import residency')
+    md=capstone.Cs(capstone.CS_ARCH_X86,capstone.CS_MODE_32)
+    decoded={i.address-0x10000000:(i.mnemonic,i.op_str)
+             for start,size in ((0x63ba0,0x15),(0x68e60,0x14))
+             for i in md.disasm(core.get_data(start,size),0x10000000+start)}
+    expected={0x63ba0:('call','0x10068e60'),0x63ba5:('mov','edx, dword ptr [0x100b55b8]'),
+              0x63bab:('xor','ecx, ecx'),0x63bad:('cmp','eax, edx'),0x63baf:('sete','cl'),
+              0x63bb2:('mov','eax, ecx'),0x63bb4:('ret',''),
+              0x68e60:('mov','ecx, dword ptr [0x100b55b8]'),0x68e66:('or','eax, 0xffffffff'),
+              0x68e69:('cmp','ecx, eax'),0x68e6b:('je','0x10068e73'),
+              0x68e6d:('jmp','dword ptr [0x1008008c]'),0x68e73:('ret','')}
+    require(decoded==expected,'Native thread-query body gained or changed instructions')
+    return {'core_sha256':CORE_PIN,'executable_sha256':EXE_PIN,'checked_instructions':len(expected),
+            'engine_callbacks_or_object_loads':False,'ordinary_import_residency_verified':True,
+            'initialized_main_thread_proved':False,'runtime_executed':False,
+            'limits':'Unmodified pinned code/IAT and normal import-loader lifetime; sentinel -1 is not initialized-thread proof; no arbitrary unload or active-runtime attestation'}
 
 
 def verify_seat_attachment(pe):
@@ -184,6 +221,11 @@ def verify(game):
     engine = (game / 'Bin/Engine.dll').read_bytes()
     require(hashlib.sha256(engine).hexdigest() == ENGINE_PIN, 'Unsupported Engine build')
     palette_reference = verify_draw_palette_reference(pefile.PE(data=engine, max_symbol_exports=100000))
+    core=(game/'Bin/Core.dll').read_bytes();executable=(game/'Bin/Sam2.exe').read_bytes()
+    require(hashlib.sha256(core).hexdigest()==CORE_PIN,'Unsupported Core build')
+    require(hashlib.sha256(executable).hexdigest()==EXE_PIN,'Unsupported primary executable')
+    thread_query=verify_thread_query(pefile.PE(data=core,max_symbol_exports=100000),
+                                    pefile.PE(data=executable,max_symbol_exports=100000))
     pe = pefile.PE(data=data, max_symbol_exports=100000)
     base = pe.OPTIONAL_HEADER.ImageBase
     require(base == 0x10000000 and pe.FILE_HEADER.Machine == 0x14c, 'Unsupported native ABI')
@@ -247,6 +289,7 @@ def verify(game):
         require(decoded.get(address) == instruction, 'Native steering seam changed at ' + hex(address))
     return {'native_sha256': PIN, 'checked_instructions': len(expected),
             'draw_palette_reference': palette_reference,
+            'thread_query':thread_query,
             'seat_attachment': verify_seat_attachment(pe),
             'native_drive_input': 'raw move.x steering; raw move.z drive',
             'wheeled_target_selection': 'input sign selects zero or native joint limits',

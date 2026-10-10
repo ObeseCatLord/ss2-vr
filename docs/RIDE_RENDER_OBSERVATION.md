@@ -1,5 +1,84 @@
 # Controlled ride and rendered model association
 
+## Current schema4: actual Main draw mapping
+
+The default-off observer now connects an occupied ride's existing Main/Seat
+frame to an actual native indexed draw through the existing render bank and GPU
+probe owner. Historical schemas1–3 below remain readable. This is passive source
+implementation; it does not enable vehicle grabbing or prove live GPU geometry.
+
+The new internal RideMainMapping policy admits an exact root instance, model,
+configuration/resource, selected LOD and global Main bone/definition. It validates
+every palette-map member's draw and model ownership and requires exactly one Main
+mapping. The actual local Main slot is copied; an authored palette ordinal or bone
+name is not substituted. The diagnostic budget is32 mappings per draw, not a
+native engine limit. SingleAffine and the ID2 three-entry weapon policy are unchanged.
+
+This distinction matters: the inspected Fighter LOD0 Default surface has one
+palette entry and2806 triangles; the Saucer LOD0 Saucer surface has15 entries and
+2626 triangles. The positive Saucer handles belong to that larger surface, so a
+whole-draw SingleAffine requirement would reject it. Authored one-hot weights and
+local-index bytes are candidates until actual bound bytes and position-program
+consumption agree. The current2673-triangle idle storage also cannot contain the
+entire Fighter surface. Neither incompatibility warrants borrowing a weapon ID
+or replacing the existing probe/cleanup architecture.
+
+Before and after the original successful indexed call, complete native bookends
+must agree on the frame and copied draw. Raw actual Main palette and model world
+matrices are retained independently of canonical-source equality. Sticky reentry
+denial starts before any public draw guard and remains through all COM Releases.
+Cleanup queries the current owner after every Release, then samples fresh reentry,
+reset generation, forwarding and routing/suppression conditions. Only normal
+native-finally return can snapshot an immutable receipt, clear its readiness and
+attempt the existing bank's final owner-gated record. No released device is
+dereferenced, geometry is replayed or native input is changed.
+
+Schema4 adds mainDrawCount and mainDrawOverflow to each identity. Up to eight
+copies per eye have contiguous ordinals and exactly one mainDraw, one
+mainDrawLayout and two mainDrawMatrix records (modelWorld and actualPalette).
+Each record joins row/bank/eye/ordinal and carries native draw/surface/instance,
+resource/LOD/Main identity, API arguments, channel descriptors and raw matrix words.
+All buffer, program, grasp and steering claims remain0. Overflow is explicit;
+eye visibility and counts can differ, including zero draws without loss of the
+core Main/Seat frame. Rejected or unsupported draws are not inventoried.
+
+The assessor's declared_draw_inventory_complete means that the declared bounded
+log inventory is complete without overflow. It does not certify complete native
+draw coverage, GPU semantics, authenticated source, usable grasp or input-time
+freshness. draw_mapping_copies_present separately reports whether any copies exist.
+Raw unsupported numerical values remain diagnostic; no transform is synthesized.
+
+Astra/xhigh design ADAPT and final source GO; current local routing verified,
+backend unattested. The finite native verifier pins both complete Core thread-query
+bodies (13 instructions), export, Kernel32 import and executable Core dependency.
+The proof assumes unmodified pinned code/imports and normal loader lifetime; the
+uninitialized sentinel does not prove initialized main-thread identity. Seven
+actual compiled owner-gate consumers reject a false gate before ordinary bank
+reads; mutation controls exercise target, test register, polarity and entry bypass.
+Those checks are not general CFG, callback-lifetime or native runtime proof.
+
+All four products rebuilt at source fingerprint
+fe0b725923e0e08543d6ccf134ba7bdb54a86e1bf58a83dfdbc83b76fc9d92ae,
+IPC10/wire7.82Debug and82assert-enabledRelease groups pass, as do relevant compiled
+forwarding/unwind/dispatch, reader and native mutation checks normal/-O. No game,
+editor, vehicle, headset, firing, input or network test, installation or staging ran.
+
+| Astra recommendation | Disposition |
+| --- | --- |
+| Observe actual Main mapping on a multi-bone surface | Adopted; no fabricated whole-draw affine or authored slot assumption. |
+| Keep missing draw evidence independent of Main/Seat | Adopted; zero draws and asymmetric eyes retain core evidence. |
+| Query owner before the final fresh cleanup flags | Fixed; certification follows all Releases and the query. |
+| Do not publish a mutable TLS receipt across admission | Fixed; immutable value snapshot, readiness cleared before record. |
+| Inventory completeness must not imply draw coverage | Fixed; declared inventory and copy presence are separate. |
+| Prove the native query's narrow callback/lifetime premise | Adapted to pinned query/import/dependency checks, with explicit assumptions. |
+
+Next: reuse the existing bounded buffer/range and program-copy plumbing with an
+explicit vehicle capacity policy, bind actual indexed Main-weighted grip vertices
+to this same draw, then integrate freshness/rearm/hand transfer at the original
+mode-appropriate ClientAction boundary. No new collector service is required.
+
+## Historical core observation
+
 The optional `SS2VR_LAB_RIDE_CONTROL=1` diagnostic now joins the current local
 operated ride to its model during the existing world-render borrow. It uses the
 existing frozen presentation bank, not the earlier getter receipt or a new
@@ -227,5 +306,5 @@ controls activation occurred.
 | Distinguish canonical draw source from bone placement | Adopted in the existing reader and current documentation. |
 | Avoid an additional bind transform for admitted authored vertices | Adapted: require the actual same-borrow draw palette and proven vertex/weight inputs. |
 | Do not infer final palette equality from DDE30 alone | Adopted; postPalette can modify the palette and equality remains unverified. |
-| Reuse SingleAffine and existing bounded buffer ownership | Adopted as the next production association boundary, with ride Main/resource/LOD checks. |
+| Reuse existing draw and bounded buffer ownership | Adapted by schema4: Saucer requires Main mapping in a multi-bone draw rather than whole-draw SingleAffine. |
 | Add a new native query, collector or inactive grip helper | Rejected for this slice; existing draw/copy boundaries remain reusable. |

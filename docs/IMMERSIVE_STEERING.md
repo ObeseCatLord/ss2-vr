@@ -1,5 +1,29 @@
 # Immersive steering: requirement and native evidence
 
+## Current implementation boundary — 2026-10-10
+
+The existing default-off [render observer](RIDE_RENDER_OBSERVATION.md) now joins
+the occupied vehicle's Main/Seat frame to an actual indexed draw, selected LOD,
+resource identity and actual Main palette slot. Its schema4 preserves core frames
+when draw evidence is absent and permits different eye inventories. Publication
+requires original success, all COM Releases, fresh owner/routing/generation checks
+and normal native-finally completion. All four products rebuilt;82Debug and
+82assert-enabledRelease groups pass. Astra/xhigh source GO, local routing verified,
+backend unattested. No vehicle/runtime/input test or controls activation occurred.
+
+Static resource evidence shows the Saucer handles belong to a15-bone surface;
+whole-draw SingleAffine is unsuitable. Fighter's one-bone surface has2806 triangles,
+exceeding existing2673-triangle idle storage. These are demonstrated narrow policy
+incompatibilities. Reuse existing bound-buffer/program ownership with explicit
+vehicle capacities and actual indexed Main-weighted subsets; do not widen ID2's
+three-entry policy or assume serialized palette slot10 equals a live draw slot.
+
+Loaded GPU bytes/program semantics, defensible grasp and simulation-time input
+freshness remain open. The native mode2 look/processed movement route and mode3
+sign-based steering remain distinct. Preserve joystick fallback, throttle/aim/fire,
+physics and ClientAction while adding availability-loss rearm and smooth hand
+transfer. This source association is not a completed physical steering feature.
+
 Owner requirement, 2026-10-07: vehicles with steering wheels must support grabbing
 and turning the wheel with either hand or both. Hand transfer should not cause a
 steering jump. This feature is not implemented yet.
