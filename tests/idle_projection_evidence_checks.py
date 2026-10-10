@@ -35,6 +35,37 @@ def fixture(retained=False,flags=0):
     return '\n'.join([*lines,*producer(flags),*extras])
 
 class Checks(unittest.TestCase):
+    def test_opportunity_chronology_is_diagnostic_and_requires_complete_owner(self):
+        from idle_projection_evidence import consume,validate
+        from assess_idle_weapon import integer,hexwords
+        import copy
+        record={'nativeId':2,'request':9,'eye':0,'hand':1,
+                'submissions':{'palette_copies':{'outerCompleted':1}}}
+        base={'request':'9','eye':'0','hand':'1'}
+        summary={**base,'count':'2','overflow':'0','ordinal':'5','rootQuery':'2',
+                 'palette':'3','submission':'0','diagnostic':'1'}
+        rows=[{**base,'index':str(i),'ordinal':str(1 if i==0 else 5),'kind':str(i),
+               'source':str(1+i),'pass':'4','stage':'3','pose':str(i),'exact':'1','oldGate':str(i)} for i in range(2)]
+        consume(record,'projectionOpportunitySummary',summary,integer,hexwords)
+        for row in rows:consume(record,'projectionOpportunity',row,integer,hexwords)
+        validate(record)
+        self.assertTrue(record['projection_opportunities']['diagnostic_only'])
+        self.assertFalse(record['projection_opportunities']['reference_replaced'])
+        self.assertFalse(record['projection_opportunities']['alignment_accepted'])
+        incomplete=copy.deepcopy(record);del incomplete['projection_opportunities']['rows'][1]
+        with self.assertRaises(ValueError):validate(incomplete)
+        crossed=copy.deepcopy(record);crossed['projection_opportunities']['palette']=1
+        with self.assertRaises(ValueError):validate(crossed)
+        duplicate=copy.deepcopy(record);duplicate['projection_opportunities']['rows'][1]['ordinal']=1
+        with self.assertRaises(ValueError):validate(duplicate)
+        for change in ({'source':'3'},{'oldGate':'1','pose':'0'},{'exact':'1','pass':'3'},
+                       {'ordinal':'0'},{'request':'10'}):
+            fresh=copy.deepcopy(record);fresh['projection_opportunities']['rows']={}
+            with self.assertRaises(ValueError):consume(fresh,'projectionOpportunity',{**rows[0],**change},integer,hexwords)
+        for change in ({'nativeId':1},{'submissions':{}},{}):
+            fresh={**record,**change}
+            if change:fresh.pop('projection_opportunities',None)
+            with self.assertRaises(ValueError):consume(fresh,'projectionOpportunitySummary',summary,integer,hexwords)
     def test_poly_bump_source_is_diagnostic_only(self):
         from idle_native_reference import native_reference
         text=fixture().replace('source=1 complete=1','source=2 complete=1')

@@ -170,6 +170,7 @@ static void __cdecl projectionSlots(const int32_t *slots) {
     const auto caller=reinterpret_cast<uintptr_t>(__builtin_return_address(0));
     auto *owner=ownsNativeThread()?idleProjectionOwner():nullptr;
     const uint32_t source=idleProjectionSlotsSource(projectionShaderBase,caller,reinterpret_cast<uintptr_t>(slots));
+    if(ownsNativeThread())observeIdleProjectionOpportunity(0,source);
     const bool selected=owner && source && (source==1 || owner->nativeId==13);
     const bool entered=selected && owner->projectionProbe.enterHelper();
     bool returned=false;
@@ -190,6 +191,8 @@ static void *__cdecl projectionFog(void *out) {
     IdleProjectionSnapshot sample;
     if(source)captureProjectionSnapshot(sample);
     auto *owner=source && ownsNativeThread()?idleProjectionOwner():nullptr;
+    // The post-production integer snapshot above precedes all bookkeeping.
+    if(ownsNativeThread())observeIdleProjectionOpportunity(1,source);
     const bool pending=owner && (source==1 || owner->nativeId==13) && owner->projectionProbe.enterFog(source);
     void *result=nullptr;
     withNativeFinally([&] {
@@ -1296,6 +1299,7 @@ static void observeIdleQuery(void *queue,uintptr_t caller) {
     std::memcpy(&instance,static_cast<const uint8_t*>(queue)+8,4);
     if(instance!=reinterpret_cast<uintptr_t>(binding.modelInstance))return; // Unrelated child query stays native.
     trace->callbacks|=IdleWeaponTrace::QueryRootSeen;
+    if(trace->nativeId==2)trace->projectionOpportunities.mark(trace->projectionOpportunities.rootQuery);
     if(!idleConfig(binding.modelInstance,config)) {
         trace->reject(IdleWeaponTrace::Rejection::QueryConfig);return;
     }
@@ -1332,6 +1336,7 @@ static void observeIdlePalette() {
     ScopeDrawBinding binding;IdleDrawIdentity identity;IdleWeaponTrace *trace=nullptr;
     if(paletteInvalidated || !currentIdleDraw(binding,identity,trace))return;
     trace->callbacks|=IdleWeaponTrace::PaletteSeen;
+    if(trace->nativeId==2)trace->projectionOpportunities.mark(trace->projectionOpportunities.palette);
     std::span<NativeModelRecord> records;
     if(!rendererArray(0x2eac20,MaxModelRecords,records)) {trace->reject(IdleWeaponTrace::Rejection::PaletteRecords);return;}
     unsigned matches=0;const NativeModelRecord *selected=nullptr;

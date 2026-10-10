@@ -4384,6 +4384,23 @@ IdleWeaponTrace *idleProjectionOwner() noexcept {
          trace->precedingStage==IdleWeaponTrace::Stage::Palette);
     return trace->admitted && stage && trace->poseCopied ? trace : nullptr;
 }
+void observeIdleProjectionOpportunity(unsigned kind,unsigned source) noexcept {
+    if(!physicalWeapon || !physicalWeapon->ordinaryCommand || !physicalWeapon->idle ||
+       physicalWeapon->hand<0 || physicalWeapon->hand>1 || eyeIndex<0 || eyeIndex>1)return;
+    auto *trace=physicalWeapon->idle;
+    if(!trace->admitted || trace->nativeId!=2)return;
+    auto *invocation=physicalWeapon;
+    bool exact=false,aborted=false;
+    withNativeFinally([&] {
+        ScopeDrawBinding binding;IdleDrawIdentity identity;IdleWeaponTrace *same=nullptr;
+        exact=currentIdleDraw(binding,identity,same) && same==trace && identity==trace->binding;
+    },[&](bool interrupted) noexcept {aborted=interrupted;});
+    if(aborted || physicalWeapon!=invocation || invocation->idle!=trace) {
+        trace->projectionOpportunities.overflow=true;return;
+    }
+    trace->projectionOpportunities.observe(kind,source,invocation->pass.stage,
+        unsigned(trace->stage),trace->poseCopied,exact,idleProjectionOwner()==trace);
+}
 int selectedIdleProbeWeapon() noexcept {
     static const int selected=[] {wchar_t value[3]{};
         const auto n=GetEnvironmentVariableW(L"SS2VR_LAB_IDLE_WEAPON",value,3);
@@ -4490,6 +4507,21 @@ bool idleRejectedRasterCurrent(const IdleRasterCopy &expected,const IdleWeaponTr
        !trace->poseCopied || !IdleWeaponTrace::observedStreamFamily(trace->inputFailure))return false;
     IdleRasterCopy now;
     return copyBoundIdleRaster(binding,identity,trace,now) && now==expected;
+}
+static void emitIdleProjectionOpportunities(const IdleWeaponTrace &trace) {
+    if(!trace.admitted || !trace.submissions.outerCompleted)return;
+    const auto &b=trace.binding;
+    if(trace.nativeId==2) {
+        const auto &op=trace.projectionOpportunities;
+        log("Lab idle projectionOpportunitySummary request=%llu eye=%u hand=%u count=%u overflow=%u ordinal=%u rootQuery=%u palette=%u submission=%u diagnostic=1",
+            b.request,b.eye,b.hand,op.count,unsigned(op.overflow),op.ordinal,op.rootQuery,op.palette,op.submission);
+        for(unsigned i=0;i<op.count && i<IdleProjectionOpportunities::MaxRows;++i) {
+            const auto &row=op.rows[i];
+            log("Lab idle projectionOpportunity request=%llu eye=%u hand=%u index=%u ordinal=%u kind=%u source=%u pass=%u stage=%u pose=%u exact=%u oldGate=%u",
+                b.request,b.eye,b.hand,i,row.ordinal,row.kind,row.source,row.passStage,row.traceStage,
+                row.poseCopied,row.exactDraw,row.oldGate);
+        }
+    }
 }
 static void emitIdlePaletteCompanions(const IdleWeaponTrace &trace) {
     if(trace.nativeId!=2)return;
@@ -5186,7 +5218,10 @@ static void renderTrackedWeapon(void *w, Matrix34 m, bool sniper, uintptr_t call
     // The joined companion emits only here, after normal original and
     // cleanup completion. Legacy diagnostics keep their existing schema/order.
     if(!returned && idleStorage)idleStorage->submissions.outerCompleted=false;
-    if(returned && idleStorage)withNativeFinally([&] {emitIdlePaletteCompanions(*idleStorage);},[](bool) noexcept {});
+    if(returned && idleStorage)withNativeFinally([&] {
+        emitIdlePaletteCompanions(*idleStorage);
+        emitIdleProjectionOpportunities(*idleStorage);
+    },[](bool) noexcept {});
 }
 static void __fastcall weaponRender(void *w, void *, Matrix34 m) {
     renderTrackedWeapon(w, m, false,reinterpret_cast<uintptr_t>(__builtin_return_address(0)));

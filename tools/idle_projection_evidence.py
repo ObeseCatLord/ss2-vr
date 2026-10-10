@@ -5,6 +5,28 @@ WIDTHS={'model':12,'view':12,'projection':16,'cachedVP':16,'cachedMVP':16}
 def consume(record,kind,f,integer,hexwords):
     if not BASE.issubset(f) or any(integer(f[k])!=record[k] for k in BASE):
         raise ValueError('Foreign projection producer record')
+    if kind=='projectionOpportunitySummary':
+        names={'count','overflow','ordinal','rootQuery','palette','submission','diagnostic'}
+        if record.get('nativeId')!=2 or set(f)!=BASE|names or 'projection_opportunities' in record:
+            raise ValueError('Projection opportunity summary schema/duplicate')
+        values={k:integer(f[k],0,64 if k=='count' else 1 if k in ('overflow','diagnostic') else 0xffffffff) for k in names}
+        if values['diagnostic']!=1 or values['count']>values['ordinal'] or \
+           any(values[k]>values['ordinal'] for k in ('rootQuery','palette','submission')) or \
+           record.get('submissions',{}).get('palette_copies',{}).get('outerCompleted')!=1:
+            raise ValueError('Uncompleted or inconsistent projection opportunity owner')
+        values.update(rows={},diagnostic_only=True,reference_replaced=False,alignment_accepted=False)
+        record['projection_opportunities']=values;return
+    if kind=='projectionOpportunity':
+        names={'index','ordinal','kind','source','pass','stage','pose','exact','oldGate'}
+        values=record.get('projection_opportunities')
+        if values is None or set(f)!=BASE|names:raise ValueError('Projection opportunity before summary/schema')
+        row={k:integer(f[k],0,1 if k in ('kind','pose','exact','oldGate') else 2 if k=='source' else
+                       5 if k=='pass' else 4 if k=='stage' else 0xffffffff) for k in names}
+        if row['index']>=values['count'] or row['index'] in values['rows'] or \
+           not 0<row['ordinal']<=values['ordinal'] or row['exact'] and row['pass']!=4 or \
+           row['oldGate'] and not row['pose']:
+            raise ValueError('Projection opportunity bounds/gate disagreement')
+        values['rows'][row['index']]=row;return
     if kind=='projectionSummary':
         if set(f)!=BASE|{'configured','count','invalidations','blocked','pending'} or 'projection_probe' in record:
             raise ValueError('Projection summary schema/duplicate')
@@ -41,6 +63,16 @@ def consume(record,kind,f,integer,hexwords):
     v['data'][key]=hexwords(f['values'],WIDTHS[which])
 
 def validate(record):
+    opportunities=record.get('projection_opportunities')
+    if opportunities is not None:
+        if set(opportunities['rows'])!=set(range(opportunities['count'])):
+            raise ValueError('Truncated projection opportunity inventory')
+        ordinals=[row['ordinal'] for row in opportunities['rows'].values()]
+        if ordinals!=sorted(set(ordinals)):
+            raise ValueError('Projection opportunity chronology is not ordered and unique')
+        markers=[opportunities[k] for k in ('rootQuery','palette','submission') if opportunities[k]]
+        if len(set(markers+ordinals))!=len(markers)+len(ordinals):
+            raise ValueError('Projection opportunity event ordinals overlap')
     p=record.get('projection_probe')
     if p is None:return
     if set(p['pairs'])!=set(range(1,p['count']+1)):raise ValueError('Missing native producer pairs')

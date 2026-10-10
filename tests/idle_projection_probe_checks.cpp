@@ -13,6 +13,27 @@ static IdleProjectionSnapshot sample(uint32_t flags=0) {
     return s;
 }
 int main() {
+    {
+        IdleProjectionOpportunities o;
+        o.observe(0,1,4,0,false,true,false);
+        o.mark(o.rootQuery);o.mark(o.palette);o.mark(o.submission);
+        o.observe(1,2,4,3,true,true,true);
+        assert(o.count==2 && o.ordinal==5 && o.rootQuery==2 && o.palette==3 && o.submission==4);
+        assert(o.rows[0].ordinal==1 && !o.rows[0].oldGate && o.rows[0].exactDraw);
+        assert(o.rows[1].ordinal==5 && o.rows[1].source==2 && o.rows[1].oldGate);
+        while(o.count<o.MaxRows)o.observe(0,0,0,0,false,false,false);
+        o.observe(0,1,4,2,true,true,true);
+        assert(o.count==o.MaxRows && o.overflow);
+        o.ordinal=UINT32_MAX;o.mark(o.rootQuery);
+        assert(o.ordinal==UINT32_MAX && o.rootQuery==2 && o.overflow);
+        IdleProjectionOpportunities malformed;malformed.observe(2,1,4,2,true,true,true);
+        assert(malformed.overflow && !malformed.count);
+        malformed.count=malformed.MaxRows+1;malformed.observe(0,1,4,2,true,true,true);
+        assert(malformed.overflow && malformed.count==malformed.MaxRows+1);
+        IdleWeaponTrace untouched;untouched.projectionOpportunities=o;
+        assert(untouched.stage==IdleWeaponTrace::Stage::Empty && !untouched.poseCopied &&
+               !untouched.projectionProbe.count && !untouched.projectionProbe.blocked);
+    }
     constexpr uintptr_t base=0x10000000;
     assert(idleProjectionSlotsSource(base,base+0xf4ff,base+0x2834c)==1);
     assert(idleProjectionSlotsSource(base,base+0x856b,base+0x27ccc)==2);

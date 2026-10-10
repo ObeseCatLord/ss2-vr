@@ -352,6 +352,7 @@ struct IdleWeaponTrace {
         return idleBufferRanges(p.content,std::span(p.before.declaration).first(p.before.declarationCount),ranges,nullptr,2);
     }
     IdleProjectionProbe projectionProbe{};
+    IdleProjectionOpportunities projectionOpportunities{};
     uint32_t paletteProjectionSequence(unsigned slot) const noexcept {
         if(!paletteApiPublishable(slot) || projectionProbe.blocked || projectionProbe.pending ||
            projectionProbe.helperActive || projectionProbe.fogActive)return 0;

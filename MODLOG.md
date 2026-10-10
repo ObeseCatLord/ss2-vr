@@ -1848,3 +1848,23 @@ eye animation-query/config receipt is absent. Preserve diagnostic rejection; no
 alignment/grasp/GPU/native-release acceptance. Requested bounded Astra design
 review of a current-draw metadata/raw-projection adapter; no new native change
 is implemented before its ownership/phase decision.
+
+
+## 2026-10-10 — actual projection-source opportunity result
+
+Astra design ADAPT rejected premature sampler widening/configuration seeding.
+Implemented only bounded invocation-local scalar opportunity/timeline counters;
+existing source1/reference/animation admission remains unchanged. Normal outer
+cleanup precedes copied-value emission. Scoped Astra/xhigh source GO, local routing
+verified/backend unattested. Four products rebuilt at3f49bd6c/IPC11/wire7;82Debug/
+82assert-Release, relevant native/compiled projection gates normal/-O and artifact
+contracts pass. Optimized capacity warning led to>=guard plus invalid-count test.
+
+One fresh private neutral native capture completed scene/preparation/shutdown,
+without firing/movement.32joined owners, zero overflow: source2slots/fog callbacks
+occur in both eyes at native pass4with current weapon bindings; source1is absent
+within this finite observation. Unclassified callbacks occur before the second
+submission. This changes the next adapter question to actual source2support and
+unclassified-callback handling. No projection reference/grasp/alignment/native
+release/full-mod/device/MP completion inferred. All captures/fixtures remain
+private and preserved.

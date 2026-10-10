@@ -866,6 +866,8 @@ static HRESULT probeScopeDraw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base
         // Arm an independent bounded value owner before the first AddRef.
         // The existing geometry rejection (including cap8) is untouched.
         probe.submissionOwner=idleSubmissionOwner();
+        if(probe.submissionOwner && probe.submissionOwner->nativeId==2)
+            probe.submissionOwner->projectionOpportunities.mark(probe.submissionOwner->projectionOpportunities.submission);
         if(probe.submissionOwner)probe.submissionSlot=probe.submissionOwner->submissions.reserve(
             ScopeIndexedDraw{uint32_t(type),base,minimum,vertices,start,primitives});
         if(probe.submissionOwner)probe.paletteApiSlot=probe.submissionOwner->reservePaletteApi(probe.submissionSlot);

@@ -14,6 +14,8 @@ void retireIdleSubmissionOwner(IdleWeaponTrace *) noexcept;
 // Pure invocation metadata borrow. The caller separately establishes native
 // thread ownership before original entry; DIP revalidates the native binding.
 IdleWeaponTrace *idleProjectionOwner() noexcept;
+// Passive counters outside native matrix production; no admission changes.
+void observeIdleProjectionOpportunity(unsigned kind,unsigned source) noexcept;
 // Boolean-only association check for an already rejected diagnostic. Never
 // provides an admitted raster/geometry output or changes rejection policy.
 bool idleRejectedRasterCurrent(const IdleRasterCopy &,const IdleWeaponTrace *);

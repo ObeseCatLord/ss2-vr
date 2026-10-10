@@ -4,6 +4,31 @@
 #include <span>
 
 namespace ss2vr {
+// Invocation-local chronology only; never an owner, producer selector or
+// reference. Capacity loss remains explicit instead of choosing passing rows.
+struct IdleProjectionOpportunities {
+    struct Row {
+        uint32_t ordinal=0,kind=0,source=0,passStage=0,traceStage=0;
+        uint32_t poseCopied=0,exactDraw=0,oldGate=0;
+    };
+    static constexpr unsigned MaxRows=64;
+    std::array<Row,MaxRows> rows{};
+    uint32_t count=0,ordinal=0,rootQuery=0,palette=0,submission=0;
+    bool overflow=false;
+    uint32_t next() noexcept {
+        if(ordinal==UINT32_MAX) {overflow=true;return 0;}
+        return ++ordinal;
+    }
+    void mark(uint32_t &first) noexcept {
+        const auto value=next();if(!first)first=value;
+    }
+    void observe(uint32_t kind,uint32_t source,uint32_t pass,uint32_t stage,
+                 bool pose,bool exact,bool gate) noexcept {
+        const auto value=next();
+        if(!value || count>=MaxRows || kind>1 || source>2 || stage>4) {overflow=true;return;}
+        rows[count++]={value,kind,source,pass,stage,unsigned(pose),unsigned(exact),unsigned(gate)};
+    }
+};
 // Diagnostic values only. Pointer-shaped words are comparison keys, never
 // retained borrows or independent projection inputs. No native state is written.
 struct IdleProjectionSnapshot {

@@ -1,5 +1,33 @@
 # Implementation status — 2026-10-10
 
+## Bounded projection opportunities measured in actual ID2 gameplay
+
+Added invocation-local bounded scalar counters under the existing32ID2 trace cap,
+without changing animation/configuration or projection/reference admission.
+Bookkeeping stays outside native matrix-production snapshots; output uses copied
+values after normal outer cleanup. The reader requires complete joined chronology
+and retains false reference/grasp/alignment claims. Astra/xhigh design ADAPT and
+bounded patch source GO, current local routing verified/backend unattested.
+
+All4products rebuilt at native fingerprint
+3f49bd6c0dc8fdb2aa26902ef41e68e2078e2ea6c3aa9d6f65ad9bb59cf8f4ab;
+IPC11/wire7/layout unchanged.82Debug/82assert-enabledRelease groups and actual
+game/server native/compiled projection checks normal/-O pass. Optimized C++
+verification prompted a robust capacity check and invalid-count regression.
+
+One fresh private neutral capture confirmed exact Jungle simulation, native ID2
+preparation and clean native/display shutdown. All32joined opportunity owners
+have zero overflow. Both eyes show source2slots/fog callbacks at pass4with current
+weapon bindings; source1was absent within these admitted invocations. Source0
+callbacks follow before the second submission. This does not identify every
+possible producer or establish reference/animation/grasp validity.
+
+The next source decision is support for the observed source2path in the existing
+adapter, including unclassified later-callback handling. No sampler was widened,
+no trace configuration was seeded and no alignment correction was activated.
+Captured data/assets remain private; hardware, firing and multiplayer acceptance
+remain user-operated. Earlier3f49-predecessor identities below are historical.
+
 ## Actual neutral Auto Shotgun capture; reference gate still open
 
 The rebuilt observer successfully opened IPC11 in a fresh private capture.
