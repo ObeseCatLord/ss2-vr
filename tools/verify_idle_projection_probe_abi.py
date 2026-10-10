@@ -15,6 +15,27 @@ PINS={'Engine.dll':'da6efc9f72637eb3b6f48eadca2107be89b09c00618b6e72d5d3632938a7
 def require(ok,message):
     if not ok:raise ValueError(message)
 
+def verify_raw_diagnostic_source(engine,remote):
+    """Finite bypass regressions; native forwarding still needs source review."""
+    owner=engine.split('IdleWeaponTrace *idleRawProjectionOwner() noexcept {',1)[1].split(
+        'void observeIdleProjectionOpportunity(',1)[0]
+    for token in ('!physicalWeapon->ordinaryCommand','!trace->admitted || trace->nativeId!=2',
+                  'withNativeFinally(', 'currentIdleDraw(binding,identity,same) && same==trace && identity==trace->binding',
+                  'aborted || physicalWeapon!=invocation || invocation->idle!=trace || !exact ||',
+                  'weaponPairFault || invocation->pass.failed || invocation->pass.stage!=4',
+                  'trace->projectionProbe.invalidate();return nullptr;'):
+        require(token in owner,'Missing raw diagnostic owner guard: '+token)
+    require('poseCopied' not in owner and 'trace->config=' not in owner,'Raw diagnostic changes admission')
+    raster=engine.split('static bool copyBoundIdleRaster(',1)[1].split('IdleWeaponTrace *idleSubmissionOwner()',1)[0]
+    require('if((trace->nativeId!=2 || p.source==1) && out.matchesProjection(p))out.projectionSequence=p.sequence;' in raster,
+            'ID2 raw SOURCE2 reached raster association')
+    require('break; // Only the latest corresponding producer' in raster,'Raster seeks earlier passing producer')
+    hooks=remote.split('static void __cdecl projectionSlots(',1)[1].split('static void producerAbort()',1)[0]
+    require(hooks.count('if(raw && (!owner || owner->nativeId==2))owner=idleRawProjectionOwner();')==2,
+            'Missing initial raw owner check or failed-check fallback')
+    require(hooks.count('raw && owner->nativeId==2?idleRawProjectionOwner():idleProjectionOwner();')==2,
+            'Missing raw completion owner check')
+
 def decode(raw,address):
     decoder=capstone.Cs(capstone.CS_ARCH_X86,capstone.CS_MODE_32);decoder.detail=True
     return list(decoder.disasm(raw,address))
@@ -157,6 +178,8 @@ def native(game):
     return result
 
 def verify(game,obj):
+    root=Path(__file__).resolve().parents[1]
+    verify_raw_diagnostic_source((root/'src/game/engine.cpp').read_text(),(root/'src/game/remote_render.cpp').read_text())
     facts=native(game);b=bodies(obj)
     sample=unique(b,'captureProjectionSnapshot(ss2vr::IdleProjectionSnapshot&)')
     facts['sampler']=verify_sample(instructions(sample))

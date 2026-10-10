@@ -1,5 +1,20 @@
 # Mod journal
 
+## 2026-10-10 — ID2 SOURCE2 raw projection observation
+
+Actual neutral gameplay showed SOURCE2 callbacks in both eyes where the old
+pose-qualified owner declined. Reused existing hooks/probe storage with current
+admitted-ID2 binding checks outside the native integer snapshot interval. Native
+forwarding and cleanup remain unchanged; no new producer/renderer/protocol.
+
+Astra design ADAPT caught an additional raster-association consumer; ID2 SOURCE2
+now explicitly cannot become a reference there or in existing palette/sequence
+gates. Bounded patch source GO, local Astra/xhigh routing verified/backend
+unattested. All4products b268d3e4... IPC11/wire7,82Debug/82assertRelease, nine
+normal/-O verifier cases, game/server compiled projection gates normal/-O and
+artifact/product contracts pass. Actual raw capture remains next; no alignment,
+grasp, hardware, firing or multiplayer acceptance claimed.
+
 ## 2026-10-10 — completed stereo ride bank publication
 
 Corrected a real handoff defect missed by earlier individual-guard tests:

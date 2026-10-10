@@ -168,10 +168,12 @@ static void captureProjectionSnapshot(IdleProjectionSnapshot &out) noexcept {
 }
 static void __cdecl projectionSlots(const int32_t *slots) {
     const auto caller=reinterpret_cast<uintptr_t>(__builtin_return_address(0));
-    auto *owner=ownsNativeThread()?idleProjectionOwner():nullptr;
     const uint32_t source=idleProjectionSlotsSource(projectionShaderBase,caller,reinterpret_cast<uintptr_t>(slots));
     if(ownsNativeThread())observeIdleProjectionOpportunity(0,source);
-    const bool selected=owner && source && (source==1 || owner->nativeId==13);
+    auto *owner=ownsNativeThread()?idleProjectionOwner():nullptr;
+    const bool raw=source==2 && ownsNativeThread();
+    if(raw && (!owner || owner->nativeId==2))owner=idleRawProjectionOwner();
+    const bool selected=owner && source && (source==1 || owner->nativeId==13 || (raw && owner->nativeId==2));
     const bool entered=selected && owner->projectionProbe.enterHelper();
     bool returned=false;
     withNativeFinally([&] {originalProjectionSlots(slots);returned=true;},[&](bool aborted) noexcept {
@@ -179,7 +181,9 @@ static void __cdecl projectionSlots(const int32_t *slots) {
     });
     // Finish all owner lookups/finally callbacks BEFORE the pre-production
     // sample. There is no callback or floating arithmetic from sample to return.
-    if(!entered || !returned || idleProjectionOwner()!=owner)return;
+    if(!entered || !returned)return;
+    auto *current=raw && owner->nativeId==2?idleRawProjectionOwner():idleProjectionOwner();
+    if(current!=owner) {owner->projectionProbe.invalidate();return;}
     auto *sample=owner->projectionProbe.begin(source);
     if(sample)captureProjectionSnapshot(*sample);
 }
@@ -193,11 +197,16 @@ static void *__cdecl projectionFog(void *out) {
     auto *owner=source && ownsNativeThread()?idleProjectionOwner():nullptr;
     // The post-production integer snapshot above precedes all bookkeeping.
     if(ownsNativeThread())observeIdleProjectionOpportunity(1,source);
-    const bool pending=owner && (source==1 || owner->nativeId==13) && owner->projectionProbe.enterFog(source);
+    const bool raw=source==2 && ownsNativeThread();
+    if(raw && (!owner || owner->nativeId==2))owner=idleRawProjectionOwner();
+    const bool pending=owner && (source==1 || owner->nativeId==13 || (raw && owner->nativeId==2)) && owner->projectionProbe.enterFog(source);
     void *result=nullptr;
     withNativeFinally([&] {
         result=originalProjectionFog(out);
-        if(pending)owner->projectionProbe.end(sample,result==out && idleProjectionOwner()==owner);
+        if(pending) {
+            auto *current=raw && owner->nativeId==2?idleRawProjectionOwner():idleProjectionOwner();
+            owner->projectionProbe.end(sample,result==out && current==owner);
+        }
     },[&](bool aborted) noexcept {
         if(pending)owner->projectionProbe.leaveFog(aborted);
     });

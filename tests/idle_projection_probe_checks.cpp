@@ -61,6 +61,16 @@ int main() {
     for(unsigned source:{0u,3u,0xffffffffu}) {
         IdleProjectionProbe q;assert(!q.begin(source) && q.blocked && !q.pending);
     }
+    { // A completed raw SOURCE2 pair survives retirement as history, never a
+      // source1 reference. A later interrupted pair cannot replace that history.
+      IdleProjectionProbe q;auto b=sample();auto a=sample(6);
+      *q.begin(2)=b;assert(q.enterFog(2));q.end(a,true);q.leaveFog(false);
+      assert(q.count==1 && q.pairs[0].qualified());
+      assert(!q.currentSequence(a,100,200,std::span(a.model)));
+      *q.begin(2)=b;assert(q.enterFog(2));q.end(a,false);q.leaveFog(false);
+      q.retire();assert(q.count==1 && q.blocked && q.pairs[0].qualified());
+      assert(!q.currentSequence(a,100,200,std::span(a.model)));
+    }
     {IdleProjectionProbe q;q.pending=true;q.count=IdleProjectionProbe::MaxPairs;
      assert(!q.enterFog(2) && q.blocked);}
     {IdleProjectionProbe p;assert(p.enterHelper());assert(!p.enterHelper());

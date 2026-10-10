@@ -7,6 +7,23 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 from verify_idle_projection_probe_abi import decode,verify_sample,sample_prefix,instructions,verify_producer_interval
 
 class Checks(unittest.TestCase):
+    def test_raw_source2_cannot_bypass_owner_or_promote_raster(self):
+        from verify_idle_projection_probe_abi import verify_raw_diagnostic_source
+        root=Path(__file__).resolve().parents[1]
+        engine=(root/'src/game/engine.cpp').read_text();remote=(root/'src/game/remote_render.cpp').read_text()
+        verify_raw_diagnostic_source(engine,remote)
+        for token in ('!trace->admitted || trace->nativeId!=2',
+                      'same==trace && identity==trace->binding',
+                      'weaponPairFault || invocation->pass.failed || invocation->pass.stage!=4',
+                      'trace->nativeId!=2 || p.source==1',
+                      'break; // Only the latest corresponding producer'):
+            with self.subTest(token=token),self.assertRaises(ValueError):
+                verify_raw_diagnostic_source(engine.replace(token,'true'),remote)
+        for token in ('if(raw && (!owner || owner->nativeId==2))owner=idleRawProjectionOwner();',
+                      'raw && owner->nativeId==2?idleRawProjectionOwner():idleProjectionOwner();'):
+            with self.subTest(token=token),self.assertRaises(ValueError):
+                verify_raw_diagnostic_source(engine,remote.replace(token,'idleProjectionOwner();'))
+
     def test_native_bookend_interval_rejects_calls_returns_control_changes_and_escape(self):
         self.assertEqual(verify_producer_interval(decode(bytes.fromhex('90 d8 c1'),0x1000),0x1000,0x1003),2)
         for raw in ('ff d0','c3','d9 2c 24','db e3','0f ae 14 24','eb 7f'):

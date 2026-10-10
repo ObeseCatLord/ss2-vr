@@ -4384,6 +4384,24 @@ IdleWeaponTrace *idleProjectionOwner() noexcept {
          trace->precedingStage==IdleWeaponTrace::Stage::Palette);
     return trace->admitted && stage && trace->poseCopied ? trace : nullptr;
 }
+IdleWeaponTrace *idleRawProjectionOwner() noexcept {
+    if(!physicalWeapon || !physicalWeapon->ordinaryCommand || !physicalWeapon->idle ||
+       physicalWeapon->hand<0 || physicalWeapon->hand>1 || eyeIndex<0 || eyeIndex>1)
+        return nullptr;
+    auto *invocation=physicalWeapon;
+    auto *trace=invocation->idle;
+    if(!trace->admitted || trace->nativeId!=2)return nullptr;
+    bool exact=false,aborted=false;
+    withNativeFinally([&] {
+        ScopeDrawBinding binding;IdleDrawIdentity identity;IdleWeaponTrace *same=nullptr;
+        exact=currentIdleDraw(binding,identity,same) && same==trace && identity==trace->binding;
+    },[&](bool interrupted) noexcept {aborted=interrupted;});
+    if(aborted || physicalWeapon!=invocation || invocation->idle!=trace || !exact ||
+       weaponPairFault || invocation->pass.failed || invocation->pass.stage!=4) {
+        trace->projectionProbe.invalidate();return nullptr;
+    }
+    return trace;
+}
 void observeIdleProjectionOpportunity(unsigned kind,unsigned source) noexcept {
     if(!physicalWeapon || !physicalWeapon->ordinaryCommand || !physicalWeapon->idle ||
        physicalWeapon->hand<0 || physicalWeapon->hand>1 || eyeIndex<0 || eyeIndex>1)return;
@@ -4437,7 +4455,9 @@ static bool copyBoundIdleRaster(const ScopeDrawBinding &binding,const IdleDrawId
             const auto &p=trace->projectionProbe.pairs[n-1];
             if(!p.qualified() || p.after.modelRecord!=out.projectionModelAddress ||
                p.after.drawRecord!=out.projectionDrawAddress)continue;
-            if(out.matchesProjection(p))out.projectionSequence=p.sequence;
+            // ID2 SOURCE2 is raw diagnostic evidence only. Do not skip it to
+            // choose an older matching producer; existing ID13 behavior stays.
+            if((trace->nativeId!=2 || p.source==1) && out.matchesProjection(p))out.projectionSequence=p.sequence;
             break; // Only the latest corresponding producer; no passing-choice search.
         }
     }

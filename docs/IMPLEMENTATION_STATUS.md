@@ -1,5 +1,34 @@
 # Implementation status — 2026-10-10
 
+## ID2 SOURCE2 raw diagnostic connected; capture next
+
+The observed native SOURCE2 callbacks now use the existing installed bookends,
+integer sampler and fixed probe storage under a separate admitted-ID2 current
+binding check. Native-finally lookup/reentry/pass checks precede the pre-snapshot
+and follow the first post-snapshot, outside the matrix production interval.
+Original Slots/Fog calls, cleanup and returned Fog pointer remain native.
+
+Astra's design ADAPT found an additional raster-association consumer; its guard
+was adopted. ID2 SOURCE2 cannot supply raster or palette projection sequences or
+independent reference/grasp/alignment admission. The latest corresponding row
+does not fall back to an older SOURCE1 match. Raw pairs remain historical copied
+diagnostics when later unclassified callbacks occur. No pose/configuration or
+animation-query admission was widened. Bounded Astra patch source GO, current
+local default/Astra/xhigh tags verified; backend attestation unavailable.
+
+All4products rebuilt at native fingerprint
+b268d3e447c512ef3e09ffb7abd67f8e51b0928addd48d2a11c4c0b55c944196;
+IPC11/wire7 unchanged.82Debug/82assert-enabledRelease groups, nine projection
+verifier cases normal/-O, game/server compiled/native projection gates normal/-O
+and artifact/product contracts pass. Reviewer lacked Capstone in its interpreter;
+main's dependency-equipped full tests passed. Negative controls cover owner,
+late failure/binding, completion and forbidden raster-reference bypasses; portable
+checks cover raw SOURCE2 retirement without source1 reference promotion.
+
+Next: one fresh matched private neutral capture of SOURCE2 control/flags/operands
+and cache bookends in both eyes. Production alignment remains IDs1/13-only; own-DIP
+membership, winning animation/grasp and full all-weapon equivalence remain open.
+
 ## Bounded projection opportunities measured in actual ID2 gameplay
 
 Added invocation-local bounded scalar counters under the existing32ID2 trace cap,

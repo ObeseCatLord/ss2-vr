@@ -1,5 +1,27 @@
 # Current source continuation
 
+## Active capture authority and actual ID2 result — 2026-10-10
+
+The user's all-necessary-captures approval supersedes the pending ID2 permission
+entries below. Necessary private neutral grant/equip/save preparation is allowed;
+desktop interference and automated firing/movement/hardware/vehicle/MP acceptance
+remain excluded. Historical V48 readiness and permission entries are preserved.
+
+The latest matched V52 capture reached exact Jungle simulation, native ID2
+preparation and clean native/private-display shutdown. Both eyes showed SOURCE2
+projection callbacks at native pass4/current weapon binding in all32admitted
+invocations; SOURCE1was absent within that finite observation, and unclassified
+callbacks followed before the second submission. Geometry readiness remains
+rejected: this is neither own-DIP projection nor animation/grasp/alignment evidence.
+
+Astra's bounded design ADAPT selects raw SOURCE2 observation through existing
+installed bookends and fixed probe storage. The additional raster-association
+consumer must exclude ID2 SOURCE2 alongside the existing source1-only sequence
+and palette gates. Current source patch is under review/build; no alignment
+correction or admission widening is authorized by these counters. Use the private
+current handoff and IMPLEMENTATION_STATUS for subsequent exact build/capture
+identities. Preserve every attempted fixture and original installation/WIP/saves.
+
 ## Current matched collection readiness — 2026-10-10
 
 V48 now supplies a fresh private matched package/fixture for native0047bd77...
