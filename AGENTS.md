@@ -26,6 +26,15 @@ publication is outside that source-only approval. Historical instructions are
 preserved byte-for-byte in [the archive](docs/AGENTS_HISTORY_2026_10_09.md);
 use this active file and current user messages for authority.
 
+## Latest attachment scope — 2026-10-10
+
+The user requires practical controller gun attachment and laser aiming. Detailed
+winning-animation/cache attribution and certified anatomical grasp references are
+optional research, not ordinary attachment prerequisites. This supersedes stricter
+historical alignment gates below. Reuse calibratedGrip/native placement/muzzle
+transport; preserve native lifetime, melee release and multiplayer ownership checks.
+Do not describe practical calibration as a certified anatomical measurement.
+
 ## Workspace and ownership
 
 Use this isolated sanitized development checkout. Preserve the old installed-game

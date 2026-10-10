@@ -1,5 +1,19 @@
 # Native hand/weapon alignment gate
 
+## Latest user clarification — 2026-10-10
+
+Ordinary guns need practical controller attachment and laser aiming. The existing
+calibratedGrip/native placement/muzzle route supplies that behavior. Detailed
+winning-animation/cache and anatomical grasp qualification below is optional
+research; it no longer gates basic attachment. Native lifetime, melee release and
+multiplayer ownership checks remain necessary. User VR fit/aim checks remain open.
+
+## Historical detailed reference qualification
+
+The stricter evidence requirements below apply to claims of measured native grasp
+or uploaded-transform attribution. They no longer gate practical controller gun
+attachment under the latest user clarification.
+
 Current source installs the reviewed position-only correction for the matched
 stock ID1 handle. See [implementation and limits](ID1_MODEL_ALIGNMENT.md). Older
 no-correction statements below record their original evidence boundary; they do

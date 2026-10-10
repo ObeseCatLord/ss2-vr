@@ -1,5 +1,40 @@
 # Current source continuation
 
+## 2026-10-10 — practical controller attachment is the requirement
+
+The user clarified that ordinary guns need to attach properly to controllers and
+use laser pointers for aiming. Detailed winning-animation/cache attribution and
+certified anatomical grasp references are optional research, not prerequisites
+for ordinary controller attachment. Earlier stricter alignment statements remain
+historical evidence; they must not restart that diagnostic chain as a completion
+gate. Preserve actual native lifetime, melee press/release and multiplayer ownership
+checks. Do not label practical calibration as a certified anatomical measurement.
+
+The existing implementation uses the physical controller grip position and
+runtime aim orientation. Per-weapon position/rotation calibration is applied by
+`calibratedGrip`; native model placement, muzzle retargeting and outgoing handheld
+poses use that calibrated basis. Lasers originate from the retargeted native
+muzzle and use native collision queries. Stock animation, native weapon eligibility,
+ammo and firing remain native. Visual fit and laser/shot agreement are part of the
+user-operated VR checks; no new firing or hardware acceptance is claimed.
+
+The optional uncommitted Event-copy diagnostic was preserved privately and removed
+from active source. Its cache investigation is closed. No new capture is planned
+to satisfy that optional proof. Continue concrete gun attachment/laser defects and
+the remaining melee, vehicle, collision and multiplayer work.
+
+## 2026-10-10 — right-eye diagnostic copy completed
+
+The fresh follow-up reached native Jungle and completed 126 neutral stereo world
+projection pairs, then shut down native processes and the private display cleanly
+with no survivors or cleanup errors. Both 1280×720 images were inspected; 602,366
+of 921,600 pixels differ, with both guns and laser lines visible. All 64 admitted
+native palette/API/content copies completed across both eyes. The diagnostic
+reference reader still rejects its optional animation/grasp qualification. This
+is not a startup failure and does not block ordinary attachment under the user's
+clarification above. No firing, head-motion, headset or multiplayer acceptance is
+added. Save reload remains unverified; captures and saves remain private.
+
 ## 2026-10-10 — observe each native draw without requiring a repeated event
 
 The ID2 diagnostic adapter now accepts configuration from its own current native

@@ -1,5 +1,19 @@
 # Local integration continuation — current status first
 
+## Latest continuation — 2026-10-10
+
+The user clarified practical controller attachment and laser aiming. Reuse existing
+calibratedGrip/native model+muzzle/outgoing pose paths; optional winning-animation/
+cache and certified anatomical grasp research no longer gates ordinary attachment.
+The cache investigator is closed and its optional uncommitted diagnostic is archived
+privately and removed from active source. Preserve melee release/MP ownership checks.
+
+Latest neutral capture completed126 worldprojection pairs,64 native copies across
+both eyes and clean native/private-display shutdown. Optional reference rejection
+is not a startup crash. No new firing/head-motion/hardware/MP acceptance. Products
+remain at011f29229dcba94b41ef1b814a6d86084e007d1d44a1f67d5d7022779641359b,
+IPC11/wire7; no runtime/build/review operation live. See current status for limits.
+
 The actual delivered user approval permits public source and sanitized RE notes
 with empty author/committer emails; no assets/binaries/credentials, Actions disabled.
 Online play with other mod users is an explicit requirement. Preserve the original
