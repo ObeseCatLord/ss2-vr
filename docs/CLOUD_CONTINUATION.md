@@ -1,5 +1,23 @@
 # Current source continuation
 
+## Current physical grip continuity correction — 2026-10-10
+
+PhysicalGestureInput now consumes the existing grip generation independently of
+trigger identity in all three local sample/validation/publication consumers.
+Skipped loss cannot borrow prior quiet into a false swing. Replaced/zero epochs
+revoke provenance, while actual native High reconciliation/manual demand remain.
+No native history/release, wire7 or IPC11 change. Bounded Astra source GO, current
+local tags verified/backend unattested; actual source-owned x86 padding measured.
+
+All4 products at0047bd77db502e9a24addda7dbfdf3f9bbaed7df42ee8b7de78891582d1eaa9e;
+82Debug/82assertRelease, both compiled unwind normal/-O and artifact/contracts pass.
+No runtime/contact/release/hardware/MP pass. V47 was freshly staged/seal/preflight
+checked at the preceding swimming contract, but this src change makes it stale.
+Preserve V46/V47 and all older fixtures; prepare a fresh matched collection path.
+ID2 authority still unanswered; do not launch/grant/equip/save until it arrives.
+The next concrete operation is matched packaging/preflight, then loaded ID2 own
+camera/palette evidence. Broader goal remains active, not reduced to these fixes.
+
 ## Current swimming continuity correction — 2026-10-10
 
 Optional arm pulls now consume existing durable grip generations, preventing a

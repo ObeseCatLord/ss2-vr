@@ -25,10 +25,13 @@ struct PhysicalGestureInput {
     uint64_t sequence = 0, tickMs = 0;
     bool configured = false;
     PhysicalGestureSample last;
+    // Separate from trigger identity; tail placement preserves earlier fields.
+    uint32_t gripPoseGeneration = 0;
 
-    bool current(const PhysicalGestureSample &captured, const Input &input,
+    bool current(const PhysicalGestureSample &captured, const Input &input, uint32_t gripGeneration,
                  const PhysicalGestureBinding &native, uint32_t inputProducer, uint64_t now) const noexcept {
-        return stream.active && captured.eligible && captured.generation == stream.generation &&
+        return gripGeneration && gripGeneration == gripPoseGeneration &&
+            stream.active && captured.eligible && captured.generation == stream.generation &&
             captured.generation == last.generation && captured.down == last.down &&
             input.sequence == sequence && input.tickMs == tickMs &&
             input.session == session && input.reference == reference && binding == native &&
@@ -40,7 +43,7 @@ struct PhysicalGestureInput {
             PhysicalMotion::valid(input.grip[native.hand]) && std::isfinite(input.trigger[native.hand]) &&
             input.trigger[native.hand] >= 0 && input.trigger[native.hand] <= 1;
     }
-    PhysicalGestureSample sample(const Input &input, const PhysicalGestureBinding &native,
+    PhysicalGestureSample sample(const Input &input, uint32_t gripGeneration, const PhysicalGestureBinding &native,
                                  uint32_t inputProducer, uint64_t now, bool allowed) {
         const auto hand = native.hand;
         if (hand >= 2) {
@@ -49,16 +52,17 @@ struct PhysicalGestureInput {
             return {};
         }
         const bool changed = !configured || binding != native || producer != inputProducer ||
-            action != input.primaryInputGeneration[hand] || session != input.session ||
+            action != input.primaryInputGeneration[hand] || gripPoseGeneration != gripGeneration || session != input.session ||
             reference != input.reference;
         if (changed) {
             stream.invalidate(); motion.reset(); gate = {}; last = {};
             boundary = {input.session, input.reference, input.sequence, now, inputProducer};
             binding = native; producer = inputProducer; action = input.primaryInputGeneration[hand];
             session = input.session; reference = input.reference; configured = true;
+            gripPoseGeneration = gripGeneration;
             sequence = tickMs = 0;
         }
-        allowed = allowed && native.owner && native.weapon && native.rig && inputProducer && input.session && input.reference &&
+        allowed = allowed && gripGeneration && native.owner && native.weapon && native.rig && inputProducer && input.session && input.reference &&
             input.focused && input.headValid && input.handValid[hand] && input.gripValid[hand] &&
             primaryActionEligible(input, hand) && !recenterHeld(input) &&
             PhysicalMotion::valid(input.head) && std::isfinite(input.trigger[hand]) &&

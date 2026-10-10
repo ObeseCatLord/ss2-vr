@@ -1,5 +1,30 @@
 # Implementation status — 2026-10-10
 
+## Physical gesture: skipped grip-loss correction
+
+Fixed the same demonstrated continuity class in physical melee: an omitted grip
+loss/recovery could bridge3cm/20ms into an eligible high while the trigger stream
+was unchanged. The existing grip generation now reaches sampling, local current
+validation and pose publication. Replaced/zero generations revoke provenance;
+recovery uses the existing causal reset, fresh baseline and new quiet requirement.
+Native consumption/release/manual160/348 and wire7 remain unchanged. No new registry
+or protocol; accounted native High still retains its reconciliation obligation.
+
+Astra design ADOPT and bounded patch source GO, current local routing tags verified
+per turn/backend unattested. Main's actual i686 compiler layout probes confirm the
+new word consumes former padding: size176, alignment8, last164, new field172.
+All4 products rebuilt at0047bd77db502e9a24addda7dbfdf3f9bbaed7df42ee8b7de78891582d1eaa9e,
+IPC11/wire7 unchanged.82Debug/82assert-enabledRelease groups, game/server compiled
+unwind normal/-O and artifact/product contracts pass. Native contact/release,
+gameplay, headset and multiplayer runtime acceptance remain untested. The protected
+installation, original WIP and user profiles/settings/saves remain unchanged.
+
+The reviewed V47 collector was refreshed and fully seal/preflight checked before
+this additional src correction, with17files/3exactlinks/3independent profile files.
+It is now preserved and stale, along with V46. A fresh matched package/fixture is
+required before capture. ID2 grant/equip/save authority remains pending. Full
+alignment/wider controls and user hardware/mixed-MP acceptance remain unfinished.
+
 ## Optional swimming: skipped tracking-loss correction
 
 Fixed a demonstrated cross-feature continuity defect: recovered grip positions

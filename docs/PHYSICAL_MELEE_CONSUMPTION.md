@@ -1,5 +1,23 @@
 # Native circular-saw consumption adapter
 
+## Grip-loss continuity correction — 2026-10-10
+
+Local physical sampling, consumption validation and pose publication now require
+the existing per-hand grip continuity generation. A loss/recovery interval missed
+by latest-value input delivery invalidates old motion/quiet provenance; recovery
+reseeds and must obtain new fresh quiet before a swing qualifies. Trigger identity
+remains independent. Zero or late replaced grip generations reject captured data.
+Native High reconciliation obligations and manual demand remain intact; native
+consumption, release,160/348 and wire7 transport were not changed.
+
+Main reproduced the pre-fix false high in the portable helper, then added both-hand
+skipped-loss/recovery/quiet/current-generation regressions. Astra returned bounded
+source GO; current local Astra/xhigh tags verified, backend unattested. Actual x86
+compiler probes preserve helper size176/alignment8/last offset164, placing the new
+word in former tail padding at172. Both game/server compiled unwind gates pass
+normal/-O. These checks do not establish actual native release, contact or MP
+runtime behavior; the default-off development setting remains unchanged.
+
 The default-off source adapter now connects local, server-authoritative and
 remote-observer native consumers for a uniquely mapped circular saw. Physical
 motion remains separate from trigger/history input. Matching wire7 products are

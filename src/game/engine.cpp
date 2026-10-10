@@ -1767,7 +1767,7 @@ static bool meleeGestureCurrent(PreparedPlayer &entry, unsigned hand) {
     const auto &owner = localSnapshotOwner.melee[hand];
     const bool valid = meleeOwnerMatches(owner, entry, hand) && owner.gestureArmed &&
         !owner.gestureInvalidated && !owner.blocked && !owner.teardownDepth && !owner.resetGesture &&
-        owner.gesture.current(captured.gesture, source.input,
+        owner.gesture.current(captured.gesture, source.input, source.gripPoseGeneration[hand],
             {entry.handle, entry.weaponHandle[hand], source.generation, hand}, source.inputProducer, now);
     ReleaseSRWLockShared(&snapshotLock);
     return valid;
@@ -1891,7 +1891,7 @@ static void prepareLocalGestureSource(Snapshot &source) {
         auto &owner = localSnapshotOwner.melee[hand];
         const bool usable = target[hand] && !owner.gestureInvalidated && !source.selecting[hand] &&
             !source.ui.wheel[hand].open && !(source.input.blockedWheels & (1u << hand));
-        const auto sample = owner.gesture.sample(source.input,
+        const auto sample = owner.gesture.sample(source.input, source.gripPoseGeneration[hand],
             {source.playerHandle, source.handle[hand], source.generation, hand},
             source.inputProducer, now, usable);
         owner.gestureInvalidated = false;
@@ -1924,7 +1924,7 @@ static void appendLocalGesturePose(const Snapshot &source, network::PosePacket &
         if (!capture.gesture.eligible || physical.gestureInvalidated ||
             source.handle[hand] != entry->weaponHandle[hand] || source.ui.currentWeapon[hand] != 0 ||
             !(pose.validMask & (bit << 1)) || (pose.wheelOrEquipBlockedMask & bit) ||
-            !physical.gesture.current(capture.gesture, source.input,
+            !physical.gesture.current(capture.gesture, source.input, source.gripPoseGeneration[hand],
                 {source.playerHandle, source.handle[hand], source.generation, hand}, source.inputProducer,
                 GetTickCount64())) continue;
         pose.gestureEligibleMask |= bit;
