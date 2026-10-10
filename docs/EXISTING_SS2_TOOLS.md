@@ -1,5 +1,40 @@
 # Existing Serious Sam 2 tools — research, 2026-10-09
 
+## Current adoption decision — 2026-10-10
+
+A new bounded Astra/xhigh research sidecar checked online author/publisher
+sources while physical hover-grip source integration continued. Local routing
+tags were verified; no independent backend attestation. No downloads, installation,
+editor/game launch, fixture modification or native runtime test occurred.
+
+The useful tools remain **Serious Editor 2/Edit Data**, the already evaluated
+**other1/Andrey Blender importer**, and **SE2 Macro fixture authoring**. Croteam's
+[October 27, 2025 announcement](https://store.steampowered.com/news/posts/?appids=204340)
+documents Edit Data for mesh, skeleton and animation editing. The importer author's
+[binary/ASCII support description](https://www.serioussite.ru/load/raznoe/serious_engine_2_import_ehksport_dlja_blender/10-1-0-3143)
+was independently rechecked; it does not require Edit Data to import binary
+resources. This does not establish compatibility with every Blender release.
+
+Recommended next use is an independently inspected additional vehicle resource:
+compare actual geometry, weights, attachments and animations before extending
+controls. Editor/Macro tools can later create a private fixed-pickup/vehicle scene
+for user-operated acceptance. Exact action names and pinned-build filesystem
+isolation must be verified before authoring; no script is guessed or installed.
+
+A useful additional discovery aid is Editor2 AWF entity export described by
+[Ryason in Croteam's interview](https://steamcommunity.com/games/564310/announcements/detail/4534653721978976237).
+The exported SS2 authored inventory can locate original vehicle encounters; it
+cannot certify live ownership or current evaluated transforms. Existing extraction
+already works, so Game Extractor/AutoGro are optional rather than replacement
+requirements. Historical SDK examples are not verified native SDK/ABI headers.
+[SeriousSaveEditor](https://github.com/widberg/SeriousSaveEditor) explicitly lists
+SS2 unsupported and remains excluded from save preparation.
+
+These authoring utilities can simplify asset inspection and repeatable scene
+preparation. The current native geometry-to-submission receipt, input lifetime,
+melee release and multiplayer authority boundaries still require source/native
+evidence and user runtime acceptance. Proprietary exports/fixtures stay private.
+
 ## Additional fixture-authoring research — 2026-10-10
 
 At the user's request a separate read-only researcher checked public tool
