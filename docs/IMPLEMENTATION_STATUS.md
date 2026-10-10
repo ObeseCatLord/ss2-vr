@@ -1,5 +1,23 @@
 # Implementation status — 2026-10-09
 
+## Joined palette reader connected to the existing collector
+
+The existing submission reader now consumes bounded ID2 native/API companions
+and preserves multi-bone diagnostic metadata. It checks exact owners, reservation
+ordinals, complete per-row arrays and duplicated draw words; consistent canonical
+disagreement remains data. Missing emitted rows do not establish coverage and all
+content/index/GPU/grasp/alignment claims remain false. No replay admission change.
+
+Astra/xhigh design/source GO follows corrected zero-request and contradictory
+single-bone-name mutations.27normal/-O cases and7Debug/Release consumer groups
+pass. The preserved V42ID13 log re-read yields7complete copied observations and
+25diagnostics, without launching a target. Native/products remain at
+d836a37c958f4e16c6efa8ca3e010adf8c1b3951afbe075c4e064353fbbdf8c1,
+IPC10/wire7; pure Python changes require no rebuild. See ID2_PALETTE_COMPANION.md.
+Actual ID2 program/index/reference evidence and full remaining implementation
+remain open; reader readiness is not alignment or runtime acceptance.
+
+
 ## Joined ID2 palette evidence connected; REA static provider usable
 
 The optional draw-local companion now copies1–3 mappings and independent canonical

@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 import struct
 from idle_stream_evidence import consume as consume_stream_probe, validate as validate_stream_probe, declaration_layout, OBSERVED, NO_UV56, OBSERVED_MULTI_UV, PASSIVE_FIVE_ROW78
-from idle_submission_evidence import consume as consume_submission,validate as validate_submission
+from idle_submission_evidence import consume as consume_submission,validate as validate_submission,consume_palette
 from idle_projection_evidence import consume as consume_projection_probe, validate as validate_projection_probe, validate_association
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -96,6 +96,7 @@ def assess(text,expected_source):
             raise ValueError('Truncated reserved idle prefix')
         kind=line.split()[2];f=fields(line)
         if kind.startswith('submission') and consume_submission(current,kind,f):continue
+        if consume_palette(current,kind,f,expected_source):continue
         if kind=='draw':
             names={'rawGripValid','schema','draws','source','ipc','wire','request','input','owner','weapon','model','generation','hand','eye',
                    'stage','cfg','file','resource','contributors','matrices','historicalBytes','grasp'}

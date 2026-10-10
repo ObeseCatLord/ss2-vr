@@ -47,6 +47,51 @@ Source instrumentation does not authorize fixture grant/equip or game launches.
 Current user capture scope, isolation and immutable-fixture rules still apply.
 Raw constants, addresses, bytecode, captures and asset identities remain private.
 
+## Offline reader
+
+The existing `assess_idle_weapon.py`/`idle_submission_evidence.py` collector path
+now reads the schema1 companion. It ties detailed rows to their original
+submission, enforces the reserved API index and ordinal, checks all copied
+array inventories, and compares the duplicated draw including signed base bits.
+Native matrices must be finite; raw API constants and stream descriptors remain
+diagnostic, including unused NaNs, zero stride and non-unit frequency. This
+reader does not introduce position admission for those inputs.
+
+Explicit ID2/schema4/copyLayout1 metadata can retain `bone=-1` as multiple or
+unresolved scalar evidence. A detailed multi-mapping receipt additionally
+requires `boneName=0`. IDs1/13 retain their single-bone bounds. A contradictory
+equality flag, wrong owner/configuration/mapping, zero request, duplicate data
+or a truncated detailed row rejects. Consistent canonical/palette disagreement
+remains data for diagnosis.
+
+Complete arrays establish completeness within an emitted detailed row only.
+Failed/suppressed samples create gaps in the original numbering. Missing detail
+cannot establish complete API coverage: the producer summary has no count of
+qualified emissions. The reader labels completion as emitter-reported and keeps
+source authentication, content, shader-index association, GPU visibility, grasp
+and alignment verification false. Collection output stays private through the
+existing collector path; no parallel launch or replay mechanism is added.
+
+Reader verification:27normal/-O regression cases and7existing Debug/Release
+collector/matcher/replay consumer groups pass. The preserved ID13 V42 log was
+re-read with7complete copied observations and25diagnostics. This read of existing
+evidence launched no target and does not add runtime acceptance. Current products
+still match the native fingerprint below; Python-only changes require no rebuild.
+
+The Astra/xhigh bounded reader review approved the incremental design and source
+after independently reproduced zero-request and contradictory multi-bone-name
+counterexamples were corrected. Local current-turn routing was verified; backend
+attestation remains unavailable. The next unresolved relationship is the actual
+ID2 draw/program/index upload association and independent camera/grasp reference.
+
+| Reader recommendation | Disposition |
+| --- | --- |
+| Extend the existing submission reader | Adopted; existing collector and owner/ordinal grammar reused. |
+| Preserve passive raw constants and descriptors | Adopted; unused NaN/zero-stride/non-unit-frequency regressions accepted as diagnostics. |
+| Join duplicated draw words explicitly | Adopted; signed-base round-trip and crossed-draw rejection checked. |
+| Reject zero requests and contradictory multi-bone names | Adopted; both counterexamples reproduced and fixed. |
+| Do not infer coverage or position acceptance | Adopted; absent details stay unknown and verification claims remain false. |
+
 Portable checks cover native bounds, crossed canonical/palette rows, every outer
 completion gate, payload capacity, row/ordinal mismatch, missing/interrupted
 API copies and Release-time retirement. Source-order checks state their bounded

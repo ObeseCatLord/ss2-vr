@@ -71,7 +71,96 @@ def fixture(declaration=OBSERVED):
         lines=expanded
     return '\n'.join(lines)
 
+def palette_fixture(count=3,selected=2,attempts=3,declaration=NO_UV56,equal=True):
+    lines=[f'Lab idle draw schema=4 nativeId=2 copyLayout=1 rawGripValid=0 draws=0 source={SOURCE} ipc=10 wire=7 request=100 input=90 owner=1 weapon=2 model=3 generation=4 hand=1 eye=0 stage=3 cfg=20 file=30 resource=1 contributors=1 matrices=4 historicalBytes=0 grasp=0',
+           'Lab idle rejection '+BASE+' reason=28 preceding=2 checks=0 state=47 callbacks=63',
+           'Lab idle submissionSummary '+BASE+f' attempts={attempts} count={attempts} overflow=0 outerReturned=1 limit=64']
+    for i in range(attempts):
+        lines+=['Lab idle submissionRow '+BASE+f' index={i} ordinal={i+1} status=8 hr=0 flags=15 draw=4,0,0,3,0,1',
+                'Lab idle submissionMetadata '+BASE+f' index={i} keys=1000,{2000+i*32},1,{3+i},3000,4000,123,{1200 if count==1 else 0},{2 if count==1 else -1} root=20,30,1 render=50,60,2 layout=3,1,0,133,0,0,135,0,48,128,0,36,128,0']
+    lines+=['Lab idle paletteSummary schema=1 '+BASE+f' source={SOURCE} payloads={min(attempts,10)} overflow={int(attempts>10)} outerCompleted=1 alignment=0 grasp=0']
+    if selected is None:return '\n'.join(lines)
+    head=BASE+f' index={selected} ordinal={selected+1}'
+    lines+=['Lab idle paletteRow schema=1 request=100 input=90 generation=4 owner=1 weapon=2 model=3 eye=0 hand=1 '+
+            f'index={selected} ordinal={selected+1} api={selected} modelAddress=1000 drawAddress={2000+selected*32} modelRecord=1 drawRecord={3+selected} instance=4000 surface=3000 root=20,30,1 render=50,60,2 evaluated=7000 matrices=8000 mapping=9000 palette=10000 first=4 count={count} mapCount=7 paletteCount=7 canonicalCount=12 modelCount=2 canonicalEqual={int(equal)} words=2 constants=4 declaration={len(declaration)} objects=20,21,22 cleanupCertified=1 outerCurrent=1']
+    def data(kind,item,values,chunk=0):
+        lines.append('Lab idle paletteData '+head+f' kind={kind} item={item} chunk={chunk} values='+','.join(f'{v:08x}' for v in values))
+    matrix=[0x3f800000,0,0,0,0,0x3f800000,0,0,0,0,0x3f800000,0]
+    data('world',0,matrix);data('draw',0,[4,0,0,3,0,1])
+    for i in range(count):
+        canonical=matrix.copy();canonical[3]=(0x40e00000,0x41600000,0x41a80000)[i]
+        actual=canonical.copy()
+        if not equal and i==0:actual[3]=0x3f800000
+        data('mapping',i,[3+selected,2+i,1,1100+i*120,1200+i])
+        data('canonical',i,canonical);data('palette',i,actual)
+    for i,offset,stride in [(0,0,12),(1,36,4),(2,48,4)]:data('stream',i,[101,offset,stride,1])
+    for i,e in enumerate(declaration):data('declaration',i,e)
+    for i in range(4):data('constant',i,[0,0,0,0])
+    data('program',0,[0xfffe0101,0xffff])
+    return '\n'.join(lines)
+
 class Checks(unittest.TestCase):
+    def test_joined_palette_reader_retains_owned_copies_and_gaps_without_alignment(self):
+        for count in (1,2,3):
+            for declaration in (NO_UV56,OBSERVED,OBSERVED_MULTI_UV,PASSIVE_FIVE_ROW78):
+                r=assess(palette_fixture(count=count,declaration=declaration),SOURCE)
+                self.assertFalse(r['copied_event_pose_observations'])
+                p=r['rejected_or_missing_observations'][0]['submissions']['palette_copies']
+                self.assertEqual(set(p['rows']),{2});row=p['rows'][2]
+                self.assertTrue(row['completion_reported']);self.assertEqual(row['count'],count)
+                self.assertEqual(row['stream_numbers'],[0,5,6] if declaration==NO_UV56 else [0,7,8])
+                for name in ('source_provenance_authenticated','api_coverage_complete','vertex_content_verified',
+                             'shader_index_association_verified','gpu_visibility_verified','positive_grasp_verified','alignment_accepted'):
+                    self.assertFalse(p[name])
+        crossed=assess(palette_fixture(equal=False),SOURCE)['rejected_or_missing_observations'][0]['submissions']['palette_copies']
+        self.assertEqual(crossed['rows'][2]['canonicalEqual'],0)
+        summary=assess(palette_fixture(selected=None),SOURCE)['rejected_or_missing_observations'][0]['submissions']['palette_copies']
+        self.assertFalse(summary['rows']);self.assertFalse(summary['api_coverage_complete'])
+        overflow=assess(palette_fixture(attempts=11,selected=9),SOURCE)['rejected_or_missing_observations'][0]['submissions']['palette_copies']
+        self.assertTrue(overflow['overflow']);self.assertEqual(set(overflow['rows']),{9})
+        # Passive API evidence permits unknown input behavior and unused NaNs;
+        # these raw words must not be mistaken for position replay admission.
+        text=palette_fixture().replace('kind=constant item=0 chunk=0 values=00000000','kind=constant item=0 chunk=0 values=7fc00001')
+        text=text.replace('kind=stream item=0 chunk=0 values=00000065,00000000,0000000c,00000001',
+                          'kind=stream item=0 chunk=0 values=00000065,00000000,00000000,40000001')
+        r=assess(text,SOURCE)['rejected_or_missing_observations'][0]['submissions']['palette_copies']['rows'][2]
+        self.assertEqual(r['data']['constant:0:0'][0],0x7fc00001);self.assertFalse(r['shader_index_association_verified'])
+        negative=palette_fixture().replace('draw=4,0,0,3,0,1','draw=4,-1,0,3,0,1')
+        negative=negative.replace('kind=draw item=0 chunk=0 values=00000004,00000000',
+                                  'kind=draw item=0 chunk=0 values=00000004,ffffffff')
+        r=assess(negative,SOURCE)['rejected_or_missing_observations'][0]['submissions']['palette_copies']['rows'][2]
+        self.assertEqual(r['data']['draw:0:0'][1],0xffffffff)
+
+    def test_joined_palette_reader_rejects_truncated_foreign_contradictory_data(self):
+        text=palette_fixture()
+        replacements=[('api=2','api=1'),('count=3 mapCount=7','count=4 mapCount=7'),
+                      ('first=4 count=3','first=5 count=3'),('canonicalCount=12','canonicalCount=3'),
+                      ('canonicalEqual=1','canonicalEqual=0'),('objects=20,21,22','objects=20,0,22'),
+                      ('cleanupCertified=1 outerCurrent=1','cleanupCertified=0 outerCurrent=1'),
+                      ('payloads=3','payloads=2'),('outerCompleted=1','outerCompleted=0'),
+                      ('kind=mapping item=0 chunk=0 values=00000005,00000002,00000001',
+                       'kind=mapping item=0 chunk=0 values=00000005,00000002,00000000'),
+                      ('kind=world item=0 chunk=0 values=3f800000','kind=world item=0 chunk=0 values=7fc00001'),
+                      ('kind=program item=0 chunk=0','kind=program item=0 chunk=1'),
+                      ('kind=palette item=2 chunk=0','kind=palette item=3 chunk=0'),
+                      ('kind=declaration item=0 chunk=0 values=00000000','kind=declaration item=0 chunk=0 values=00000007'),
+                      ('modelAddress=1000','modelAddress=1001'),('input=90 generation=4 owner=1','input=91 generation=4 owner=1')]
+        replacements.append(('kind=draw item=0 chunk=0 values=00000004,00000000,00000000,00000003,00000000,00000001',
+                             'kind=draw item=0 chunk=0 values=00000004,00000000,00000000,00000003,00000001,00000001'))
+        replacements.extend([('request=100','request=0'),('123,0,-1','123,999,-1')])
+        for old,new in replacements:
+            bad=text.replace(old,new);self.assertTrue(bad!=text,old)
+            with self.assertRaises(ValueError,msg=old):assess(bad,SOURCE)
+        for native in (1,13):
+            with self.assertRaises(ValueError):assess(text.replace('nativeId=2',f'nativeId={native}'),SOURCE)
+        lines=text.splitlines()
+        for i,line in enumerate(lines):
+            if line.startswith('Lab idle paletteData'):
+                with self.assertRaises(ValueError,msg=line):assess('\n'.join(lines[:i]+lines[i+1:]),SOURCE)
+                with self.assertRaises(ValueError,msg=line):assess(text+'\n'+line,SOURCE)
+        row=next(x for x in lines if x.startswith('Lab idle paletteRow'))
+        with self.assertRaises(ValueError):assess(text+'\n'+row,SOURCE)
+        with self.assertRaises(ValueError):assess(text.replace('alignment=0 grasp=0','alignment=1 grasp=0'),SOURCE)
     def test_submission_native_borrow_cleanup_order_is_source_bound(self):
         from verify_idle_submission_abi import source_checks
         root=Path(__file__).resolve().parents[1]
