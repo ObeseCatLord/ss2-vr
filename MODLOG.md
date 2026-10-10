@@ -1,5 +1,14 @@
 # Mod journal
 
+## 2026-10-09 — owned ride render observation and copied rigid inputs
+
+Optional ride observation now associates operator/renderable/model/Main cache
+inside the existing world bank, with fresh reciprocal ownership and two raw
+bookends. It remains passive/default-off with zero grasp/steering claims. Added
+explicit offline rigid palette inputs without widening native admission. Astra
+source/tool review caught a foreign bank-read race and two checker flow gaps;
+fixes and actual-byte controls pass. All products rebuilt; no gameplay launched.
+
 ## 2026-10-09 — observe borrowed hovercraft control state
 
 Added an optional passive callback observer to the existing mounted-look route,

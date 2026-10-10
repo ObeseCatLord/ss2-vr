@@ -6,15 +6,72 @@ import json
 from pathlib import Path
 import re
 import subprocess
+from verify_ride_control_abi import bodies as decoded_bodies,decoded_nodes
 
 
 def require(ok, message):
     if not ok:
         raise ValueError(message)
 
+def verify_declined_ride_entries(assembly):
+    """Actual consumer bytes with the source-reviewed owner gate returning false.
+
+    This checks the dispatch boundary, not native thread-query semantics or
+    object lifetime. No ordinary bank read precedes admission or follows its
+    false result. A foreign callback can overlap initialization only on that
+    declined path. Private stack/output initialization is outside this claim.
+    """
+    table=decoded_bodies(assembly)
+    def selected(fragment):
+        found=[b for n,b in table.items() if fragment in n and 'clone' not in n]
+        require(len(found)==1,'Missing unique ride guard consumer: '+fragment)
+        return decoded_nodes(found[0])
+    gate=selected('::rideObservationOwnerCurrent(unsigned int)')[0][0]
+    checked=0
+    for name in ('::copyRidePaletteBookend(', '::observeRidePalette()', '::publishRideObservation('):
+        nodes=selected(name)
+        calls=[i for i,(_,mn,op,_) in enumerate(nodes) if mn=='call' and op==hex(gate)]
+        require(len(calls)==1,'Ride consumer lost unique exact owner-gate call')
+        call=calls[0]
+        require(not nodes[call][3], 'Local owner-gate call gained relocation/addend')
+        require(not any(target=='.bss' for _,_,_,rs in nodes[:call] for _,_,target in rs),
+                'Ride bank read precedes owner admission')
+        prefix_addresses={a for a,_,_,_ in nodes[:call+1]}
+        for a,mn,op,_ in nodes[:call]:
+            require(mn!='call' and mn!='ret','Ride entry acquired an unapproved call/return before admission')
+            if mn.startswith('j'):
+                require(re.fullmatch(r'0x[0-9a-f]+',op) and int(op,16) in prefix_addresses,
+                        'Ride entry branch bypasses owner admission')
+        index=call+1
+        if nodes[index][1:3]==('mov','edx, eax'):index+=1
+        require(nodes[index][1:3]==('test','al, al') and nodes[index+1][1]=='je',
+                'Ride owner false result is not the inspected rejection branch')
+        address=int(nodes[index+1][2],16)
+        by_address={row[0]:i for i,row in enumerate(nodes)}
+        visited=set()
+        while True:
+            require(address in by_address and address not in visited,'Unbounded ride rejection path')
+            visited.add(address);i=by_address[address];a,mn,op,relocations=nodes[i]
+            require(not relocations,'Declined ride path touches relocated/global state')
+            require(mn in ('mov','xor','lea','add','pop','ret','jmp','nop'),
+                    'Declined ride path acquired work beyond scalar return')
+            for memory in re.findall(r'\[([^]]+)\]',op):
+                require(re.fullmatch(r'(?:esp|ebp)(?: [+-] 0x[0-9a-f]+)?',memory),
+                        'Declined ride path reads memory outside its stack')
+            if mn=='ret':break
+            if mn=='jmp':
+                require(re.fullmatch(r'0x[0-9a-f]+',op),'Indirect ride rejection jump')
+                address=int(op,16)
+            else:
+                require(i+1<len(nodes),'Ride rejection falls outside consumer')
+                address=nodes[i+1][0]
+        checked+=1
+    return checked
+
 
 def verify(obj):
-    assembly = subprocess.check_output(['objdump', '-drC', '-Mintel', str(obj)], text=True)
+    assembly = subprocess.check_output(['objdump', '-drC', '-Mintel', '--insn-width=16', str(obj)], text=True)
+    declined_ride_entries=verify_declined_ride_entries(assembly)
     symbols = subprocess.check_output(['objdump', '-tC', str(obj)], text=True)
     require('file format pe-i386' in assembly, 'Expected GNU x86 remote-render object')
     parts = re.split(r'^[0-9a-f]+ <(.+)>:\n', assembly, flags=re.M)
@@ -42,13 +99,18 @@ def verify(obj):
         require(len(found) == 1, 'Missing native state symbol: ' + name)
         return int(found[0], 16)
 
-    for name in ['palettePass()', 'modelPass()', 'animationEnd(void*)', 'freezePair()',
+    for name in ['palettePass()', 'modelPass()', 'animationEnd(void*)', 'freezePair(unsigned int)',
                  'commitPair(ss2vr::Slot&, ss2vr::Request const&, bool, unsigned int)']:
         entry = one('ss2vr::game::remote_render::', name)
         require(entry.count('DISP32\tss2vrNativeFinally') == 1,
                 'Entry must retain one native unwind extent: ' + name)
 
-    cleanup_names = ['palettePass()', 'modelPass()', 'animationEnd(void*)', 'freezePair()', 'commitPair(',
+    ride_copy = one('::copyRidePaletteBookend(', ')')
+    require(not any(re.match(r'f[a-z]', i) or re.search(r'\b(?:xmm|ymm|zmm)[0-9]', i)
+                    for i in code(ride_copy)),
+            'Ride raw-word snapshot body gained floating/SIMD instructions')
+
+    cleanup_names = ['palettePass()', 'modelPass()', 'animationEnd(void*)', 'freezePair(unsigned int)', 'commitPair(',
                      'postModelPass()', 'postPalette()', 'observeLocalScope()']
     fault = 'ss2vr::game::nativeUiFault(char const*)'
     # The diagnostic reason changed this ABI after the historical gate was
@@ -90,8 +152,8 @@ def verify(obj):
                     for i in instructions) and
                 f'mov BYTE PTR ds:{hex(offset("pairInvalid"))},0x1' in instructions,
                 'Abort lost scalar exact-owner CAS retirement: ' + name)
-        if name in ['freezePair()', 'commitPair(', 'postModelPass()', 'postPalette()']:
-            unlock = 'ReleaseSRWLockExclusive@4' if name == 'freezePair()' else 'ReleaseSRWLockShared@4'
+        if name in ['freezePair(unsigned int)', 'commitPair(', 'postModelPass()', 'postPalette()']:
+            unlock = 'ReleaseSRWLockExclusive@4' if name == 'freezePair(unsigned int)' else 'ReleaseSRWLockShared@4'
             require(unlock in calls and
                     'ss2vr::game::multiplayer::PresentationReadGuard::release()' in calls,
                     'Both presentation locks need explicit retirement: ' + name)
@@ -149,6 +211,8 @@ def verify(obj):
             'ui_fault_object_sha256': hashlib.sha256(bridge.read_bytes()).hexdigest(),
             'ui_fault_cleanup_scalar': True, 'ui_fault_variants_checked': len(fault_bodies),
             'owner_helpers_scalar_no_callbacks':True,
+            'ride_snapshot_body_scalar':True,
+            'declined_ride_entries_without_global_reads':declined_ride_entries,
             'owner_cas_width_bits':32,
             'owner_comparison_semantics':'production portable policy plus source review; not a compiled path proof',
             'runtime_executed': False}

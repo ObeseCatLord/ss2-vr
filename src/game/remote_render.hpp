@@ -10,7 +10,8 @@ namespace ss2vr::game::remote_render {
 
 using HookInstallerRva = bool (*)(HMODULE, uint32_t, void *, void **);
 
-bool initialize(HMODULE engine, HMODULE core, HMODULE sam, HookInstallerRva install, bool enableHeadTracking);
+bool initialize(HMODULE engine, HMODULE core, HMODULE sam, HookInstallerRva install, bool enableHeadTracking,
+                bool observeRideControl=false);
 
 // Pin before native simulation; check lifecycle entries before native mutation.
 void noteSimulationThread();
@@ -31,9 +32,12 @@ void invalidatePlayer(void *player);
 
 // One exact native world invocation owns the existing bank. Stereo keeps its
 // token through UI publication/cleanup; mono keeps it through its original draw.
-uint32_t freezePair();
+uint32_t freezePair(uint32_t localPlayer=0);
 void useFrozenPair(bool enabled);
-uint32_t beginMonoPresentation();
+uint32_t beginMonoPresentation(uint32_t localPlayer=0);
+// Historical copied world observation, only on a normal original mono return.
+// Retirement remains unconditional and separate, including diagnostic failure.
+void completeMonoPresentation(uint32_t owner,bool completed);
 void retirePresentation(uint32_t owner) noexcept;
 bool suppressNestedPresentation() noexcept;
 bool presentationSuppressionCurrent() noexcept;

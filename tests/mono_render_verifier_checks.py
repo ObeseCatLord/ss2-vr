@@ -6,7 +6,7 @@ import subprocess
 import sys
 import unittest
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
-from verify_mono_render_abi import verify_extent
+from verify_mono_render_abi import verify_extent,verify_completion_sequence
 from verify_ride_control_abi import bodies,decoded_nodes,extent,instructions,symbol_offset
 OBJECT=Path(sys.argv.pop(1)).resolve()
 
@@ -74,6 +74,43 @@ class Checks(unittest.TestCase):
         delegate=next(a for a,mn,op,relocs in decoded_nodes(finish)
                       if relocs==[(a+1,'DISP32','ss2vr::game::remote_render::retirePresentation(unsigned int)')])
         self.rejects(finish,delegate,bytes.fromhex('e9 01 00 00 00'))
+
+    def test_completion_owner_flag_and_relocation(self):
+        run=extent(self.table,'presentedRender(void*)','::Context::run(void*)')
+        target='ss2vr::game::remote_render::completeMonoPresentation(unsigned int, bool)'
+        complete=next(a for a,mn,op,relocs in decoded_nodes(run)
+                      if relocs==[(a+1,'DISP32',target)])
+        self.rejects(run,complete,bytes.fromhex('e8 01 00 00 00'))
+        flag=next(a for a,mn,op in instructions(run) if (mn,op)==('mov','dword ptr [esp + 4], 1'))
+        self.rejects(run,flag,bytes.fromhex('c7 44 24 04 00 00 00 00'))
+        owner=next(a for a,mn,op in instructions(run) if (mn,op)==('mov','eax, dword ptr [ebx]'))
+        self.rejects(run,owner,bytes.fromhex('8b 13')) # Wrong completion value register.
+
+    def test_branch_cannot_enter_argument_setup_midway(self):
+        run=extent(self.table,'presentedRender(void*)','::Context::run(void*)')
+        branch=next(a for a,mn,op in instructions(run) if mn=='js')
+        middle=next(a for a,mn,op in instructions(run) if (mn,op)==('mov','eax, dword ptr [ebx]'))
+        self.assertTrue(-128<=middle-(branch+2)<=127)
+        self.rejects(run,branch,bytes([0x78,(middle-(branch+2))&255]))
+
+    def test_address_order_and_one_call_each_do_not_prove_execution_order(self):
+        # Encoded bounded graph executes all six events once, but setup and
+        # completion precede the original. Numerical addresses remain ordered.
+        body=''' 100: eb 0e jmp 110
+ 105: 90 nop
+ 106: c3 ret
+ 110: 90 nop
+ 111: 90 nop
+ 112: 90 nop
+ 113: 90 nop
+ 114: 90 nop
+ 115: eb ee jmp 105
+'''
+        normal=body.replace('eb 0e jmp 110','eb 03 jmp 105').replace('106: c3 ret','106: eb 08 jmp 110').replace('115: eb ee jmp 105','115: c3 ret')
+        events=[0x105,0x110,0x111,0x112,0x113,0x114]
+        verify_completion_sequence(normal,events)
+        with self.assertRaisesRegex(ValueError,'skips/reorders'):
+            verify_completion_sequence(body,events)
 
 
 if __name__=='__main__':unittest.main()

@@ -89,6 +89,8 @@ static uint32_t idleAnimationName = 0;
 static uint32_t headName = 0;
 static uint32_t scopeName = 0, scopeBoneName = 0;
 static bool headTrackingEnabled = false;
+static bool rideObservationEnabled = false;
+static uint32_t mainName = 0;
 static StringId stringId = nullptr;
 static int(__cdecl *isMainThread)() = nullptr;
 static const uint32_t *invalidId = nullptr;
@@ -123,6 +125,14 @@ static std::atomic<DWORD> simulationThread = 0; // observations establish native
 static DWORD pairThread = 0;
 static thread_local bool frozenPair = false;
 static thread_local bool reentrant = false, modelInvalidated = false, presentationBusy = false;
+// One optional observation in the EXISTING frozen bank. Native addresses are
+// equality tokens; every dereference starts with a fresh render-owner query.
+static RideRenderIdentity frozenRide;
+static IdleConfigIdentity frozenRideConfig;
+static std::array<RideRenderFrameCopy,2> rideFrames;
+static std::array<bool,2> rideFrameSeen{};
+static std::atomic<bool> rideObservationDeclined=false;
+static std::atomic<unsigned> rideObservationRows=0;
 
 // All sampling is integer/raw-bit only. In particular, no model/raster query or
 // reference arithmetic occurs between native matrix production bookends.
@@ -791,6 +801,145 @@ struct IdleRasterStorage {
     std::vector<int32_t> owners;
     std::vector<ModelRecord> tree;
 };
+struct RidePaletteBookend {
+    RideRenderFrameCopy frame;
+    std::array<uint32_t,3> modelArray{},boneArray{},cacheRows{};
+    uint32_t boneFirst=0,boneCount=0,canonicalCount=0,skeleton=0,skeletonFlags=0;
+    uint32_t lodCount=0,lods=0,lod=0,definitions=0,definitionCount=0;
+    bool operator==(const RidePaletteBookend &) const = default;
+};
+__attribute__((noinline)) static bool rideObservationOwnerCurrent(uint32_t owner) {
+    // Native thread ownership and TLS/atomic token precede EVERY ordinary bank
+    // read. A foreign producer may overlap freezePair's bank initialization.
+    if(!hooksReady.load(std::memory_order_acquire) || !ready.load(std::memory_order_acquire) ||
+       !rideObservationEnabled ||
+       !ownsNativeThread() || !owner || !frozenPair ||
+       !frozenPresentationOwnerMatches(pairOwner.load(std::memory_order_acquire),currentFrozenOwner,owner) ||
+       presentationSuppressed || paletteInvalidated || pairInvalid.load(std::memory_order_acquire))return false;
+    return pairThread==GetCurrentThreadId();
+}
+// Copy raw words after native DDE30 production. No reference arithmetic, native
+// evaluation, allocation or virtual resource load occurs in this observer.
+__attribute__((noinline,optimize("no-tree-vectorize","no-tree-loop-distribute-patterns")))
+static bool copyRidePaletteBookend(RidePaletteBookend &out,bool &selected) {
+    selected=false;
+    if(!rideObservationOwnerCurrent(currentFrozenOwner) || !rideObservationEnabled ||
+       !frozenRide.valid() || rideObservationDeclined)return false;
+    out={}; // Even compiler-generated clearing stays behind owner admission.
+    selected=true; // Losing the captured actor/model owner declines the bank.
+    auto &frame=out.frame;
+    if(!copyNativeRideRenderIdentity(frozenRide.player,frame.identity) || frame.identity!=frozenRide)return false;
+    void *instance=reinterpret_cast<void*>(frame.identity.instance);
+    if(!readableMemory(instance,0x2c))return false;
+    std::memcpy(&frame.evaluated,reinterpret_cast<void*>(engineBase+0x2eab68),4);
+    uint32_t linked=0,evaluatedOwner=0;
+    std::memcpy(&linked,static_cast<uint8_t*>(instance)+0x28,4);
+    if(!frame.evaluated || frame.evaluated!=linked) {selected=false;return false;}
+    if(!readableMemory(reinterpret_cast<void*>(frame.evaluated),0x38))return false;
+    std::memcpy(&evaluatedOwner,reinterpret_cast<void*>(frame.evaluated+0x18),4);
+    if(evaluatedOwner!=frame.identity.instance)return false;
+    selected=true; // Subsequent failed association invalidates a provisional copy.
+    std::span<NativeModelRecord> records;std::span<NativeBone> bones;
+    if(!rendererArray(0x2eac20,MaxModelRecords,records) || records.empty() || records[0].instance ||
+       !rendererArray(0x2eac60,MaxNativeBones,bones))return false;
+    std::memcpy(out.modelArray.data(),reinterpret_cast<void*>(engineBase+0x2eac20),12);
+    std::memcpy(out.boneArray.data(),reinterpret_cast<void*>(engineBase+0x2eac60),12);
+    size_t owner=0;unsigned matches=0;
+    for(size_t i=1;i<records.size();++i)
+        if(reinterpret_cast<uintptr_t>(records[i].instance)==frame.identity.instance) {owner=i;++matches;}
+    if(matches!=1)return false;
+    frame.modelRecord=uint32_t(owner);
+    const auto *model=reinterpret_cast<const uint8_t*>(&records[owner]);
+    std::memcpy(&out.boneFirst,model+0x18,4);
+    std::memcpy(&out.boneCount,model+0x1c,4);
+    std::memcpy(&out.lod,model+0x5c,4);
+    if(!out.boneFirst || !out.boneCount || out.boneFirst>bones.size() ||
+       out.boneCount>bones.size()-out.boneFirst)return false;
+    IdleConfigIdentity config;
+    if(!idleConfig(instance,config) || config!=frozenRideConfig ||
+       !readableMemory(reinterpret_cast<void*>(config.configuration),0x34))return false;
+    frame.configuration=config.configuration;frame.file=config.file;frame.resource=uint32_t(config.resource);
+    std::memcpy(&out.skeleton,reinterpret_cast<void*>(config.configuration+0x30),4);
+    if(!readableMemory(reinterpret_cast<void*>(out.skeleton),0x38))return false;
+    std::memcpy(&out.skeletonFlags,reinterpret_cast<void*>(out.skeleton+4),4);
+    std::memcpy(&out.lodCount,reinterpret_cast<void*>(out.skeleton+0x30),4);
+    std::memcpy(&out.lods,reinterpret_cast<void*>(out.skeleton+0x34),4);
+    if((out.skeletonFlags&1) || !out.lodCount || out.lodCount>64 || !out.lods || out.lod<out.lods ||
+       (out.lod-out.lods)%0x20 || (out.lod-out.lods)/0x20>=out.lodCount ||
+       !readableMemory(reinterpret_cast<void*>(out.lods),size_t(out.lodCount)*0x20))return false;
+    std::memcpy(&out.definitions,reinterpret_cast<void*>(out.lod+0xc),4);
+    std::memcpy(&out.definitionCount,reinterpret_cast<void*>(out.lod+0x10),4);
+    if(!out.definitionCount || out.definitionCount>MaxNativeBones || !out.definitions ||
+       !readableMemory(reinterpret_cast<void*>(out.definitions),size_t(out.definitionCount)*0x78))return false;
+    std::memcpy(&frame.matrices,reinterpret_cast<void*>(frame.evaluated+0x20),4);
+    std::memcpy(&out.canonicalCount,reinterpret_cast<void*>(frame.evaluated+0x24),4);
+    std::memcpy(out.cacheRows.data(),reinterpret_cast<void*>(frame.evaluated+0x2c),12);
+    if(evaluatedOwner!=frame.identity.instance || out.canonicalCount<bones.size() ||
+       out.canonicalCount>MaxNativeBones || !frame.matrices ||
+       out.cacheRows[2]!=records.size() || out.cacheRows[0]<out.cacheRows[2] || !out.cacheRows[1] ||
+       !readableMemory(reinterpret_cast<void*>(out.cacheRows[1]),records.size()*8) ||
+       !readableMemory(reinterpret_cast<void*>(frame.matrices),size_t(out.canonicalCount)*sizeof(Matrix34)))return false;
+    uint32_t cacheLod=0;
+    std::memcpy(&cacheLod,reinterpret_cast<void*>(out.cacheRows[1]+owner*8+4),4);
+    if(cacheLod!=out.lod)return false;
+    unsigned mains=0;
+    for(size_t i=out.boneFirst;i<size_t(out.boneFirst)+out.boneCount;++i) {
+        const auto &bone=bones[i];const auto definition=reinterpret_cast<uintptr_t>(bone.definition);
+        if(bone.owner!=int32_t(owner) || definition<out.definitions ||
+           (definition-out.definitions)%0x78 || (definition-out.definitions)/0x78>=out.definitionCount)return false;
+        uint32_t name=0;std::memcpy(&name,bone.definition,4);
+        if(name==mainName) {++mains;frame.mainBone=uint32_t(i);frame.boneDefinition=uint32_t(definition);}
+    }
+    if(mains!=1)return false;
+    // Global NativeBone index, exactly the native DDE97/DDEA5 lookup, not the
+    // model-relative index. All reads remain within the selected cache bounds.
+    std::memcpy(frame.world.data(),model+0x24,48);
+    std::memcpy(frame.main.data(),reinterpret_cast<void*>(frame.matrices+frame.mainBone*48),48);
+    frame.skeleton=out.skeleton;frame.lod=out.lod;frame.definitions=out.definitions;
+    frame.definitionCount=out.definitionCount;frame.boneFirst=out.boneFirst;frame.boneCount=out.boneCount;
+    frame.canonicalCount=out.canonicalCount;frame.cacheRows=out.cacheRows[1];frame.cacheRowCount=out.cacheRows[2];
+    return true;
+}
+__attribute__((noinline)) static void observeRidePalette() {
+    if(!rideObservationOwnerCurrent(currentFrozenOwner) || !rideObservationEnabled ||
+       !frozenRide.valid() || rideObservationDeclined)return;
+    const int eye=nativeWorldEye();
+    if(eye < -1 || eye > 1) {rideObservationDeclined=true;return;}
+    const size_t index=eye<0?0:size_t(eye);
+    RidePaletteBookend before,after;
+    bool selected=false,afterSelected=false;
+    if(!copyRidePaletteBookend(before,selected)) {
+        if(selected)rideObservationDeclined=true;
+        return; // Other model production is ordinary visibility absence.
+    }
+    if(rideFrameSeen[index] || !copyRidePaletteBookend(after,afterSelected) || before!=after) {
+        rideObservationDeclined=true;return;
+    }
+    rideFrames[index]=before.frame;rideFrameSeen[index]=true;
+}
+__attribute__((noinline)) static void publishRideObservation(uint32_t owner,bool stereo) {
+    if(!rideObservationOwnerCurrent(owner) || !rideObservationEnabled || rideObservationDeclined ||
+       !frozenRide.valid() ||
+       !rideFrameSeen[0] || (stereo && !rideFrameSeen[1]))return;
+    if(rideObservationRows.load(std::memory_order_relaxed)>=32)return;
+    const unsigned row=rideObservationRows.fetch_add(1,std::memory_order_relaxed);
+    if(row>=32)return;
+    for(unsigned eye=0;eye<(stereo?2u:1u);++eye) {
+        const auto &frame=rideFrames[eye];const auto &id=frame.identity;
+        log("Lab ride render schema=1 row=%u bank=%u eye=%d player=%u brain=%u ride=%u seat=%u class=%x renderableHandle=%u renderable=%u instance=%u cfg=%u file=%u resource=%u modelRecord=%u evaluated=%u matrices=%u mainBone=%u definition=%u resourceClaim=0 seatClaim=0 graspClaim=0 steeringClaim=0",
+            row,owner,stereo?int(eye):-1,id.player,id.brain,id.ride,id.seat,id.classRva,id.renderableHandle,
+            id.renderable,id.instance,frame.configuration,frame.file,frame.resource,frame.modelRecord,
+            frame.evaluated,frame.matrices,frame.mainBone,frame.boneDefinition);
+        log("Lab ride render binding schema=1 row=%u bank=%u eye=%d skeleton=%u lod=%u definitions=%u definitionCount=%u boneFirst=%u boneCount=%u canonicalCount=%u cacheRows=%u cacheRowCount=%u",
+            row,owner,stereo?int(eye):-1,frame.skeleton,frame.lod,frame.definitions,frame.definitionCount,
+            frame.boneFirst,frame.boneCount,frame.canonicalCount,frame.cacheRows,frame.cacheRowCount);
+        const auto emit=[&](const char *kind,const std::array<uint32_t,12> &m) {
+            log("Lab ride render matrix schema=1 row=%u bank=%u eye=%d kind=%s words=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x",
+                row,owner,stereo?int(eye):-1,kind,m[0],m[1],m[2],m[3],m[4],m[5],m[6],m[7],m[8],m[9],m[10],m[11]);
+        };
+        emit("modelWorld",frame.world);emit("MainCanonical",frame.main);
+    }
+}
 static bool readIdleRaster(void *instance,IdleRasterCopy &out,IdleRasterStorage &storage) {
     out={};
     if(!instance || !hooksReady.load(std::memory_order_acquire) || !ready.load(std::memory_order_acquire) ||
@@ -946,6 +1095,7 @@ static void __cdecl palettePass() {
                                    // retires the pair through its native-finally cleanup.
                                    observeLocalScope();
                                    observeIdlePalette();
+                                   observeRidePalette();
                                }, [] { if (headTrackingEnabled) paletteFault(); });
     },[&](bool aborted) noexcept {
         if(aborted && entered)entered->reject(IdleWeaponTrace::Rejection::PaletteAbort);
@@ -974,12 +1124,16 @@ static void clearBinding(uint32_t handle) {
     for (const auto &entry : frozen)
         if (pairOwner.load(std::memory_order_acquire) && entry.bodyValid && (!handle || entry.binding.playerHandle == handle))
             pairInvalid.store(true, std::memory_order_release);
+    // Foreign lifecycle callers never read the main-thread observation fields.
+    // Conservatively decline any active observation while holding the bank lock.
+    if(pairOwner.load(std::memory_order_acquire))rideObservationDeclined=true;
     ReleaseSRWLockExclusive(&bindingLock);
 }
 
 } // namespace
 
-bool initialize(HMODULE engine, HMODULE core, HMODULE sam, HookInstallerRva install, bool enableHeadTracking) {
+bool initialize(HMODULE engine, HMODULE core, HMODULE sam, HookInstallerRva install, bool enableHeadTracking,
+                bool observeRideControl) {
     if (ready.load(std::memory_order_acquire))
         return true;
     if (!engine || !core || !sam || !install)
@@ -1013,11 +1167,16 @@ bool initialize(HMODULE engine, HMODULE core, HMODULE sam, HookInstallerRva inst
     }
     stringId(&scopeName, "Scope");
     stringId(&scopeBoneName, "Sniper");
+    if(observeRideControl) {
+        stringId(&mainName,"Main");
+        if(!invalidId || mainName==*invalidId)return false;
+    }
     if (!invalidId || scopeName == *invalidId || scopeBoneName == *invalidId ||
         !install(engine, 0xdde30, reinterpret_cast<void *>(palettePass),
                  reinterpret_cast<void **>(&originalPalettePass)) || !originalPalettePass)
         return false;
     headTrackingEnabled = enableHeadTracking; // Writes require a frozen stereo pair.
+    rideObservationEnabled = observeRideControl;
     if(idleProbeWeaponSupported(selectedIdleProbeWeapon())) {
         stringId(&idleAnimationName,"Idle");
         if(idleAnimationName==*invalidId ||
@@ -1213,7 +1372,7 @@ void invalidatePlayer(void *player) {
     clearBinding(pointerHandle(player));
 }
 
-uint32_t freezePair() {
+uint32_t freezePair(uint32_t localPlayer) {
     uint32_t issued=0;
     if(currentFrozenOwner || pairOwner.load(std::memory_order_acquire) || presentationBusy ||
        presentationSuppressed || !ownsNativeThread())return 0;
@@ -1223,9 +1382,18 @@ uint32_t freezePair() {
         if(!issued)return;
         currentFrozenOwner=issued;
         frozen = {};
+        frozenRide={};frozenRideConfig={};rideFrames={};rideFrameSeen={};rideObservationDeclined=false;
         pairThread = GetCurrentThreadId();
         pairInvalid.store(false, std::memory_order_release);
         pairOwner.store(issued,std::memory_order_release);
+        if(rideObservationEnabled && localPlayer) {
+            RideRenderIdentity identity,after;IdleConfigIdentity config;
+            if(copyNativeRideRenderIdentity(localPlayer,identity) &&
+               idleConfig(reinterpret_cast<void*>(identity.instance),config) &&
+               copyNativeRideRenderIdentity(localPlayer,after) && after==identity) {
+                frozenRide=identity;frozenRideConfig=config;
+            }
+        }
         // Native model/handle access stays on the established simulation thread.
         // A bank with no admissible remote players is a valid native-only pair.
         if (ready.load(std::memory_order_acquire) && checkNativeThread()) {
@@ -1264,6 +1432,7 @@ bool commitPair(Slot &slot, const Request &request, bool localEligible, uint32_t
         committed=commitNativeFrame(slot,request,localEligible &&
             frozenPresentationOwnerMatches(pairOwner.load(std::memory_order_acquire),currentFrozenOwner,owner) &&
             validatePair(guard));
+        if(committed)publishRideObservation(owner,true);
     },[&](bool) noexcept {
         invalidateFrozenPresentationOwner(pairOwner,pairInvalid,currentFrozenOwner,owner);
     });
@@ -1273,12 +1442,15 @@ bool commitPair(Slot &slot, const Request &request, bool localEligible, uint32_t
 void useFrozenPair(bool enabled) {
     frozenPair = enabled;
 }
-uint32_t beginMonoPresentation() {
-    if(!headTrackingEnabled || !hooksReady.load(std::memory_order_acquire) ||
+uint32_t beginMonoPresentation(uint32_t localPlayer) {
+    if((!headTrackingEnabled && !rideObservationEnabled) || !hooksReady.load(std::memory_order_acquire) ||
        !ready.load(std::memory_order_acquire) || !ownsNativeThread())return 0;
-    const uint32_t owner=freezePair();
+    const uint32_t owner=freezePair(localPlayer);
     if(owner)frozenPair=true;
     return owner;
+}
+void completeMonoPresentation(uint32_t owner,bool completed) {
+    if(completed)publishRideObservation(owner,false);
 }
 void retirePresentation(uint32_t owner) noexcept {
     retireFrozenPresentationOwner(pairOwner,pairInvalid,currentFrozenOwner,frozenPair,owner);

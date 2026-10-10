@@ -1,6 +1,7 @@
 #pragma once
 #include "common/ipc.hpp"
 #include "common/math.hpp"
+#include "common/ride_render_observation.hpp"
 #include <atomic>
 #include <d3d9.h>
 namespace ss2vr::game {
@@ -46,6 +47,10 @@ bool nativeUiProgramsCurrent(IDirect3DVertexShader9 *, IDirect3DPixelShader9 *);
 bool copyExecutedUiProjection(void *player, const Request &, int index, Matrix44 &out);
 bool nativeUiFrameCurrent(void *player, const Request &);
 bool nativeUiOwnerCurrent(void *player);
+// Fresh reciprocal ownership within the current original Render3D extent.
+// No lifetime is retained by the copied result; only two pinned hover families.
+bool copyNativeRideRenderIdentity(uint32_t expectedPlayer,RideRenderIdentity &out);
+int nativeWorldEye() noexcept;
 void nativeUiFault(const char *reason = "unspecified") noexcept;
 bool nativeUiBeginOverlay(void *player, bool admitted);
 void nativeUiEndOverlay(bool completed) noexcept;

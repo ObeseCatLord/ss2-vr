@@ -1,5 +1,10 @@
 # Passive ride-control scalar observation
 
+The later [render observation](RIDE_RENDER_OBSERVATION.md) supplies a separate
+same-world owner/model/cache association. The scalar/getter receipts described
+here retain their original zero frame/resource claims; they are never used to
+seed that render observation. Physical cockpit controls remain open.
+
 This diagnostic is a prerequisite for physical cockpit controls. It does not
 implement grabbing or steering, identify installed resources, or certify a live
 control frame. No vehicle runtime test has been performed for it.

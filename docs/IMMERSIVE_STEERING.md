@@ -4,6 +4,12 @@ Owner requirement, 2026-10-07: vehicles with steering wheels must support grabbi
 and turning the wheel with either hand or both. Hand transfer should not cause a
 steering jump. This feature is not implemented yet.
 
+The [same-world render observation](RIDE_RENDER_OBSERVATION.md) now joins the
+current operated hover ride to its renderable, model and selected Main cache.
+It is passive/default-off and has not run in a vehicle. Installed controls,
+seat-relative geometry and input-time freshness remain separate prerequisites;
+the older getter-time receipt does not supply them.
+
 ## Existing input route to preserve
 
 The mounted adapter already disables handheld weapon wheels while seated, keeps

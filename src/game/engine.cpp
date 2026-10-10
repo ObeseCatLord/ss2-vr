@@ -3162,7 +3162,7 @@ bool beginStereo(void *p, const Request &request, uint32_t &remoteOwner) {
             ReleaseSRWLockShared(&laserLock);
             eyeWorldVisibility = clear ? 1.f : 0.f;
         }
-        remoteOwner=remote_render::freezePair();
+        remoteOwner=remote_render::freezePair(eyeSnapshot.playerHandle);
         ready=remoteOwner!=0;
     }
     return ready && rigPublication.usable(eyeSnapshot.rigRevision);
@@ -5146,6 +5146,9 @@ struct NativeUiOwner {
 static thread_local NativeUiOwner uiOwner;
 static thread_local unsigned uiOwnerDepth = 0, uiOverlayDepth = 0;
 static thread_local uint64_t uiOwnerGeneration = 0;
+static bool labRideControlConfigured=false;
+static uintptr_t controlsGameBase=0;
+static constinit thread_local uint32_t nativeWorldRenderDepth=0;
 bool nativeRenderExtentCurrent() noexcept {
     return !uiOwnerDepth || uiOwnerGeneration == graphicsResourceGeneration();
 }
@@ -5157,6 +5160,51 @@ bool nativeUiOwnerCurrent(void *player) {
     uint32_t handle=0;
     memcpy(&handle,static_cast<uint8_t *>(uiOwner.brain)+0x28,4);
     return handle==uiOwner.playerHandle && resolve(handle)==player;
+}
+int nativeWorldEye() noexcept {return eyeIndex;}
+bool copyNativeRideRenderIdentity(uint32_t expectedPlayer,RideRenderIdentity &out) {
+    out={};
+    if(!labRideControlConfigured || nativeWorldRenderDepth!=1 || !expectedPlayer ||
+       expectedPlayer!=uiOwner.playerHandle || !hooksReady.load(std::memory_order_acquire) ||
+       !laserModelInstance || !isAlive || !isLocal || !resolve)return false;
+    void *player=resolve(expectedPlayer);
+    if(!nativeUiOwnerCurrent(player) || !isLocal(player) || !isAlive(player) ||
+       !readableMemory(player,0x550))return false;
+    RiderIdentity rider;
+    if(!readNativeRider(player,rider) || !rider.seated())return false;
+    // Re-resolve in dependency order. readNativeRider's equality token is not
+    // dereferenced; this is a new, reviewed render-extent owner route.
+    void *ride=resolve(rider.ride);
+    if(!readableMemory(ride,0x390))return false;
+    uint32_t table=0,operatorBrain=0,renderableHandle=0;
+    std::memcpy(&table,ride,4);
+    std::memcpy(&operatorBrain,static_cast<uint8_t*>(ride)+0x38c,4);
+    if(!controlsGameBase || (table!=controlsGameBase+0x2a8558 && table!=controlsGameBase+0x2b8420) ||
+       operatorBrain!=uiOwner.brainHandle || resolve(operatorBrain)!=uiOwner.brain)return false;
+    std::memcpy(&renderableHandle,static_cast<uint8_t*>(ride)+0x120,4);
+    void *renderable=renderableHandle?resolve(renderableHandle):nullptr;
+    if(!readableMemory(renderable,0x60))return false;
+    uint32_t renderableTable=0,owner=0,instanceToken=0;
+    std::memcpy(&renderableTable,renderable,4);
+    std::memcpy(&owner,static_cast<uint8_t*>(renderable)+0x48,4);
+    std::memcpy(&instanceToken,static_cast<uint8_t*>(renderable)+0x5c,4);
+    const auto gameBase=controlsGameBase;
+    if(!gameBase || renderableTable!=gameBase+0x2a4648 || owner!=reinterpret_cast<uintptr_t>(ride) ||
+       !instanceToken || laserModelInstance(renderable)!=reinterpret_cast<void*>(instanceToken))return false;
+    if(!nativeUiOwnerCurrent(player) || resolve(rider.ride)!=ride ||
+       !nativeRiderCurrent(player,rider) || resolve(renderableHandle)!=renderable)return false;
+    // Bookend every owner edge, including mutations preserving handles.
+    uint32_t afterTable=0,afterOperator=0,afterHandle=0,afterOwner=0,afterInstance=0;
+    std::memcpy(&afterTable,ride,4);
+    std::memcpy(&afterOperator,static_cast<uint8_t*>(ride)+0x38c,4);
+    std::memcpy(&afterHandle,static_cast<uint8_t*>(ride)+0x120,4);
+    std::memcpy(&afterOwner,static_cast<uint8_t*>(renderable)+0x48,4);
+    std::memcpy(&afterInstance,static_cast<uint8_t*>(renderable)+0x5c,4);
+    if(afterTable!=table || afterOperator!=operatorBrain || afterHandle!=renderableHandle ||
+       afterOwner!=owner || afterInstance!=instanceToken)return false;
+    out={expectedPlayer,operatorBrain,rider.ride,rider.seat,uint32_t(table-gameBase),renderableHandle,
+         uint32_t(reinterpret_cast<uintptr_t>(renderable)),instanceToken};
+    return out.valid();
 }
 bool nativeUiFrameCurrent(void *player,const Request &request) {
     if(!nativeUiOwnerCurrent(player)) return false;
@@ -5228,13 +5276,16 @@ static void __cdecl nativeFill(uint32_t color) {
         else if(aborted) nativeUiFault();
     });
 }
-static constinit thread_local uint32_t nativeWorldRenderDepth=0;
 bool nativeWorldRenderActive() noexcept {return nativeWorldRenderDepth!=0;}
 static void __thiscall presentedRender(void *p) {
     uint32_t owner=0;
     withNativeFinally([&] {
-        if(eyeIndex<0 && nativeRenderExtentCurrent())owner=remote_render::beginMonoPresentation();
+        if(eyeIndex<0 && nativeRenderExtentCurrent())
+            owner=remote_render::beginMonoPresentation(uiOwner.player==p?uiOwner.playerHandle:0);
         originalRender(p);
+        // No publication if the original unwound. A diagnostic failure still
+        // retires the exact owner in the same existing finally.
+        remote_render::completeMonoPresentation(owner,true);
     },[&](bool) noexcept {remote_render::retirePresentation(owner);});
 }
 static void __fastcall render(void *p,void *) {
@@ -5305,8 +5356,6 @@ static SRWLOCK controlsLock = SRWLOCK_INIT;
 using LookClamp = void(__thiscall *)(void *, Vec3 &);
 using QuaternionEuler = Vec3 *(__cdecl *)(Vec3 *, const Quat &);
 static LookClamp originalLookClamp = nullptr,originalRideLookClamp=nullptr;
-static bool labRideControlConfigured=false;
-static uintptr_t controlsGameBase=0;
 static thread_local RideControlObservation *activeRideControlObservation=nullptr;
 static std::atomic<unsigned> labRideControlRows=0;
 using RideModelGetter=void *(__thiscall *)(void *);
@@ -6887,7 +6936,7 @@ bool attach(bool headless) {
          ok;
     if (!headless) {
         ok = menus::initialize(g, internalHook) && ok;
-        ok = remote_render::initialize(e, c, g, internalHook, settings.remoteHeadTracking) && ok;
+        ok = remote_render::initialize(e, c, g, internalHook, settings.remoteHeadTracking,labRideControlConfigured) && ok;
     }
     if (!ok) {
         rollbackNativeHooks();

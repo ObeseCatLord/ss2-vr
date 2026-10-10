@@ -6,14 +6,46 @@ import json
 from pathlib import Path
 import subprocess
 from verify_ride_control_abi import (bodies,decoded_nodes,extent,finally_delegates,forwards,instructions,
-                                    paths,require,symbol_offset,symbol_section,scalar_op)
+                                    paths,require,symbol_offset,symbol_section,scalar_op,fault_edges)
 from verify_saved_tls import State,pointer
+import re
 
 class CallbackState(State):
     def write(self,operand,value,relocations,state_offset):
         if value[:1]==('constant',) and any(r.endswith('dir32\t.text') for r in relocations):
             value=('function',value[1])
         super().write(operand,value,relocations,state_offset)
+
+def verify_completion_sequence(body,events):
+    """All bounded normal paths must visit these exact events in order.
+
+    Lexical address order is insufficient: branches can enter argument setup
+    midway or execute completion before the original despite one call each.
+    """
+    code=instructions(body);by_address={a:i for i,(a,_,_) in enumerate(code)}
+    expected={address:i for i,address in enumerate(events)}
+    require(len(expected)==len(events),'Completion events alias')
+    faults=fault_edges(body);pending=[(code[0][0],0,frozenset())];seen=set();returns=0
+    while pending:
+        address,phase,ancestors=pending.pop();state=(address,phase)
+        require(state not in ancestors,'Unbounded normal mono completion path')
+        if state in seen:continue
+        seen.add(state);require(address in by_address,'Mono completion flow escapes extent')
+        ancestors=ancestors|{state};i=by_address[address];_,mn,op=code[i]
+        if address in expected:
+            require(expected[address]==phase,'Mono path skips/reorders original, argument setup or completion')
+            phase+=1
+        if mn=='ret':
+            require(phase==len(events),'Mono returns before ordered completion');returns+=1;continue
+        if address in faults:
+            require(mn=='jmp','Unexpected mono GNU-failure edge');continue
+        if mn.startswith('j'):
+            require(re.fullmatch(r'0x[0-9a-f]+',op),'Unknown mono completion branch')
+            pending.append((int(op,16),phase,ancestors))
+            if mn=='jmp':continue
+        require(i+1<len(code),'Mono completion falls outside extent')
+        pending.append((code[i+1][0],phase,ancestors))
+    require(returns,'No ordered normal mono completion')
 
 
 def verify_extent(assembly,symbols):
@@ -58,15 +90,32 @@ def verify_extent(assembly,symbols):
     prefix=[(mn,op) for _,mn,op in code[:index-2]]
     require(prefix[:6]==[('push','ebp'),('mov','ebp, esp'),('push','esi'),('push','ebx'),
                         ('and','esp, 0xfffffff0'),('sub','esp, 0x20')] and
-            prefix[6:9]==[('mov','eax, dword ptr [ebp + 8]'),('mov','edx, dword ptr fs:[0x2c]'),
-                          ('mov','ebx, dword ptr [eax]')],
+            prefix[6:9]==[('mov','eax, dword ptr [ebp + 8]'),('mov','edx, dword ptr [0]'),
+                          ('mov','ebx, dword ptr [eax]')] and
+            decoded_nodes(run)[7][3]==[(code[7][0]+2,'dir32','_tls_index')],
             'Original-render context/closure load changed')
-    supported={'push','pop','mov','sub','and','lea','test','js','jne','jmp','call','ret','xor','or','nop'}
+    supported={'push','pop','mov','sub','and','lea','test','cmp','js','je','jne','jmp','call','ret','xor','or','nop','xchg'}
     for i,(_,mn,op) in enumerate(code):
         require(mn in supported,'Unsupported renderer instruction')
+        if mn=='xchg':require(op=='ax, ax','Only compiler no-op XCHG is admitted')
         if op.split(',')[0] in ('ebx','bx','bl','bh') and mn!='push':
             require((i==8 and (mn,op)==('mov','ebx, dword ptr [eax]')) or
                     (i>index and mn=='pop'), 'Original-render closure base overwritten')
+    completion_name='ss2vr::game::remote_render::completeMonoPresentation(unsigned int, bool)'
+    completion=[(a,mn,op,relocs) for a,mn,op,relocs in decoded_nodes(run)
+                if any(target==completion_name for _,_,target in relocs)]
+    require(len(completion)==1,'Missing unique normal mono completion')
+    a,mn,op,relocs=completion[0]
+    require(a>code[index][0] and mn=='call' and op==hex(a+5) and
+            relocs==[(a+1,'DISP32',completion_name)],'Mono completion target/addend/order differs')
+    paths(run,{a},'')
+    complete_index=next(i for i,item in enumerate(code) if item[0]==a)
+    require([x[1:] for x in code[complete_index-4:complete_index]]==[
+            ('mov','dword ptr [esp + 4], 1'),('mov','eax, dword ptr [ebx]'),
+            ('mov','eax, dword ptr [eax]'),('mov','dword ptr [esp], eax')],
+            'Mono completion must consume captured owner after normal original return')
+    verify_completion_sequence(run,[code[index][0]]+
+                               [x[0] for x in code[complete_index-4:complete_index]]+[a])
     retirement=[(a,mn,op,relocs) for a,mn,op,relocs in decoded_nodes(finish)
                 if any(target=='ss2vr::game::remote_render::retirePresentation(unsigned int)'
                        for _,_,target in relocs)]
@@ -79,6 +128,7 @@ def verify_extent(assembly,symbols):
                     for _,mn,op in instructions(finish)), 'Mono cleanup gained FP work')
     return {'once_only_original_normal_paths':True,'native_thiscall_ecx_capture_verified':True,
             'return_opcode_stack_pop_bytes':0,'owner_retirement_connected':True,
+            'normal_mono_completion_connected':True,
             'scope':'finite entry/capture/ECX load/original relocation and normal forwarding; native lifetime and owner retirement semantics are source/portable checks',
             'runtime_executed':False}
 

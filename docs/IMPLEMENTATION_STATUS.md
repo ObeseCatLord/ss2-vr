@@ -1,5 +1,34 @@
 # Implementation status — 2026-10-09
 
+## Controlled ride/render association implemented; copied rigid inputs added
+
+The optional ride diagnostic now positively joins the local operated hover ride
+through its controlling brain and renderable owner backlink to a unique native
+model record and selected Main cache. It uses the existing frozen render bank,
+fresh dependent resolutions and two complete raw-word bookends; exports require
+normal mono or successful stereo completion. Foreign callbacks decline before
+ordinary bank reads. No resource/Seat/grasp/steering or vehicle runtime completion
+is claimed. See [render observation](RIDE_RENDER_OBSERVATION.md).
+
+The offline position VM accepts explicit copied rigid palette indices0/1/2 and
+strict weights in the5/6 and7/8 input families. Legacy defaults and integral-only
+address rejection remain. Native multi-palette admission/ID2 replay remain disabled
+pending actual draw/program/upload association and independent references. See
+[Auto Shotgun boundary](IDLE_AUTOSG_COLLECTION.md).
+
+Astra/xhigh Source/tool GO after correcting the bank-read race, admission-prefix
+and completion-order checker gaps, and a vacuous negative fixture. Current local
+routing tags verified; backend unattested. All four products match source
+fingerprint173cc0fe88540e77298c559c7291d6076494d7748eabe546bba4b10aa11254d0,
+IPC10/wire7.81Debug/81Release groups pass; normal/-O game/server forwarding,
+unwind, ownership-decline and actual-byte controls plus matching artifacts pass.
+These are offline results. No gameplay/input/vehicle/firing/headset/network launch.
+
+Non-scoped per-hand lasers and mixed desktop/VR participation remain explicit
+requirements with source paths connected. Visual all-weapon alignment and actual
+native mixed multiplayer remain user acceptance. Full physical cockpit controls,
+broader alignment, multiplayer body/origin settlement and full goal remain open.
+
 ## Non-scoped native laser coverage established; mono remote heads connected
 
 The native audit established the original shooting getter for15 non-sniper weapon
