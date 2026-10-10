@@ -323,6 +323,9 @@ class Checks(unittest.TestCase):
                         ('!copySlice(i==1,','!copyWrongSlice(i==1,'),
                         ('!probe.rideReentered && !probe.split','!probe.split'),
                         ('probe.rideGpuMatched=finishRideGpu(d);','probe.rideGpuMatched=true;'),
+                        ('&& rideCameraCurrent;',';'),
+                        ('&&\n         cameraAfterRelease==probe.rideCamera','||\n         cameraAfterRelease==probe.rideCamera'),
+                        ('profile!=RideHandleProfile::Unknown && copyRideHandles','true && copyRideHandles'),
                         ('std::optional<RideDrawGpuCopy>{probe.rideGpu}','std::nullopt'),
                         ('if(ride)return true;','if(false)return true;')]:
             bad=source.replace(old,new);self.assertTrue(bad!=source,old)

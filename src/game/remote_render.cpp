@@ -1060,6 +1060,11 @@ __attribute__((noinline)) static void publishRideObservation(uint32_t owner,bool
             };
             emitDraw("modelWorld",d.world);emitDraw("actualPalette",d.actualPalette);
             if(g.copied) {
+                log("Lab rideHandleProof schema=1 source=%.*s row=%u bank=%u eye=%d ordinal=%u profile=%u geometryCopied=%u vertices=%u,%u positionAgrees=%u graspClaim=0 steeringClaim=0",
+                    64,ss2vrBuildContract.sourceFingerprint.data(),row,owner,stereo?int(eye):-1,ordinal,
+                    unsigned(g.handles.profile),unsigned(g.handles.copied),
+                    g.handles.copied?g.handles.handles[0].vertices:0,g.handles.copied?g.handles.handles[1].vertices:0,
+                    unsigned(g.handlePositionAgrees));
                 std::array<char,325> hashes{};
                 constexpr char hex[]="0123456789abcdef";
                 for(unsigned i=0;i<5;++i) {

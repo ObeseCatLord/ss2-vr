@@ -78,8 +78,14 @@ def verify_ride_gpu_source(source: str, render: str) -> dict:
             'GPU publication must snapshot a value rather than reusable TLS')
     cleanup=body('static void cleanup(', 'void retireIdleSubmissionOwner(')
     ordered(cleanup,['releaseBindings(b);', 'release(probe.device);',
-                     'constboolrideOwnerCurrent=', 'probe.rideReady=rideOwnerCurrent',
-                     'probe.rideGpu.copied=probe.rideReady&&probe.rideGpuMatched;'])
+                     'constboolrideOwnerCurrent=', 'constboolrideCameraCurrent=',
+                     'probe.rideReady=rideOwnerCurrent',
+                     'probe.rideGpu.copied=probe.rideReady&&probe.rideGpuMatched&&rideCameraCurrent;'])
+    require('constboolrideCameraCurrent=!probe.rideCameraCaptured||(copyExecutedRideCamera(probe.rideAfter.identity.player,probe.generation,probe.rideAfter.eye,cameraAfterRelease)&&cameraAfterRelease==probe.rideCamera);' in cleanup,
+            'Captured root camera must remain current after every Release')
+    require('if(profile!=RideHandleProfile::Unknown&&copyRideHandles(slices,profile,probe.rideBefore.paletteCount,g.handles)&&probe.rideCameraCaptured)' in begin and
+            'g.handlePositionAgrees=rideHandlesPosition(g.handles,' in begin,
+            'Handle admission requires exact content, copied geometry and executed camera')
     require('!aborted&&!retired&&!probe.rideReentered&&!probe.split' in cleanup and
             'probe.generation==graphicsResourceGeneration()&&scopeGpuForwardingAllowed()&&scopeGpuMappingObservationCurrent(device)' in cleanup,
             'GPU readiness must retain final release/reentry/generation/routing checks')

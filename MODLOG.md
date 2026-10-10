@@ -1,5 +1,28 @@
 # Mod journal
 
+## 2026-10-10 — current vehicle handle geometry and camera proof
+
+Connected exact five-channel handle extraction to the existing draw/GPU owner,
+preserving seam vertices, winding and actual rigid local Main ownership. Reused
+the executed root camera under stereo/player/epoch/graphics/rig ownership and
+post-Release equality. Separate vehicle actual-byte/address policy keeps weapon
+limits unchanged. Every vertex must pass independent clip/world backprojection
+checks; no guessed inverse bind, pivot or native physics rewrite.
+
+Astra design ADAPT/source GO/fresh bounded follow-up GO, local routing verified
+per turn/backend unattested. Payload resets apply only to charged GPU attempts.
+Added noncommuting transform and clip-tolerance-pass/world-error-fail regressions.
+All4 products rebuilt at b69204fa9eb7dbffe3c6b1591a750e5481f4d63ff3796b26eff0249cf4e5c7d9,
+IPC10/wire7;82Debug/82assert-enabledRelease groups and14 normal/-O compiled/artifact
+reports pass after correcting one stale checker literal. Private owned-resource
+parsers pass Fighter25/25 and Saucer35/35 handles. No runtime, staging or installation.
+CPU agreement/diagnostic receipts are not live shader, grasp or steering acceptance.
+
+At the user's request a separate read-only public-tool researcher additionally
+identified SE2 Macro guides for reproducible private fixture authoring. Existing
+validated importer remains useful; unsupported SeriousSaveEditor is excluded.
+No tool installation/editor launch or proprietary download occurred.
+
 ## 2026-10-10 — actual vehicle GPU input evidence
 
 Added explicit vehicle policy at the existing buffer boundary, preserving weapon

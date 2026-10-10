@@ -1,5 +1,43 @@
 # Existing Serious Sam 2 tools — research, 2026-10-09
 
+## Additional fixture-authoring research — 2026-10-10
+
+At the user's request a separate read-only researcher checked public tool
+documentation while native implementation continued. The useful new lead is
+Nollopa's author-published Serious Editor2 Macro scripting documentation:
+[beginner guide](https://www.serioussite.ru/publ/nollopa_serious_macro_scripting/5-1-0-331)
+and [advanced guide](https://www.serioussite.ru/publ/nollopa_serious_macro_scripting_prodvinutyj_uroven/5-1-0-332).
+The integration owner checked the advanced guide. It covers context-sensitive
+entity actions/events, WorldInfo/player lookup, spawner-result capture, resource
+references and chapter controls. These are SE2 Macro authoring interfaces;
+later-engine Lua interfaces cannot be substituted. Exact pinned-build support
+and save-editing capability are not established by a tutorial.
+
+Practical adoption order:
+
+| Candidate | Use for this project | Next bounded operation |
+| --- | --- | --- |
+| Existing other1/Andrey importer parser | Continue authored mesh/skeleton/resource inspection; its unchanged parser has already been compared with owned bytes. | Reuse existing decoded resource/channel identities for handle extraction instead of another decoder. |
+| Official Editor2/Edit Data | Independent authored resource cross-check and private fixture authoring. | Verify matching installed build, active-mod filesystem isolation and export fidelity before any authoring. |
+| Macro scripting guides | Repeatable private scene with a characterized ride, fixed pickups, identifiable player and checkpoint sequence. | Inventory the installed editor's actual entity action/event choices before writing a fixture. A closest-player lookup is a fixture convenience, not multiplayer authority. |
+
+The fixture specification is one characterized occupied-seat route, known
+weapon pickups, native dual-wield settings and a checkpoint reachable through
+the existing direct-level lab launcher. Pickup/grant/save action names remain
+unverified and must come from the actual editor or native contract; no guessed
+script is installed. Normal native saving remains preferable to an unsupported
+save editor. SeriousSaveEditor's own
+[compatibility table](https://github.com/widberg/SeriousSaveEditor) marks SS2
+unsupported; the integration owner rechecked it.
+
+The research found no verified current public SS2 native SDK in its bounded
+search. Historical2.070 SDK examples are not evidence of a current C++ ABI.
+AutoGro2018 may package resource dependencies, but SS2/current-build compatibility
+is unverified. Existing D3D9 mod-menu source may supply narrow hook/save leads;
+co-installing its proxy would collide with this mod. None of these tools resolves
+live camera/palette ownership, independent hand firing or mixed desktop/VR
+replication. No new tool, game/editor process, download or installation was used.
+
 ## Targeted follow-up — 2026-10-10
 
 A separate read-only subagent researched existing tools against the new vehicle

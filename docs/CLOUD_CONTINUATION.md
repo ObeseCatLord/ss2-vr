@@ -1,5 +1,37 @@
 # Current source continuation
 
+## Current handle geometry/root-camera adapter — 2026-10-10
+
+The optional ride GPU receipt now retains actual two-handle geometry under exact
+five-channel profiles. Current executed stereo root V/adjustedP provide an
+independent reference; no raw-cache interpretation or new camera history. Actual
+UBYTE4N/index/weight input uses a separate max32 vehicle policy, keeping weapon
+max3/exact-integer behavior. Per-vertex P*V*ModelWorld*Main agreement plus conditioned
+camera backprojection within1mm yields copied world vertices. Camera ownership is
+rechecked through final Releases, and proof remains under the existing bank and
+normal native-finally return. Optional raw GPU records survive absent stereo camera
+with no position claim; grasp/steering remain false. No production controls enabled.
+
+Fresh Astra/xhigh design/source/follow-up reviews, current local tags verified,
+backend unattested. All4 products match fingerprint
+b69204fa9eb7dbffe3c6b1591a750e5481f4d63ff3796b26eff0249cf4e5c7d9,
+IPC10/wire7;82Debug/82assert-enabledRelease groups and14 relevant normal/-O
+compiled/artifact checks pass. Owned resource parser passes both25/25 and35/35
+handle inventories. No game/editor/runtime/native test, input, staging or install.
+
+NEXT source operation: use the copied world geometry in a coherent existing
+rider/input interval with native anchor/lifecycle freshness, contact/rearm and
+smooth one-/two-hand transfer. Do not promote diagnostic banks/budgets into a
+production control service, guess a wheel pivot or infer shader/runtime acceptance
+from offline tests. The optional Lab rideHandleProof outcome is CPU admission only.
+The user primarily tests hardware/shooting/vehicles/MP. Full melee release/lifetime,
+roomscale authority settlement and broad gameplay/platform acceptance remain open.
+
+Public-tool follow-up adds Nollopa's SE2 Macro authoring guides for an optional
+private fixture specification. Continue using the already compared importer
+parser; no new save editor/SDK compatibility is established. Details and sources
+are in EXISTING_SS2_TOOLS.md.
+
 ## Current vehicle buffer/program adapter — 2026-10-10
 
 Schema5 optional GPU receipts are now connected to the existing ride Main draw

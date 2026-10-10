@@ -11,6 +11,7 @@
 #include "common/scope_draw_order.hpp"
 #include "common/scope_shader_constants.hpp"
 #include "common/scope_position_program.hpp"
+#include "common/ride_position.hpp"
 #include <bcrypt.h>
 #include <atomic>
 #include <algorithm>
@@ -67,6 +68,7 @@ struct ProbeOwner {
     bool streamReentered=false;
     RideMainDrawCopy rideBefore{},rideAfter{};
     RideDrawGpuCopy rideGpu;bool rideGpuAttempt=false,rideGpuMatched=false;
+    RideCameraCopy rideCamera{};bool rideCameraCaptured=false;
     bool rideReentered=false,rideOriginalReturned=false,rideMatched=false,rideReady=false;
     ScopeLockLedger lock;
     IDirect3DVertexBuffer9 *lockedVertex = nullptr;
@@ -183,13 +185,17 @@ static void cleanup(bool aborted) noexcept {
     // own tail checks run AFTER every Release and retain the sticky reentry bit.
     // `device` is only compared numerically after its invocation reference retires.
     const bool rideOwnerCurrent=probe.rideMatched && remote_render::rideMainDrawCurrent(probe.rideAfter);
+    RideCameraCopy cameraAfterRelease;
+    const bool rideCameraCurrent=!probe.rideCameraCaptured ||
+        (copyExecutedRideCamera(probe.rideAfter.identity.player,probe.generation,probe.rideAfter.eye,cameraAfterRelease) &&
+         cameraAfterRelease==probe.rideCamera);
     // Native owner admission precedes the FINAL reentry/generation checks, not
     // the reverse; even an unexpected query callback cannot lend its old result.
     probe.rideReady=rideOwnerCurrent && !aborted && !retired && !probe.rideReentered && !probe.split &&
         probe.rideOriginalReturned && probe.rideMatched &&
         probe.generation==graphicsResourceGeneration() && scopeGpuForwardingAllowed() &&
         scopeGpuMappingObservationCurrent(device);
-    probe.rideGpu.copied=probe.rideReady && probe.rideGpuMatched;
+    probe.rideGpu.copied=probe.rideReady && probe.rideGpuMatched && rideCameraCurrent;
     probe.transaction = probe.split = probe.imageChanged = probe.imageRestoreFailed = false;
     probe.cap = {}; probe.uvRows={}; probe.program={}; probe.colorProgram={};
     probe.idleTrace=nullptr;probe.idleNativeId=-1;
@@ -650,7 +656,11 @@ static bool sameInputs(const BoundInputs &a,const BoundInputs &b) {
 // crypto owner. No getter, hashing or native query runs while a buffer is locked.
 static bool rideGpuOwnerCurrent(IDirect3DDevice9 *d) {
     const bool owner=remote_render::rideMainDrawCurrent(probe.rideBefore);
-    return owner && !probe.rideReentered && probe.generation==graphicsResourceGeneration() &&
+    RideCameraCopy camera;
+    const bool cameraCurrent=!probe.rideCameraCaptured ||
+        (copyExecutedRideCamera(probe.rideBefore.identity.player,probe.generation,probe.rideBefore.eye,camera) &&
+         camera==probe.rideCamera);
+    return owner && cameraCurrent && !probe.rideReentered && probe.generation==graphicsResourceGeneration() &&
         scopeGpuForwardingAllowed() && scopeGpuMappingObservationCurrent(d);
 }
 static bool rideGpuBookend(IDirect3DDevice9 *d) {
@@ -660,7 +670,9 @@ static bool rideGpuBookend(IDirect3DDevice9 *d) {
     return now==probe.rideBefore && rideGpuOwnerCurrent(d);
 }
 static bool beginRideGpu(IDirect3DDevice9 *d) {
-    auto &g=probe.rideGpu;g.copied=false;
+    auto &g=probe.rideGpu;g.copied=false;g.handles={};g.handleWorld={};g.handlePositionAgrees=false;
+    probe.rideCameraCaptured=copyExecutedRideCamera(probe.rideBefore.identity.player,
+        probe.generation,probe.rideBefore.eye,probe.rideCamera);
     const auto draw=probe.rideBefore.api;
     if(!rideGpuOwnerCurrent(d) || !boundInputs(d,probe.bindings[0],draw,GeometryBufferPolicy::Ride,
             nullptr,-1,&probe.rideBefore.layout) || !boundProgram(false,true) || !rideGpuBookend(d))return false;
@@ -685,6 +697,18 @@ static bool beginRideGpu(IDirect3DDevice9 *d) {
     g.shaderObject=uint32_t(reinterpret_cast<uintptr_t>(b.identity[6]));
     for(unsigned i=0;i<b.constantCount;++i)for(unsigned j=0;j<4;++j)
         g.constants[4*i+j]=std::bit_cast<uint32_t>(b.constants[i][j]);
+    const auto profile=rideHandleProfile(g.hashes);
+    const ScopeSliceBytes slices{storage[0].first(ranges.slices[0].size),storage[1].first(ranges.slices[1].size),
+        storage[2].first(ranges.slices[2].size),storage[3].first(ranges.slices[3].size),storage[4].first(ranges.slices[4].size)};
+    if(profile!=RideHandleProfile::Unknown && copyRideHandles(slices,profile,probe.rideBefore.paletteCount,g.handles) &&
+       probe.rideCameraCaptured) {
+        Matrix34 world{},main{};
+        std::memcpy(world.m,probe.rideBefore.world.data(),sizeof(world.m));
+        std::memcpy(main.m,probe.rideBefore.actualPalette.data(),sizeof(main.m));
+        g.handlePositionAgrees=rideHandlesPosition(g.handles,probe.rideBefore.paletteCount,probe.rideBefore.localMainSlot,
+            std::span(g.program).first(g.programWords),std::span(b.constants).first(b.constantCount),layout,
+            world,main,probe.rideCamera.view,probe.rideCamera.projection,g.handleWorld);
+    }
     return true;
 }
 static bool finishRideGpu(IDirect3DDevice9 *d) {
@@ -832,6 +856,7 @@ static HRESULT probeScopeDraw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base
     probe.streamReentered=false;
     probe.rideBefore={};probe.rideAfter={};
     probe.rideGpu.copied=false;probe.rideGpuAttempt=false;probe.rideGpuMatched=false;
+    probe.rideCameraCaptured=false;
     probe.rideReentered=false;probe.rideOriginalReturned=false;probe.rideMatched=false;probe.rideReady=false;
     probe.paletteApiSlot=IdleWeaponTrace::MaxPaletteApiPayloads;
     HRESULT result=D3DERR_INVALIDCALL;

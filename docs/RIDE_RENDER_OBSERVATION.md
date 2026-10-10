@@ -1,5 +1,57 @@
 # Controlled ride and rendered model association
 
+## Current handle transform adapter
+
+The same default-off GPU receipt can now retain the two characterized handle
+meshes from actual copied slices. All five complete channel digests must match
+one known profile before extracting the fixed ranges. Original seam vertices,
+weights/local indices, UVs and triangle winding are retained; no proprietary
+coordinates are embedded in source. Fighter uses two25-vertex/30-triangle ranges;
+Saucer uses two35-vertex/30-triangle ranges. Owned-resource offline parser checks
+pass both profiles. They do not establish live GPU consumption.
+
+During an ordinary stereo root draw, the existing executed root view and adjusted
+projection provide an independent camera reference. A value-only accessor
+requires current player, eye, tracking/graphics generation, rig, active root and
+completed capture; nested views, scope/weapon passes, mono and changed native
+camera matrices decline. The copied camera is compared at buffer bookends and
+after every COM Release before certification. No raw-cache layout interpretation
+or additional projection history is introduced.
+
+Every handle vertex must use the actual mapped Main local slot with rigid
+one-hot weights. The bounded existing VS1.1 interpreter uses actual UBYTE4N input
+bytes under a separate vehicle policy (up to32 palette entries). Weapon replay
+retains its previous three-entry/exact-integer policy. Microsoft documents
+round-to-nearest for VS1.1 MOV a0.x; exact halfway values decline because its
+[reference](https://learn.microsoft.com/en-us/windows/win32/direct3dhlsl/dx9-graphics-reference-asm-vs-registers-address)
+does not specify the tie rule.
+
+CPU clip output must agree with P*V*ModelWorld*actualMainPalette at the existing
+scope tolerance. An independently inverted P*V also backprojects every result
+within1mm of the derived world vertex. Inversion residual and condition limits
+reject collapsed or ill-conditioned views; unsupported arithmetic/inputs remain
+unknown. This is a conservative CPU admission bound, not GPU precision or
+proof that a live shader was observed.
+
+The separate `Lab rideHandleProof` record reports geometryCopied and
+positionAgrees only after the existing original/cleanup/bank gates. Schema5
+ride-render records remain unchanged; their claim flags remain zero. No grasp
+orientation, continuous input-time ownership or physical steering is enabled.
+The diagnostic eight/64 budgets remain unsuitable for production continuous
+grabbing. Next join copied world geometry to a current native rider/input
+interval, preserving joystick fallback, rearm and smooth hand transfer.
+
+| Astra recommendation | Disposition |
+| --- | --- |
+| Reuse executed root camera rather than infer V/P from raw sampler words | Adopted: value-only active stereo-root accessor; mono remains unsupported. |
+| Avoid another projection observer/history | Adopted: existing draw/GPU owner and camera bookends. |
+| Separate vehicle input/address policy and prevent collapsed clip agreement | Adopted: weapon policy unchanged; conditioned inverse and1mm backprojection bound. |
+| Clear stale mesh payload and strengthen numerical regression coverage | Adopted: charged-attempt reset, noncommuting success and clip-pass/world-fail checks; fresh scoped GO. |
+
+Review routing was verified as current local Astra/xhigh on every review turn;
+independent backend attestation is unavailable. Reviews approve this source
+boundary only, without live shader, alignment or vehicle input acceptance.
+
 ## Current schema5: copied GPU inputs and program
 
 The same default-off collector now optionally copies GPU input evidence for the

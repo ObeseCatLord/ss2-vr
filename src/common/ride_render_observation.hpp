@@ -5,6 +5,7 @@
 #include "scope_buffer_layout.hpp"
 #include "idle_geometry.hpp"
 #include "scope_program.hpp"
+#include "ride_geometry.hpp"
 
 namespace ss2vr {
 // Copied identities only. These numbers never authorize a later dereference or
@@ -82,7 +83,18 @@ struct RideDrawGpuCopy {
     std::array<std::array<uint8_t,32>,5> hashes{};
     uint32_t declarationElements=0,programWords=0,constantRows=0,inputLayout=0;
     uint32_t declarationObject=0,shaderObject=0;
+    RideHandleGeometry handles;
+    std::array<std::array<Vec3,RideHandleMesh::MaxVertices>,2> handleWorld{};
+    bool handlePositionAgrees=false;
     bool copied=false;
+};
+struct RideCameraCopy {
+    Matrix34 view{};
+    Matrix44 projection{};
+    bool operator==(const RideCameraCopy &other) const noexcept {
+        return !std::memcmp(view.m,other.view.m,sizeof(view.m)) &&
+            !std::memcmp(projection.m,other.projection.m,sizeof(projection.m));
+    }
 };
 // No reservation lifecycle: each charge occurs before foreign GPU work, even
 // when the attempt fails or the frame never publishes.

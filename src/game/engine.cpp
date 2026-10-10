@@ -3011,6 +3011,7 @@ thread_local void *executingView = nullptr;
 thread_local WeaponWorldView preparedWeaponWorld, executedWeaponWorld;
 thread_local Matrix44 executedUiProjection;
 thread_local bool executedUiProjectionValid = false;
+thread_local uint64_t executedRootGeneration = 0;
 thread_local bool rootCaptureArmed = false, rootCaptureAttempted = false;
 thread_local bool weaponPairFault = false;
 thread_local ScopeObservationBank eyeScopePoses;
@@ -3094,6 +3095,7 @@ static void __fastcall viewPrepare(void *command, void *, const Matrix34 &view, 
             preparedWeaponWorld = {};
             executedWeaponWorld = {};
             executedUiProjectionValid = false;
+            executedRootGeneration = 0;
             rootCaptureArmed = false;
             originalViewPrepare(command, view, projection, depthRange, identifier);
             return;
@@ -3194,6 +3196,7 @@ void beginEye(void *p, const Request &r, int i) {
     preparedWeaponWorld = {};
     executedWeaponWorld = {};
     executedUiProjectionValid = false;
+    executedRootGeneration = 0;
     rootCaptureArmed = rootCaptureAttempted = false;
     eyePlayer = p;
     eyeRequest = r;
@@ -3203,6 +3206,7 @@ void beginEye(void *p, const Request &r, int i) {
     eyeNativeBaseFov = 0;
 }
 void endEye() {
+    executedRootGeneration = 0;
     scopePreview = false;
     scopeSource = {};
     remote_render::useFrozenPair(false);
@@ -3436,6 +3440,7 @@ static void __cdecl weaponDepthRange(float nearDepth, float farDepth) {
                                     finiteProjection(*nativeAdjustedProjection);
         if (executedUiProjectionValid)
             executedUiProjection = *nativeAdjustedProjection;
+        executedRootGeneration = executedUiProjectionValid ? generation : 0;
         if (!executedWeaponWorld.valid)
             weaponPairFault = true;
     }
@@ -3456,6 +3461,26 @@ bool copyExecutedUiProjection(void *player, const Request &request, int index, M
     }
     if (!admitted) return false;
     out = executedUiProjection;
+    return true;
+}
+bool copyExecutedRideCamera(uint32_t player,uint64_t generation,int index,RideCameraCopy &out) {
+    out={};
+    if(!remote_render::ownsNativeThread() || !hooksReady.load(std::memory_order_acquire) ||
+       !generation || generation!=graphicsResourceGeneration() || generation!=executedRootGeneration ||
+       index<0 || index>1 || index!=eyeIndex || !eyePlayer || eyePlayer!=eyeSnapshot.player ||
+       player!=eyeSnapshot.playerHandle || !livePlayer(eyeSnapshot) ||
+       !rootView || executingView!=rootView || scopePreview || scopeSource.active || physicalWeapon ||
+       !rootCaptureAttempted || rootCaptureArmed || weaponPairFault ||
+       !executedWeaponWorld.valid || !executedUiProjectionValid ||
+       !rigPublication.usable(eyeSnapshot.rigRevision) || !channel.shared ||
+       trackingEpoch(*channel.shared)!=eyeSnapshot.generation ||
+       eyeRequest.trackingGeneration!=eyeSnapshot.generation || !physicalCallbacksAvailable() ||
+       !nativeCurrentView || !nativeCurrentProjection || !nativeAdjustedProjection ||
+       std::memcmp(nativeCurrentView,&executedWeaponWorld.view,sizeof(Matrix34)) ||
+       std::memcmp(nativeCurrentProjection,&executedWeaponWorld.projection,sizeof(Matrix44)) ||
+       std::memcmp(nativeAdjustedProjection,&executedUiProjection,sizeof(Matrix44)))return false;
+    out.view=executedWeaponWorld.view;
+    out.projection=executedUiProjection;
     return true;
 }
 static void finishPhysicalWeapon(PhysicalWeaponInvocation &invocation, uint64_t generation) noexcept {

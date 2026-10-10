@@ -1,5 +1,38 @@
 # Implementation status — 2026-10-10
 
+## Current vehicle handle geometry and transform adapter
+
+The existing default-off ride GPU collector now extracts both actual handle
+meshes only after all five known channel fingerprints match. It preserves their
+native vertices/winding and checks actual local Main weight/index ownership.
+The bounded existing position interpreter has a separate vehicle input policy;
+weapon limits remain unchanged. An accessor reuses the current executed stereo
+root V/adjusted P, with exact player/eye/graphics/tracking/rig/root ownership and
+camera bookends through the final Release. Per-vertex clip agreement and a
+conditioned independent-camera backprojection within1mm govern copied world
+geometry. The separate diagnostic reports CPU agreement with zero grasp/steering
+claims; mono/nested/unsupported contexts decline. See RIDE_RENDER_OBSERVATION.md.
+
+Astra/xhigh design ADAPT, source GO and fresh bounded follow-up GO; current local
+routing verified per turn/backend unattested. Adopted payload clearing only on
+charged attempts and noncommuting/collapsed-clip numerical regressions. Four
+products rebuilt at fingerprint
+b69204fa9eb7dbffe3c6b1591a750e5481f4d63ff3796b26eff0249cf4e5c7d9,
+IPC10/wire7;82Debug/82assert-enabledRelease groups and14 relevant normal/-O
+compiled/artifact reports pass. Initial full build had one stale checker literal,
+corrected with three new negative controls. Both owned-resource parser checks
+pass: Fighter25/25 and Saucer35/35 vertices. No runtime/installation/staging.
+
+Existing-tool research additionally identifies SE2 Macro guides for private
+fixture authoring; the validated importer parser remains reusable, and
+SeriousSaveEditor explicitly does not support SS2. See EXISTING_SS2_TOOLS.md.
+
+NEXT: join copied current world geometry to a current native rider/input interval
+with grasp/rearm/hand transfer and continuous production ownership. The existing
+diagnostic64-attempt cap is not production gripping. Live shader admission,
+alignment/physical controls, melee lifetime/release, authoritative multiplayer
+settlement and real-device Windows/Linux acceptance remain open. Full goal active.
+
 ## Vehicle GPU evidence adapter implemented
 
 The existing default-off ride collector now optionally copies actual bound

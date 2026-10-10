@@ -45,6 +45,9 @@ bool presentationDeviceOwner(IDirect3DDevice9 *) noexcept;
 uint32_t traceChainPresent(IDirect3DSwapChain9 *, uintptr_t caller, HWND overrideWindow) noexcept;
 bool nativeUiProgramsCurrent(IDirect3DVertexShader9 *, IDirect3DPixelShader9 *);
 bool copyExecutedUiProjection(void *player, const Request &, int index, Matrix44 &out);
+// Value-only current root camera for a borrowed stereo vehicle draw. Mono,
+// nested views, weapon passes and retired graphics owners decline.
+bool copyExecutedRideCamera(uint32_t player,uint64_t generation,int eye,RideCameraCopy &out);
 bool nativeUiFrameCurrent(void *player, const Request &);
 bool nativeUiOwnerCurrent(void *player);
 // Fresh reciprocal ownership within the current original Render3D extent.

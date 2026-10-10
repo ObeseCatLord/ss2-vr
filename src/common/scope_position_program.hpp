@@ -23,6 +23,15 @@ struct RigidPaletteInput {
                weights==std::array<uint8_t,4>{255,0,0,0};
     }
 };
+// Separate vehicle policy. Never widens the existing <=3 weapon replay policy.
+struct VehicleRigidPaletteInput {
+    std::array<uint8_t,4> indices{},weights{255,0,0,0};
+    uint32_t paletteCount=0;
+    bool valid() const noexcept {
+        return paletteCount>=1 && paletteCount<=32 && indices[0]<paletteCount &&
+            !indices[1] && !indices[2] && !indices[3] && weights==std::array<uint8_t,4>{255,0,0,0};
+    }
+};
 inline Scalar value(float v) noexcept { return {v,std::isfinite(v)}; }
 inline Scalar add(Scalar a,Scalar b) noexcept { return a.known && b.known ? value(a.value+b.value) : Scalar{}; }
 inline Scalar mul(Scalar a,Scalar b) noexcept { return a.known && b.known ? value(a.value*b.value) : Scalar{}; }
@@ -32,10 +41,12 @@ inline Vector constant(const std::array<float,4> &v) noexcept {
 inline bool position(std::span<const uint32_t> words,std::span<const std::array<float,4>> uploaded,
                      Vec3 p,std::array<float,2> uv,bool weightsBound,std::array<float,4> &out,
                      GeometryInputLayout layout=GeometryInputLayout::Legacy56,
-                     const RigidPaletteInput *copiedRigid=nullptr) noexcept {
+                     const RigidPaletteInput *copiedRigid=nullptr,
+                     const VehicleRigidPaletteInput *vehicleRigid=nullptr) noexcept {
     using namespace scope_program;
-    if(uploaded.size()>256 || (copiedRigid && (!weightsBound || !copiedRigid->valid() ||
-                                            !vertexPositionProgram(words))))return false;
+    if(uploaded.size()>256 || (copiedRigid && vehicleRigid) ||
+       (copiedRigid && (!weightsBound || !copiedRigid->valid() || !vertexPositionProgram(words))) ||
+       (vehicleRigid && (!weightsBound || !vehicleRigid->valid() || !vertexPositionProgram(words))))return false;
     if(layout!=GeometryInputLayout::Legacy56 && layout!=GeometryInputLayout::Observed78 &&
        layout!=GeometryInputLayout::NoUV56 && layout!=GeometryInputLayout::ObservedMultiUV78 &&
        layout!=GeometryInputLayout::NoUV78)return false;
@@ -68,12 +79,13 @@ inline bool position(std::span<const uint32_t> words,std::span<const std::array<
                       layout==GeometryInputLayout::NoUV78;
     const unsigned local=uses78?7:5,weight=uses78?8:6;
     inputs[local]=constant({0,0,0,0}); // Exact hashed first-local-palette indices, UBYTE4N.
-    if(copiedRigid) {
+    if(copiedRigid || vehicleRigid) {
         // D3DDECLTYPE_UBYTE4N is component-order byte/255, not D3DCOLOR's swizzle.
         // Fractional/unavailable shader addresses still decline below; no GPU
         // conversion/rounding rule or native transform reference is invented.
         std::array<float,4> normalized{};
-        for(unsigned i=0;i<4;++i)normalized[i]=float(copiedRigid->indices[i])/255.f;
+        const auto &indices=copiedRigid?copiedRigid->indices:vehicleRigid->indices;
+        for(unsigned i=0;i<4;++i)normalized[i]=float(indices[i])/255.f;
         inputs[local]=constant(normalized);
     }
     if (weightsBound) inputs[weight]=constant({1,0,0,0}); // Exact 255/0/0/0 UBYTE4N weights.
@@ -148,7 +160,21 @@ inline bool position(std::span<const uint32_t> words,std::span<const std::array<
         if (type(dest)==0) target=&temporary[dest&0x7ffu];
         else if (type(dest)==4 && (dest&0x7ffu)==0) target=&clip;
         if (target) for (unsigned i=0;i<4;++i) if (dest&(1u<<(16+i))) (*target)[i]=result[i];
-        if (type(dest)==3) address=result[0];
+        if (type(dest)==3) {
+            address=result[0];
+            if(vehicleRigid) {
+                // VS1.1 MOV a0.x uses round-to-nearest. Microsoft's reference
+                // does not specify halfway ties; those decline rather than guess.
+                // Legacy weapon callers retain their exact-integer requirement.
+                if(opcode!=1 || !address.known)address={};
+                else {
+                    const double low=std::floor(double(address.value));
+                    const double fraction=double(address.value)-low;
+                    if(fraction==.5 || low < -256 || low>255)address={};
+                    else address=value(float(low+(fraction>.5?1:0)));
+                }
+            }
+        }
     }
     return false;
 }
