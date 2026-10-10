@@ -1,5 +1,56 @@
 # Current source continuation
 
+## 2026-10-10 — diagnostic boundary source implementation and storage cleanup
+
+The passive ID2 palette-copy diagnostic now reports the first returned failing
+guard at the existing two-copy boundary. It copies only values available under
+original read/lifetime guards; unavailable cache fields remain unknown. Abort,
+reentry, retirement, mismatched owner and incomplete outer cleanup cannot produce
+a definitive failure receipt. It does not promote SOURCE2, alignment or grasp.
+All four native products rebuilt with source fingerprint
+9c1df922bdfb02a4e836d2a6027830dcb8e457a75ef3f8e35d6d0c8491b1790f,
+IPC11/wire7. All 82 Debug and 82 assertion-enabled Release groups pass. Game and
+server native/compiled projection, submission and cleanup gates pass normally
+and with optimized Python. The Astra patch review found two reader defects:
+impossible API failure shapes and incomplete boundary inventories. Both were
+corrected, with 39 reader/source groups passing normally and under optimization;
+the bounded Astra follow-up returned GO for both fixes. Effective local
+Astra/xhigh routing was verified; independent backend identity was unavailable.
+No runtime capture has been made with this diagnostic yet, and no new weapon
+alignment is accepted.
+
+The user's cleanup request reclaimed 111.8 GiB by consolidating 546 exact duplicate
+archive files from 39 retired agent labs into 14 independent read-only copies.
+Every content hash, historical metadata and retirement mapping remains private.
+The latest lab stays independent; logs, captures, profiles/settings, saves,
+unique evidence, the original installation and old checkout/WIP are preserved.
+Retired fixtures must not be launched or resealed. New runnable labs need
+independent archive copies. Private storage reduced from roughly 201 GiB to 89 GiB.
+
+Implementation remains open for all-weapon native alignment/grasp references,
+wider positively established vehicle controls and final integration/package/test
+guide. Connected roomscale/scopes/overlays/melee/remote-head/mixed desktop-VR MP
+source paths still require comprehensive user/device/online acceptance. There is
+no reliable completion ETA.
+
+
+## Latest actual matrix evidence — 2026-10-10
+
+Fresh V54 reached exact Jungle/native ID2 preparation and138neutral complete
+stereo pairs with clean native/outer shutdown.32raw SOURCE2 pairs across both
+eyes/hands independently reproduce every VP/MVP word using the known route's
+Poly Bump calculation; all control127/flags8→14. Images show world projection,
+dual Auto Shotguns and lasers. These are neutral simulation results, not new
+head-motion/hardware/firing/MP or grasp acceptance.
+
+Palette/API copies remain missing at the draw boundary. Existing earlier
+Palette-stage cache mismatch does not identify that DIP-time failure. Next
+bounded source design is a passive first-failed-guard receipt in the existing
+copy path, using only values already read and existing normal cleanup. No
+unlinked-cache dereference, guessed root switch, alignment activation or broader
+architecture replacement. See latest status/private handoff for exact live
+review and committed/native identities. V53/V54 and all old attempts are immutable.
+
 ## Current raw capture and startup logging — 2026-10-10
 
 Reviewed SOURCE2 adapter build b268d3e4... IPC11/wire7 passed all4product builds,

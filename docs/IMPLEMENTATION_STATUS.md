@@ -1,5 +1,66 @@
 # Implementation status — 2026-10-10
 
+## 2026-10-10 — diagnostic boundary source implementation and storage cleanup
+
+The passive ID2 palette-copy diagnostic now reports the first returned failing
+guard at the existing two-copy boundary. It copies only values available under
+original read/lifetime guards; unavailable cache fields remain unknown. Abort,
+reentry, retirement, mismatched owner and incomplete outer cleanup cannot produce
+a definitive failure receipt. It does not promote SOURCE2, alignment or grasp.
+All four native products rebuilt with source fingerprint
+9c1df922bdfb02a4e836d2a6027830dcb8e457a75ef3f8e35d6d0c8491b1790f,
+IPC11/wire7. All 82 Debug and 82 assertion-enabled Release groups pass. Game and
+server native/compiled projection, submission and cleanup gates pass normally
+and with optimized Python. The Astra patch review found two reader defects:
+impossible API failure shapes and incomplete boundary inventories. Both were
+corrected, with 39 reader/source groups passing normally and under optimization;
+the bounded Astra follow-up returned GO for both fixes. Effective local
+Astra/xhigh routing was verified; independent backend identity was unavailable.
+No runtime capture has been made with this diagnostic yet, and no new weapon
+alignment is accepted.
+
+The user's cleanup request reclaimed 111.8 GiB by consolidating 546 exact duplicate
+archive files from 39 retired agent labs into 14 independent read-only copies.
+Every content hash, historical metadata and retirement mapping remains private.
+The latest lab stays independent; logs, captures, profiles/settings, saves,
+unique evidence, the original installation and old checkout/WIP are preserved.
+Retired fixtures must not be launched or resealed. New runnable labs need
+independent archive copies. Private storage reduced from roughly 201 GiB to 89 GiB.
+
+Implementation remains open for all-weapon native alignment/grasp references,
+wider positively established vehicle controls and final integration/package/test
+guide. Connected roomscale/scopes/overlays/melee/remote-head/mixed desktop-VR MP
+source paths still require comprehensive user/device/online acceptance. There is
+no reliable completion ETA.
+
+## Actual SOURCE2 matrix capture; draw-copy boundary still unresolved
+
+The fresh capture with preserved game logging reached exact Jungle simulation
+and native ID2 grant/equip/save preparation.138distinct complete neutral stereo
+pairs and both1280x720eye images were recorded using projection presentation.
+The images show the game world, both Auto Shotguns and per-hand laser lines;
+605766of921600pixels differ. This neutral simulated capture adds no head-motion,
+hardware, firing, save-reload or multiplayer acceptance. Native shutdown and
+private-display retirement completed with no owned survivors or cleanup errors.
+
+All32raw SOURCE2 pairs completed without invalidation/overflow: both eyes and
+both hands are represented; control word127 and cache flags8→14 are consistent.
+The existing Poly Bump calculation selected by the known native SOURCE2 route
+reproduces every captured VP/MVP word from independent copied M/V/P inputs.
+This corroborates arithmetic for these captures; it does not establish own-DIP
+membership, winning cached animation, grasp or alignment.
+
+This run emitted no usable palette/API copies. Original indexed calls succeeded,
+but their metadata remained unknown. Existing Palette-stage diagnostics report
+evaluated/root-linked cache mismatch in18invocations; that earlier callback is
+not evidence of the failing DIP-time guard. A bounded Astra design review is
+selecting the smallest passive failure receipt at the existing copy boundary.
+Do not switch cache ownership to a guessed instance, relax animation/admission,
+or enable SOURCE2 reference qualification solely from numerical agreement.
+
+Native products remain b268d3e4... IPC11/wire7, with the reviewed observer-only
+logging correction. All attempted fixtures and original user files are preserved.
+
 ## Raw capture startup timeout; real game log preservation corrected
 
 One fresh neutral capture of the reviewed b268d3e4... build passed actual private

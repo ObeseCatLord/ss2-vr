@@ -380,6 +380,34 @@ static bool paletteApiOwnerCurrent(IDirect3DDevice9 *d,IdleWeaponTrace *owner,un
     const auto &p=owner->paletteApiPayloads[api];
     return p.submissionSlot==slot && p.ordinal==owner->submissions.rows[slot].ordinal;
 }
+static bool armPaletteBoundary(IDirect3DDevice9 *d,IdleWeaponTrace *owner,unsigned slot,unsigned api,unsigned phase) {
+    if(!paletteApiOwnerCurrent(d,owner,slot,api))return false;
+    auto &receipt=owner->paletteApiPayloads[api].boundary;
+    if(!receipt.kind) {receipt={};receipt.phase=phase;}
+    return true;
+}
+static void recordPaletteBoundaryFailure(IDirect3DDevice9 *d,IdleWeaponTrace *owner,unsigned slot,unsigned api,
+                                        unsigned phase,const IdlePaletteBoundaryCopy &copy={}) {
+    if(!paletteApiOwnerCurrent(d,owner,slot,api) || copy.wrapper==99)return;
+    auto &receipt=owner->paletteApiPayloads[api].boundary;
+    if(receipt.kind)return; // Freeze the first returned, current failure.
+    receipt=copy;receipt.phase=phase;receipt.kind=1;
+}
+static bool copyPaletteBoundary(IDirect3DDevice9 *d,IdleWeaponTrace *owner,unsigned slot,unsigned api,
+                                unsigned phase,IdlePaletteCopy &out) {
+    if(!armPaletteBoundary(d,owner,slot,api,phase))return false;
+    IdlePaletteBoundaryCopy copy; // Caller-owned values above native finally frames.
+    const bool copied=copyIdleSubmissionPalette(owner,out,&copy);
+    if(!copied)recordPaletteBoundaryFailure(d,owner,slot,api,phase,copy);
+    return copied; // Original caller retains its own completion/current check.
+}
+static void recordPaletteApiFailure(IDirect3DDevice9 *d,IdleWeaponTrace *owner,unsigned slot,unsigned api,
+                                    unsigned phase,const IdleWeaponTrace::StreamSnapshot &snapshot) {
+    IdlePaletteBoundaryCopy copy;
+    copy.valid=16;copy.apiStatus=snapshot.status;copy.apiStep=snapshot.step;
+    copy.apiIndex=snapshot.index;copy.apiResult=snapshot.hresult;
+    recordPaletteBoundaryFailure(d,owner,slot,api,phase,copy);
+}
 static bool serializePaletteGeometry(IdleWeaponTrace::PaletteApiPayload &p) {
     const auto &g=probe.idle;const auto &b=probe.bindings[0];
     if(!g.words || g.words>p.program.size() || !g.constantCount || g.constantCount>256 ||
@@ -412,11 +440,16 @@ static bool beginPaletteApi(IDirect3DDevice9 *d,IdleWeaponTrace *owner,unsigned 
     if(!paletteApiOwnerCurrent(d,owner,slot,api))return false;
     // Capability getters are outside the sampled interval. An admitted geometry
     // already performed them; do not add callbacks after its certification.
-    if(!geometryAdmitted && (!nativeUiDeviceCurrent(d) || !paletteApiOwnerCurrent(d,owner,slot,api)))return false;
+    if(!geometryAdmitted) {
+        if(!armPaletteBoundary(d,owner,slot,api,1))return false;
+        if(!nativeUiDeviceCurrent(d)) {recordPaletteBoundaryFailure(d,owner,slot,api,1);return false;}
+        if(!paletteApiOwnerCurrent(d,owner,slot,api))return false;
+    }
     IdlePaletteCopy before,bookend;
-    if(!copyIdleSubmissionPalette(owner,before) || !paletteApiOwnerCurrent(d,owner,slot,api))return false;
+    if(!copyPaletteBoundary(d,owner,slot,api,2,before) || !paletteApiOwnerCurrent(d,owner,slot,api))return false;
     auto &p=owner->paletteApiPayloads[api];
     bool copied=false;
+    if(!armPaletteBoundary(d,owner,slot,api,3))return false;
     if(geometryAdmitted) {
         copied=serializePaletteGeometry(p);
         p.content=probe.idle.inputs;p.contentHashes=probe.idle.hashes;
@@ -435,8 +468,9 @@ static bool beginPaletteApi(IDirect3DDevice9 *d,IdleWeaponTrace *owner,unsigned 
     if(!paletteApiOwnerCurrent(d,owner,slot,api))return false;
     p.beforeCopied=copied;
     p.contentMatched=p.contentCopied && copied && paletteContentMatchesApi(probe.bindings[0],p.before);
-    if(!copied || !copyIdleSubmissionPalette(owner,bookend) ||
-       !paletteApiOwnerCurrent(d,owner,slot,api) || before!=bookend)return false;
+    if(!copied) {recordPaletteApiFailure(d,owner,slot,api,3,p.before);return false;}
+    if(!copyPaletteBoundary(d,owner,slot,api,4,bookend) || !paletteApiOwnerCurrent(d,owner,slot,api))return false;
+    if(before!=bookend) {recordPaletteBoundaryFailure(d,owner,slot,api,8);return false;}
     owner->submissions.before(slot,before.metadata,true);
     before.projectionBookend(bookend);
     owner->submissions.paletteBefore(slot,before,true);
@@ -446,14 +480,16 @@ static bool finishPaletteApi(IDirect3DDevice9 *d,IdleWeaponTrace *owner,unsigned
                              IdlePaletteCopy &after) {
     if(!paletteApiOwnerCurrent(d,owner,slot,api))return false;
     IdlePaletteCopy bookend;
-    if(!copyIdleSubmissionPalette(owner,after) || !paletteApiOwnerCurrent(d,owner,slot,api))return false;
+    if(!copyPaletteBoundary(d,owner,slot,api,5,after) || !paletteApiOwnerCurrent(d,owner,slot,api))return false;
     IdleWeaponTrace::StreamSnapshot snapshot;
     uint32_t unusedWords=0;
+    if(!armPaletteBoundary(d,owner,slot,api,6))return false;
     const bool copied=sampleIdleApi(d,probe.bindings[2],snapshot,{},unusedWords,{},true,false);
     if(!paletteApiOwnerCurrent(d,owner,slot,api))return false;
     auto &p=owner->paletteApiPayloads[api];p.afterCopied=copied;
-    if(!copied || !copyIdleSubmissionPalette(owner,bookend) ||
-       !paletteApiOwnerCurrent(d,owner,slot,api) || after!=bookend)return false;
+    if(!copied) {recordPaletteApiFailure(d,owner,slot,api,6,snapshot);return false;}
+    if(!copyPaletteBoundary(d,owner,slot,api,7,bookend) || !paletteApiOwnerCurrent(d,owner,slot,api))return false;
+    if(after!=bookend) {recordPaletteBoundaryFailure(d,owner,slot,api,9);return false;}
     p.matched=p.beforeCopied && IdleWeaponTrace::sameStreamSnapshots(p.before,snapshot);
     after.projectionBookend(bookend);
     owner->submissions.paletteAfter(slot,after,true);

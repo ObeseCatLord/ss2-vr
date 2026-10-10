@@ -9,7 +9,7 @@ bool currentIdleRaster(IdleRasterCopy &,IdleWeaponTrace *&);
 bool currentIdleDraw(ScopeDrawBinding &,IdleDrawIdentity &,IdleWeaponTrace *&);
 IdleWeaponTrace *idleSubmissionOwner() noexcept;
 bool copyIdleSubmissionMetadata(const IdleWeaponTrace *,IdleSubmissionMetadata &) noexcept;
-bool copyIdleSubmissionPalette(const IdleWeaponTrace *,IdlePaletteCopy &) noexcept;
+bool copyIdleSubmissionPalette(const IdleWeaponTrace *,IdlePaletteCopy &,IdlePaletteBoundaryCopy *diagnostic=nullptr) noexcept;
 void retireIdleSubmissionOwner(IdleWeaponTrace *) noexcept;
 // Pure invocation metadata borrow. The caller separately establishes native
 // thread ownership before original entry; DIP revalidates the native binding.

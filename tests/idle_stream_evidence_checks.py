@@ -118,7 +118,120 @@ def palette_projection_fixture():
     text+='\n'+'\n'.join(line.replace('eye=1 hand=0','eye=0 hand=1').replace('drawBefore=2000 drawAfter=2000','drawBefore=2064 drawAfter=2064') for line in producer())
     return text
 
+def boundary_fixture(attempts=1,excluded=(),**changes):
+    text=palette_fixture(selected=None,attempts=attempts)
+    # A normal original draw may lack any copied palette metadata.
+    text='\n'.join(line for line in text.splitlines() if 'submissionMetadata' not in line)
+    text=text.replace('status=8 hr=0 flags=15','status=1 hr=0 flags=4')
+    values=dict(index=0,ordinal=1,api=0,phase=2,kind=1,wrapper=4,leg=1,reader=14,valid=7,
+                root=4000,render=4100,evaluated=7000,linked=0,cacheOwner=0,canonicalCount=0,matrices=0,
+                apiStatus=0,apiStep=0,apiIndex=0,apiResult=0,software=0)
+    values.update(changes)
+    identity=BASE+' input=90 generation=4 owner=1 weapon=2 model=3'
+    indices=[n for n in range(min(attempts,10)) if n not in excluded]
+    for n in excluded:
+        text=text.replace(f'index={n} ordinal={n+1} status=1',f'index={n} ordinal={n+1} status=5')
+    text+='\nLab idle paletteBoundarySummary schema=1 '+identity+f' source={SOURCE} count={len(indices)} diagnostic=1'
+    for n in indices:
+        row=values if n==0 else {k:0 for k in values}
+        if n:row.update(index=n,ordinal=n+1,api=n)
+        text+='\nLab idle paletteBoundary '+identity+' '+' '.join(f'{k}={v}' for k,v in row.items())
+    return text
+
 class Checks(unittest.TestCase):
+    def test_boundary_unlinked_cache_is_unknown_and_not_a_reference(self):
+        r=assess(boundary_fixture(),SOURCE)['rejected_or_missing_observations'][0]['submissions']
+        b=r['palette_boundaries'];self.assertEqual(b['rows'][0]['reader'],14)
+        self.assertEqual(b['rows'][0]['valid'],7)
+        for key in ('reference_qualified','alignment_accepted','positive_grasp_verified','source_provenance_authenticated'):
+            self.assertFalse(b[key])
+        self.assertEqual(r['palette_copies']['rows'],{})
+        with self.assertRaises(ValueError):assess(boundary_fixture(cacheOwner=4000),SOURCE)
+
+    def test_boundary_each_copy_leg_and_api_failure(self):
+        for phase in (2,4,5,7):
+            for wrapper,leg in ((4,1),(8,2)):
+                b=assess(boundary_fixture(phase=phase,wrapper=wrapper,leg=leg),SOURCE)
+                self.assertEqual(b['rejected_or_missing_observations'][0]['submissions']['palette_boundaries']['rows'][0]['leg'],leg)
+        for phase in (3,6):
+            text=boundary_fixture(phase=phase,wrapper=0,leg=0,reader=0,valid=16,
+                                  root=0,render=0,evaluated=0,apiStatus=2,apiStep=9,apiIndex=7,apiResult=-1)
+            self.assertEqual(assess(text,SOURCE)['rejected_or_missing_observations'][0]['submissions']['palette_boundaries']['rows'][0]['apiResult'],-1)
+        text=boundary_fixture(kind=0,phase=5,wrapper=0,leg=0,reader=0,valid=0,root=0,render=0,evaluated=0)
+        self.assertEqual(assess(text,SOURCE)['rejected_or_missing_observations'][0]['submissions']['palette_boundaries']['rows'][0]['kind'],0)
+
+    def test_boundary_join_capacity_completion_and_skipped_reads(self):
+        text=boundary_fixture();lines=text.splitlines()
+        for old,new in [('count=1 diagnostic=1','count=2 diagnostic=1'),
+                        ('count=1 diagnostic=1','count=11 diagnostic=1'),
+                        ('outerCompleted=1','outerCompleted=0'),('status=1 hr=0 flags=4','status=4 hr=0 flags=4'),
+                        ('status=1 hr=0 flags=4','status=1 hr=-1 flags=4'),
+                        ('status=1 hr=0 flags=4','status=1 hr=0 flags=0'),
+                        (f'source={SOURCE} count=1','source='+'c'*64+' count=1')]:
+            with self.assertRaises(ValueError,msg=old):assess(text.replace(old,new),SOURCE)
+        for index in (-1,-2):
+            with self.assertRaises(ValueError):assess(text+'\n'+lines[index],SOURCE)
+        with self.assertRaises(ValueError):assess('\n'.join(lines[:-1]),SOURCE)
+        bads=[dict(ordinal=2),dict(api=1),dict(wrapper=99),dict(phase=10),dict(leg=2),
+              dict(reader=9),dict(valid=15),dict(cacheOwner=4000),dict(matrices=8000),
+              dict(apiResult=-1),dict(software=-1,reader=3,valid=33,render=0,evaluated=0),
+              dict(kind=0),dict(phase=0)]
+        # Software guard failure is valid only for a copied value other than -1.
+        for changes in bads:
+            with self.assertRaises(ValueError,msg=str(changes)):assess(boundary_fixture(**changes),SOURCE)
+        for old,new in [('input=90','input=91'),('generation=4','generation=5'),('owner=1','owner=9'),
+                        ('model=3','model=8'),('hand=1','hand=0'),('eye=0','eye=1')]:
+            with self.assertRaises(ValueError,msg=old):assess(text.replace(lines[-1],lines[-1].replace(old,new)),SOURCE)
+
+    def test_boundary_failure_freeze_unwind_and_normal_outer_are_source_bound(self):
+        from verify_idle_submission_abi import source_checks
+        root=Path(__file__).resolve().parents[1]
+        engine=(root/'src/game/engine.cpp').read_text();gpu=(root/'src/game/scope_gpu.cpp').read_text()
+        for old,new in [('copy.wrapper==99','copy.wrapper==0'),('if(receipt.kind)return;',''),
+                        ('if(!receipt.kind) {','if(true) {'),
+                        ('if(!paletteApiOwnerCurrent(d,owner,slot,api) || copy.wrapper==99)return;',
+                         'if(copy.wrapper==99)return;')]:
+            bad=gpu.replace(old,new);self.assertNotEqual(gpu,bad)
+            with self.assertRaises(ValueError):source_checks(engine,bad)
+        for old,new in [('diagnostic->wrapper!=99','true'),('diagnostic->wrapper=99;','diagnostic->wrapper=1;'),
+                        ('emitIdlePaletteBoundaries(*idleStorage);',''),('trace.paletteBoundaryPublishable(n)','true')]:
+            bad=engine.replace(old,new);self.assertNotEqual(engine,bad)
+            with self.assertRaises(ValueError):source_checks(bad,gpu)
+
+    def test_boundary_api_rejects_impossible_completion_and_phase(self):
+        def api(**changes):
+            fields=dict(phase=6,wrapper=0,leg=0,reader=0,valid=16,root=0,render=0,evaluated=0,
+                        apiStatus=2,apiStep=9,apiIndex=7,apiResult=-1)
+            fields.update(changes);return boundary_fixture(**fields)
+        for changes in (dict(apiStatus=1),dict(apiStatus=3),dict(apiStep=0),dict(apiStep=4294967295),
+                        dict(apiStep=19,apiIndex=0),dict(apiStep=20,apiIndex=0),dict(apiStep=21,apiIndex=0),
+                        dict(apiIndex=1),dict(apiStep=13),dict(apiResult=0),
+                        dict(valid=0,apiStatus=0,apiStep=0,apiIndex=0,apiResult=0),
+                        dict(apiStatus=0,apiStep=0,apiIndex=0,apiResult=0)):
+            with self.assertRaises(ValueError,msg=str(changes)):assess(api(**changes),SOURCE)
+        # Serialization can decline before sampling, yielding a zero Missing snapshot.
+        self.assertEqual(assess(api(phase=3,apiStatus=0,apiStep=0,apiIndex=0,apiResult=0),SOURCE)
+                         ['rejected_or_missing_observations'][0]['submissions']['palette_boundaries']['rows'][0]['apiStatus'],0)
+        for phase in (3,6):
+            for step in range(1,23):
+                if phase==6 and step in (19,20,21):continue
+                index=5 if step in (9,10,11,12) else 0
+                result=0 if step in (2,5,7,10,14,17,20,22) else -1
+                assess(api(phase=phase,apiStep=step,apiIndex=index,apiResult=result),SOURCE)
+
+    def test_boundary_inventory_exact_at_capacity_and_excluded_rows(self):
+        for count in (0,1,10,11):
+            text=boundary_fixture(attempts=count)
+            boundary=assess(text,SOURCE)['rejected_or_missing_observations'][0]['submissions']['palette_boundaries']
+            self.assertEqual(set(boundary['rows']),set(range(min(count,10))))
+            if count:
+                lines=text.splitlines();missing='\n'.join(lines[:-1])
+                missing=missing.replace(f'count={min(count,10)} diagnostic=1',f'count={min(count,10)-1} diagnostic=1')
+                with self.assertRaises(ValueError):assess(missing,SOURCE)
+        text=boundary_fixture(attempts=3,excluded=(1,))
+        self.assertEqual(set(assess(text,SOURCE)['rejected_or_missing_observations'][0]['submissions']['palette_boundaries']['rows']),{0,2})
+        with self.assertRaises(ValueError):assess(text.replace('count=2 diagnostic=1','count=0 diagnostic=1').rsplit('\n',2)[0],SOURCE)
+
     def test_palette_schema3_attaches_only_its_owned_submission_producer(self):
         text=palette_projection_fixture()
         r=assess(text,SOURCE)['rejected_or_missing_observations'][0]
@@ -281,7 +394,7 @@ class Checks(unittest.TestCase):
         engine=(root/'src/game/engine.cpp').read_text();gpu=(root/'src/game/scope_gpu.cpp').read_text()
         for old,new in [('probe.submissionOwner->reservePaletteApi(', 'reserveDifferentPayload('),
                         ('sampleIdleApi(d,probe.bindings[1],p.before,p.program,p.words,{},true,true)', 'sampleWrongInputs()'),
-                        ('copyIdleSubmissionPalette(owner,bookend)', 'copyWrongPalette(bookend)'),
+                        ('copyPaletteBoundary(d,owner,slot,api,4,bookend)', 'copyWrongPalette(bookend)'),
                         ('before.projectionBookend(bookend);',''),('after.projectionBookend(bookend);',''),
                         ('paletteApiOwnerCurrent(d,owner,slot,api)', 'true'),
                         ('api>=IdleWeaponTrace::MaxPaletteApiPayloads ||',

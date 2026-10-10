@@ -28,7 +28,7 @@ bool idleProjectionConfigured() noexcept;
 bool copyIdleRaster(void *instance,IdleRasterCopy &out);
 // ID2-only policy selected by the current submission owner; copies raw values
 // without changing the single-affine raster/geometry admission policy.
-bool copyIdlePalette(void *instance,IdlePaletteCopy &out);
+bool copyIdlePalette(void *instance,IdlePaletteCopy &out,IdlePaletteBoundaryCopy *diagnostic=nullptr);
 // Integer-only current globals vs exact latest producer; no native writes/callbacks.
 uint32_t idlePaletteProjectionSequence(const IdleProjectionProbe &,const IdlePaletteCopy &) noexcept;
 // Existing render bank and actual DIP borrow only. No buffer/program, whole-draw

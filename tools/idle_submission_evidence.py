@@ -62,7 +62,7 @@ def consume(record,kind,f):
 
 def consume_palette(record,kind,f,expected_source):
     """Read emitter-reported copied evidence, without widening replay admission."""
-    if kind not in ('paletteSummary','paletteRow','paletteData'):return False
+    if kind not in ('paletteSummary','paletteRow','paletteData','paletteBoundarySummary','paletteBoundary'):return False
     if record is None or record.get('schema')!=4 or record.get('copyLayout')!=1 or \
             not record.get('native_id_explicit') or record.get('nativeId')!=2 or not record.get('request') or \
             not BASE.issubset(f) or any(number(f[k],(1<<64)-1 if k=='request' else 0xffffffff)!=record[k] for k in BASE):
@@ -83,6 +83,8 @@ def consume_palette(record,kind,f,expected_source):
         submitted['palette_copies']=p;return True
     p=submitted.get('palette_copies')
     if p is None or not p['outerCompleted']:raise ValueError('Palette detail without reported outer completion')
+    if kind.startswith('paletteBoundary'):
+        return consume_palette_boundary(record,kind,f,expected_source,submitted,p)
     index=number(f.get('index',''),63);ordinal=number(f.get('ordinal',''))
     original=submitted['rows'].get(index)
     if index>=p['payloads'] or ordinal!=index+1 or original is None or original['status']!=8 or original['metadata'] is None:
@@ -141,9 +143,80 @@ def consume_palette(record,kind,f,expected_source):
         raise ValueError('Nonfinite copied native palette matrix')
     r['data'][key]=raw;return True
 
+def consume_palette_boundary(record,kind,f,expected_source,submitted,p):
+    identity={'input','generation','owner','weapon','model'}
+    if any(number(f.get(k,''),(1<<64)-1 if k=='input' else 0xffffffff)!=record[k] or not record[k] for k in identity):
+        raise ValueError('Foreign palette boundary invocation')
+    if kind=='paletteBoundarySummary':
+        if set(f)!=BASE|identity|{'schema','source','count','diagnostic'} or f['schema']!='1' or \
+           f['source']!=expected_source or f['diagnostic']!='1' or 'palette_boundaries' in submitted:
+            raise ValueError('Palette boundary summary/schema/source/duplicate')
+        count=number(f['count'],10)
+        expected={index for index,row in submitted['rows'].items() if index<p['payloads'] and
+                  row['status'] in (1,2,3,8) and row['flags']&4 and row['hresult']>=0}
+        if count!=len(expected):raise ValueError('Palette boundary eligible inventory mismatch')
+        submitted['palette_boundaries']={'count':count,'rows':{},'diagnostic_only':True,
+            'source_provenance_authenticated':False,'reference_qualified':False,'alignment_accepted':False,'positive_grasp_verified':False}
+        return True
+    boundary=submitted.get('palette_boundaries')
+    fields={'index','ordinal','api','phase','kind','wrapper','leg','reader','valid',
+            'root','render','evaluated','linked','cacheOwner','canonicalCount','matrices',
+            'apiStatus','apiStep','apiIndex','apiResult','software'}
+    if boundary is None or set(f)!=BASE|identity|fields:raise ValueError('Palette boundary before summary/schema')
+    v={k:(signed(f[k]) if k in ('apiResult','software') else number(f[k])) for k in fields}
+    row=submitted['rows'].get(v['index'])
+    if row is None or v['index'] in boundary['rows'] or v['api']!=v['index'] or v['api']>=p['payloads'] or \
+       v['ordinal']!=row['ordinal'] or row['status'] not in (1,2,3,8) or not row['flags']&4 or row['hresult']<0:
+        raise ValueError('Foreign/retired/reentered palette boundary row')
+    if v['phase']>9 or v['kind']>1 or v['wrapper']>11 or v['leg']>2 or \
+       v['reader'] not in (*range(19),32) or v['valid'] not in (0,1,3,7,15,16,33) or v['apiStatus']>3:
+        raise ValueError('Palette boundary phase/guard/validity outside bounds')
+    groups=((1,('root',)),(2,('render',)),(4,('evaluated','linked')),
+            (8,('cacheOwner','canonicalCount','matrices')),(16,('apiStatus','apiStep','apiIndex','apiResult')),(32,('software',)))
+    if any(any(v[k] for k in keys) for bit,keys in groups if not v['valid']&bit):
+        raise ValueError('Palette boundary claims skipped native reads')
+    if not v['kind']:
+        if v['phase']>7 or any(v[k] for k in fields-{'index','ordinal','api','phase','kind'}):
+            raise ValueError('Unknown progress claims returned failure data')
+    elif not v['phase']:
+        raise ValueError('Returned palette failure without attempted phase')
+    elif v['phase'] in (2,4,5,7):
+        if not v['wrapper'] or v['valid']==16 or v['wrapper'] in (1,2,3) and (v['leg'] or v['reader'] or v['valid']):
+            raise ValueError('Inconsistent native palette copy leg/failure')
+        if v['wrapper'] in (4,8):
+            required={1:1,2:1,3:33,4:1,5:3,6:3,11:3,12:3,13:3,14:7,15:15,16:15,17:1,18:1,32:15}
+            if v['leg']!=(1 if v['wrapper']==4 else 2) or v['reader'] not in required or v['valid']!=required[v['reader']]:
+                raise ValueError('Unsupported reader guard or partial field inventory')
+            if v['reader']==3 and v['software']==-1:raise ValueError('Software guard did not fail')
+        elif v['wrapper']>3 and (v['reader'] or v['valid']!=15 or v['leg']!=(1 if v['wrapper']<8 else 2)):
+            raise ValueError('Wrapper failure lacks its completed native leg')
+    elif v['wrapper'] or v['leg'] or v['reader'] or v['valid'] not in ((0,16) if v['phase'] in (3,6) else (0,)):
+        raise ValueError('API/equality failure contains foreign native data')
+    if v['kind'] and v['phase'] in (3,6):
+        if v['valid']!=16:raise ValueError('API failure lacks copied snapshot status')
+        if v['apiStatus']==0:
+            if v['phase']!=3 or any(v[k] for k in ('apiStep','apiIndex','apiResult')):
+                raise ValueError('Missing snapshot is only a pre-copy serializer failure')
+        else:
+            step=v['apiStep'];index=v['apiIndex'];result=v['apiResult']
+            if v['apiStatus']!=2 or step not in range(1,23) or v['phase']==6 and step in (19,20,21):
+                raise ValueError('API failure is not a reachable normal failed return')
+            if (index not in (0,5,6,7,8) if step in (9,10,11,12) else index!=0):
+                raise ValueError('API failure index outside reachable stream inventory')
+            if step in (1,3,4,6,9,11,13,16,19) and result>=0 or \
+               step in (2,5,7,10,14,17,20,22) and result<0:
+                raise ValueError('API result contradicts its failed getter or successful validation predecessor')
+    boundary['rows'][v['index']]=v;return True
+
 def validate_palette(record):
     submitted=record.get('submissions',{});p=submitted.get('palette_copies')
     if p is None:return
+    boundaries=submitted.get('palette_boundaries')
+    if boundaries is not None:
+        expected={index for index,row in submitted['rows'].items() if index<p['payloads'] and
+                  row['status'] in (1,2,3,8) and row['flags']&4 and row['hresult']>=0}
+        if len(boundaries['rows'])!=boundaries['count'] or set(boundaries['rows'])!=expected:
+            raise ValueError('Truncated palette boundary inventory')
     for index,r in p['rows'].items():
         d=r['data'];wanted={'world:0:0','draw:0:0'}
         for kind,count in [('mapping',r['count']),('canonical',r['count']),('palette',r['count']),

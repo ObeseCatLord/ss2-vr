@@ -186,6 +186,15 @@ struct IdlePaletteCopy {
     }
 };
 constexpr unsigned IdlePaletteApiCapacity=10;
+// Optional passive copy-boundary values. Pointer-shaped tokens are never
+// dereferenced by this receipt. Validity marks reached reads, including zero.
+struct IdlePaletteBoundaryCopy {
+    uint32_t phase=0,kind=0,wrapper=0,leg=0,reader=0,valid=0;
+    uint32_t root=0,render=0,evaluated=0,linked=0,cacheOwner=0,canonicalCount=0,matrices=0;
+    uint32_t apiStatus=0,apiStep=0,apiIndex=0;
+    int32_t apiResult=0;
+    int32_t software=0;
+};
 struct IdleSubmissionTrace {
     static constexpr unsigned MaxAttempts=64,NoSlot=MaxAttempts;
     enum class Status : uint32_t { Pending,PreUnknown,PostUnknown,Mismatch,OriginalFailed,Reentered,Retired,Aborted,Qualified,NoForward,Split };
@@ -312,6 +321,7 @@ struct IdleWeaponTrace {
     } streamProbe{};
     struct PaletteApiPayload {
         uint32_t submissionSlot=IdleSubmissionTrace::NoSlot,ordinal=0,words=0;
+        IdlePaletteBoundaryCopy boundary{};
         bool beforeCopied=false,afterCopied=false,matched=false;
         StreamSnapshot before;
         std::array<uint32_t,IdleGeometryCopy::MaxProgramWords> program{};
@@ -352,6 +362,16 @@ struct IdleWeaponTrace {
         return idleBufferRanges(p.content,std::span(p.before.declaration).first(p.before.declarationCount),ranges,nullptr,2);
     }
     IdleProjectionProbe projectionProbe{};
+    bool paletteBoundaryPublishable(unsigned slot) const noexcept {
+        if(slot>=IdleSubmissionTrace::MaxAttempts || slot>=submissions.count || !submissions.outerReturned || !submissions.outerCompleted ||
+           paletteApiCount>MaxPaletteApiPayloads)return false;
+        const auto &row=submissions.rows[slot];
+        if(!row.returned || row.hresult<0 || row.paletteApiSlot>=paletteApiCount)return false;
+        using S=IdleSubmissionTrace::Status;
+        if(row.status!=S::PreUnknown && row.status!=S::PostUnknown && row.status!=S::Mismatch && row.status!=S::Qualified)return false;
+        const auto &p=paletteApiPayloads[row.paletteApiSlot];
+        return p.submissionSlot==slot && p.ordinal==row.ordinal && row.ordinal==slot+1;
+    }
     IdleProjectionOpportunities projectionOpportunities{};
     uint32_t paletteProjectionSequence(unsigned slot) const noexcept {
         if(!paletteApiPublishable(slot) || projectionProbe.blocked || projectionProbe.pending ||

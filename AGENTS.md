@@ -30,7 +30,7 @@ use this active file and current user messages for authority.
 
 Use this isolated sanitized development checkout. Preserve the old installed-game
 checkout, old ancestry, rejected melee patch, user changes, installation,
-settings/profiles/saves and all attempted private fixtures. Never merge/reset old
+settings/profiles/saves and unique evidence from attempted private fixtures. Never merge/reset old
 email-bearing history into this checkout. Cloud source edits stopped to avoid
 competing writers. One original integration/runtime/publication owner remains.
 
@@ -98,7 +98,17 @@ or replace user-operated firing, vehicle, headset or multiplayer acceptance.
 Use the reviewed isolated lab/prefix and per-process simulated Monado setup,
 fixed neutral poses/zero controls, exact products/settings/profiles/scene and
 source/tool seals, bounded readiness/deadlines and exact owned-process cleanup.
-Attempted fixtures are immutable: never rerun/reseal, including failures.
+Attempted fixtures must never be rerun/resealed, including failures. The user
+subsequently requested cleanup to control disk usage. Verified duplicate archives
+in retired agent-created fixtures may be consolidated into a private read-only
+store, retaining exact content hashes, original metadata and a retirement ledger.
+Keep logs, captures, receipts, saves, profiles, settings and all unique evidence.
+Do not link archived content to the original installation or mutable lab files;
+new runnable fixtures must receive independent copies. Cleanup is limited to
+owned generated data and does not authorize removal of user or original files.
+Before creating more lab copies, check free space and retire superseded owned
+storage when its unique evidence is preserved. Keep active fixtures independent;
+do not accumulate another full archive set for each historical attempt.
 A collection-readiness rejection after clean scene/shutdown is not a startup
 crash. Keep native/Windows runtime manifests distinct and preserve global
 runtime/security/credential settings. No automatic WinBoat passthrough changes.

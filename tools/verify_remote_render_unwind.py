@@ -277,7 +277,7 @@ def verify(obj):
     idle_cold=[b for n,b in bodies.items() if 'copyIdleRaster(' in n and '::Context::run(void*) [clone .cold]' in n]
     require(len(idle_cold)==1 and '__cxa_begin_catch' in idle_cold[0] and '__cxa_end_catch' in idle_cold[0],
             'Idle raster allocation failure must be contained locally')
-    palette_entry=one('ss2vr::game::remote_render::','copyIdlePalette(void*, ss2vr::IdlePaletteCopy&)')
+    palette_entry=one('ss2vr::game::remote_render::','copyIdlePalette(void*, ss2vr::IdlePaletteCopy&, ss2vr::IdlePaletteBoundaryCopy*)')
     require(palette_entry.count('DISP32\tss2vrNativeFinally')==1,
             'Joined palette scratch lacks local containment')
     palette_cleanup=one('copyIdlePalette(', '::Context::finish(void*, int)')

@@ -4487,28 +4487,34 @@ bool copyIdleSubmissionMetadata(const IdleWeaponTrace *wanted,IdleSubmissionMeta
     },[&](bool aborted) noexcept {if(aborted){out={};copied=false;}});
     return copied; // No trace rejection, clip qualification, or retained native borrow.
 }
-bool copyIdleSubmissionPalette(const IdleWeaponTrace *wanted,IdlePaletteCopy &out) noexcept {
+bool copyIdleSubmissionPalette(const IdleWeaponTrace *wanted,IdlePaletteCopy &out,IdlePaletteBoundaryCopy *diagnostic) noexcept {
     out={};bool copied=false;
+    if(diagnostic)*diagnostic={};
+    const auto failed=[&](unsigned step) noexcept {if(diagnostic && diagnostic->wrapper!=99)diagnostic->wrapper=step;};
     withNativeFinally([&] {
         ScopeDrawBinding binding;IdleDrawIdentity identity;IdleWeaponTrace *trace=nullptr;
-        if(!currentIdleDraw(binding,identity,trace) || trace!=wanted || !trace || trace->nativeId!=2 ||
-           !trace->admitted || trace->binding!=identity || !trace->config.configuration)return;
+        if(!currentIdleDraw(binding,identity,trace)) {failed(1);return;}
+        if(trace!=wanted || !trace || trace->nativeId!=2 || !trace->admitted || trace->binding!=identity) {failed(2);return;}
+        if(!trace->config.configuration) {failed(3);return;}
         IdlePaletteCopy before,after;
-        if(!remote_render::copyIdlePalette(binding.modelInstance,before) ||
-           before.metadata.rootConfig!=trace->config)return;
+        if(diagnostic)diagnostic->leg=1;
+        if(!remote_render::copyIdlePalette(binding.modelInstance,before,diagnostic)) {failed(4);return;}
+        if(before.metadata.rootConfig!=trace->config) {failed(5);return;}
         const uint32_t projection=remote_render::idlePaletteProjectionSequence(trace->projectionProbe,before);
         ScopeDrawBinding now;IdleDrawIdentity current;IdleWeaponTrace *same=nullptr;
-        if(!currentIdleDraw(now,current,same) || same!=trace || current!=identity ||
-           now.modelInstance!=binding.modelInstance ||
-           !remote_render::copyIdlePalette(now.modelInstance,after) || before!=after)return;
+        if(!currentIdleDraw(now,current,same)) {failed(6);return;}
+        if(same!=trace || current!=identity || now.modelInstance!=binding.modelInstance) {failed(7);return;}
+        if(diagnostic)diagnostic->leg=2;
+        if(!remote_render::copyIdlePalette(now.modelInstance,after,diagnostic)) {failed(8);return;}
+        if(before!=after) {failed(9);return;}
         ScopeDrawBinding end;IdleDrawIdentity finalIdentity;IdleWeaponTrace *finalTrace=nullptr;
-        if(!currentIdleDraw(end,finalIdentity,finalTrace) || finalTrace!=trace || finalIdentity!=identity ||
-           end.modelInstance!=binding.modelInstance)return;
+        if(!currentIdleDraw(end,finalIdentity,finalTrace)) {failed(10);return;}
+        if(finalTrace!=trace || finalIdentity!=identity || end.modelInstance!=binding.modelInstance) {failed(11);return;}
         out=before;
         const uint32_t finalProjection=remote_render::idlePaletteProjectionSequence(trace->projectionProbe,after);
         if(projection && projection==finalProjection)out.projectionSequence=projection;
         copied=true;
-    },[&](bool aborted) noexcept {if(aborted){out={};copied=false;}});
+    },[&](bool aborted) noexcept {if(aborted){out={};copied=false;if(diagnostic){*diagnostic={};diagnostic->wrapper=99;}}});
     return copied;
 }
 bool currentIdleRaster(IdleRasterCopy &out,IdleWeaponTrace *&trace) {
@@ -4541,6 +4547,23 @@ static void emitIdleProjectionOpportunities(const IdleWeaponTrace &trace) {
                 b.request,b.eye,b.hand,i,row.ordinal,row.kind,row.source,row.passStage,row.traceStage,
                 row.poseCopied,row.exactDraw,row.oldGate);
         }
+    }
+}
+static void emitIdlePaletteBoundaries(const IdleWeaponTrace &trace) {
+    if(!trace.admitted || trace.nativeId!=2 || !trace.submissions.outerCompleted)return;
+    const auto &b=trace.binding;
+    unsigned count=0;
+    for(unsigned n=0;n<trace.submissions.count && n<IdleSubmissionTrace::MaxAttempts;++n)
+        count+=trace.paletteBoundaryPublishable(n);
+    log("Lab idle paletteBoundarySummary schema=1 source=%.*s request=%llu input=%llu generation=%u owner=%u weapon=%u model=%u eye=%u hand=%u count=%u diagnostic=1",
+        64,ss2vrBuildContract.sourceFingerprint.data(),b.request,b.input,b.generation,b.owner,b.weapon,b.model,b.eye,b.hand,count);
+    for(unsigned n=0;n<trace.submissions.count && n<IdleSubmissionTrace::MaxAttempts;++n) {
+        if(!trace.paletteBoundaryPublishable(n))continue;
+        const auto &row=trace.submissions.rows[n];const auto &p=trace.paletteApiPayloads[row.paletteApiSlot].boundary;
+        log("Lab idle paletteBoundary request=%llu input=%llu generation=%u owner=%u weapon=%u model=%u eye=%u hand=%u index=%u ordinal=%u api=%u phase=%u kind=%u wrapper=%u leg=%u reader=%u valid=%u root=%u render=%u evaluated=%u linked=%u cacheOwner=%u canonicalCount=%u matrices=%u apiStatus=%u apiStep=%u apiIndex=%u apiResult=%d software=%d",
+            b.request,b.input,b.generation,b.owner,b.weapon,b.model,b.eye,b.hand,n,row.ordinal,row.paletteApiSlot,
+            p.phase,p.kind,p.wrapper,p.leg,p.reader,p.valid,p.root,p.render,p.evaluated,p.linked,p.cacheOwner,
+            p.canonicalCount,p.matrices,p.apiStatus,p.apiStep,p.apiIndex,p.apiResult,p.software);
     }
 }
 static void emitIdlePaletteCompanions(const IdleWeaponTrace &trace) {
@@ -5240,6 +5263,7 @@ static void renderTrackedWeapon(void *w, Matrix34 m, bool sniper, uintptr_t call
     if(!returned && idleStorage)idleStorage->submissions.outerCompleted=false;
     if(returned && idleStorage)withNativeFinally([&] {
         emitIdlePaletteCompanions(*idleStorage);
+        emitIdlePaletteBoundaries(*idleStorage);
         emitIdleProjectionOpportunities(*idleStorage);
     },[](bool) noexcept {});
 }

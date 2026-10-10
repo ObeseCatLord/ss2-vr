@@ -8,6 +8,38 @@ using namespace ss2vr;
 #error Idle diagnostic checks need active assertions
 #endif
 int main() {
+    { // Failed palette borrowing can report its guard, never a qualified reference.
+     const ScopeIndexedDraw draw{4,0,0,3017,0,2673};
+     IdleWeaponTrace t;t.nativeId=2;
+     auto &s=t.submissions;const auto slot=s.reserve(draw),api=t.reservePaletteApi(slot);
+     s.after(slot,{},false,0);s.finalize(slot,false,true,false);
+     assert(!t.paletteBoundaryPublishable(slot));
+     s.outerReturned=true;s.completeOuter(true,true,true,true,true);
+     assert(t.paletteBoundaryPublishable(slot) && !t.paletteApiPublishable(slot));
+     const auto good=t;
+     for(unsigned failure=0;failure<13;++failure) {
+        t=good;auto &r=t.submissions.rows[slot];auto &p=t.paletteApiPayloads[api];
+        if(failure==0)t.submissions.outerReturned=false;
+        else if(failure==1)t.submissions.outerCompleted=false;
+        else if(failure==2)t.paletteApiCount=IdleWeaponTrace::MaxPaletteApiPayloads+1;
+        else if(failure==3)r.returned=false;
+        else if(failure==4)r.hresult=-1;
+        else if(failure==5)r.paletteApiSlot=t.paletteApiCount;
+        else if(failure==6)++p.submissionSlot;
+        else if(failure==7)++p.ordinal;
+        else if(failure==8){++r.ordinal;++p.ordinal;}
+        else if(failure==9)r.status=IdleSubmissionTrace::Status::Reentered;
+        else if(failure==10)r.status=IdleSubmissionTrace::Status::Aborted;
+        else if(failure==11)r.status=IdleSubmissionTrace::Status::Retired;
+        else r.status=IdleSubmissionTrace::Status::NoForward;
+        assert(!t.paletteBoundaryPublishable(slot));
+     }
+     t=good;assert(!t.paletteBoundaryPublishable(t.submissions.count));
+     for(auto status:{IdleSubmissionTrace::Status::PreUnknown,IdleSubmissionTrace::Status::PostUnknown,
+                      IdleSubmissionTrace::Status::Mismatch,IdleSubmissionTrace::Status::Qualified}) {
+        t.submissions.rows[slot].status=status;assert(t.paletteBoundaryPublishable(slot));
+     }
+    }
     {IdlePaletteCopy p;
      p.metadata.modelAddress=100;p.metadata.drawAddress=200;p.metadata.modelRecord=1;
      p.metadata.drawRecord=3;p.metadata.surface=300;p.metadata.instance=400;
