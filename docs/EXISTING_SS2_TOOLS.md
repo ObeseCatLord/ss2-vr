@@ -1,5 +1,34 @@
 # Existing Serious Sam 2 tools — research, 2026-10-09
 
+## Current practical decision — 2026-10-10
+
+Continue reusing the independently compared other1/Andrey parser for authored
+resources. Editor2/Edit Data is the candidate for private resource cross-checks;
+SE2 Macro is the candidate for simpler user-operated acceptance scenes. No tool
+found in the bounded searches replaces live loaded-model, animation/cache or
+native owner evidence. Keep the prepared native collector for that boundary.
+
+The latest read-only subagent identified one additional concrete authoring recipe.
+Nollopa's [beginner guide](https://www.serioussite.ru/publ/nollopa_serious_macro_scripting/5-1-0-331)
+demonstrates `Item.SpawnSimple()` and `Item.OnePicked`, with a shotgun-spawner
+example. The guide distinguishes the spawner interface from the spawned entity.
+Its [advanced guide](https://www.serioussite.ru/publ/nollopa_serious_macro_scripting_prodvinutyj_uroven/5-1-0-332)
+describes Chapter Info autosave points, selected-chapter editor starts and
+`Chapter002.Start()`. The integration owner checked both primary pages.
+
+The smallest adoption trial is one private pickup-to-checkpoint sequence in the
+matching isolated editor: confirm those members on the actual single-item
+spawner, bind a characterized weapon resource, then connect pickup completion to
+a Chapter Info checkpoint. Verify saved inventory on reload; verify equip and
+neutral animation separately. This composition is proposed, not implemented or
+runtime-verified. Tutorial names do not establish Auto Shotgun identity, pinned
+build support or automatic equip, and do not justify guessed alignment.
+
+No download, installation, editor/game launch or capture occurred. Astra/xhigh
+was explicitly requested for the research helper; effective routing metadata
+was unavailable, so this is not an attested Astra review or source GO. Public
+documentation supports the recipe; it grants no game-asset redistribution rights.
+
 ## Bounded follow-up: secondary test aids
 
 A user-requested read-only subagent researched new tools while ID2 submission

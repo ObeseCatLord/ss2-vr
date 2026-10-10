@@ -1796,3 +1796,19 @@ changes. Owner cleanup is scalar lock-free32-bit code; CAS comparison semantics
 remain production-policy/source checks. Corrected an older linked-weapon symbol
 selector that mistook a lambda helper for its outer callback. No runtime/install
 changes; physical vehicle controls, broader alignment and full acceptance remain.
+
+
+## 2026-10-10 — pickup/checkpoint tooling and recovery acceptance
+
+A user-requested read-only online research subagent narrowed the existing SE2
+Macro lead to SpawnSimple/OnePicked on item spawners. Main checked the author
+guides and recorded a private pickup-to-checkpoint editor trial, with pinned-build,
+inventory/equip and live-reference limits. No tool was installed or launched.
+Astra/xhigh was requested; effective routing metadata was unavailable, so no
+attested review GO is claimed.
+
+Updated the comprehensive user procedure for short grip-loss/recovery in optional
+arm pulls and physical saw gestures, separating unintended input from native
+momentum and native release. Documentation-only; diff checks pass, native build
+fingerprint0047bd77/IPC11/wire7 remains unchanged. No runtime or new alignment
+acceptance. The existing ID2 observation dependency remains unresolved.

@@ -90,6 +90,14 @@ collision is not established. Record these settings and each outcome separately.
    role independently admits first use after fresh quiet and rearms after actual
    stops. Include copied-active state and compare behavior with a native manual press.
 
+For the physical-saw pass, also interrupt grip tracking briefly while keeping the
+trigger released, then restore tracking with the controller in a slightly different
+position. Test each hand separately. Recovery must not create a new physical
+gesture, even if the game missed the loss frame. Hold still to establish a fresh
+quiet baseline before making the next intentional swing. Test native stop/release
+separately: rejecting a recovered gesture does not prove that an earlier native
+press was released. Do not modify native manual history to prime this test.
+
 ## Wheels, menus and comfort
 
 During the later hardware pass, recenter while looking up/down and with a tilted
@@ -129,6 +137,15 @@ For positively identified driver wheels with enabled physical steering, test lef
 right and both hands, smooth transfer, release, tracking loss and joystick
 fallback. Record vehicle/seat identity. Do not treat a road-wheel joint or a
 weapon-wheel action as physical driver steering. Teleport is outside scope.
+
+For optional arm pulls, use `[Swimming]Immersive=1` only in the separate test
+copy; the default is0. Keep the movement stick centered in water. Briefly lose
+and regain either controller's grip tracking at a different hand position, then
+repeat with both controllers. Recovery must not inject a pull-stroke control
+input; existing native momentum may continue. After a fresh tracked baseline,
+an intentional pull should work again. Compare with arm pulls disabled and check
+that head-directed joystick swimming still works. These checks distinguish a
+recovery-generated input from normal native buoyancy and movement.
 
 ## Multiplayer with other mod users
 
