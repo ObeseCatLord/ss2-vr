@@ -5,6 +5,21 @@ These notes include historical inactive-component checkpoints. Current
 single-player integration is documented in ROOMSCALE_LOCAL_CONTROLLER.md;
 multiplayer body/origin settlement remains unfinished.
 
+## Current source clarification — 2026-10-09
+
+The current root sweep already covers the admitted two-hull swimming configuration,
+including its rotated capsule, through native child-pose and affine-transform
+bounds. Earlier upright-only/inactive-reader statements below are historical.
+See ROOMSCALE_BODY_SWEEP_GEOMETRY.md and the actual
+src/common/roomscale_body_sweep.hpp caller in engine.cpp.
+
+The current head-volume path has no single-player-only gate. The remaining nearby
+singlePlayer() check belongs to private fixture cheat/save preparation and must
+not be removed as a multiplayer feature change. Controlling-local body movement
+has its explicit local/SP/server/negotiated-client entry and revalidation gates;
+remote actors keep native correction/physics. This clarification adds no runtime
+acceptance and does not close authoritative multiplayer settlement.
+
 ## Exact native placement/shape sources
 
 CMechanism::GetRootBody at133B60 checks part count+8 and returns the first part's

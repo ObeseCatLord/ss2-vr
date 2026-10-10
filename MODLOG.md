@@ -1,5 +1,17 @@
 # Mod journal
 
+## 2026-10-09 — native occupied-seat mapping and tool adoption
+
+External unchanged SE2 parser now decodes four characterized hovercraft parameter
+resources with independently matching seat/attachment/ride-part names. Follow-up
+research found official editor IDs/debug controls and an authored AWF export route.
+Focused REA and independent decoding establish the native seat-name → attachment
+ABI. Added its finite predicates to the existing native steering verifier; normal
+and optimized checks pass with 45 rejected in-memory mutation controls per mode.
+All four product identities/contract are unchanged. No new native hook or runtime
+launch; authored names do not prove loaded seat association, grasp or steering.
+Corrected stale rotated-swimming/head-volume notes while retaining history.
+
 ## 2026-10-09 — paired evaluated cockpit Main/Seat copies
 
 Added Seat to the existing bounded ride render observer/cache bookends, preserving

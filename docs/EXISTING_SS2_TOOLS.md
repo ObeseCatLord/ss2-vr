@@ -81,3 +81,33 @@ parser instead of repeatedly writing a resource-specific decoder. Keep pinned
 bytes and independent range/count/hash/reference checks before trusting a new
 resource. The native observer is still needed for the actual evaluated Main/Seat
 frame: Fighter Loading invalidates a fixed authored Seat-to-Main assumption.
+
+## Further author/official documentation
+
+A bounded follow-up subagent search found useful existing editor interfaces:
+
+| Interface | Primary evidence | Use and limit |
+| --- | --- | --- |
+| Editor Entity ID and debug-variable menu | [Croteam's 2021 update announcement](https://steamcommunity.com/app/204340/discussions/0/3100138655163313155/) documents visible Entity IDs and the `.` debug menu. | Useful for inspecting an authored entity and available debug controls. No mapping to runtime pointer, network identity or render ownership is established. |
+| AWF world export | [Ryason55's own map-port description](https://steamcommunity.com/sharedfiles/filedetails/?id=2993154487) credits SE2 AWF export and other1's Blender tools. | Possible authored world-placement inspection route. The destination is Fusion; its weapon scripts and multiplayer limitations are not SS2 behavior. Export fidelity remains untested here. |
+| Native weapon adjustment and left-weapon controls | [Croteam's October 2025 notes](https://store.steampowered.com/news/posts/?appids=204340) name the weapon-adjustment cheat and describe enabling dual wield through the left-weapon toggle when Combo Weapons is active. | Concrete native control names for investigation. No new independent hand-aim, eligibility, placement or replication proof follows from release notes. |
+
+The integration owner checked these primary pages. Historical help/LightWave and
+developer-diary mirrors are leads only; their current installed interfaces were
+not independently established. No additional current SS2 native SDK, symbol
+package or hook framework was verified in the bounded search. This is not a
+claim that none exists. No editor installation or launch is needed for the
+standalone parser already evaluated.
+
+That parser was additionally used, unchanged, on three characterized Fighter
+parameter resources and the Saucer parameter resource. Authored seat names,
+attachment names and ride-part names matched the independent decoder normally
+and with Python optimization. This expands practical parser use to parameter
+relationships. Its serialized SPuppetSeatData object is not a live native
+CPuppetSeatData pointer. Exact private identities/results remain local; no
+third-party source or game resource was vendored or published.
+
+Next use is authored resource/reference inspection through the existing parser,
+then comparison with the current loaded model and occupied native seat. An editor
+preview or authored name match cannot supply that live association. Keep native
+draw/animation ownership evidence and the current D3D9-to-D3D11 architecture.

@@ -16,6 +16,87 @@ def require(condition, message):
         raise ValueError(message)
 
 
+def verify_seat_attachment(pe):
+    """Bind the occupied-name → attachment route; never call its native getter.
+
+    This is a finite instruction/dispatch check of the pinned module, not a
+    lifetime proof, general CFG proof, or certification of a loaded resource.
+    In particular GetSeatAttachment resolves its returned handle twice and
+    does not null-check the second result before reading it.
+    """
+    base = pe.OPTIONAL_HEADER.ImageBase
+    exports = {e.name.decode(): e.address for e in pe.DIRECTORY_ENTRY_EXPORT.symbols if e.name}
+    for name, address in (
+        ('?FindSeatDataByName@CPuppetEntity@SeriousEngine@@UAE?AV?$Handle@VCPuppetSeatData@SeriousEngine@@@2@VIDENT@2@@Z', 0x84880),
+        ('?GetSeatAttachment@CPuppetEntity@SeriousEngine@@UAE?AVIDENT@2@V32@@Z', 0x84930),
+        ('?GetSeatAbsPlacement@CPuppetEntity@SeriousEngine@@UAE?AVMatrix34f@2@VIDENT@2@@Z', 0x84d10),
+    ):
+        require(exports.get(name) == address, 'Native seat export changed')
+    for table in (0x2a8558, 0x2b8420):
+        for slot, target in ((0x20c, 0x84880), (0x214, 0x84930), (0x224, 0x84d10)):
+            require(struct.unpack('<I', pe.get_data(table + slot, 4))[0] == base + target,
+                    'Hover occupied-seat dispatch changed')
+    imports = {i.address: (d.dll.lower(), i.name)
+               for d in pe.DIRECTORY_ENTRY_IMPORT for i in d.imports}
+    for address, expected in (
+        (0x102941d0, (b'core.dll', b'?hvHandleToPointer@SeriousEngine@@YAPAXK@Z')),
+        (0x1029405c, (b'core.dll', b'?_st_idInvalid@SeriousEngine@@3UInvalidIdent@1@B')),
+        (0x10294cf4, (b'engine.dll', b'?GetAttachmentAbsolutePlacement@CModelRenderable@SeriousEngine@@QAE?AVMatrix34f@2@VIDENT@2@@Z')),
+    ):
+        require(imports.get(address) == expected, 'Native seat import changed')
+    md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32)
+    decoded = {i.address - base: (i.mnemonic, i.op_str)
+               for start, size in ((0x84880, 0xa5), (0x84930, 0x4f), (0x84d10, 0x3b))
+               for i in md.disasm(pe.get_data(start, size), base + start)}
+    expected = {
+        # Find by *name*, distinct from seat index and attachment identity.
+        0x8488c: ('call', 'dword ptr [eax + 0x200]'),
+        0x848a9: ('call', 'dword ptr [edx + 0x204]'),
+        0x848b3: ('call', 'dword ptr [0x102941d0]'),
+        0x848b9: ('mov', 'ecx, dword ptr [eax + 4]'),
+        0x848c2: ('cmp', 'ecx, ebx'),
+        0x848c4: ('je', '0x10084916'),
+        0x84919: ('mov', 'ecx, dword ptr [ebp + 0xc]'),
+        0x8491e: ('mov', 'dword ptr [eax], ecx'),
+        0x84922: ('ret', '8'),
+        # IDENT uses a hidden output pointer; both exits pop two arguments.
+        0x84933: ('mov', 'edx, dword ptr [ebp + 0xc]'),
+        0x84939: ('push', 'edx'),
+        0x8493a: ('lea', 'edx, [ebp + 0xc]'),
+        0x8493d: ('push', 'edx'),
+        0x8493e: ('call', 'dword ptr [eax + 0x20c]'),
+        0x84947: ('mov', 'esi, dword ptr [0x102941d0]'),
+        0x8494e: ('call', 'esi'),
+        0x84953: ('test', 'eax, eax'),
+        0x84955: ('jne', '0x10084969'),
+        0x84957: ('mov', 'ecx, dword ptr [0x1029405c]'),
+        0x8495f: ('mov', 'eax, dword ptr [ebp + 8]'),
+        0x84962: ('mov', 'dword ptr [eax], edx'),
+        0x84966: ('ret', '8'),
+        0x8496d: ('call', 'esi'),
+        0x8496f: ('mov', 'ecx, dword ptr [eax + 8]'),
+        0x84972: ('mov', 'eax, dword ptr [ebp + 8]'),
+        0x84978: ('mov', 'dword ptr [eax], ecx'),
+        0x8497c: ('ret', '8'),
+        # The native world-placement route consumes the resulting attachment.
+        0x84d25: ('call', 'dword ptr [eax + 0x214]'),
+        0x84d2b: ('mov', 'eax, dword ptr [esi + 0x120]'),
+        0x84d32: ('call', 'dword ptr [0x102941d0]'),
+        0x84d38: ('mov', 'ecx, dword ptr [ebp + 0xc]'),
+        0x84d3e: ('push', 'ecx'),
+        0x84d45: ('call', 'dword ptr [0x10294cf4]'),
+    }
+    for address, instruction in expected.items():
+        require(decoded.get(address) == instruction, 'Native seat seam changed at ' + hex(address))
+    return {'checked_instructions': len(expected), 'hover_classes_checked': 2,
+            'attachment_abi': 'thiscall; hidden IDENT output then seat IDENT; ret8',
+            'occupied_name_and_attachment_are_distinct_fields': True,
+            'second_handle_resolution_null_checked': False,
+            'loaded_resource_correspondence_proved': False,
+            'sampling_getter_authorized_by_this_check': False,
+            'runtime_executed': False}
+
+
 def verify(game):
     data = (game / 'Bin/Sam2Game.dll').read_bytes()
     require(hashlib.sha256(data).hexdigest() == PIN, 'Unsupported Sam2Game build')
@@ -81,6 +162,7 @@ def verify(game):
     for address, instruction in expected.items():
         require(decoded.get(address) == instruction, 'Native steering seam changed at ' + hex(address))
     return {'native_sha256': PIN, 'checked_instructions': len(expected),
+            'seat_attachment': verify_seat_attachment(pe),
             'native_drive_input': 'raw move.x steering; raw move.z drive',
             'wheeled_target_selection': 'input sign selects zero or native joint limits',
             'proportional_steering_magnitude_proved': False,

@@ -1,5 +1,31 @@
 # Current source continuation
 
+## Existing-tool adoption and occupied-seat mapping
+
+Follow-up research identifies official editor Entity IDs/debug variables and an
+author-documented AWF export route; current native SDK/symbol support remains
+unverified. The unchanged external standalone parser now matches authored seat,
+attachment and ride-part names for four characterized hovercraft parameter
+resources against the independent decoder. No editor/game launch occurred.
+
+The existing native steering verifier now binds the occupied-name → attachment
+route with 33 instruction sites, three exports, six hover dispatch slots and three
+import identities. Normal/-O positive gates pass; 45 in-memory native-byte/metadata
+controls are rejected in both modes. Astra/xhigh bounded source GO, current local
+routing verified and backend unattested. This supplies a future integration boundary,
+not safe-query lifetime, loaded resource correspondence, grasp or controls.
+See [native seat evidence](NATIVE_VEHICLE_SEAT_AUDIT.md) and
+[tool adoption](EXISTING_SS2_TOOLS.md). The current sweep already supports rotated
+swimming capsules, and head-volume capture has no single-player-only gate; older
+inactive/upright-only notes are historical.
+
+This tools/docs-only change preserves all four native products and fingerprint
+1a453f2210cbefa6199c866aaac2f14317fbb106bc2cfc6d79e978fb0b17aec2,
+IPC10/wire7; current product-contract verification passes. Previous 82-group builds
+remain the native build evidence, not new runtime acceptance. Physical controls,
+full alignment, melee lifetime/release, authoritative MP settlement and user/device
+acceptance remain open. No new runtime hook, staging or native execution.
+
 ## Paired live Main/Seat source capture; external parser evaluated
 
 The existing optional vehicle render observer now copies distinct Main and Seat

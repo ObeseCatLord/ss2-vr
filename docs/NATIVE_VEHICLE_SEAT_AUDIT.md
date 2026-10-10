@@ -2,6 +2,43 @@
 
 Binary examined: `Sam2Game.dll`, SHA-256 `5628b4ed30a966f10c8e8ea46bf0789257a35ea80127bacacebe28b1ce5303df`.
 
+## Current occupied-seat mapping — 2026-10-09
+
+The following older alternatives are investigation history. The mounted tracking
+adapter now reuses the native rider body orientation while retaining native eye
+position/height; it does not add a GetSeatAbsPlacement query or seat-pose cache.
+
+Focused REA/Ghidra evidence
+`ev_3246e3b5922a990060e59858ad6f01d4d155fe0b34ddf0e28350981a03a14c3b`
+and independent decoding bind GetSeatAttachment at RVA84930..8497E.
+The occupied seat IDENT passes through virtual20C FindSeatDataByName84880;
+the latter compares the seat datum's name at+4. GetSeatAttachment returns the
+distinct attachment IDENT at+8 through a hidden output pointer, with ret8 on
+both exits. A failed first handle resolution supplies native InvalidIdent;
+the second resolution is not null-checked before reading+8. This establishes
+the native mapping and ABI, not a safe new sampling query or pointer lifetime.
+
+Both inspected hover tables retain the same name/attachment/world-placement
+dispatch. Native GetSeatAbsPlacement consumes the mapped attachment through
+the ride's model and original GetAttachmentAbsolutePlacement. A bone named Seat
+alone therefore cannot certify the occupied-seat attachment or cockpit grasp.
+
+The existing verify_vehicle_steering_native.py now checks this finite route:
+three exports, six hover dispatch entries, three import identities and 33 decoded
+instruction sites, under the existing whole-module pin. It explicitly reports
+no runtime, resource correspondence or sampling-query authorization. It is not
+a general control-flow or lifetime proof. Raw native analysis stays private.
+
+Astra/xhigh gave bounded source GO after independently checking the owned module
+and reproducing the normal/optimized positive gates and all 45 in-memory mutation
+rejections. Current local routing tags were verified; independent backend
+attestation is unavailable. This review adds no runtime or lifetime acceptance.
+
+The standalone external parser additionally matched authored seat/attachment/
+ride-part names against the independent decoder for three Fighter parameter
+variants and Saucer. Loaded resource/seat correspondence, actual evaluated child
+attachment and input-time freshness remain unfinished. No vehicle was launched.
+
 ## Proven narrow pose seam
 
 The local rider carries the current ride handle at `+0x544`, ride state at `+0x548`, and seat IDENT at `+0x54C`. `RegisterForRide` (`0x9AA30..0x9AAD8`) stores handle/IDENT/index at `+544/+54C/+550`; `DoStartRiding` (`0x7EE70..0x7EE7A`) sets state `3`; `UnregisterFromRide` (`0xA95C0..0xA9625`) clears the handle, resets state to `0`, and invalidates seat/index. Resolve afresh each simulation/render transaction; do not retain a vehicle pointer.
