@@ -1,5 +1,30 @@
 # Implementation status — 2026-10-10
 
+## Completed stereo ride-bank handoff fixed
+
+Found and corrected an actual source ordering defect: endEye clears the native
+draw-use flag before stereo Ready, but copied ride publication required it.
+The retained bank owner survives that transition. The existing gate now has
+Drawing/Retained phases; only the successful copied-value publisher uses Retained.
+Seven native borrowers keep Drawing, and both phases preserve all bank/thread/
+reset/suppression checks. No new lifetime state or native draw-retarget behavior.
+See RIDE_RENDER_OBSERVATION.md for exact ordering and limits.
+
+Astra/xhigh source GO; current local routing verified/backend unattested. All4
+products rebuilt at fingerprint
+7aacdd344915191190993727b80f5f0088e70cf3a9852a180623c0856a83294d,
+IPC10/wire7;82Debug/82assert-enabledRelease groups and18 relevant normal/-O
+compiled/artifact/mutation reports pass. New regression covers the actual
+draw-end/bank-retained phase order, with four source bypass controls and all eight
+compiled false-gate consumers. No runtime/staging/installation.
+
+NEXT: production geometry value handoff must occur within successful commit,
+before its finally invalidates the bank token. Join coherent current local rider,
+model/config/parameter and rig/input/rearm ownership; do not borrow the bank after
+commit returns or promote diagnostic budgets into continuous grabbing. The next
+design review evaluates a completed native-render geometry reference, not an
+unsupported current-input Main/Seat query. Physical controls and full goal remain open.
+
 ## Current vehicle handle geometry and transform adapter
 
 The existing default-off ride GPU collector now extracts both actual handle

@@ -30,6 +30,21 @@ def verify_ride_frame_source(text):
     require('before!=after' in observe and 'rideFrames[index]=before.frame;' in observe,
             'Ride frame must retain both raw native bookends')
     publish=region('static void publishRideObservation(', 'enum class IdleNativeDrawPolicy')
+    owner=region('static bool rideObservationOwnerCurrent(', '// Copy raw words after native DDE30 production.')
+    require('!rideReadPhaseCurrent(frozenPair,phase)' in owner and
+            'RideReadPhasephase=RideReadPhase::Drawing' in owner and
+            '!frozenPresentationOwnerMatches(' in owner,
+            'Ride owner requires exact bank and explicit draw/retained phase')
+    require(text.count('RideReadPhase::Retained')==1 and
+            'if(!rideObservationOwnerCurrent(owner,RideReadPhase::Retained)' in publish,
+            'Only copied-value publication may use retained ride ownership')
+    commit=region('bool commitPair(', 'void useFrozenPair(')
+    mono=region('void completeMonoPresentation(', 'void retirePresentation(')
+    require('committed=commitNativeFrame(' in commit and
+            'if(committed)publishRideObservation(owner,true);' in commit and
+            commit.index('committed=commitNativeFrame(')<commit.index('if(committed)publishRideObservation(') and
+            'if(completed)publishRideObservation(owner,false);' in mono,
+            'Retained publication must follow successful stereo or normal mono completion')
     require('!rideFrameSeen[0]||(stereo&&!rideFrameSeen[1])' in publish and
             'emit("SeatCanonical",frame.seat);' in publish and
             'resourceClaim=0seatClaim=0graspClaim=0steeringClaim=0' in publish and
@@ -72,7 +87,7 @@ def verify_declined_ride_entries(assembly):
                'withNativeFinally<' not in n and '{lambda' not in n]
         require(len(found)==1,'Missing unique ride guard consumer: '+fragment)
         return decoded_nodes(found[0])
-    gate=selected('::rideObservationOwnerCurrent(unsigned int)')[0][0]
+    gate=selected('::rideObservationOwnerCurrent(unsigned int, ss2vr::RideReadPhase)')[0][0]
     checked=0
     for name in ('::copyRidePaletteBookend(', '::copyRideAttachmentBookend(', '::observeRidePalette()', '::publishRideObservation(',
                  '::copyCurrentRideMainDraw(', '::rideMainDrawCurrent(', '::recordRideMainDraw(', '::claimRideGpuAttempt('):

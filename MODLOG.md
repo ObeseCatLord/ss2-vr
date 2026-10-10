@@ -1,5 +1,24 @@
 # Mod journal
 
+## 2026-10-10 — completed stereo ride bank publication
+
+Corrected a real handoff defect missed by earlier individual-guard tests:
+endEye retires native draw use before Ready, but copied ride publication required
+that draw flag. Exact bank ownership remains held through successful commit.
+Drawing/Retained phases on the existing gate now distinguish native borrowing
+from copied publication; default native consumers remain Drawing. No extended
+frozen-model behavior or duplicate lifetime state/gate.
+
+Astra/xhigh source GO, local routing verified/backend unattested. All4 products
+rebuilt at7aacdd344915191190993727b80f5f0088e70cf3a9852a180623c0856a83294d,
+IPC10/wire7;82Debug/82assert-enabledRelease and18 relevant normal/-O compiled/
+artifact/mutation reports pass. Portable owner-phase regression covers the missed
+normal sequence, four source bypasses decline and all eight compiled rejection
+paths stay checked. No runtime or installation; vehicle grasp/steering not completed.
+
+Commit finally invalidates the bank token. Future production input value handoff
+must occur within successful commit, not by reading a retired bank afterward.
+
 ## 2026-10-10 — current vehicle handle geometry and camera proof
 
 Connected exact five-channel handle extraction to the existing draw/GPU owner,

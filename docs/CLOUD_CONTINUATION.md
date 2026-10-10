@@ -1,5 +1,30 @@
 # Current source continuation
 
+## Current completed ride-bank phase — 2026-10-10
+
+Fixed the previously unreachable stereo observation publication: endEye clears
+frozenPair before Ready, while the owner gate demanded active drawing. The same
+gate now distinguishes Drawing from Retained; only success-gated copied-value
+publication uses Retained. Native samplers/recording remain Drawing. Exact bank,
+native thread, suppression and reset/unwind checks remain unchanged.
+
+Astra/xhigh source GO, current local tags verified/backend unattested. All4
+products rebuilt at fingerprint
+7aacdd344915191190993727b80f5f0088e70cf3a9852a180623c0856a83294d,
+IPC10/wire7;82Debug/82assert-enabledRelease and18 normal/-O compiled/artifact/
+mutation reports pass. Regression covers draw-ended but bank-held publication;
+four source controls and actual eight-consumer false-gate checks pass. No game,
+editor, vehicle, headset, network, input test, staging or installation occurred.
+
+NEXT concrete boundary: copied production grip-frame handoff INSIDE successful
+commit, before finally invalidates the global bank token; after-commit reads are
+invalid. Use current local rider/model/config/parameter/rig/input rearm coherence,
+the actual handle geometry and original mode-specific clamp/ClientAction.
+The fresh design review addresses whether completed native-render geometry is
+a defensible interaction reference, without pretending an input-time Main/Seat
+query or literal wheel geometry. Diagnostic caps remain unfit for production.
+The full implementation goal and user-operated gameplay acceptance remain active.
+
 ## Current handle geometry/root-camera adapter — 2026-10-10
 
 The optional ride GPU receipt now retains actual two-handle geometry under exact

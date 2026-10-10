@@ -1,6 +1,7 @@
 #include "common/ride_control_observation.hpp"
 #include "common/ride_render_observation.hpp"
 #include "common/ride_position.hpp"
+#include "common/presentation_identity.hpp"
 #include <cassert>
 #include <initializer_list>
 #include <vector>
@@ -9,6 +10,25 @@
 #endif
 using namespace ss2vr;
 static RideControlObservation fixture() {return {123,456,7};}
+static void retainedRideBank() {
+    // The actual eye/Ready ordering: draw ends before copied-bank publication.
+    std::atomic<uint32_t> owner{11};std::atomic<bool> invalid{false};
+    uint32_t local=11;bool drawing=true;
+    const auto read=[&](RideReadPhase phase) {
+        return frozenPresentationOwnerMatches(owner.load(),local,11) && !invalid.load() &&
+            rideReadPhaseCurrent(drawing,phase);
+    };
+    assert(read(RideReadPhase::Drawing));drawing=false;
+    assert(!read(RideReadPhase::Drawing) && read(RideReadPhase::Retained));
+    // Invalid/reset bank and foreign/zero/replaced owners still cannot publish.
+    invalid=true;assert(!read(RideReadPhase::Retained));invalid=false;
+    owner=12;assert(!read(RideReadPhase::Retained));owner=11;
+    assert(!rideReadPhaseCurrent(true,static_cast<RideReadPhase>(2)));
+    retireFrozenPresentationOwner(owner,invalid,local,drawing,11);
+    assert(!read(RideReadPhase::Drawing) && !read(RideReadPhase::Retained));
+    // Mono completion may happen while its native draw-use flag is still set.
+    assert(rideReadPhaseCurrent(true,RideReadPhase::Retained));
+}
 static void handleGeometry() {
     for(auto profile:{RideHandleProfile::Fighter,RideHandleProfile::Saucer}) {
         const bool fighter=profile==RideHandleProfile::Fighter;
@@ -187,7 +207,7 @@ static void vehicleRanges() {
     total=0;assert(!chargeRideGpuAttempt(next,total,true) && !total && !next);
 }
 int main() {
-    mainMappings();vehicleRanges();handleGeometry();handlePosition();
+    mainMappings();vehicleRanges();handleGeometry();handlePosition();retainedRideBank();
     for(auto table:{0x2a8558u,0x2b8420u}) {
         auto row=fixture();assert(row.enter(123,456,7));
         row.copy({table,2,4,41,0,0}); // Null association tokens remain unassociated.

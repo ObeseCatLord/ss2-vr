@@ -87,6 +87,10 @@ class Checks(unittest.TestCase):
                         ('if(row[4] || row[5])return false;','if(row[4])return false;'),
                         ('copy.parentName!=parentName','copy.parentName!=frame.frame.seatBone'),
                         ('attachmentBefore==attachmentAfter','true'),
+                        ('rideObservationOwnerCurrent(owner,RideReadPhase::Retained)','rideObservationOwnerCurrent(owner)'),
+                        ('!rideReadPhaseCurrent(frozenPair,phase)','false'),
+                        ('if(committed)publishRideObservation(owner,true);','publishRideObservation(owner,true);'),
+                        ('if(completed)publishRideObservation(owner,false);','publishRideObservation(owner,false);'),
                         ('childWorldAvailable=0','childWorldAvailable=1')]:
             with self.subTest(old=old):
                 bad=text.replace(old,new);self.assertNotEqual(bad,text)

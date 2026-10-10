@@ -1,5 +1,35 @@
 # Controlled ride and rendered model association
 
+## Completed stereo bank handoff correction
+
+The previous source incorrectly required the active native-draw flag when
+publishing copied observations. Stereo ends both eyes, clears that flag, rebuilds
+the desktop view and later commits Ready; the exact bank owner remains held.
+Thus a successful stereo commit still could not publish its ride observation.
+Earlier individual-guard checks missed this normal sequence.
+
+The existing owner gate now has explicit Drawing and Retained read phases.
+Seven native sampling/recording consumers keep Drawing by default. Only the
+private copied-value publisher requests Retained after a successful stereo commit
+or normal mono completion. Both phases retain exact global/TLS/captured bank
+tokens, native/thread ownership, readiness, suppression and invalidation checks.
+Retained is not a completion receipt and does not authorize native scratch reads.
+The publisher still performs its existing native thread-role query; copied
+identities/matrices/buffers are never treated as later native pointer leases.
+
+Reset, nested suppression and unwind invalidate ownership. Commit cleanup
+invalidates the global token, so a future input handoff must copy values within
+the successful commit extent, before cleanup. Keeping the draw flag active through
+Ready was rejected because it would alter native frozen-model behavior during
+desktop reconstruction. No additional gate/lifetime state was introduced.
+
+Astra/xhigh source GO, current local routing verified/backend unattested. The
+portable regression covers draw-end/retained publication and rejected native
+reads, invalid/replaced/retired owners, mono and invalid phase values. Four source
+mutations cover phase and completion bypasses; all eight actual compiled consumers'
+false-gate paths remain checked. These are offline checks, not a live vehicle
+stereo handoff. Physical grabbing/steering remains unfinished.
+
 ## Current handle transform adapter
 
 The same default-off GPU receipt can now retain the two characterized handle

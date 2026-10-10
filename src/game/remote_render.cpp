@@ -818,12 +818,13 @@ struct RidePaletteBookend {
     uint32_t lodCount=0,lods=0,lod=0,definitions=0,definitionCount=0;
     bool operator==(const RidePaletteBookend &) const = default;
 };
-__attribute__((noinline)) static bool rideObservationOwnerCurrent(uint32_t owner) {
+__attribute__((noinline,noclone)) static bool rideObservationOwnerCurrent(uint32_t owner,
+        RideReadPhase phase=RideReadPhase::Drawing) {
     // Native thread ownership and TLS/atomic token precede EVERY ordinary bank
     // read. A foreign producer may overlap freezePair's bank initialization.
     if(!hooksReady.load(std::memory_order_acquire) || !ready.load(std::memory_order_acquire) ||
        !rideObservationEnabled ||
-       !ownsNativeThread() || !owner || !frozenPair ||
+       !ownsNativeThread() || !owner || !rideReadPhaseCurrent(frozenPair,phase) ||
        !frozenPresentationOwnerMatches(pairOwner.load(std::memory_order_acquire),currentFrozenOwner,owner) ||
        presentationSuppressed || paletteInvalidated || pairInvalid.load(std::memory_order_acquire))return false;
     return pairThread==GetCurrentThreadId();
@@ -1008,7 +1009,9 @@ __attribute__((noinline)) static void observeRidePalette() {
     rideFrames[index]=before.frame;rideFrameSeen[index]=true;
 }
 __attribute__((noinline)) static void publishRideObservation(uint32_t owner,bool stereo) {
-    if(!rideObservationOwnerCurrent(owner) || !rideObservationEnabled || rideObservationDeclined ||
+    // endEye retires native scratch use before stereo Ready. It does not retire
+    // the bank owner; only this copied-value publication uses the retained phase.
+    if(!rideObservationOwnerCurrent(owner,RideReadPhase::Retained) || !rideObservationEnabled || rideObservationDeclined ||
        !frozenRide.valid() ||
        !rideFrameSeen[0] || (stereo && !rideFrameSeen[1]))return;
     if(rideObservationRows.load(std::memory_order_relaxed)>=32)return;

@@ -8,6 +8,12 @@
 #include "ride_geometry.hpp"
 
 namespace ss2vr {
+// Drawing borrows native render scratch. Retained reads copied values after a
+// normal presentation completion, while its exact bank owner is still held.
+enum class RideReadPhase : uint32_t { Drawing, Retained };
+constexpr bool rideReadPhaseCurrent(bool drawing,RideReadPhase phase) noexcept {
+    return phase==RideReadPhase::Retained || (phase==RideReadPhase::Drawing && drawing);
+}
 // Copied identities only. These numbers never authorize a later dereference or
 // steering input. The native sampler re-establishes every edge in world render.
 struct RideRenderIdentity {
