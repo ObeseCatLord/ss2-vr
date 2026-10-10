@@ -1,5 +1,19 @@
 # Current source continuation
 
+## Current matched collection readiness — 2026-10-10
+
+V48 now supplies a fresh private matched package/fixture for native0047bd77...
+IPC11/wire7 after both continuity fixes. Existing reviewed wrapper/source tools
+unchanged.17file seals,3exact links,3independent profile files, staged products,
+scene/archive bytes and neutral disabled development settings passed offline
+verification; collect.py --check passed. No runtime/native preparation launched.
+V46/V47 and older fixtures are preserved, never rerun/resealed.
+
+Use the private current handoff for exact ready V48 identities. ID2 grant/equip/save
+capture authority remains unanswered; do not launch until the pending answer.
+Loaded own-camera/palette/grasp evidence remains missing, so no alignment offset
+can yet be justified. Broader controls/user acceptance and full goal remain open.
+
 ## Current physical grip continuity correction — 2026-10-10
 
 PhysicalGestureInput now consumes the existing grip generation independently of

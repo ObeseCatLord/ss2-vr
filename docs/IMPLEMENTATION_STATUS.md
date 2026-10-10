@@ -1,5 +1,21 @@
 # Implementation status — 2026-10-10
 
+## Matched ID2 collector refreshed after continuity fixes
+
+A fresh V48 private package/fixture now matches native fingerprint
+0047bd77db502e9a24addda7dbfdf3f9bbaed7df42ee8b7de78891582d1eaa9e,
+IPC11/wire7. The reviewed collector wrapper and source tools are unchanged;
+staged products/install receipt,17file seals,3exact link targets and3independent
+profile-file copies were checked. Exact scene/archive bytes and neutral disabled
+swimming/melee settings were independently verified; check-only preflight passed.
+No game, Wine, Monado, display, native preparation or input was launched.
+
+V46/V47 and all prior fixtures remain preserved. Private identities/guide record
+the exact V48 paths and hashes. The existing ID2 grant/equip/save capture question
+still has no answer; preflight is not authorization or loaded-reference evidence.
+The next alignment operation is this observation after authorization. No guessed
+grasp correction or full-goal/hardware/multiplayer completion claim.
+
 ## Physical gesture: skipped grip-loss correction
 
 Fixed the same demonstrated continuity class in physical melee: an omitted grip
