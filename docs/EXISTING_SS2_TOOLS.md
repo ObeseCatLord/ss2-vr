@@ -17,6 +17,14 @@ them itself, and independent backend attestation remains unavailable.
 | GameDig | [Maintainer mapping](https://github.com/gamedig/node-gamedig/blob/master/lib/games.js) lists `serioussam2`, GameSpy2, port25600. | Conditional server/map/player-count availability aid after one comparison with an owned server. Current Steam query compatibility untested; status cannot certify join, poses, hit results or convergence. No runtime dependency added. |
 | io_sedASCII | [Maintainer README](https://github.com/purifetchi/io_sedASCII) describes AMF import and AMF/ASF/AAF export; skeleton/animation import planned. | No new capability needed over the already evaluated binary importer; exact SS2 compatibility remains unknown. |
 | SeriousTexture notes | [Author's format description](https://gist.github.com/zturtleman/720d24ff3e36270fa3e47a23531746eb) uses an SS2 demo texture. | Optional reference for a concrete unsupported texture. Tentative fields and retail compatibility unknown; no new decoder justified. |
+| Editor2 attachment properties | [-SR-'s original replies362/368](https://www.serioussite.ru/forum/5-6-13) describe a named `Children` model and `Target bone`. | Useful authored attachment cross-check; the evaluated parser already supplies these relationships. A bone name is not a live grasp or evaluated frame. |
+| AnimatedMover authoring | [The same author's reply372](https://www.serioussite.ru/forum/5-6-13) describes animation envelopes, `SecPerFrame`, keyframes and Macro playback. | Candidate moving-platform fixture for later collision/occlusion acceptance. This recipe does not supply weapon equip, neutral animation or vehicle-seat control. No fixture implemented or launched. |
+
+The latest user-requested Astra/xhigh sidecar specifically checked automation and
+animation interfaces against the existing research. The owner verified the
+primary recipes and current local routing tags; backend attestation remains
+unavailable. No newly verified batch interface or tool removes the current
+loaded-model evidence requirement. Avoid another broad search of the same tools.
 
 The practical asset tools remain Editor2/Edit Data, the evaluated other1/Andrey
 parser and SE2 Macro fixture authoring. Live submission, camera, evaluated
@@ -89,6 +97,15 @@ script is installed. Normal native saving remains preferable to an unsupported
 save editor. SeriousSaveEditor's own
 [compatibility table](https://github.com/widberg/SeriousSaveEditor) marks SS2
 unsupported; the integration owner rechecked it.
+
+The concrete action-discovery route in Nollopa's guide is to declare the player
+variable as `CPlayerPuppetEntity`, then invoke Ctrl+Space after its action/member
+expression. Without the explicit type, runtime player lookup does not give the
+editor enough information for completion. Record actual equip/animation action
+signatures from the pinned editor before adopting a fixture. Its documented
+Chapter Info workflow can isolate an editor test chapter and create a checkpoint;
+it does not establish an external batch launcher or replace the verified game
+`+level` route. No editor evaluation or new fixture was performed this turn.
 
 The research found no verified current public SS2 native SDK in its bounded
 search. Historical2.070 SDK examples are not evidence of a current C++ ABI.
