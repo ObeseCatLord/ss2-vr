@@ -3652,9 +3652,11 @@ static Pose *shooting(void *w, Pose *out, PoseGet original, const Snapshot *snap
                            current!=alignmentEvidence)return;
                     } else if(weaponAlignmentSupported(primaryField(w,0xb4)))return;
                     Pose grip = compose(body, context.sample.pose.grip[context.hand]);
-                    *out = retargetShot(camera, *out, compose(inverse(camera), modelPose).p, grip,
-                                        .5f, displacement,alignment,
-                                        preserveNativeMuzzleReach(alignmentEvidence.nativeId,alignmentEvidence.weapon!=0));
+                    const Pose target = retargetCalibratedMuzzle(
+                        camera, *out, compose(inverse(camera), modelPose).p, grip,
+                        displacement, alignment);
+                    if (finite(target))
+                        *out = target;
                     return;
                 }
                 Pose body, nativeCamera;
@@ -3708,9 +3710,8 @@ static Pose *shooting(void *w, Pose *out, PoseGet original, const Snapshot *snap
                 }
                 Pose target;
                 if (calibrationAdmitted)
-                    target = retargetShot(nativeCamera, *out, c.nativeModelLocal.p, hand,
-                                         .5f, c.nativeDisplacement,c.nativeAlignment,
-                                         preserveNativeMuzzleReach(c.alignment.nativeId,c.alignmentApplied));
+                    target = retargetCalibratedMuzzle(nativeCamera, *out, c.nativeModelLocal.p,
+                                                      hand, c.nativeDisplacement, c.nativeAlignment);
                 else
                     target = {normalize(multiply(hand.q, multiply(inverse(nativeCamera.q), out->q))), hand.p};
                 diagnosticRejection=17;
@@ -3770,7 +3771,7 @@ static Pose *shooting(void *w, Pose *out, PoseGet original, const Snapshot *snap
                         hand.p.x,hand.p.y,hand.p.z,hand.q.x,hand.q.y,hand.q.z,hand.q.w,
                         c.nativeDisplacement.x,c.nativeDisplacement.y,c.nativeDisplacement.z,
                         c.nativeAlignment.x,c.nativeAlignment.y,c.nativeAlignment.z,v.x,v.y,v.z,radius,
-                        unsigned(preserveNativeMuzzleReach(c.alignment.nativeId,c.alignmentApplied)),
+                        unsigned(calibrationAdmitted),
                         target.p.x,target.p.y,target.p.z,target.q.x,target.q.y,target.q.z,target.q.w);
                 }
                 laserTraceValue(LaserTraceStage::Muzzle,"certified",s,context.hand,0,

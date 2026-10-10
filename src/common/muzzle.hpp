@@ -2,10 +2,15 @@
 #include "network.hpp"
 
 namespace ss2vr {
-// Only the already-admitted stock sniper binding preserves its native-selected
-// reach. This chooses no new origin and does not certify a visual child point.
-constexpr bool preserveNativeMuzzleReach(uint32_t nativeId,bool alignmentAdmitted) noexcept {
-    return alignmentAdmitted && nativeId==13;
+// Caller owns native getter/model calibration admission and current hand/rig
+// checks. Preserve the native-selected attachment vector: a fixed controller
+// radius would pull long weapons' lasers/shots back inside their rendered barrel.
+// This does not establish an anatomical grip or a particular animated child point.
+inline Pose retargetCalibratedMuzzle(Pose camera, Pose nativeShot, Vec3 nativeModelLocal,
+                                    Pose hand, Vec3 nativeDisplacement = {},
+                                    Vec3 nativeAlignment = {}) {
+    return retargetShot(camera, nativeShot, nativeModelLocal, hand, .5f,
+                        nativeDisplacement, nativeAlignment, true);
 }
 // Transient evidence from native ownership and the frozen authoritative sample.
 // This stores no policy across ticks and never resolves game pointers itself.

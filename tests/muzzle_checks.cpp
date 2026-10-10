@@ -21,22 +21,17 @@ static Observation dispatch(bool accepted, bool sniper = true, bool nested = fal
         [&] { ++result.attachment; result.placement = muzzle; },
         [&] {
             ++result.retarget;
-            result.placement = retargetShot({}, result.placement, model.p, tracked);
+            result.placement = retargetCalibratedMuzzle({}, result.placement, model.p, tracked);
             result.calibrated = true;
         }, &result.calibrated);
     return result;
 }
 int main() {
-    for(uint32_t id : {0u,1u,12u,13u,14u,UINT32_MAX}) {
-        check(!preserveNativeMuzzleReach(id,false),"Unadmitted reach exception");
-        check(preserveNativeMuzzleReach(id,true)==(id==13),"Reach policy changed another weapon");
-    }
     const Pose native{{}, {.04658699f,.35394251f,-.59738034f}};
     const Pose tracked{yaw(.7f),{3,2,-9}};
     const Vec3 charge{.1f,.02f,0},alignment{-.02f,0,.003f},root{.03f,-.01f,.005f};
     const auto expected=tracked.p+rotate(tracked.q,native.p-root+charge+alignment);
-    const auto unbounded=retargetShot({},native,root+charge,tracked,.5f,charge,alignment,
-                                    preserveNativeMuzzleReach(13,true));
+    const auto unbounded=retargetCalibratedMuzzle({},native,root+charge,tracked,charge,alignment);
     check(dot(unbounded.p-expected,unbounded.p-expected)<1e-12f,"Native reach changed vector/charge/alignment");
     const auto limited=retargetShot({},native,root+charge,tracked,.5f,charge,alignment);
     check(dot(limited.p-unbounded.p,limited.p-unbounded.p)>.01f,"Long native vector still truncated");
@@ -44,9 +39,33 @@ int main() {
           limited.q.z==unbounded.q.z && limited.q.w==unbounded.q.w,"Reach changed native aim orientation");
     const Pose shortNative{{},{0,0,-.1f}};
     const auto shortBounded=retargetShot({},shortNative,{},tracked);
-    const auto shortPreserved=retargetShot({},shortNative,{},tracked,.5f,{}, {},true);
+    const auto shortPreserved=retargetCalibratedMuzzle({},shortNative,{},tracked);
     check(shortBounded.p.x==shortPreserved.p.x && shortBounded.p.y==shortPreserved.p.y &&
           shortBounded.p.z==shortPreserved.p.z,"Short native vector changed");
+    // Exercise the production conversion for independent hands, longer native
+    // reach and a moved/rotated native camera. The camera must cancel out of the
+    // attachment vector, while authored aim, charge and alignment survive once.
+    const Pose camera{yaw(-.6f), {24, 3, -15}};
+    const Pose movedCamera{yaw(.9f), {-13, 5, 7}};
+    const Pose attachment{yaw(.15f), {.2f, -.05f, -1.4f}};
+    const Vec3 modelRoot{-.1f, .02f, .3f};
+    for (unsigned hand = 0; hand < 2; ++hand) {
+        const Pose controller{yaw(hand ? -.4f : .8f), {hand ? 2.f : -2.f, 1.2f, -3}};
+        const auto result = retargetCalibratedMuzzle(camera, compose(camera, attachment),
+                                                    modelRoot + charge, controller, charge, alignment);
+        const auto moved = retargetCalibratedMuzzle(movedCamera, compose(movedCamera, attachment),
+                                                   modelRoot + charge, controller, charge, alignment);
+        const Pose expectedPose{multiply(controller.q, attachment.q),
+            controller.p + rotate(controller.q, attachment.p - modelRoot + alignment + charge)};
+        check(dot(result.p - expectedPose.p, result.p - expectedPose.p) < 1e-10f,
+              "Calibrated long muzzle lost native reach/charge/alignment");
+        check(dot(moved.p - result.p, moved.p - result.p) < 1e-10f,
+              "Native camera movement changed the controller muzzle");
+        const auto aim = rotate(result.q, {0, 0, -1});
+        const auto expectedAim = rotate(expectedPose.q, {0, 0, -1});
+        check(dot(aim - expectedAim, aim - expectedAim) < 1e-10f,
+              "Native attachment aim was changed by reach preservation");
+    }
     Input input;
     input.headValid = input.handValid[0] = input.handValid[1] = 1;
     for (unsigned hand = 0; hand < 2; ++hand) {

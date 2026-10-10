@@ -1979,3 +1979,28 @@ submission. This changes the next adapter question to actual source2support and
 unclassified-callback handling. No projection reference/grasp/alignment/native
 release/full-mod/device/MP completion inferred. All captures/fixtures remain
 private and preserved.
+
+
+## 2026-10-10 — preserve admitted native muzzle reach for ordinary weapons
+
+The calibrated model-to-muzzle conversion no longer truncates ordinary weapons'
+admitted native offset to0.5units from the controller. The same stateless conversion
+now preserves native reach for local and authoritative calls, so a long native
+barrel reference can keep its laser/shot origin beyond that former radius. Charge,
+static reference correction and native attachment orientation remain applied once.
+Astra design ADAPT and bounded patch GO were adopted; current local Astra/xhigh
+routing verified, independent backend attestation unavailable. Authoritative
+output is staged and must be finite before replacing the original native result. Missing-calibration fallback, laser rejection, current owner/hand,
+native dispatch and desktop/nested behavior remain unchanged.
+
+This preserves the existing admitted reference, not universal current-model
+freshness: configuration/stretch bookends remain conditional on IDs1/13; other
+weapons retain their existing lifecycle and local100ms calibration admission.
+No additional native reads, weapon reference geometry, IPC or combat state were
+introduced. Portable cases exercise the production conversion through native/laser
+parity and rejection fixtures, long offsets, both hands, native-camera movement,
+charge and alignment. All82Debug/82assertion-enabledRelease groups pass. All four
+products rebuilt at6da93fba945c4ced74d4a47981d7d769be9574a6c83400ba2442127ddcb0d70a,
+IPC11/wire7; both x86 muzzle native-unwind gates pass normally and under optimized
+Python, and compiled artifact contracts/layouts agree. No game, firing, headset or
+network test was launched for this change. User gameplay acceptance remains open.

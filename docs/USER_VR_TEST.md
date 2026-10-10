@@ -60,6 +60,9 @@ collision is not established. Record these settings and each outcome separately.
    entering scope zoom. Trace lasers across nearby walls and distant terrain. They should originate
    at the native muzzle and terminate on the closest eligible surface. They do
    not promise the final random projectile spread or penetration path.
+   Include a long-barrel weapon: its laser must begin at its muzzle rather than
+   at a fixed distance from the controller. Repeat after turning or moving the
+   body, charging where applicable and switching either hand.
 3. For every combination the stock game actually permits, record left/right
    weapon identities and native eligibility. Unsupported combinations remain
    unsupported. A two-hand grip on one weapon is a separate test.
