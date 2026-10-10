@@ -107,7 +107,43 @@ def palette_fixture(count=3,selected=2,attempts=3,declaration=NO_UV56,equal=True
             for i in range(5):data('contentHash',i,[i+1]*8)
     return '\n'.join(lines)
 
+def palette_projection_fixture():
+    from idle_projection_evidence_checks import producer,P
+    text=palette_fixture(content=True).replace('schema=2','schema=3')
+    text=text.replace('contentCopied=1 ','contentCopied=1 projectionSequence=1 ').replace('constants=4 ','constants=5 ')
+    for i in range(1,4):
+        target=f'kind=constant item={i} chunk=0 values=00000000,00000000,00000000,00000000'
+        text=text.replace(target,f'kind=constant item={i} chunk=0 values='+','.join(f'{v:08x}' for v in P[(i-1)*4:i*4]))
+    text+='\nLab idle paletteData '+BASE+' index=2 ordinal=3 kind=constant item=4 chunk=0 values='+','.join(f'{v:08x}' for v in P[12:])
+    text+='\n'+'\n'.join(line.replace('eye=1 hand=0','eye=0 hand=1').replace('drawBefore=2000 drawAfter=2000','drawBefore=2064 drawAfter=2064') for line in producer())
+    return text
+
 class Checks(unittest.TestCase):
+    def test_palette_schema3_attaches_only_its_owned_submission_producer(self):
+        text=palette_projection_fixture()
+        r=assess(text,SOURCE)['rejected_or_missing_observations'][0]
+        a=r['submissions']['palette_copies']['rows'][2]['projection_association']
+        self.assertEqual((a['sequence'],a['submission_index'],a['ordinal']),(1,2,3))
+        self.assertFalse(a['source_provenance_authenticated']);self.assertFalse(a['alignment_accepted'])
+        for old,new in [('projectionSequence=1','projectionSequence=2'),
+                        ('source=1 complete=1','source=2 complete=1'),
+                        ('drawBefore=2064 drawAfter=2064','drawBefore=2032 drawAfter=2032'),
+                        ('modelBefore=1000 modelAfter=1000','modelBefore=1001 modelAfter=1001'),
+                        ('invalidations=0 blocked=0','invalidations=1 blocked=1'),
+                        ('kind=constant item=4 chunk=0 values=00000000','kind=constant item=4 chunk=0 values=3f800000')]:
+            with self.subTest(old=old),self.assertRaises(ValueError):assess(text.replace(old,new),SOURCE)
+
+    def test_palette_schema3_missing_receipt_stays_diagnostic(self):
+        text=palette_fixture(content=True).replace('schema=2','schema=3').replace('contentCopied=1 ','contentCopied=1 projectionSequence=0 ')
+        r=assess(text,SOURCE)['rejected_or_missing_observations'][0]
+        row=r['submissions']['palette_copies']['rows'][2]
+        self.assertNotIn('projection_association',row)
+        self.assertFalse(row['alignment_accepted'])
+        for value in ('1','9','4294967296'):
+            with self.assertRaises(ValueError):assess(text.replace('projectionSequence=0','projectionSequence='+value),SOURCE)
+        with self.assertRaises(ValueError):assess(text.replace(' projectionSequence=0',''),SOURCE)
+
+
     def test_palette_content_snapshot_uses_shared_bounds_without_pose_admission(self):
         for declaration in (NO_UV56,OBSERVED,OBSERVED_MULTI_UV,PASSIVE_FIVE_ROW78):
             for present in (False,True):
@@ -246,6 +282,7 @@ class Checks(unittest.TestCase):
         for old,new in [('probe.submissionOwner->reservePaletteApi(', 'reserveDifferentPayload('),
                         ('sampleIdleApi(d,probe.bindings[1],p.before,p.program,p.words,{},true,true)', 'sampleWrongInputs()'),
                         ('copyIdleSubmissionPalette(owner,bookend)', 'copyWrongPalette(bookend)'),
+                        ('before.projectionBookend(bookend);',''),('after.projectionBookend(bookend);',''),
                         ('paletteApiOwnerCurrent(d,owner,slot,api)', 'true'),
                         ('api>=IdleWeaponTrace::MaxPaletteApiPayloads ||',
                          'api>=IdleWeaponTrace::MaxPaletteApiPayloads || !nativeUiDeviceCurrent(d) ||'),
@@ -265,6 +302,7 @@ class Checks(unittest.TestCase):
                         ('submissions.completeOuter(', 'submissions.ignoreOuter('),
                         ('trace.paletteApiPublishable(n)', 'true'),
                         ('trace.paletteContentPublishable(n)', 'true'),
+                        ('trace.paletteProjectionSequence(n)','p.projectionSequence'),
                         ('alignment=0 grasp=0', 'alignment=1 grasp=1')]:
             bad=engine.replace(old,new);self.assertTrue(bad!=engine,'Engine mutation did not change source: '+old)
             with self.assertRaises(ValueError):source_checks(bad,gpu)

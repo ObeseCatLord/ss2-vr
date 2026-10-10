@@ -44,6 +44,7 @@ int main() {
      different=p;different.evaluated=701;assert(different!=p);
      different=p;different.entries[2].definition=1400;assert(different!=p);
      const ScopeIndexedDraw draw{4,0,0,3017,0,2673};
+     p.projectionSequence=1;
      IdleSubmissionTrace s;const auto slot=s.reserve(draw);
      s.before(slot,p.metadata,true);s.paletteBefore(slot,p,true);
      s.after(slot,p.metadata,true,0);s.paletteAfter(slot,p,true);s.finalize(slot,false,true,false);
@@ -54,6 +55,13 @@ int main() {
         assert(!s.palettePublishable(slot));
      }
      s.completeOuter(true,true,true,true,true);assert(s.palettePublishable(slot));
+     assert(s.rows[slot].projectionMatched && s.palettePublishable(slot));
+     different=p;different.projectionSequence=2;
+     assert(different==p); // Optional association cannot widen/retire native palette data.
+     s.paletteAfter(slot,different,true);assert(s.palettePublishable(slot) && !s.rows[slot].projectionMatched);
+     auto interrupted=p;interrupted.projectionBookend(different);assert(!interrupted.projectionSequence);
+     interrupted=p;interrupted.projectionBookend(p);assert(interrupted.projectionSequence==1);
+     different=p;different.entries[1].palette=p.entries[0].palette;
      s.paletteAfter(slot,different,true);assert(!s.palettePublishable(slot));
      // Disagreement between native rows is diagnostic data, not a filter that
      // seeks a matching sample or substitutes upload rows as the reference.
@@ -86,6 +94,19 @@ int main() {
      auto &api=t.paletteApiPayloads[0];api.words=2;api.before.status=IdleWeaponTrace::StreamSnapshot::Copied;
      api.beforeCopied=api.afterCopied=api.matched=true;
      assert(t.paletteApiPublishable(0)); // Overall RasterMapping rejection is diagnostic, not a new admission rule.
+     auto &pair=t.projectionProbe.pairs[0];t.projectionProbe.count=1;
+     pair.source=pair.sequence=1;pair.complete=true;
+     pair.before.control=pair.after.control=127;pair.before.flags=0;pair.after.flags=6;
+     pair.before.modelRecord=pair.after.modelRecord=100;pair.before.drawRecord=pair.after.drawRecord=200;
+     api.before.caps=5;
+     t.submissions.rows[0].projectionMatched=true;
+     assert(t.paletteProjectionSequence(0)==1);
+     api.before.constants[4][3]=1;
+     assert(!t.paletteProjectionSequence(0) && t.paletteApiPublishable(0));
+     api.before.constants[4][3]=0;api.before.caps=4;
+     assert(!t.paletteProjectionSequence(0) && t.paletteApiPublishable(0));
+     api.before.caps=5;pair.source=2;
+     assert(!t.paletteProjectionSequence(0) && t.paletteApiPublishable(0));pair.source=1;
      const auto good=api;
      for(unsigned failure=0;failure<9;++failure) {
         api=good;

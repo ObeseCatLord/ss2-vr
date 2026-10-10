@@ -1,5 +1,32 @@
 # Current source continuation
 
+## Current ID2 receipt/replay source checkpoint — 2026-10-10
+
+Added the minimal own-submission native camera receipt required by the ID2 design
+review, then reused the existing CPU position evaluator for rigid indices0/1/2.
+Schema3 palette diagnostics and schema4 offline input keep their claims separate
+from single-affine geometry, GPU visibility, grasp/alignment and complete API
+coverage. Cold own SOURCE1 PC24/nearest plus canonical equality is mandatory;
+missing/interrupted evidence stays unknown, without numerical-success fallback.
+Bounded Astra/xhigh source GO; local tags verified/backend unattested. See newest
+IMPLEMENTATION_STATUS.md and ID2_PALETTE_COMPANION.md for review dispositions.
+
+All4products fingerprint98ebe10308471db3ca952e8c58030df16490b774c910364d0590e96cb913eba7,
+IPC11/wire7.82Debug/82assertRelease,33reader/12replay normal/-O and relevant
+compiled submission/projection/collector/artifact/product-contract gates pass.
+No target was launched, no new package staged or installation/fixture changed.
+Actual ID2 native acquisition/program/grasp remain open; source instrumentation
+must not expand current fixture grant/equip/capture authorization.
+
+The user's tools-research sidecar completed, primary sources checked and useful
+native UI/network acceptance aids documented. No new required tool/dependency or
+SDK was established. Finite helicopter inspection found no defensible control;
+32unopened immediate references and other loaded/world/rider limits stay explicit.
+Broader controls and all-weapon references remain required. First-use melee,
+mono remote-head and controlling-local MP origin source paths are connected;
+actual contact/lifetime/convergence/appearance/device acceptance is still open.
+Preserve protected installation/WIP/coordination files and all attempted fixtures.
+
 ## Current physical hover-grip source checkpoint — 2026-10-10
 
 Actual submitted world geometry now drives the narrowly admitted native mode2
@@ -21,9 +48,10 @@ vehicles, firing, hardware and multiplayer; do not revive agent gameplay probes.
 
 NEXT source work: inspect one actual additional vehicle/control resource using
 existing validated parser/editor evidence, then implement only positively
-established controls. Literal wheels/wider vehicles, first-use melee/native
-lifetime, authoritative MP body/origin settlement, remote head and complete
-Windows/Linux hardware acceptance remain requirements. Do not promote source
+established controls. Literal wheels/wider vehicles and remaining weapon-reference implementation
+remain open. First-use saw, controlling-local MP origin capture and mono remote
+heads are already connected in source; their actual contact/lifetime, correction
+convergence, appearance and Windows/Linux hardware acceptance remain unverified. Do not promote source
 fixtures/counters or this hover-only adapter to full-goal completion. Preserve
 original installation/WIP/fixtures; public source commits require all-history
 empty-email verification, Actions disabled and no game assets/binaries/captures.

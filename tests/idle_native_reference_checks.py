@@ -164,7 +164,7 @@ class Checks(unittest.TestCase):
         from replay_idle_geometry import replay
         evidence={'source_fingerprint':SOURCE,'copied_event_pose_observations':[{'draws':1,'submissions':{'attempts':2}}],
                   'rejected_or_missing_observations':[]}
-        matching={'matches':[],'retained_diagnostic_matches':[],
+        matching={'matches':[],'retained_diagnostic_matches':[],'palette_content_matches':[],
                   'observations_without_geometry':[],'copied_geometry_coverage_complete':True}
         # Unknown program can return the historical legacy verdict without an
         # association. Whole coverage must still reject surplus native draws.

@@ -149,7 +149,16 @@ struct IdlePaletteCopy {
     std::array<uint32_t,12> world{};
     std::array<Entry,MaxPalette> entries{};
     bool copied=false;
-    bool operator==(const IdlePaletteCopy &) const = default;
+    uint32_t projectionSequence=0; // Optional receipt; cannot change native-copy admission.
+    bool operator==(const IdlePaletteCopy &o) const noexcept {
+        return metadata==o.metadata && first==o.first && count==o.count && mapCount==o.mapCount &&
+            paletteCount==o.paletteCount && canonicalCount==o.canonicalCount && modelCount==o.modelCount &&
+            evaluated==o.evaluated && matrices==o.matrices && mappingAddress==o.mappingAddress &&
+            paletteAddress==o.paletteAddress && world==o.world && entries==o.entries && copied==o.copied;
+    }
+    void projectionBookend(const IdlePaletteCopy &o) noexcept {
+        if(!projectionSequence || projectionSequence!=o.projectionSequence || !(*this==o))projectionSequence=0;
+    }
     static bool finiteWords(const std::array<uint32_t,12> &m) noexcept {
         for(auto bits:m)if((bits&0x7f800000u)==0x7f800000u)return false;
         return true; // Raw IEEE float finiteness only, not an invertible frame.
@@ -188,7 +197,7 @@ struct IdleSubmissionTrace {
         Status status=Status::Pending;
         int32_t hresult=0;
         bool preCopied=false,postCopied=false,returned=false,matched=false;
-        bool paletteBeforeCopied=false,paletteAfterCopied=false,paletteMatched=false;
+        bool paletteBeforeCopied=false,paletteAfterCopied=false,paletteMatched=false,projectionMatched=false;
         uint32_t paletteApiSlot=IdlePaletteApiCapacity; // Independent capacity, never geometry.draws.
     };
     std::array<Row,MaxAttempts> rows{};
@@ -220,6 +229,8 @@ struct IdleSubmissionTrace {
         if(slot>=count || rows[slot].status==Status::Reentered)return;
         auto &r=rows[slot];r.paletteAfterCopied=known && value.bounded();
         r.paletteMatched=r.paletteBeforeCopied && r.paletteAfterCopied && r.palette==value;
+        r.projectionMatched=r.paletteMatched && r.palette.projectionSequence &&
+                            r.palette.projectionSequence==value.projectionSequence;
     }
     void completeOuter(bool originalReturned,bool passComplete,bool generationCurrent,
                        bool noWeaponFault,bool normalCleanup) noexcept {
@@ -341,6 +352,19 @@ struct IdleWeaponTrace {
         return idleBufferRanges(p.content,std::span(p.before.declaration).first(p.before.declarationCount),ranges,nullptr,2);
     }
     IdleProjectionProbe projectionProbe{};
+    uint32_t paletteProjectionSequence(unsigned slot) const noexcept {
+        if(!paletteApiPublishable(slot) || projectionProbe.blocked || projectionProbe.pending ||
+           projectionProbe.helperActive || projectionProbe.fogActive)return 0;
+        const auto &row=submissions.rows[slot];const auto sequence=row.palette.projectionSequence;
+        if(!row.projectionMatched || !sequence || sequence>projectionProbe.count ||
+           sequence>IdleProjectionProbe::MaxPairs)return 0;
+        const auto &pair=projectionProbe.pairs[sequence-1];
+        const auto &snapshot=paletteApiPayloads[row.paletteApiSlot].before;
+        if(pair.source!=1 || !pair.qualified() || snapshot.caps<5)return 0;
+        for(unsigned i=0;i<16;++i)
+            if(snapshot.constants[1+i/4][i%4]!=pair.after.cachedMVP[i])return 0;
+        return sequence; // Optional upload disagreement preserves base diagnostics.
+    }
     // Select passive diagnostics from the immutable original rejection, never
     // either resampled declaration. Reuse the exact ID1 declaration predicates.
     static std::array<unsigned,3> passiveStreamNumbers(const InputFailure &d) noexcept {

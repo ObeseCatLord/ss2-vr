@@ -71,7 +71,7 @@ def consume_palette(record,kind,f,expected_source):
     if submitted is None:raise ValueError('Copied palette without submission inventory')
     if kind=='paletteSummary':
         if set(f)!=BASE|{'schema','source','payloads','overflow','outerCompleted','alignment','grasp'} or \
-                f['schema'] not in ('1','2') or f['source']!=expected_source or 'palette_copies' in submitted:
+                f['schema'] not in ('1','2','3') or f['source']!=expected_source or 'palette_copies' in submitted:
             raise ValueError('Copied palette summary schema/source/duplicate')
         p={k:number(f[k],10 if k=='payloads' else 1) for k in ('payloads','overflow','outerCompleted','alignment','grasp')}
         if p['alignment'] or p['grasp'] or p['payloads']!=min(submitted['count'],10) or \
@@ -92,7 +92,8 @@ def consume_palette(record,kind,f,expected_source):
         scalars={'schema','index','ordinal','api','modelAddress','drawAddress','modelRecord','drawRecord','instance','surface',
                  'evaluated','matrices','mapping','palette','first','count','mapCount','paletteCount','canonicalCount','modelCount',
                  'canonicalEqual','words','constants','declaration','cleanupCertified','outerCurrent'}
-        if p['schema']==2:scalars.add('contentCopied')
+        if p['schema']>=2:scalars.add('contentCopied')
+        if p['schema']==3:scalars.add('projectionSequence')
         if set(f)!=BASE|identity|scalars|{'root','render','objects'} or f['schema']!=str(p['schema']) or index in p['rows']:
             raise ValueError('Palette row schema/duplicate')
         if any(number(f[k],(1<<64)-1 if k=='input' else 0xffffffff)!=record[k] or not record[k] for k in identity):
@@ -177,6 +178,20 @@ def validate_palette(record):
             r.update(content_snapshot_copied=True,content_evidence_class='pre-original-bound-buffer-copies',
                      in_place_content_immutability_verified=False)
             if layout in (2,3,4):r['auxiliary_channels']=['uv']
+        sequence=r.get('projectionSequence',0)
+        if sequence:
+            probe=record.get('projection_probe',{})
+            pair=probe.get('pairs',{}).get(sequence)
+            if probe.get('blocked') or probe.get('pending') or pair is None or pair['source']!=1 or \
+                    [pair['modelAfter'],pair['drawAfter']]!=[r['modelAddress'],r['drawAddress']] or \
+                    pair['data'].get('1:model')!=d['world:0:0'] or r['constants']<5 or \
+                    pair['data'].get('1:cachedMVP')!=sum((d[f'constant:{i}:0'] for i in range(1,5)),[]):
+                raise ValueError('Palette receipt without its own current native projection')
+            r['projection_association']={'sequence':sequence,'submission_index':index,'ordinal':r['ordinal'],
+                'model_address':r['modelAddress'],'draw_address':r['drawAddress'],
+                'evidence_class':'emitter-reported-submission-native-api-bookends',
+                'source_provenance_authenticated':False,'reference_replaced':False,
+                'gpu_visibility_verified':False,'positive_grasp_verified':False,'alignment_accepted':False}
         r.update(input_layout=layout,stream_numbers=[0,7,8] if layout in (1,3,4) else [0,5,6],
                  completion_reported=True,shader_index_association_verified=False,
                  vertex_content_verified=False,alignment_accepted=False,positive_grasp_verified=False)

@@ -57,8 +57,24 @@ int main() {
     IdleProjectionProbe p;auto before=sample();auto after=sample(6);
     *p.begin()=before;p.end(after,true);
     assert(p.count==1 && !p.pending && !p.blocked && p.pairs[0].qualified());
+    assert(p.currentSequence(after,100,200,std::span(after.model))==1);
+    for(unsigned fail=0;fail<9;++fail) {
+        auto q=p;auto changed=after;auto world=std::array<uint32_t,12>{};
+        std::copy(std::begin(after.model),std::end(after.model),world.begin());
+        if(fail==0)changed.view[4]++;if(fail==1)changed.projection[15]++;
+        if(fail==2)changed.cachedMVP[3]++;if(fail==3)changed.flags++;
+        if(fail==4)world[0]++;if(fail==5)q.pending=true;if(fail==6)q.blocked=true;
+        if(fail==7)q.pairs[0].source=2;if(fail==8)q.pairs[0].complete=false;
+        assert(!q.currentSequence(changed,100,200,world));
+    }
+    assert(!p.currentSequence(after,101,200,std::span(after.model)));
+    assert(!p.currentSequence(after,100,201,std::span(after.model)));
     auto reused=sample(6);*p.begin()=reused;p.end(reused,true);
     assert(p.count==2 && p.pairs[1].before.flags==6); // Reuse, not an earlier producer certificate.
+    assert(p.currentSequence(reused,100,200,std::span(reused.model))==2);
+    // A single older address match never wins over the current producer.
+    auto newest=p;newest.pairs[1].after.drawRecord=201;newest.pairs[1].before.drawRecord=201;
+    assert(!newest.currentSequence(after,100,200,std::span(after.model)));
     for(unsigned fail=0;fail<3;++fail) {
         IdleProjectionProbe q;auto b=sample(6),a=sample(6);*q.begin()=b;
         if(fail==0)a.cachedVP[15]++;

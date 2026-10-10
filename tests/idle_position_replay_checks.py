@@ -15,19 +15,126 @@ EVALUATOR=Path(sys.argv.pop(1)).resolve()
 IDENTITY=[1.,0.,0.,0.,0.,1.,0.,0.,0.,0.,1.,0.,0.,0.,0.,1.]
 PROGRAM=[0xfffe0101,31,0x80000005,0x900f0000,20,0xc00f0000,0x90e40000,0xa0e40000,0xffff]
 
-def fixture(program=PROGRAM,constants=None,points=None,clip=IDENTITY,weights=1,layout=None,local=None):
+RIGID_PROGRAM=[0xfffe0101,31,0x80000005,0x900f0000,31,0x80050005,0x900f0005,31,0x80060005,0x900f0006,
+           81,0xa00f00ff,0x437f0000,0x40400000,0,0x3f800000,
+           5,0x80010002,0x90000005,0xa00000ff,
+           5,0x80010002,0x80000002,0xa05500ff,
+           1,0xb0010000,0x80000002,
+           9,0x80010000,0x90e40000,0xa0e42004,
+           9,0x80020000,0x90e40000,0xa0e42005,
+           9,0x80040000,0x90e40000,0xa0e42006,
+           1,0x80080000,0xa0ff00ff,
+           20,0xc00f0000,0x80e40000,0xa0e40000,0xffff]
+
+def fixture(program=PROGRAM,constants=None,points=None,clip=IDENTITY,weights=1,layout=None,local=None,palette=None,indices=None):
     constants=constants or [IDENTITY[i:i+4] for i in range(0,16,4)]
     points=points or [(1.,2.,3.,.25,.75)]
-    schema=3 if local is not None else 1 if layout is None else 2
+    schema=4 if palette is not None else 3 if local is not None else 1 if layout is None else 2
     data=b'SS2VIRP1'+struct.pack('<5I',schema,len(program),len(constants),len(points),weights)
     if schema>=2:data+=struct.pack('<I',0 if layout is None else layout)
     data+=struct.pack('<16f',*clip)
-    if local is not None:data+=struct.pack('<12f',*local)
+    if palette is not None:
+        data+=struct.pack('<I',len(palette))
+        for matrix in palette:data+=struct.pack('<12f',*matrix)
+    elif local is not None:data+=struct.pack('<12f',*local)
     data+=struct.pack('<'+str(len(program))+'I',*program)
     data+=struct.pack('<'+str(len(constants)*4)+'f',*[v for row in constants for v in row])
-    return data+b''.join(struct.pack('<5f',*p)+bytes([255,0,0,0,0,0,0,0]) for p in points)
+    return data+b''.join(struct.pack('<5f',*p)+bytes([255,0,0,0,(indices or [0]*len(points))[i],0,0,0]) for i,p in enumerate(points))
 
 class Checks(unittest.TestCase):
+    def test_schema4_actual_rigid_indices_and_staged_references(self):
+        # Own index input drives a0; do not guess an uploaded register base.
+        p=RIGID_PROGRAM
+        palette=[[1,0,0,2,0,1,0,3,0,0,1,4],
+                 [0,-1,0,7,1,0,0,-3,0,0,1,2],
+                 [-2,0,0,-4,0,1,0,5,0,0,.5,3]]
+        clip=[0,-1,0,4,1,0,0,2,0,0,-1,3,0,0,0,1]
+        constants=[clip[i:i+4] for i in range(0,16,4)]+[m[i:i+4] for m in palette for i in range(0,12,4)]
+        points=[(1,2,3,.25,.75)]*3
+        data=fixture(program=p,constants=constants,points=points,clip=clip,palette=palette,indices=[0,1,2])
+        r=json.loads(self.run_fixture(data).stdout)
+        self.assertTrue(r['position_replay_agrees_with_reference']);self.assertEqual(r['vertex'],3)
+        self.assertFalse(r['gpu_execution']);self.assertFalse(r['positive_grasp_verified'])
+        for slot in range(3):
+            bad=[m.copy() for m in palette];bad[slot][3]+=1
+            r=json.loads(self.run_fixture(fixture(program=p,constants=constants,points=points,clip=clip,palette=bad,indices=[0,1,2])).stdout)
+            self.assertEqual(r['reason'],'projection-mismatch');self.assertEqual(r['vertex'],slot)
+        # A collapsed single-index route cannot pass distinct palette references.
+        wrong=p.copy();wrong[wrong.index(0x90000005)]=0xa0aa00ff
+        collapsed=json.loads(self.run_fixture(fixture(program=wrong,constants=constants,points=points,clip=clip,palette=palette,indices=[0,1,2])).stdout)
+        self.assertFalse(collapsed['position_replay_agrees_with_reference'])
+        self.assertEqual((collapsed['reason'],collapsed['vertex']),('projection-mismatch',1))
+        for count in (0,4):
+            matrices=palette[:count] if count==0 else palette+[palette[0]]
+            self.assertNotEqual(self.run_fixture(fixture(palette=matrices)).returncode,0)
+        for bad in (data[:-1],data+b'x',fixture(palette=palette,weights=0),fixture(palette=palette,layout=5)):
+            self.assertNotEqual(self.run_fixture(bad).returncode,0)
+        for byte,value in ((-4,3),(-3,1),(-8,128),(-7,1)):
+            bad=bytearray(data);bad[byte]=value
+            self.assertEqual(json.loads(self.run_fixture(bad).stdout)['reason'],'unsupported-influence')
+        bad=[m.copy() for m in palette];bad[2][0]=float('nan')
+        self.assertNotEqual(self.run_fixture(fixture(palette=bad)).returncode,0)
+
+
+    def test_palette_replay_joins_content_and_own_reference_without_promotion(self):
+        import copy
+        from idle_stream_evidence_checks import palette_projection_fixture,SOURCE
+        from match_idle_geometry import CHANNELS
+        text=palette_projection_fixture()
+        program=RIGID_PROGRAM.copy()
+        for i,v in enumerate(program):
+            if v in (0xa0e42004,0xa0e42005,0xa0e42006):program[i]=v+1
+        program[-2]=0xa0e40001 # Common MVP is explicitly uploaded in rows1..4.
+        constants=[[0,0,0,0]]+[IDENTITY[i:i+4] for i in range(0,16,4)]
+        matrices=[[1,0,0,7,0,1,0,0,0,0,1,0],
+                  [1,0,0,14,0,1,0,0,0,0,1,0],[1,0,0,21,0,1,0,0,0,0,1,0]]
+        constants += [m[i:i+4] for m in matrices for i in range(0,12,4)]
+        channels={'positions':struct.pack('<9f',1,2,3,2,3,4,-1,2,5),
+                  'indices':struct.pack('<3H',0,1,2),'local_indices':bytes([0,0,0,0,1,0,0,0,2,0,0,0]),
+                  'weights':bytes([255,0,0,0])*3,'uv':struct.pack('<6f',.25,.75,.5,.25,.75,.5)}
+        lines=[line for line in text.splitlines() if not any('kind='+kind+' ' in line for kind in ('constant','program','contentHash'))]
+        lines=[line.replace('words=2 constants=5',f'words={len(program)} constants={len(constants)}') for line in lines]
+        def data(kind,item,values,chunk=0):
+            lines.append('Lab idle paletteData request=100 eye=0 hand=1 index=2 ordinal=3 '+
+                f'kind={kind} item={item} chunk={chunk} values='+','.join(f'{v:08x}' for v in values))
+        for i,c in enumerate(constants):data('constant',i,struct.unpack('<4I',struct.pack('<4f',*c)))
+        for i in range(0,len(program),32):data('program',0,program[i:i+32],i)
+        hashes={name:hashlib.sha256(channels[name]).hexdigest() for name in CHANNELS}
+        for i,name in enumerate(CHANNELS):data('contentHash',i,struct.unpack('<8I',bytes.fromhex(hashes[name])))
+        evidence=assess('\n'.join(lines),SOURCE)
+        ranges={name:{'offset':off,'size':len(channels[name]),'format':fmt,'buffer':0} for name,off,fmt in
+                [('positions',0,133),('indices',0,135),('weights',48,128),('local_indices',36,128),('uv',60,132)]}
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);asset=b'synthetic-private-test-asset';(root/'asset').write_bytes(asset)
+            for name,value in channels.items():(root/name).write_bytes(value)
+            candidate={'vertices':3,'triangles':1,'whole_vertex_buffer_bytes':84,'whole_index_buffer_bytes':6,
+                'single_body_influence':False,'rigid_palette_id2':True,'mesh_object':1,'lod':0,
+                'channel_ranges':ranges,'channel_sha256':hashes,'channel_files':{name:name for name in CHANNELS}}
+            candidates={'asset':{'asset_sha256':hashlib.sha256(asset).hexdigest(),'candidate_native_id':2,'candidate_channels':[candidate]}}
+            result=replay(evidence,candidates,root,EVALUATOR,root)
+            draw=result['palette_draws'][0]
+            self.assertTrue(draw['position_replay']['position_replay_agrees_with_reference'])
+            self.assertEqual(draw['native_reference']['projection_sequence'],1)
+            self.assertNotIn('render_geometry',draw);self.assertFalse(result['all_consumed_positions_agree_with_native_reference'])
+            for key in ('api_geometry_coverage_complete','gpu_execution','positive_grasp_verified','alignment_accepted'):
+                self.assertFalse(result[key]);self.assertFalse(draw[key])
+            for failure,reason in [('missing','projection-association-unavailable'),('cached','native-cold-pc24-reference-unavailable'),
+                ('precision','native-cold-pc24-reference-unavailable'),('canonical','canonical-palette-reference-disagreement'),
+                ('camera','independent-native-camera-disagreement'),('sequence','projection-association-unavailable')]:
+                bad=copy.deepcopy(evidence);o=bad['rejected_or_missing_observations'][0]
+                row=o['submissions']['palette_copies']['rows'][2];pair=o['projection_probe']['pairs'][1]
+                if failure=='missing':row.pop('projection_association')
+                elif failure=='cached':pair['flagsBefore']=6
+                elif failure=='precision':pair['controlBefore']=895
+                elif failure=='canonical':row['canonicalEqual']=0
+                elif failure=='camera':pair['data']['1:view'][0]=0x40000000
+                else:row['projection_association']['sequence']=2
+                failed=replay(bad,candidates,root,EVALUATOR,root)['palette_draws'][0]
+                self.assertEqual(failed['position_replay']['reason'],reason)
+                self.assertFalse(failed['position_replay']['position_replay_agrees_with_reference'])
+            old=copy.deepcopy(evidence);old['rejected_or_missing_observations'][0]['submissions']['palette_copies']['rows'][2].pop('projection_association')
+            self.assertEqual(replay(old,candidates,root,EVALUATOR,root)['palette_draws'][0]['position_replay']['reason'],'projection-association-unavailable')
+
     def test_larger_offline_envelope_and_overflow(self):
         data=fixture(points=[(1.,2.,3.,.25,.75)]*2904)
         self.assertGreater(len(data),65536)

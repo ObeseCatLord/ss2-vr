@@ -35,13 +35,23 @@ int main(int argc,char **argv) {
         if(input.take<std::array<char,8>>()!=std::array<char,8>{'S','S','2','V','I','R','P','1'})throw std::runtime_error("input-magic");
         const auto schema=input.take<uint32_t>(),words=input.take<uint32_t>(),count=input.take<uint32_t>(),
                    vertices=input.take<uint32_t>(),weights=input.take<uint32_t>();
-        if((schema!=1 && schema!=2 && schema!=3) || words<2 || words>512 || !count || count>256 || !vertices || vertices>IdleGeometryStorageVertices || weights>1)
+        if((schema!=1 && schema!=2 && schema!=3 && schema!=4) || words<2 || words>512 || !count || count>256 || !vertices || vertices>IdleGeometryStorageVertices || weights>1)
             throw std::runtime_error("input-bounds");
         const auto layout=schema>=2?input.take<uint32_t>():0;
         if(layout>4 || (layout!=0 && !weights))throw std::runtime_error("input-layout");
         const auto clip=input.take<Matrix44>();
         for(float v:clip.m)if(!std::isfinite(v))throw std::runtime_error("nonfinite-reference");
         Matrix34 local{};
+        std::array<Matrix34,3> palette{};
+        uint32_t paletteCount=0;
+        if(schema==4) {
+            paletteCount=input.take<uint32_t>();
+            if(!weights || !paletteCount || paletteCount>palette.size())throw std::runtime_error("invalid-palette-count");
+            for(unsigned i=0;i<paletteCount;++i) {
+                palette[i]=input.take<Matrix34>();
+                if(!finiteMatrix(palette[i]))throw std::runtime_error("nonfinite-palette-reference");
+            }
+        }
         if(schema==3) {
             local=input.take<Matrix34>();
             if(!weights || !finiteMatrix(local))throw std::runtime_error("invalid-staged-local-reference");
@@ -56,10 +66,16 @@ int main(int argc,char **argv) {
         struct Vertex {Vec3 p;std::array<float,2> uv;};
         static_assert(sizeof(Vertex)==20);
         std::array<Vertex,IdleGeometryStorageVertices> source{};
+        std::array<scope_position::RigidPaletteInput,IdleGeometryStorageVertices> rigid{};
         for(unsigned i=0;i<vertices;++i) {
             source[i]=input.take<Vertex>();
             const auto influence=input.take<std::array<uint8_t,8>>();
-            if(influence!=std::array<uint8_t,8>{255,0,0,0,0,0,0,0})return result(false,"unsupported-influence",i);
+            if(schema==4) {
+                auto &r=rigid[i];r.paletteCount=paletteCount;
+                std::copy_n(influence.begin(),4,r.weights.begin());
+                std::copy_n(influence.begin()+4,4,r.indices.begin());
+                if(!r.valid())return result(false,"unsupported-influence",i);
+            } else if(influence!=std::array<uint8_t,8>{255,0,0,0,0,0,0,0})return result(false,"unsupported-influence",i);
             const auto &v=source[i];
             if(!std::isfinite(v.p.x) || !std::isfinite(v.p.y) || !std::isfinite(v.p.z) ||
                !std::isfinite(v.uv[0]) || !std::isfinite(v.uv[1]))throw std::runtime_error("nonfinite-vertex");
@@ -69,10 +85,11 @@ int main(int argc,char **argv) {
         for(unsigned i=0;i<vertices;++i) {
             std::array<float,4> actual{};const auto &v=source[i];
             if(!scope_position::position(std::span(program).first(words),std::span(constants).first(count),v.p,v.uv,weights!=0,actual,
-                                        GeometryInputLayout(layout)))
+                                        GeometryInputLayout(layout),schema==4?&rigid[i]:nullptr))
                 return result(false,"unknown-position-dependency",i);
             Vec3 point=v.p;
-            if(schema==3) {
+            if(schema==3 || schema==4) {
+                const auto &selected=schema==4?palette[rigid[i].indices[0]]:local;
                 // Keep the native local palette stage separate from the stored
                 // projection matrix. Explicit stores prohibit contraction or
                 // excess precision from silently collapsing these stages.
@@ -81,7 +98,7 @@ int main(int argc,char **argv) {
                 for(unsigned row=0;row<3;++row) {
                     volatile float sum=0;
                     for(unsigned col=0;col<4;++col) {
-                        volatile float product=local.m[row*4+col]*inputPoint[col];
+                        volatile float product=selected.m[row*4+col]*inputPoint[col];
                         sum=sum+product;
                     }
                     output[row]=sum;

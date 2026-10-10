@@ -438,6 +438,7 @@ static bool beginPaletteApi(IDirect3DDevice9 *d,IdleWeaponTrace *owner,unsigned 
     if(!copied || !copyIdleSubmissionPalette(owner,bookend) ||
        !paletteApiOwnerCurrent(d,owner,slot,api) || before!=bookend)return false;
     owner->submissions.before(slot,before.metadata,true);
+    before.projectionBookend(bookend);
     owner->submissions.paletteBefore(slot,before,true);
     return true;
 }
@@ -454,6 +455,7 @@ static bool finishPaletteApi(IDirect3DDevice9 *d,IdleWeaponTrace *owner,unsigned
     if(!copied || !copyIdleSubmissionPalette(owner,bookend) ||
        !paletteApiOwnerCurrent(d,owner,slot,api) || after!=bookend)return false;
     p.matched=p.beforeCopied && IdleWeaponTrace::sameStreamSnapshots(p.before,snapshot);
+    after.projectionBookend(bookend);
     owner->submissions.paletteAfter(slot,after,true);
     return true;
 }

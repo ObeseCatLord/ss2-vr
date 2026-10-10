@@ -1,5 +1,59 @@
 # Implementation status — 2026-10-10
 
+## ID2 own-submission camera receipt and multi-palette CPU replay
+
+The selected Auto Shotgun diagnostic now records its exact latest SOURCE1 camera
+producer across the existing native/API/original submission bracket. Raw camera,
+cache/control and model/draw/world words must stay current; an older address match
+cannot supply the reference. The diagnostic probe continues after ID2 Palette-stage
+single-affine rejection. An optional receipt mismatch suppresses only that receipt,
+preserving native palette diagnostics and all existing original/cleanup gates.
+
+The existing offline evaluator now supports actual rigid local indices0/1/2 and
+one to three canonical matrices. Its separate palette consumer requires the own
+cold PC24/nearest producer receipt, reproduces MVP independently from native M/V/P,
+and stages local transforms through the existing position interpreter. It does
+not promote agreement to whole API coverage, world visibility, grasp or alignment.
+Actual ID2 acquisition/program/reference/grasp remain unobserved. No game launch,
+fixture grant/equip, hardware test, install or staging occurred.
+
+Astra/xhigh design ADAPT and receipt P1/P2 findings were adopted; final bounded
+source GO. Local current routing tags verified; backend unattested. A nonblocking
+review finding corrected the collapsed-index test to use valid index-zero routing,
+then require projection mismatch at vertex1 instead of merely address overflow.
+See ID2_PALETTE_COMPANION.md for policy and historical reports.
+
+| Review recommendation | Disposition |
+| --- | --- |
+| Replace address search with submission-time live-camera receipt | Adopted; exact latest raw producer, every existing native/API bookend. |
+| Keep native diagnostics when optional projection/upload disagree | Adopted; sequence0, independent native-copy equality and strict reader. |
+| Record positive test before pending row finalization | Adopted; actual reserve/before/after/finalize lifecycle. |
+| Use existing VM/canonical equality, no additional inverse bind | Adopted; bounded schema4 and separate palette results. |
+| Test valid collapsed index route | Adopted; mismatch at second distinct canonical vertex. |
+| Infer GPU/grasp/complete-mod success from CPU agreement | Rejected; all broader acceptance flags remain false. |
+
+All4 products match fingerprint
+98ebe10308471db3ca952e8c58030df16490b774c910364d0590e96cb913eba7,
+IPC11/wire7, Input272/Request440/Shared83887888.82Debug and82assert-enabled
+Release groups pass.33reader and12replay cases pass normal and Python-O,
+including synthetic full collector→match→CPU replay. Both game/server compiled
+submission, integer camera sampling and native collector gates pass; relevant
+optimized gates and artifact/product contracts pass. Synthetic tests are not
+native observations. Exact artifact SHA identities remain in the private manifest.
+
+The requested independent tool research found only secondary new UI/network/
+server-status aids; adopted appropriate optional USER_VR_TEST.md checks. Existing
+Editor2/Edit Data, evaluated importer and Macro authoring remain the useful asset
+paths. Helicopter model/skeleton/animation/puppet/debris investigation established
+no positive driver control within its finite inspected chain; exact uninspected
+coverage is retained in IMMERSIVE_STEERING.md and private evidence.
+
+Next implementation/evidence: actual all-weapon grasp/reference coverage and wider
+positively established vehicle controls. First-use saw, controlling-local MP origin
+capture and mono remote heads already have source callers; native/hardware contact,
+lifetime, mixed-role correction convergence and appearance acceptance remain open.
+The full goal is active; user primarily tests shooting, vehicles, headset and MP.
+
 ## Physical hover-grip source integration
 
 Connected successfully submitted world-pair handle geometry to the borrowed native
@@ -25,8 +79,9 @@ COFF falsepasses discovered by Astra, plus earlier owner/cancellation/reentry
 cases. No runtime, installation or staging occurred.
 
 Next: broaden actual authored vehicle-control coverage without guessed wheel
-geometry, and close the remaining first-use melee/native lifetime, authoritative
-MP origin/body and remote-head gates. The full goal and user-operated hardware/
+geometry, and verify remaining all-weapon grasp references and multiplayer convergence.
+First-use saw and mono remote-head source paths are already connected; their
+runtime contact/lifetime/appearance acceptance remains open. The full goal and user-operated hardware/
 shooting/vehicle/MP acceptance remain active. Existing-tool research is recorded
 in EXISTING_SS2_TOOLS.md; use the validated importer and Editor2/Macro authoring
 for the specific remaining geometry/fixture needs.

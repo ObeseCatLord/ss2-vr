@@ -2,9 +2,50 @@
 
 This opt-in diagnostic copies the selected native ID2 draw's world matrix,
 one to three palette mappings, each referenced global canonical bone matrix,
-and the actual D3D9 shader, constants, declaration and stream bindings. It is
-separate from count-one affine geometry admission. It does not enable native
-multi-palette replay or weapon alignment.
+and the actual D3D9 shader, constants, declaration and stream bindings. It remains separate from count-one affine geometry admission. The optional
+submission-time camera receipt and bounded offline CPU replay are described below;
+weapon alignment is not accepted without actual native/reference evidence.
+
+## Submission-time camera receipt and bounded CPU replay
+
+Schema3 adds an optional own submission projection sequence. The existing raw
+producer observer remains live for admitted, pose-copied ID2 after a Palette-stage
+affine rejection. At every existing native/API bookend, it compares the current
+raw M/V/P, cache outputs, control/flags and native model/draw identity with the
+exact latest observed SOURCE1 producer. Reused addresses cannot select an older
+pair. Missing, pending, interrupted, blocked or mismatched evidence gives sequence
+zero. The receipt crosses the original draw and existing Release/outer-completion
+requirements; constants1..4 must match that producer's cached MVP before emission.
+Optional disagreement preserves otherwise valid palette diagnostics. Legacy
+schema1/2 and native single-affine admission remain unchanged.
+
+The existing offline evaluator's schema4 accepts one to three finite independent
+local matrices and actual rigid byte indices/weights through the existing position
+VM. It selects each canonical matrix by that vertex's copied local index, stages
+the local binary32 calculation, then uses the common MVP independently generated
+from native M/V/P. Only the submission's own cold SOURCE1 PC24/nearest receipt and
+canonical/palette equality qualify that numerical reference. Cache and upload
+outputs are comparisons, never reference seeds. Unknown/fractional shader routes
+remain unsupported; no guessed register base or extra inverse-bind is introduced.
+
+The existing replay tool consumes uniquely matched palette content separately as
+`palette_draws`, including qualified rows from a rejected parent. It never feeds
+these results into legacy affine world geometry, complete API coverage, positive
+grasp, GPU visibility or alignment acceptance. Missing receipts produce
+`projection-association-unavailable`; there is no numerical-success fallback.
+Actual ID2 native acquisition/program/reference and authored grasp remain open.
+Source instrumentation does not expand fixture grant/equip or runtime authority.
+
+Tests cover actual index0/1/2 routing with distinct noncommuting/reflected matrices,
+wrong-slot/collapsed-route failures, rigid bounds, truncation/nonfinite rejection,
+changed or latest-stale camera samples and own sequence/native membership. A full
+synthetic log→assessment→content match→private channel hash→CPU evaluator check
+retains the rejected parent and all broader acceptance flags false. Synthetic
+fixtures are offline tests, not observed native/gameplay results.
+
+Review disposition and exact source/build identities are recorded in the newest
+IMPLEMENTATION_STATUS.md entry; historical product reports below remain evidence
+for their own checkpoints.
 
 ## Optional bound-content snapshot
 

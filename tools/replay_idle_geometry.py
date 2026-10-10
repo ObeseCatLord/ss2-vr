@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 from assess_idle_weapon import assess, declaration_layout
 from match_idle_geometry import match,CHANNELS
-from idle_native_reference import native_reference, uploaded_transform_reference, UnsupportedNativeArithmetic, UnsupportedUploadedTransform
+from idle_native_reference import native_reference, uploaded_transform_reference, first_material_matrices, UnsupportedNativeArithmetic, UnsupportedUploadedTransform
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -43,11 +43,14 @@ def evaluate_geometry(g,channels,evaluator,temporary,reference=None):
     data=bytearray(b'SS2VIRP1')
     layout,weights=declaration_layout([d['declaration:'+str(i)] for i in range(g['declaration'])])
     if weights!=bool(d['streams:0'][8]):raise ValueError('Replay input family/binding mismatch')
-    schema=3 if reference is not None else 2 if layout else 1
+    schema=4 if reference is not None and "locals" in reference else 3 if reference is not None else 2 if layout else 1
     data+=struct.pack('<5I',schema,len(program),g['constants'],vertices,int(weights))
     if schema>=2:data+=struct.pack('<I',layout)
     data+=struct.pack('<16I',*(reference['matrix'] if reference is not None else d['clip:0']))
-    if reference is not None:data+=struct.pack('<12I',*reference['local'])
+    if schema==4:
+        data+=struct.pack('<I',len(reference['locals']))
+        for local in reference['locals']:data+=struct.pack('<12I',*local)
+    elif reference is not None:data+=struct.pack('<12I',*reference['local'])
     data+=struct.pack('<'+str(len(program))+'I',*program)
     data+=struct.pack('<'+str(len(constants))+'I',*constants)
     for i in range(vertices):
@@ -129,17 +132,84 @@ def replay_draws(rows,observations,candidates,candidate_root,evaluator,temporary
         results.append(result)
     return results
 
+def palette_reference(observation,row):
+    """Own submission receipt first; never numerical-success/address selection."""
+    def decline(reason):raise UnsupportedNativeArithmetic(reason)
+    if observation.get('schema')!=4 or observation.get('copyLayout')!=1 or observation.get('nativeId')!=2 or \
+       not observation.get('native_id_explicit') or observation.get('submissions',{}).get('palette_copies',{}).get('schema')!=3 or not 1<=row['count']<=3:
+        decline('unsupported-palette-reference-owner')
+    a=row.get('projection_association')
+    if not a or a['submission_index']!=row['index'] or a['ordinal']!=row['ordinal']:
+        decline('projection-association-unavailable')
+    probe=observation.get('projection_probe',{})
+    pair=probe.get('pairs',{}).get(a['sequence'])
+    if probe.get('blocked') or probe.get('pending') or pair is None or pair['source']!=1:
+        decline('projection-association-unavailable')
+    if pair['controlBefore']!=127 or pair['controlAfter']!=127 or pair['flagsBefore']!=0:
+        decline('native-cold-pc24-reference-unavailable')
+    if not row['canonicalEqual']:decline('canonical-palette-reference-disagreement')
+    d=pair['data'];copied=row['data']
+    if d['1:model']!=copied['world:0:0'] or \
+       (pair['modelAfter'],pair['drawAfter'])!=(row['modelAddress'],row['drawAddress']):
+        decline('projection-receipt-membership-disagreement')
+    # Independent copied primitive operands, exact pinned instruction arithmetic.
+    vp,mvp=first_material_matrices(d['1:model'],d['1:view'],d['1:projection'])
+    if vp!=d['1:cachedVP'] or mvp!=d['1:cachedMVP']:
+        decline('independent-native-camera-disagreement')
+    return {'kind':'id2-owned-cold-native-staged-palette','matrix':mvp,
+        'locals':[copied[f'canonical:{i}:0'] for i in range(row['count'])],
+        'projection_sequence':a['sequence'],'submission_index':row['index'],'ordinal':row['ordinal'],
+        'diagnostic_only':True,'gpu_execution':False,'positive_grasp_verified':False,'alignment_accepted':False}
+
+def replay_palette_draws(rows,observations,candidates,candidate_root,evaluator,temporary):
+    if not rows:return []
+    owned={(o['request'],o['eye'],o['hand']):o for o in observations}
+    results=[]
+    for matched in rows:
+        result=dict(matched)
+        result.update(reference_kind='id2-palette-reference-unavailable',
+            whole_trace_accepted=False,api_geometry_coverage_complete=False,
+            gpu_execution=False,positive_grasp_verified=False,alignment_accepted=False)
+        failure={'schema':1,'position_replay_agrees_with_reference':False,'reason':matched['result'],
+            'vertex':0,'gpu_execution':False,'positive_grasp_verified':False,'alignment_accepted':False}
+        result['position_replay']=failure
+        if matched['result']!='unique-copied-channel-match':results.append(result);continue
+        o=owned[(matched['request'],matched['eye'],matched['hand'])]
+        palette=o['submissions']['palette_copies']['rows']
+        row=palette.get(matched['submission_index'],palette.get(str(matched['submission_index'])))
+        if row is None:raise ValueError('Palette match lost its owned submission')
+        try:reference=palette_reference(o,row)
+        except UnsupportedNativeArithmetic as e:
+            failure['reason']=str(e);results.append(result);continue
+        identity=matched['candidates'][0];asset=candidates[identity['candidate']]
+        candidate=dict(asset['candidate_channels'][identity['channel_index']]);candidate['asset_sha256']=asset['asset_sha256']
+        channels=channel_bytes(candidate_root,identity['candidate'],candidate)
+        d=row['data']
+        # Reuse serializer/evaluator only. No legacy affine/world-position promotion.
+        data={'layout:0':d['contentSurface:0:0'],'streams:0':[0]*8+[1]}
+        for kind,count in [('constant',row['constants']),('declaration',row['declaration'])]:
+            for i in range(count):data[f'{kind}:{i}']=d[f'{kind}:{i}:0']
+        for i in range(0,row['words'],32):data[f'program:{i}']=d[f'program:0:{i}']
+        geometry={'data':data,'words':row['words'],'constants':row['constants'],'declaration':row['declaration']}
+        result['native_reference']=reference;result['reference_kind']=reference['kind']
+        result['position_replay']=evaluate_geometry(geometry,channels,evaluator,temporary,reference)
+        results.append(result)
+    return results
+
 def replay(evidence,candidates,candidate_root,evaluator,temporary):
     matching=match(evidence,candidates)
     results=replay_draws(matching['matches'],evidence['copied_event_pose_observations'],candidates,candidate_root,evaluator,temporary)
     diagnostic=replay_draws(matching['retained_diagnostic_matches'],
         [o for o in evidence['rejected_or_missing_observations'] if 'retained_copies' in o],
         candidates,candidate_root,evaluator,temporary,True)
+    palette=replay_palette_draws(matching['palette_content_matches'],
+        evidence['copied_event_pose_observations']+evidence['rejected_or_missing_observations'],
+        candidates,candidate_root,evaluator,temporary)
     copied_agree=matching['copied_geometry_coverage_complete'] and all(
         r['position_replay']['position_replay_agrees_with_reference'] for r in results)
     partial_api=any(o.get('submissions',{}).get('attempts',0)>o['draws']
                     for o in evidence['copied_event_pose_observations'])
-    return {'schema':1,'source_fingerprint':evidence['source_fingerprint'],'draws':results,'retained_diagnostic_draws':diagnostic,
+    return {'schema':1,'source_fingerprint':evidence['source_fingerprint'],'draws':results,'retained_diagnostic_draws':diagnostic,'palette_draws':palette,
         'observations_without_geometry':matching['observations_without_geometry'],
         'copied_geometry_coverage_complete':matching['copied_geometry_coverage_complete'],
         'all_copied_consumed_positions_agree_with_native_reference':copied_agree,

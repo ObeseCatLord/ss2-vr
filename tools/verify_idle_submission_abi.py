@@ -28,6 +28,10 @@ def source_checks(engine,gpu):
             palette.count('remote_render::copyIdlePalette(')==2 and 'before!=after' in palette and
             'copyBoundIdleRaster' not in palette and 'reject(' not in palette,
             'Palette wrapper lost its independent ID2-only native bookend')
+    require(palette.count('remote_render::idlePaletteProjectionSequence(')==2 and
+            'projection&&projection==finalProjection' in palette and
+            'out.projectionSequence=projection;' in palette,
+            'Palette receipt lost fresh raw-global bookends')
     draw=region(gpu,'static HRESULT probeScopeDraw(','HRESULT scopeGpuDraw(')
     ordered(draw,['probe.submissionOwner=idleSubmissionOwner();',
                   'probe.submissionOwner->submissions.reserve(', 'probe.submissionOwner->reservePaletteApi(', 'd->AddRef();',
@@ -38,7 +42,7 @@ def source_checks(engine,gpu):
     pre=region(gpu,'static bool beginPaletteApi(','static bool finishPaletteApi(')
     ordered(pre,['copyIdleSubmissionPalette(owner,before)','releaseBindings(probe.bindings[1]);',
                  'sampleIdleApi(d,probe.bindings[1],p.before,p.program,p.words,{},true,true)',
-                 'copyIdleSubmissionPalette(owner,bookend)','owner->submissions.paletteBefore(slot,before,true);'])
+                 'copyIdleSubmissionPalette(owner,bookend)','before.projectionBookend(bookend);','owner->submissions.paletteBefore(slot,before,true);'])
     require('if(geometryAdmitted){copied=serializePaletteGeometry(p);' in pre and
             pre.index('nativeUiDeviceCurrent(d)')<pre.index('copyIdleSubmissionPalette(owner,before)'),
             'Companion disturbed certified geometry or queried device outside native/API bracket')
@@ -67,7 +71,7 @@ def source_checks(engine,gpu):
     post=region(gpu,'static bool finishPaletteApi(','static bool idleStreamOwnerCurrent(')
     ordered(post,['copyIdleSubmissionPalette(owner,after)',
                   'sampleIdleApi(d,probe.bindings[2],snapshot,{},unusedWords,{},true,false)',
-                  'copyIdleSubmissionPalette(owner,bookend)','owner->submissions.paletteAfter(slot,after,true);'])
+                  'copyIdleSubmissionPalette(owner,bookend)','after.projectionBookend(bookend);','owner->submissions.paletteAfter(slot,after,true);'])
     for body in (pre,post):
         require(body.count('paletteApiOwnerCurrent(')>=3,'Missing foreign-call palette owner revalidation')
     require('!owner->paletteApiPayloads[api].matched' in draw and
@@ -85,7 +89,7 @@ def source_checks(engine,gpu):
                    'emitIdleWeaponTrace(*idleStorage);','retireIdleSubmissionOwner(invocation.idle);',
                    'submissions.completeOuter(', 'emitIdlePaletteCompanions(*idleStorage);'])
     emitter=region(engine,'static void emitIdlePaletteCompanions(','static void emitIdleWeaponTrace(')
-    require('trace.paletteApiPublishable(n)' in emitter and 'trace.paletteContentPublishable(n)' in emitter and 'alignment=0grasp=0' in emitter,
+    require('trace.paletteApiPublishable(n)' in emitter and 'trace.paletteContentPublishable(n)' in emitter and 'trace.paletteProjectionSequence(n)' in emitter and 'alignment=0grasp=0' in emitter,
             'Joined palette output lost its completion gate or claim limits')
     return {'source_order_checked':True,'joined_palette_source_checked':True,'geometry_cap_changed':False,
             'limits':['Checks the bounded current source form, not general CFG dominance.']}

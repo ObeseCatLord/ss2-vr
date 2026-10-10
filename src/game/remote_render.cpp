@@ -1709,6 +1709,12 @@ __attribute__((noinline)) void recordRideMainDraw(const RideMainDrawCopy &copy,c
     if(gpu && gpu->copied)rideMainGpu[index][count]=*gpu;
     ++count;
 }
+uint32_t idlePaletteProjectionSequence(const IdleProjectionProbe &probe,const IdlePaletteCopy &copy) noexcept {
+    if(!idleProjectionConfigured())return 0;
+    IdleProjectionSnapshot now;
+    captureProjectionSnapshot(now);
+    return probe.currentSequence(now,copy.metadata.modelAddress,copy.metadata.drawAddress,copy.world);
+}
 bool idleProjectionConfigured() noexcept {
     return ready.load(std::memory_order_acquire) && projectionShaderBase &&
         originalProjectionSlots && originalProjectionFog;

@@ -4378,7 +4378,11 @@ IdleWeaponTrace *idleProjectionOwner() noexcept {
        physicalWeapon->hand<0 || physicalWeapon->hand>1 || eyeIndex<0 || eyeIndex>1)
         return nullptr;
     auto *trace=physicalWeapon->idle;
-    return trace->admitted && trace->stage==IdleWeaponTrace::Stage::Palette && trace->poseCopied ? trace : nullptr;
+    // ID2's count-one affine rejection must not hide later actual producers.
+    const bool stage=trace->stage==IdleWeaponTrace::Stage::Palette ||
+        (trace->nativeId==2 && trace->stage==IdleWeaponTrace::Stage::Rejected &&
+         trace->precedingStage==IdleWeaponTrace::Stage::Palette);
+    return trace->admitted && stage && trace->poseCopied ? trace : nullptr;
 }
 int selectedIdleProbeWeapon() noexcept {
     static const int selected=[] {wchar_t value[3]{};
@@ -4455,6 +4459,7 @@ bool copyIdleSubmissionPalette(const IdleWeaponTrace *wanted,IdlePaletteCopy &ou
         IdlePaletteCopy before,after;
         if(!remote_render::copyIdlePalette(binding.modelInstance,before) ||
            before.metadata.rootConfig!=trace->config)return;
+        const uint32_t projection=remote_render::idlePaletteProjectionSequence(trace->projectionProbe,before);
         ScopeDrawBinding now;IdleDrawIdentity current;IdleWeaponTrace *same=nullptr;
         if(!currentIdleDraw(now,current,same) || same!=trace || current!=identity ||
            now.modelInstance!=binding.modelInstance ||
@@ -4462,7 +4467,10 @@ bool copyIdleSubmissionPalette(const IdleWeaponTrace *wanted,IdlePaletteCopy &ou
         ScopeDrawBinding end;IdleDrawIdentity finalIdentity;IdleWeaponTrace *finalTrace=nullptr;
         if(!currentIdleDraw(end,finalIdentity,finalTrace) || finalTrace!=trace || finalIdentity!=identity ||
            end.modelInstance!=binding.modelInstance)return;
-        out=before;copied=true;
+        out=before;
+        const uint32_t finalProjection=remote_render::idlePaletteProjectionSequence(trace->projectionProbe,after);
+        if(projection && projection==finalProjection)out.projectionSequence=projection;
+        copied=true;
     },[&](bool aborted) noexcept {if(aborted){out={};copied=false;}});
     return copied;
 }
@@ -4486,7 +4494,7 @@ bool idleRejectedRasterCurrent(const IdleRasterCopy &expected,const IdleWeaponTr
 static void emitIdlePaletteCompanions(const IdleWeaponTrace &trace) {
     if(trace.nativeId!=2)return;
     const auto &b=trace.binding;
-    log("Lab idle paletteSummary schema=2 request=%llu eye=%u hand=%u source=%.*s payloads=%u overflow=%u outerCompleted=%u alignment=0 grasp=0",
+    log("Lab idle paletteSummary schema=3 request=%llu eye=%u hand=%u source=%.*s payloads=%u overflow=%u outerCompleted=%u alignment=0 grasp=0",
         b.request,b.eye,b.hand,64,ss2vrBuildContract.sourceFingerprint.data(),trace.paletteApiCount,
         unsigned(trace.paletteApiOverflow),unsigned(trace.submissions.outerCompleted));
     for(unsigned n=0;n<trace.submissions.count;++n) {
@@ -4494,14 +4502,15 @@ static void emitIdlePaletteCompanions(const IdleWeaponTrace &trace) {
         const auto &row=trace.submissions.rows[n];const auto &p=row.palette;
         const auto &api=trace.paletteApiPayloads[row.paletteApiSlot];const auto &s=api.before;
         const auto &m=p.metadata;
-        log("Lab idle paletteRow schema=2 request=%llu input=%llu generation=%u owner=%u weapon=%u model=%u eye=%u hand=%u index=%u ordinal=%u api=%u modelAddress=%u drawAddress=%u modelRecord=%d drawRecord=%d instance=%u surface=%u root=%u,%u,%d render=%u,%u,%d evaluated=%u matrices=%u mapping=%u palette=%u first=%u count=%u mapCount=%u paletteCount=%u canonicalCount=%u modelCount=%u canonicalEqual=%u words=%u constants=%u declaration=%u objects=%u,%u,%u contentCopied=%u cleanupCertified=1 outerCurrent=1",
+        log("Lab idle paletteRow schema=3 request=%llu input=%llu generation=%u owner=%u weapon=%u model=%u eye=%u hand=%u index=%u ordinal=%u api=%u modelAddress=%u drawAddress=%u modelRecord=%d drawRecord=%d instance=%u surface=%u root=%u,%u,%d render=%u,%u,%d evaluated=%u matrices=%u mapping=%u palette=%u first=%u count=%u mapCount=%u paletteCount=%u canonicalCount=%u modelCount=%u canonicalEqual=%u words=%u constants=%u declaration=%u objects=%u,%u,%u contentCopied=%u projectionSequence=%u cleanupCertified=1 outerCurrent=1",
             b.request,b.input,b.generation,b.owner,b.weapon,b.model,b.eye,b.hand,n,row.ordinal,row.paletteApiSlot,
             m.modelAddress,m.drawAddress,m.modelRecord,m.drawRecord,m.instance,m.surface,
             m.rootConfig.configuration,m.rootConfig.file,m.rootConfig.resource,
             m.renderConfig.configuration,m.renderConfig.file,m.renderConfig.resource,
             p.evaluated,p.matrices,p.mappingAddress,p.paletteAddress,p.first,p.count,p.mapCount,p.paletteCount,
             p.canonicalCount,p.modelCount,unsigned(p.paletteCopiesCanonical()),api.words,s.caps,s.declarationCount,
-            s.declarationObject,s.indexObject,s.shaderObject,unsigned(trace.paletteContentPublishable(n)));
+            s.declarationObject,s.indexObject,s.shaderObject,unsigned(trace.paletteContentPublishable(n)),
+            trace.paletteProjectionSequence(n));
         auto words=[&](const char *kind,unsigned item,unsigned chunk,std::span<const uint32_t> values) {
             char text[32*9]{};unsigned cursor=0;
             for(auto value:values)cursor+=unsigned(std::snprintf(text+cursor,sizeof(text)-cursor,"%s%08x",cursor?",":"",value));

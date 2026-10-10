@@ -665,7 +665,7 @@ class Checks(unittest.TestCase):
              'result':'unique-consumed-channel-match','candidates':[{'candidate':'hand','asset_sha256':'b'*64,'mesh_object':1,'lod':0,'channel_index':0}]}
         candidate={'hand':{'asset_sha256':'b'*64,'candidate_channels':[{'channel_sha256':{}}]}}
         copied={'positions':struct.pack('<3f',0,0,0)*317,'indices':b'\0\0'*1014}
-        matching={'matches':[],'retained_diagnostic_matches':[row],'observations_without_geometry':[{}],'copied_geometry_coverage_complete':False}
+        matching={'matches':[],'retained_diagnostic_matches':[row],'palette_content_matches':[],'observations_without_geometry':[{}],'copied_geometry_coverage_complete':False}
         with tempfile.TemporaryDirectory() as d,patch('replay_idle_geometry.match',return_value=matching), \
                 patch('replay_idle_geometry.channel_bytes',return_value=copied), \
                 patch('replay_idle_geometry.evaluate_geometry',return_value={'position_replay_agrees_with_reference':True}):

@@ -1,6 +1,7 @@
 #pragma once
 #include <array>
 #include <cstdint>
+#include <span>
 
 namespace ss2vr {
 // Diagnostic values only. Pointer-shaped words are comparison keys, never
@@ -68,6 +69,17 @@ struct IdleProjectionProbe {
         auto &p=pairs[count];p.after=sample;p.complete=true;pending=false;
         if(!p.qualified()) {invalidate();return;}
         ++count;
+    }
+    // Exact latest observed producer, never a search by reused address or by
+    // arithmetic success. Call at each native/API submission bookend.
+    uint32_t currentSequence(const IdleProjectionSnapshot &now,uint32_t model,
+                             uint32_t draw,std::span<const uint32_t,12> world) const noexcept {
+        if(blocked || pending || helperActive || fogActive || !count || count>MaxPairs)return 0;
+        const auto &p=pairs[count-1];
+        if(p.source!=1 || !p.qualified() || p.after!=now ||
+           now.modelRecord!=model || now.drawRecord!=draw)return 0;
+        for(unsigned i=0;i<12;++i)if(now.model[i]!=world[i])return 0;
+        return p.sequence;
     }
     void invalidate() noexcept {
         pending=false;blocked=true;

@@ -29,6 +29,8 @@ bool copyIdleRaster(void *instance,IdleRasterCopy &out);
 // ID2-only policy selected by the current submission owner; copies raw values
 // without changing the single-affine raster/geometry admission policy.
 bool copyIdlePalette(void *instance,IdlePaletteCopy &out);
+// Integer-only current globals vs exact latest producer; no native writes/callbacks.
+uint32_t idlePaletteProjectionSequence(const IdleProjectionProbe &,const IdlePaletteCopy &) noexcept;
 // Existing render bank and actual DIP borrow only. No buffer/program, whole-draw
 // affine or physical-grip admission is supplied by this Main mapping observation.
 bool copyCurrentRideMainDraw(RideMainDrawCopy &out);

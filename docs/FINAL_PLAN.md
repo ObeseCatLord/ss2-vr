@@ -10,7 +10,9 @@ remote-head frozen-pair rendering and default-off controlling-local roomscale ar
 connected. The unique-saw adapter now includes local/authority/observer roles and
 wire7 retention with bounded Astra Source GO. Fresh receiver-fenced quiet permits
 a real first gesture press while initial native history stays unknown; actual
-stops require later quiet. Positive driver-control geometry is not established.
+stops require later quiet. Positive Fighter/Saucer handle geometry now feeds the reviewed native mode2
+heading adapter (VEHICLE_GRIP_INTEGRATION_PLAN.md). Literal driver wheels and
+wider vehicle controls remain open; other weapon references are still incomplete.
 The user performs primary VR, vehicle, shooting and multiplayer gameplay tests.
 Build/offline/source acceptance does not certify those tests. See current status
 and the comprehensive USER_VR_TEST.md preparation procedure.
