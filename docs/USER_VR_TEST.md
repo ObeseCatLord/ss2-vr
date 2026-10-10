@@ -114,6 +114,12 @@ must remain stable. Repeat on foot and in supported seats, separately from firin
 5. Adjust panel size/distance within supported settings. Record clipped text,
    unreadable labels, intrusive placement or uncomfortable following separately.
 
+Optional native UI aid: if this pinned game build exposes the documented menu
+gadget grid (`men_bRenderGadgetGrid` and X/Y spacing controls), compare its visible
+lines with pointer selection across the panel. Use only the test profile, record
+prior values and restore them afterward. Grid availability or appearance is not
+a passing pointer test; visible selection must match the chosen native item.
+
 ## Swimming, seats and vehicles
 
 Test walking, sprint/jump/use and head-directed swimming. Test optional arm pulls
@@ -123,12 +129,6 @@ For positively identified driver wheels with enabled physical steering, test lef
 right and both hands, smooth transfer, release, tracking loss and joystick
 fallback. Record vehicle/seat identity. Do not treat a road-wheel joint or a
 weapon-wheel action as physical driver steering. Teleport is outside scope.
-
-Optional native UI aid: if this pinned game build exposes the documented menu
-gadget grid (`men_bRenderGadgetGrid` and X/Y spacing controls), compare its visible
-lines with pointer selection across the panel. Use only the test profile, record
-prior values and restore them afterward. Grid availability or appearance is not
-a passing pointer test; visible selection must match the chosen native item.
 
 ## Multiplayer with other mod users
 
