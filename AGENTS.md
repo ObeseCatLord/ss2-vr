@@ -144,8 +144,10 @@ repeat broader passing checks without a new change or unresolved concern.
 Use the main agent or Terra for substantive investigation and implementation.
 All delegated reviews require explicit gpt-6-astra at xhigh or a supported Astra
 Max/Ultra setting; never use a fixed Terra reviewer, Sol or Spark for reviews.
-Verify current local model/effort tags before relying on a review; resumed
-overrides can change. Report unavailable Astra instead of substituting models.
+Reverify effective local model/effort tags on every review turn, including reused
+or resumed agents. Earlier tags do not establish current routing. If a resume
+cannot explicitly select Astra, spawn a fresh gpt-6-astra/xhigh reviewer instead.
+Report unavailable Astra instead of substituting models.
 State independent backend-attestation limitations. Before delegation specify objective, exact scope,
 read-only/disjoint write ownership, output/evidence bounds and failure path.
 Workers must not revert others. Main retains architecture/integration and public

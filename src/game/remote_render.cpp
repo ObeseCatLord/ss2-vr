@@ -1,4 +1,5 @@
 #include "native_memory.hpp"
+#include <cstdio>
 #include "native_finally.hpp"
 #include "remote_render.hpp"
 #include "common/idle_projection_source.hpp"
@@ -135,7 +136,9 @@ static RideRenderIdentity frozenRide;
 static IdleConfigIdentity frozenRideConfig;
 static std::array<RideRenderFrameCopy,2> rideFrames;
 static std::array<std::array<RideMainDrawCopy,RideMainDrawCapacity>,2> rideMainDraws;
-static std::array<uint32_t,2> rideMainDrawCounts{};
+static std::array<uint32_t,2> rideMainDrawCounts{},rideGpuAttempts{};
+static uint32_t rideGpuSessionAttempts=0;
+static std::array<std::array<RideDrawGpuCopy,RideMainDrawCapacity>,2> rideMainGpu;
 static std::array<bool,2> rideMainDrawOverflow{};
 static std::array<bool,2> rideFrameSeen{};
 static std::atomic<bool> rideObservationDeclined=false;
@@ -1019,42 +1022,80 @@ __attribute__((noinline)) static void publishRideObservation(uint32_t owner,bool
     for(unsigned eye=0;eye<(stereo?2u:1u);++eye) {
         const auto &frame=rideFrames[eye];const auto &id=frame.identity;
         const auto &a=frame.attachment;
-        log("Lab ride render schema=4 source=%.*s row=%u bank=%u eye=%d player=%u brain=%u ride=%u seat=%u class=%x renderableHandle=%u renderable=%u instance=%u cfg=%u file=%u resource=%u modelRecord=%u evaluated=%u matrices=%u mainBone=%u definition=%u seatBone=%u seatDefinition=%u attachmentMapped=%u mainDrawCount=%u mainDrawOverflow=%u resourceClaim=0 seatClaim=0 graspClaim=0 steeringClaim=0",
+        log("Lab ride render schema=5 source=%.*s row=%u bank=%u eye=%d player=%u brain=%u ride=%u seat=%u class=%x renderableHandle=%u renderable=%u instance=%u cfg=%u file=%u resource=%u modelRecord=%u evaluated=%u matrices=%u mainBone=%u definition=%u seatBone=%u seatDefinition=%u attachmentMapped=%u mainDrawCount=%u mainDrawOverflow=%u resourceClaim=0 seatClaim=0 graspClaim=0 steeringClaim=0",
             64,ss2vrBuildContract.sourceFingerprint.data(),row,owner,stereo?int(eye):-1,id.player,id.brain,id.ride,id.seat,id.classRva,id.renderableHandle,
             id.renderable,id.instance,frame.configuration,frame.file,frame.resource,frame.modelRecord,
             frame.evaluated,frame.matrices,frame.mainBone,frame.boneDefinition,frame.seatBone,frame.seatDefinition,unsigned(a.mapped),rideMainDrawCounts[eye],unsigned(rideMainDrawOverflow[eye]));
-        log("Lab ride render binding schema=4 row=%u bank=%u eye=%d skeleton=%u lod=%u definitions=%u definitionCount=%u boneFirst=%u boneCount=%u canonicalCount=%u cacheRows=%u cacheRowCount=%u",
+        log("Lab ride render binding schema=5 row=%u bank=%u eye=%d skeleton=%u lod=%u definitions=%u definitionCount=%u boneFirst=%u boneCount=%u canonicalCount=%u cacheRows=%u cacheRowCount=%u",
             row,owner,stereo?int(eye):-1,frame.skeleton,frame.lod,frame.definitions,frame.definitionCount,
             frame.boneFirst,frame.boneCount,frame.canonicalCount,frame.cacheRows,frame.cacheRowCount);
         const auto emit=[&](const char *kind,const std::array<uint32_t,12> &m) {
-            log("Lab ride render matrix schema=4 row=%u bank=%u eye=%d kind=%s words=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x",
+            log("Lab ride render matrix schema=5 row=%u bank=%u eye=%d kind=%s words=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x",
                 row,owner,stereo?int(eye):-1,kind,m[0],m[1],m[2],m[3],m[4],m[5],m[6],m[7],m[8],m[9],m[10],m[11]);
         };
         emit("modelWorld",frame.world);emit("MainCanonical",frame.main);emit("SeatCanonical",frame.seat);
         if(a.mapped) {
-            log("Lab ride render attachment schema=4 row=%u bank=%u eye=%d parameter=%u parameterFlags=%u seatData=%u attachment=%u childState=%u childArray=%u childCount=%u descriptor=%u parentName=%u childFlags=%u childRecordPresent=%u childRecord=%u childWorldAvailable=0 flatTree=1",
+            log("Lab ride render attachment schema=5 row=%u bank=%u eye=%d parameter=%u parameterFlags=%u seatData=%u attachment=%u childState=%u childArray=%u childCount=%u descriptor=%u parentName=%u childFlags=%u childRecordPresent=%u childRecord=%u childWorldAvailable=0 flatTree=1",
                 row,owner,stereo?int(eye):-1,a.parameter,a.parameterFlags,a.seatData,a.attachment,a.childState,
                 a.childArray,a.childCount,a.descriptor,a.parentName,a.childFlags,a.childRecordPresent,a.childRecord);
-            log("Lab ride render attachmentPose schema=4 row=%u bank=%u eye=%d pose=%08x,%08x,%08x,%08x,%08x,%08x,%08x scale=%08x,%08x,%08x",
+            log("Lab ride render attachmentPose schema=5 row=%u bank=%u eye=%d pose=%08x,%08x,%08x,%08x,%08x,%08x,%08x scale=%08x,%08x,%08x",
                 row,owner,stereo?int(eye):-1,a.pose[0],a.pose[1],a.pose[2],a.pose[3],a.pose[4],a.pose[5],a.pose[6],
                 a.scale[0],a.scale[1],a.scale[2]);
         }
         for(uint32_t ordinal=0;ordinal<rideMainDrawCounts[eye];++ordinal) {
             const auto &d=rideMainDraws[eye][ordinal];
-            log("Lab ride render mainDraw schema=4 row=%u bank=%u eye=%d ordinal=%u model=%u draw=%u surface=%u instance=%u name=%u bone=%u definition=%u cfg=%u file=%u resource=%u lod=%u paletteFirst=%u paletteCount=%u localMainSlot=%u topology=%u base=%d minimum=%u vertices=%u start=%u primitives=%u buffersClaim=0 positionProgramClaim=0 graspClaim=0 steeringClaim=0 originalSucceeded=1 cleanupCurrent=1",
+            const auto &g=rideMainGpu[eye][ordinal];
+            log("Lab ride render mainDraw schema=5 row=%u bank=%u eye=%d ordinal=%u model=%u draw=%u surface=%u instance=%u name=%u bone=%u definition=%u cfg=%u file=%u resource=%u lod=%u paletteFirst=%u paletteCount=%u localMainSlot=%u topology=%u base=%d minimum=%u vertices=%u start=%u primitives=%u buffersClaim=0 positionProgramClaim=0 graspClaim=0 steeringClaim=0 originalSucceeded=1 cleanupCurrent=1 gpuCopied=%u",
                 row,owner,stereo?int(eye):-1,ordinal,d.modelRecord,d.drawRecord,d.surface,d.instance,d.surfaceName,d.bone,d.definition,
                 d.configuration,d.file,d.resource,d.lod,d.paletteFirst,d.paletteCount,d.localMainSlot,
-                d.api.topology,d.api.base,d.api.minimum,d.api.vertices,d.api.start,d.api.primitives);
+                d.api.topology,d.api.base,d.api.minimum,d.api.vertices,d.api.start,d.api.primitives,unsigned(g.copied));
             const auto &c=d.layout.channels;
-            log("Lab ride render mainDrawLayout schema=4 row=%u bank=%u eye=%d ordinal=%u vertices=%d triangles=%d positions=%u,%u,%u indices=%u,%u,%u weights=%u,%u,%u localIndices=%u,%u,%u",
+            log("Lab ride render mainDrawLayout schema=5 row=%u bank=%u eye=%d ordinal=%u vertices=%d triangles=%d positions=%u,%u,%u indices=%u,%u,%u weights=%u,%u,%u localIndices=%u,%u,%u",
                 row,owner,stereo?int(eye):-1,ordinal,d.layout.vertices,d.layout.triangles,
                 unsigned(c[0].format),unsigned(c[0].buffer),c[0].offset,unsigned(c[1].format),unsigned(c[1].buffer),c[1].offset,
                 unsigned(c[2].format),unsigned(c[2].buffer),c[2].offset,unsigned(c[3].format),unsigned(c[3].buffer),c[3].offset);
             const auto emitDraw=[&](const char *kind,const std::array<uint32_t,12> &m) {
-                log("Lab ride render mainDrawMatrix schema=4 row=%u bank=%u eye=%d ordinal=%u kind=%s words=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x",
+                log("Lab ride render mainDrawMatrix schema=5 row=%u bank=%u eye=%d ordinal=%u kind=%s words=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x",
                     row,owner,stereo?int(eye):-1,ordinal,kind,m[0],m[1],m[2],m[3],m[4],m[5],m[6],m[7],m[8],m[9],m[10],m[11]);
             };
             emitDraw("modelWorld",d.world);emitDraw("actualPalette",d.actualPalette);
+            if(g.copied) {
+                std::array<char,325> hashes{};
+                constexpr char hex[]="0123456789abcdef";
+                for(unsigned i=0;i<5;++i) {
+                    if(i)hashes[i*65-1]=',';
+                    for(unsigned j=0;j<32;++j) {
+                        hashes[i*65+j*2]=hex[g.hashes[i][j]>>4];
+                        hashes[i*65+j*2+1]=hex[g.hashes[i][j]&15];
+                    }
+                }
+                const auto &v=g.inputs;const auto &p=v.positions,&l=v.localIndices,&w=v.weights,&u=v.uv;
+                log("Lab ride render mainDrawGpu schema=5 row=%u bank=%u eye=%d ordinal=%u programWords=%u constantRows=%u declarationElements=%u inputLayout=%u positions=%u,%u,%u,%u localIndices=%u,%u,%u,%u weights=%u,%u,%u,%u uv=%u,%u,%u,%u indexObject=%u declarationObject=%u shaderObject=%u vertexDesc=%u,%u,%u,%u,%u indexDesc=%u,%u,%u,%u,%u softwarePositions=0 hashes=%s",
+                    row,owner,stereo?int(eye):-1,ordinal,g.programWords,g.constantRows,g.declarationElements,g.inputLayout,
+                    uint32_t(p.object),p.offset,p.stride,p.frequency,uint32_t(l.object),l.offset,l.stride,l.frequency,
+                    uint32_t(w.object),w.offset,w.stride,w.frequency,uint32_t(u.object),u.offset,u.stride,u.frequency,
+                    uint32_t(v.indexObject),g.declarationObject,g.shaderObject,
+                    v.vertex.size,v.vertex.usage,v.vertex.pool,v.vertex.format,v.vertex.fvf,
+                    v.index.size,v.index.usage,v.index.pool,v.index.format,v.index.fvf,hashes.data());
+                const auto emitWords=[&](const char *kind,std::span<const uint32_t> values) {
+                    for(size_t offset=0;offset<values.size();offset+=64) {
+                        std::array<char,577> words{};
+                        const size_t count=std::min(size_t(64),values.size()-offset);
+                        for(size_t i=0;i<count;++i)std::snprintf(words.data()+i*9,10,"%08x%s",values[offset+i],i+1<count?",":"");
+                        log("Lab ride render mainDrawGpuWords schema=5 row=%u bank=%u eye=%d ordinal=%u kind=%s offset=%u words=%s",
+                            row,owner,stereo?int(eye):-1,ordinal,kind,unsigned(offset),words.data());
+                    }
+                };
+                std::array<uint32_t,130> declaration{};
+                for(unsigned i=0;i<g.declarationElements;++i) {
+                    const auto e=g.declaration[i];declaration[2*i]=(uint32_t(e.stream)<<16)|e.offset;
+                    declaration[2*i+1]=(uint32_t(e.type)<<24)|(uint32_t(e.method)<<16)|(uint32_t(e.usage)<<8)|e.usageIndex;
+                }
+                emitWords("program",std::span(g.program).first(g.programWords));
+                emitWords("constants",std::span(g.constants).first(g.constantRows*4));
+                emitWords("declaration",std::span(declaration).first(g.declarationElements*2));
+            }
+
         }
     }
 }
@@ -1589,13 +1630,23 @@ __attribute__((noinline)) bool rideMainDrawCurrent(const RideMainDrawCopy &copy)
     if(!rideObservationOwnerCurrent(copy.bank))return false;
     return rideDrawBankMatches(copy);
 }
-__attribute__((noinline)) void recordRideMainDraw(const RideMainDrawCopy &copy) noexcept {
+__attribute__((noinline)) bool claimRideGpuAttempt(const RideMainDrawCopy &copy) noexcept {
+    if(!rideObservationOwnerCurrent(copy.bank))return false;
+    if(!rideDrawBankMatches(copy) || !rideSurfaceSupported(copy.layout))return false;
+    const size_t index=copy.eye<0?0:size_t(copy.eye);
+    return chargeRideGpuAttempt(rideGpuAttempts[index],rideGpuSessionAttempts,
+        rideObservationRows.load(std::memory_order_relaxed)>=32);
+}
+__attribute__((noinline)) void recordRideMainDraw(const RideMainDrawCopy &copy,const RideDrawGpuCopy *gpu) noexcept {
     if(!rideObservationOwnerCurrent(copy.bank))return;
     if(!rideDrawBankMatches(copy))return;
     const size_t index=copy.eye<0?0:size_t(copy.eye);
     auto &count=rideMainDrawCounts[index];
     if(count==RideMainDrawCapacity) {rideMainDrawOverflow[index]=true;return;}
-    rideMainDraws[index][count++]=copy;
+    rideMainDraws[index][count]=copy;
+    rideMainGpu[index][count].copied=false;
+    if(gpu && gpu->copied)rideMainGpu[index][count]=*gpu;
+    ++count;
 }
 bool idleProjectionConfigured() noexcept {
     return ready.load(std::memory_order_acquire) && projectionShaderBase &&
@@ -1625,7 +1676,8 @@ uint32_t freezePair(uint32_t localPlayer) {
         currentFrozenOwner=issued;
         frozen = {};
         frozenRide={};frozenRideConfig={};rideFrames={};rideFrameSeen={};rideObservationDeclined=false;
-        rideMainDraws={};rideMainDrawCounts={};rideMainDrawOverflow={};
+        rideMainDraws={};rideMainDrawCounts={};rideMainDrawOverflow={};rideGpuAttempts={};
+        for(auto &eye:rideMainGpu)for(auto &g:eye)g.copied=false;
         pairThread = GetCurrentThreadId();
         pairInvalid.store(false, std::memory_order_release);
         pairOwner.store(issued,std::memory_order_release);

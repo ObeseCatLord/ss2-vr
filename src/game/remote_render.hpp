@@ -32,7 +32,8 @@ bool copyIdlePalette(void *instance,IdlePaletteCopy &out);
 // affine or physical-grip admission is supplied by this Main mapping observation.
 bool copyCurrentRideMainDraw(RideMainDrawCopy &out);
 bool rideMainDrawCurrent(const RideMainDrawCopy &copy) noexcept;
-void recordRideMainDraw(const RideMainDrawCopy &copy) noexcept;
+bool claimRideGpuAttempt(const RideMainDrawCopy &copy) noexcept;
+void recordRideMainDraw(const RideMainDrawCopy &copy,const RideDrawGpuCopy *gpu=nullptr) noexcept;
 ScopeRasterStatus copyScopeRaster(void *instance, Matrix34 &affine, ScopeSurfaceLayout &layout);
 
 // Called on the simulation thread after the original CPlayerOnStep.

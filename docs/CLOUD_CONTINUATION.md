@@ -1,5 +1,33 @@
 # Current source continuation
 
+## Current vehicle buffer/program adapter — 2026-10-10
+
+Schema5 optional GPU receipts are now connected to the existing ride Main draw
+observer and GPU ProbeOwner. Explicit vehicle range policy admits only the two
+characterized surfaces; shared index scratch now fits Fighter2806 triangles while
+all weapon limits remain unchanged. Raw program/float constants/declaration and
+five bounded copied-slice hashes use the existing references/locks/crypto cleanup.
+Second pre-original input/Main and third post-original input/final Main checks
+precede release-tail certification and immutable publication. Failed/unpublished
+attempts consume eight per eye/bank and64 per process; no new reservation lifecycle.
+
+Native/consumer Astra/xhigh source GO and final bounded checker-fix GO, local
+routing reverified per review turn/backend unattested.
+Four products rebuilt at dfce2d83925c815089118a80cfe5f7d746ba1aa031e5a9457fb9d31cce623fd4,
+IPC10/wire7;82Debug/82assert-enabledRelease and28 relevant normal/-O compiled/artifact
+reports pass. No runtime/editor/vehicle/input/network/headset/firing operation,
+installation or staging. Schemas1–4 remain readable; bounded mapping-only output
+survives optional GPU failure. The assessor CLI's5MiB limit applies to complete text.
+
+NEXT: consume exact known resource-channel matches and actual position-program
+inputs to derive the positive handle geometry in its current Main/world frame.
+Digests are observations of separate copied ranges, not proof of immutable draw
+content or complete shader state. Program interpretation must preserve actual
+UBYTE4N local indices and mapped Main slot; never extend ID2's three-entry policy
+as a vehicle shortcut. Then join existing native mode-specific ClientAction/input
+freshness, squeeze loss/rearm and smooth hand transfer. No guessed wheel/pivot,
+duplicate controller state or inactive-helper completion claim. Full goal stays active.
+
 ## Current vehicle Main draw source — 2026-10-10
 
 The existing passive ride observer now connects the occupied Main/Seat frame to

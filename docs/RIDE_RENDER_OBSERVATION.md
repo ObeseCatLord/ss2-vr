@@ -1,6 +1,72 @@
 # Controlled ride and rendered model association
 
-## Current schema4: actual Main draw mapping
+## Current schema5: copied GPU inputs and program
+
+The same default-off collector now optionally copies GPU input evidence for the
+two characterized Fighter/Saucer surfaces. An explicit Ride buffer policy reuses
+the existing structural range checks, binding snapshots, shader-copy function,
+scratch arrays, lock ledger and crypto owner. It does not use a weapon ID or the
+ID2 submission owner. Only shared index scratch grows to2806 triangles; existing
+weapon admission limits and scope behavior remain unchanged.
+
+Collection requires initial bound inputs/program and a fresh Main bookend, five
+bounded copies with completed unlocks, hashing of those owned copies, and second
+inputs/Main agreement before the original call. Third inputs are sampled after
+original success; the final native Main copy follows those getters. Existing
+release-tail/reentry/owner/routing/generation checks and normal native-finally
+completion gate an immutable optional receipt into the same render bank.
+Unsupported layouts or ordinary copy failure leave independently valid Main/Seat
+and draw metadata available. Uncertain unlock retains the existing fatal behavior.
+
+Attempts, including failures and unpublished frames, are charged before GPU work:
+eight per eye/bank and64 per process, with publication exhaustion also checked.
+No additional reservation lifecycle or collector is introduced. Scope/idle/
+submission owners exclude use of their binding slots. Raw ride float constants
+bypass the scope's UV-specific c8/c9 finite-value admission; shader consumption
+is not inferred from a declaration match.
+
+Schema5 retains the schema4 inventory and adds gpuCopied to each draw. A successful
+optional copy adds one mainDrawGpu record containing actual stream bindings,
+descriptors, object comparison keys, declaration/program/float-constant counts
+and five slice digests. Ordered mainDrawGpuWords families are program, constants,
+then packed declaration; offsets are contiguous and chunks have at most64 raw
+words. Limits are4096 program words,256 float-constant rows and65 declaration
+elements. Schema1–4 compatibility remains. The assessor rejects malformed,
+crossed, missing, duplicate or oversized inventories and reports copy presence
+separately; all authority, program, grasp and steering verification stays false.
+
+The digests describe five separately sampled owned byte ranges. Matching input
+objects/constants and Main bookends do not prove whole-draw content immutability,
+complete shader state or actual position-program consumption. Exact expected
+content matching and admitted position semantics are still required to derive
+world-space grip geometry. Neither the collector nor reader activates controls.
+The bounded GPU payload is under a conservative5MiB encoded budget; the assessor CLI
+limits its complete supplied text to5MiB, so oversized combined logs must be
+extracted into an appropriately bounded private evidence input.
+
+Astra/xhigh design ADAPT, frozen native source GO, consumer GO and final bounded
+checker-fix GO; effective local routing was verified for each review turn, backend
+unattested. All four products rebuilt at
+fingerprint dfce2d83925c815089118a80cfe5f7d746ba1aa031e5a9457fb9d31cce623fd4,
+IPC10/wire7.82Debug/82assert-enabledRelease groups and28 relevant normal/-O
+compiled/artifact reports pass. Initial full CTest ran while reader work was
+active and failed two stale source-mutation selectors; corrected checks pass.
+16 reader cases and31 idle-reader/source cases pass normal/-O, including maximum
+chunks and both checker-bypass regressions. Finite lexical source-order/mutation
+checks are not general CFG/lifetime proof.
+No runtime, vehicle/input probe, installation or staging occurred.
+
+| Astra design recommendation | Disposition |
+| --- | --- |
+| Put the final Main sample after post-original getters | Adopted; no redundant full Main query inside finishRideGpu. |
+| Bound failed and unpublished collection work | Adopted; existing-bank counters charge eight per eye and64 per process. |
+| Keep ride policy independent of native weapon IDs | Adopted; shared structural mechanics with unchanged weapon limits. |
+| Do not impose scope UV constants on raw ride observation | Adopted; float-constant bits remain raw. |
+| Reuse existing lock/reference/crypto cleanup | Adopted; no second resource owner. |
+| Hashes do not certify an immutable draw epoch or shader semantics | Adopted; evidence remains explicitly limited. |
+| Marker presence alone accepted skipped charging and an OR comparison | Fixed; exact direct/conjunctive expressions and two reproduced negative controls. |
+
+## Previous schema4: actual Main draw mapping
 
 The default-off observer now connects an occupied ride's existing Main/Seat
 frame to an actual native indexed draw through the existing render bank and GPU

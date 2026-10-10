@@ -3,6 +3,8 @@
 #include <cstdint>
 #include "head_palette.hpp"
 #include "scope_buffer_layout.hpp"
+#include "idle_geometry.hpp"
+#include "scope_program.hpp"
 
 namespace ss2vr {
 // Copied identities only. These numbers never authorize a later dereference or
@@ -53,6 +55,41 @@ struct RideMainDrawCopy {
     bool operator==(const RideMainDrawCopy &) const = default;
 };
 constexpr uint32_t RideMainDrawCapacity=8, RideMainMappingBudget=32;
+constexpr uint32_t RideGpuSessionAttempts=64, RideGeometryTriangles=2806;
+// These exact metadata profiles only select bounded observation. GPU digests,
+// program consumption and physical grasp are separate evidence.
+inline bool rideSurfaceSupported(const ScopeSurfaceLayout &s) {
+    constexpr ScopeSurfaceLayout fighter{2741,2806,{{{3600,0x85,0},{2520,0x87,0},
+        {124040,0x80,0},{135004,0x80,0}}}};
+    constexpr ScopeSurfaceLayout saucer{2464,2626,{{{3024,0x85,0},{1188,0x87,0},
+        {166048,0x80,0},{175904,0x80,0}}}};
+    return s==fighter || s==saucer;
+}
+inline bool rideBufferRanges(const ScopeBufferInputs &in,
+        std::span<const ScopeDeclarationElement> declaration,ScopeCopyRanges &out) {
+    out={};
+    if(!rideSurfaceSupported(in.surface))return false;
+    if(!boundedGeometryBufferRanges(in,declaration,out,{2741,RideGeometryTriangles}) || !out.weightsActive) {
+        out={};return false;
+    }
+    return true;
+}
+struct RideDrawGpuCopy {
+    ScopeBufferInputs inputs;
+    std::array<ScopeDeclarationElement,65> declaration{};
+    std::array<uint32_t,ScopeProgramMaxWords> program{};
+    std::array<uint32_t,1024> constants{};
+    std::array<std::array<uint8_t,32>,5> hashes{};
+    uint32_t declarationElements=0,programWords=0,constantRows=0,inputLayout=0;
+    uint32_t declarationObject=0,shaderObject=0;
+    bool copied=false;
+};
+// No reservation lifecycle: each charge occurs before foreign GPU work, even
+// when the attempt fails or the frame never publishes.
+inline bool chargeRideGpuAttempt(uint32_t &eyeAttempts,uint32_t &sessionAttempts,bool publicationExhausted) {
+    if(publicationExhausted || eyeAttempts>=RideMainDrawCapacity || sessionAttempts>=RideGpuSessionAttempts)return false;
+    ++eyeAttempts;++sessionAttempts;return true;
+}
 // Select the actual map position, not a serialized palette ordinal/name or a
 // model-relative bone index. The budget is diagnostic capacity, not a native limit.
 template<class BoneOwned> bool selectRideMainMapping(std::span<const PaletteMap> maps,

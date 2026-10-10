@@ -4,16 +4,17 @@
 namespace ss2vr {
 constexpr uint32_t IdleGeometryVertices=1490,IdleGeometryTriangles=1332;
 constexpr uint32_t IdleGeometryStorageVertices=3017,IdleGeometryStorageTriangles=2673;
-struct IdleGeometryLimits {uint32_t vertices=0,triangles=0;};
+struct GeometryCopyLimits {uint32_t vertices=0,triangles=0;};
+using IdleGeometryLimits=GeometryCopyLimits;
 inline IdleGeometryLimits idleGeometryLimits(int nativeId) {
     return nativeId==1?IdleGeometryLimits{IdleGeometryVertices,IdleGeometryTriangles}:
         nativeId==2?IdleGeometryLimits{3017,2673}:
         nativeId==13?IdleGeometryLimits{2904,2245}:IdleGeometryLimits{};
 }
-// Selected stock diagnostic domains, not a claim about every native LOD.
-inline bool idleBufferRanges(const ScopeBufferInputs &in,
-                             std::span<const ScopeDeclarationElement> declaration,ScopeCopyRanges &out,uint32_t *passedChecks=nullptr,int nativeId=1) {
-    out={};const auto &s=in.surface;const auto limits=idleGeometryLimits(nativeId);
+// Shared structural mechanics; callers supply their own admission domain.
+inline bool boundedGeometryBufferRanges(const ScopeBufferInputs &in,
+                             std::span<const ScopeDeclarationElement> declaration,ScopeCopyRanges &out,GeometryCopyLimits limits,uint32_t *passedChecks=nullptr) {
+    out={};const auto &s=in.surface;
     uint32_t passed=0;
     auto record=[&](unsigned bit,bool value) {if(value)passed|=1u<<bit;return value;};
     const bool basic[]={
@@ -47,5 +48,11 @@ inline bool idleBufferRanges(const ScopeBufferInputs &in,
         if(!valid)return false;
     }
     out=next;return true;
+}
+// Selected stock weapon domains are unchanged by shared scratch capacity.
+inline bool idleBufferRanges(const ScopeBufferInputs &in,
+        std::span<const ScopeDeclarationElement> declaration,ScopeCopyRanges &out,
+        uint32_t *passedChecks=nullptr,int nativeId=1) {
+    return boundedGeometryBufferRanges(in,declaration,out,idleGeometryLimits(nativeId),passedChecks);
 }
 }

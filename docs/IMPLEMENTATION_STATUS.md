@@ -1,5 +1,25 @@
 # Implementation status — 2026-10-10
 
+## Vehicle GPU evidence adapter implemented
+
+The existing default-off ride collector now optionally copies actual bound
+declaration, vertex program, raw float constants, stream/descriptor keys and five
+owned-slice digests for the exact two characterized vehicle surfaces. It reuses
+the existing GPU probe owner, locks, scratch and cleanup. Only index scratch
+capacity grows; weapon limits remain unchanged. Eight attempts per eye/bank and
+64 per process bound failed/unpublished work. Schema5 retains schemas1–4 and
+independently valid mapping-only output. See RIDE_RENDER_OBSERVATION.md.
+
+Astra/xhigh design ADAPT, native/consumer GO and final bounded checker-fix GO;
+current local routing verified per review turn/backend unattested. All4 products rebuilt at
+dfce2d83925c815089118a80cfe5f7d746ba1aa031e5a9457fb9d31cce623fd4,
+IPC10/wire7;82Debug/82assert-enabledRelease groups and28 relevant normal/-O
+compiled/artifact reports pass. No runtime/input/vehicle launch, installation
+or staging. Separate slice digests and matching sampled metadata do not establish
+an immutable content epoch, shader consumption, usable grasp or completed steering.
+Next consume exact content and position-program evidence to derive current handle
+geometry, then join native input freshness/rearm/hand transfer. Full goal remains open.
+
 ## Vehicle actual Main draw association implemented
 
 The existing default-off observer now binds the occupied ride's Main/Seat frame

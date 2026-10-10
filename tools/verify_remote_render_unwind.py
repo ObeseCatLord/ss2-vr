@@ -33,7 +33,7 @@ def verify_ride_frame_source(text):
     require('!rideFrameSeen[0]||(stereo&&!rideFrameSeen[1])' in publish and
             'emit("SeatCanonical",frame.seat);' in publish and
             'resourceClaim=0seatClaim=0graspClaim=0steeringClaim=0' in publish and
-            'schema=4source=%.*s' in publish,
+            'schema=5source=%.*s' in publish,
             'Ride frame output lacks completion/source/claim limits')
     attachment=region('static bool copyRideAttachmentBookend(', '__attribute__((noinline)) static void observeRidePalette(')
     require('if(copy.parameterFlags&1)returnfalse;' in attachment and
@@ -75,7 +75,7 @@ def verify_declined_ride_entries(assembly):
     gate=selected('::rideObservationOwnerCurrent(unsigned int)')[0][0]
     checked=0
     for name in ('::copyRidePaletteBookend(', '::copyRideAttachmentBookend(', '::observeRidePalette()', '::publishRideObservation(',
-                 '::copyCurrentRideMainDraw(', '::rideMainDrawCurrent(', '::recordRideMainDraw('):
+                 '::copyCurrentRideMainDraw(', '::rideMainDrawCurrent(', '::recordRideMainDraw(', '::claimRideGpuAttempt('):
         nodes=selected(name)
         calls=[i for i,(_,mn,op,_) in enumerate(nodes) if mn=='call' and op==hex(gate)]
         require(len(calls)==1,'Ride consumer lost unique exact owner-gate call')

@@ -313,6 +313,30 @@ class Checks(unittest.TestCase):
         for status in (5,6,7):
             r=assess(prefix+row.replace('status=8','status='+str(status)),SOURCE)['rejected_or_missing_observations'][0]['submissions']
             self.assertEqual(r['rows'][0]['flags'],15);self.assertIsNone(r['rows'][0]['metadata'])
+    def test_ride_gpu_actual_source_order_mutations_decline(self):
+        from verify_scope_gpu_abi import verify_ride_gpu_source
+        root=Path(__file__).resolve().parents[1]
+        source=(root/'src/game/scope_gpu.cpp').read_text();render=(root/'src/game/remote_render.cpp').read_text()
+        self.assertTrue(verify_ride_gpu_source(source,render)['source_checked'])
+        for old,new in [('!probe.submissionOwner &&','true &&'),
+                        ('!sameInputs(b,probe.bindings[1])','false'),
+                        ('!copySlice(i==1,','!copyWrongSlice(i==1,'),
+                        ('!probe.rideReentered && !probe.split','!probe.split'),
+                        ('probe.rideGpuMatched=finishRideGpu(d);','probe.rideGpuMatched=true;'),
+                        ('std::optional<RideDrawGpuCopy>{probe.rideGpu}','std::nullopt'),
+                        ('if(ride)return true;','if(false)return true;')]:
+            bad=source.replace(old,new);self.assertTrue(bad!=source,old)
+            with self.subTest(mutation=old),self.assertRaises((ValueError,IndexError)):
+                verify_ride_gpu_source(bad,render)
+        bad=render.replace('rideObservationRows.load(std::memory_order_relaxed)>=32','false')
+        with self.assertRaises(ValueError):verify_ride_gpu_source(source,bad)
+        bad=render.replace('return chargeRideGpuAttempt(','return true || chargeRideGpuAttempt(')
+        with self.assertRaises(ValueError):verify_ride_gpu_source(source,bad)
+        old='GeometryBufferPolicy::Ride,nullptr,-1,&probe.rideBefore.layout) &&\n        sameInputs(probe.bindings[0],probe.bindings[2]);'
+        bad=source.replace(old,old.replace(' &&',' ||'));self.assertTrue(bad!=source)
+        with self.assertRaises(ValueError):verify_ride_gpu_source(bad,render)
+
+
     def test_live_input_getter_routing_cannot_revert_or_leave_selector_unused(self):
         from verify_scope_gpu_abi import verify_input_stream_routing
         source=(Path(__file__).resolve().parents[1]/'src/game/scope_gpu.cpp').read_text()
@@ -323,7 +347,7 @@ class Checks(unittest.TestCase):
                 source.replace('noUV78?2u:3u','3'),
                 source.replace('noUV78?2u:3u','noUV78?3u:2u'),
                 source.replace('noUV78?2u:3u','noUV78?2u:2u'),
-                source.replace('const bool noUV78=idle &&','const bool noUV78=true || idle &&'),
+                source.replace('const bool noUV78=(idle || ride) &&','const bool noUV78=true || (idle || ride) &&'),
                 source.replace('GetStreamSource(streamNumbers[i],','GetStreamSource(3,'),
                 source.replace('noUV78?2u:3u','3 /* noUV78?2u:3u */')):
             with self.subTest(mutation=bad[bad.index('const UINT streamNumbers'):][:100]),self.assertRaises(ValueError):

@@ -58,7 +58,7 @@ def source_checks(engine,gpu):
     require('beginPaletteApi(d,owner,slot,api,idleAdmitted,paletteContentEligible);if(!scopeGpuForwardingAllowed())return;' in draw,
             'Content sampling needs lock barrier before fallback/native forwarding')
     content=region(gpu,'static bool collectPaletteContent(IDirect3DDevice9 *d,','static bool sameInputs(')
-    ordered(content,['releaseBindings(probe.bindings[0]);','boundInputs(d,b,draw,true,nullptr,2,&native.metadata.layout)',
+    ordered(content,['releaseBindings(probe.bindings[0]);','boundInputs(d,b,draw,GeometryBufferPolicy::Idle,nullptr,2,&native.metadata.layout)',
                      'copySlice(i==1,ranges.slices[i],storage[i].first(ranges.slices[i].size))',
                      '!scopeGpuForwardingAllowed()||probe.algorithm||probe.hash||!hashIdleSlices(ranges)',
                      'p.content=b.values;p.contentHashes=probe.idle.hashes;'])

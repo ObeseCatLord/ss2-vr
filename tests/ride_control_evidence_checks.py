@@ -1,6 +1,7 @@
 """Finite scalar receipt controls; no gameplay or native execution."""
 from pathlib import Path
 import sys
+import types
 import unittest
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 from assess_ride_control import assess,assess_join,assess_render
@@ -10,7 +11,7 @@ JOIN=f'Lab rideModelJoin schema=1 source={SOURCE} invocation=1 receiver=2 class=
 def render_fixture(schema=2,eyes=(-1,),row=0,bank=1,attachment_mapped=1,attachment_overrides=None,
                    cache_row_count=2,pose_words=None,scale_words=None,main_draw_count=0,
                    main_draw_overflow=0,palette_first=10,palette_count=15,local_main_slot=3,
-                   actual_palette_words=None):
+                   actual_palette_words=None,profile='Fighter',gpu_copied=1,input_layout=2):
     lines=[];words=','.join(['00000000']*12)
     attachment={'parameter':9,'parameterFlags':0,'seatData':10,'attachment':11,'childState':12,'childArray':13,
                 'childCount':1,'descriptor':14,'parentName':15,'childFlags':0,'childRecordPresent':0,'childRecord':0,
@@ -22,7 +23,7 @@ def render_fixture(schema=2,eyes=(-1,),row=0,bank=1,attachment_mapped=1,attachme
         source=f' source={SOURCE}' if schema>=2 else ''
         extra=' seatBone=3 seatDefinition=1120' if schema>=2 else ''
         mapped=f' attachmentMapped={attachment_mapped}' if schema>=3 else ''
-        main=f' mainDrawCount={main_draw_count} mainDrawOverflow={main_draw_overflow}' if schema==4 else ''
+        main=f' mainDrawCount={main_draw_count} mainDrawOverflow={main_draw_overflow}' if schema in (4,5) else ''
         lines.append('Lab ride render '+key+source+' player=1 brain=2 ride=3 seat=0 class=2a8558 renderableHandle=4 renderable=5 instance=6 cfg=7 file=8 resource=0 modelRecord=1 evaluated=9 matrices=10 mainBone=2 definition=1000'+extra+mapped+main+' resourceClaim=0 seatClaim=0 graspClaim=0 steeringClaim=0')
         lines.append('Lab ride render binding '+key+f' skeleton=11 lod=12 definitions=1000 definitionCount=4 boneFirst=2 boneCount=2 canonicalCount=4 cacheRows=13 cacheRowCount={cache_row_count}')
         for kind in ('modelWorld','MainCanonical')+(('SeatCanonical',) if schema>=2 else ()):
@@ -31,25 +32,57 @@ def render_fixture(schema=2,eyes=(-1,),row=0,bank=1,attachment_mapped=1,attachme
             fields=' '.join(f'{name}={value}' for name,value in attachment.items())
             lines.append('Lab ride render attachment '+key+' '+fields)
             lines.append('Lab ride render attachmentPose '+key+' pose='+','.join(pose_words)+' scale='+','.join(scale_words))
-        if schema==4:
+        if schema in (4,5):
             actual_palette_words=actual_palette_words or ['00000000']*12
+            profiles={
+                'Fighter':(2741,2806,((133,0,3600),(135,0,2520),(128,0,124040),(128,0,135004)),200000,20000,150000),
+                'Saucer':(2464,2626,((133,0,3024),(135,0,1188),(128,0,166048),(128,0,175904)),220000,20000,190000),
+            }
+            vertices,triangles,channels,vertex_size,index_size,uv_offset=profiles[profile]
+            words_gpu={
+                'program':['7fc00001','00000000'],
+                'constants':['00000000']*4,
+                'declaration':['00000000','02000500','00010000','02000501','00050000','08000505','00060000','08000506','00ff0000','11000000'],
+            }
             for ordinal in range(main_draw_count):
-                lines.append('Lab ride render mainDraw '+key+f' ordinal={ordinal} model=1 draw={ordinal} surface=9 instance=6 name=0 bone=2 definition=1000 cfg=7 file=8 resource=0 lod=12 paletteFirst={palette_first} paletteCount={palette_count} localMainSlot={local_main_slot} topology=4 base=-1 minimum=0 vertices=20 start=0 primitives=10 buffersClaim=0 positionProgramClaim=0 graspClaim=0 steeringClaim=0 originalSucceeded=1 cleanupCurrent=1')
-                lines.append('Lab ride render mainDrawLayout '+key+f' ordinal={ordinal} vertices=20 triangles=10 positions=2,1,0 indices=101,2,4 weights=8,3,8 localIndices=8,4,12')
+                api_base=0 if schema==5 else -1;api_vertices=vertices if schema==5 else 20;api_start=channels[1][2]//2 if schema==5 else 0;api_primitives=triangles if schema==5 else 10
+                copied=f' gpuCopied={gpu_copied}' if schema==5 else ''
+                lines.append('Lab ride render mainDraw '+key+f' ordinal={ordinal} model=1 draw={ordinal} surface=9 instance=6 name=0 bone=2 definition=1000 cfg=7 file=8 resource=0 lod=12 paletteFirst={palette_first} paletteCount={palette_count} localMainSlot={local_main_slot} topology=4 base={api_base} minimum=0 vertices={api_vertices} start={api_start} primitives={api_primitives} buffersClaim=0 positionProgramClaim=0 graspClaim=0 steeringClaim=0 originalSucceeded=1 cleanupCurrent=1'+copied)
+                if schema==5:
+                    layout=' '.join(f'{name}={format_},{buffer},{offset}' for name,(format_,buffer,offset) in zip(('positions','indices','weights','localIndices'),channels))
+                else:
+                    layout='positions=2,1,0 indices=101,2,4 weights=8,3,8 localIndices=8,4,12'
+                lines.append('Lab ride render mainDrawLayout '+key+f' ordinal={ordinal} vertices={api_vertices} triangles={api_primitives} '+layout)
                 lines.append('Lab ride render mainDrawMatrix '+key+f' ordinal={ordinal} kind=modelWorld words={words}')
                 lines.append('Lab ride render mainDrawMatrix '+key+f' ordinal={ordinal} kind=actualPalette words='+','.join(actual_palette_words))
+                if schema==5 and gpu_copied:
+                    positions,indices,weights,local=channels
+                    hashes=','.join(chr(ord('a')+i)*64 for i in range(5))
+                    lines.append('Lab ride render mainDrawGpu '+key+f' ordinal={ordinal} programWords=2 constantRows=1 declarationElements=5 inputLayout={input_layout} positions=1,{positions[2]},12,1 localIndices=1,{local[2]},4,1 weights=1,{weights[2]},4,1 uv=1,{uv_offset},8,1 indexObject=2 declarationObject=3 shaderObject=4 vertexDesc={vertex_size},0,1,100,0 indexDesc={index_size},0,1,101,0 softwarePositions=0 hashes={hashes}')
+                    for kind,raw in words_gpu.items():
+                        lines.append('Lab ride render mainDrawGpuWords '+key+f' ordinal={ordinal} kind={kind} offset=0 words='+','.join(raw))
     return '\n'.join(lines)
 
 class Checks(unittest.TestCase):
     def test_paired_render_source_mutations_decline(self):
-        from verify_remote_render_unwind import verify_ride_frame_source
+        try:
+            from verify_remote_render_unwind import verify_ride_frame_source
+        except ModuleNotFoundError as error:
+            if error.name!='capstone':raise
+            # This test invokes the lexical source checker only; its ABI helpers
+            # are not needed until the native-object checker is invoked.
+            abi=types.ModuleType('verify_ride_control_abi')
+            abi.bodies=lambda assembly: {}
+            abi.decoded_nodes=lambda body: []
+            sys.modules['verify_ride_control_abi']=abi
+            from verify_remote_render_unwind import verify_ride_frame_source
         text=(Path(__file__).resolve().parents[1]/'src/game/remote_render.cpp').read_text()
         self.assertTrue(verify_ride_frame_source(text)['paired_main_seat_source_checked'])
         for old,new in [('seats!=1','seats>1'),('frame.mainBone==frame.seatBone','false'),
                         ('frame.matrices+frame.seatBone*48','frame.matrices+(frame.seatBone-frame.boneFirst)*48'),
                         ('before!=after','false'),('emit("SeatCanonical",frame.seat);',''),
                         ('seatClaim=0','seatClaim=1'),('stringId(&seatName,"Seat");',''),
-                        ('schema=4 source=%.*s','schema=4 source=unknown'),
+                        ('schema=5 source=%.*s','schema=5 source=unknown'),
                         ('if(copy.parameterFlags&1)return false;',''),
                         ('if(row[4] || row[5])return false;','if(row[4])return false;'),
                         ('copy.parentName!=parentName','copy.parentName!=frame.frame.seatBone'),
@@ -222,6 +255,95 @@ class Checks(unittest.TestCase):
             with self.subTest(label=label),self.assertRaises(ValueError):assess_render(bad,SOURCE)
         accepted=render_fixture(schema=4,main_draw_count=1,palette_first=32767,palette_count=1,local_main_slot=0)
         self.assertEqual(assess_render(accepted,SOURCE)['observations'][0]['main_draws'][0]['paletteFirst'],32767)
+
+    def test_render_schema5_gpu_receipts_preserve_raw_words_and_profiles(self):
+        for profile in ('Fighter','Saucer'):
+            with self.subTest(profile=profile):
+                result=assess_render(render_fixture(schema=5,main_draw_count=1,profile=profile),SOURCE)
+                draw=result['observations'][0]['main_draws'][0]
+                self.assertTrue(result['gpu_receipts_present'])
+                self.assertEqual(draw['gpuCopied'],1)
+                self.assertEqual(draw['gpu_words']['program'][0],0x7fc00001)
+                self.assertEqual(len(draw['gpu_words']['constants']),4)
+                self.assertEqual(len(draw['gpu_words']['declaration']),10)
+                self.assertFalse(result['buffers_verified'])
+                self.assertFalse(result['position_program_verified'])
+                self.assertFalse(result['physical_steering_verified'])
+        zero=assess_render(render_fixture(schema=5,main_draw_count=1,gpu_copied=0),SOURCE)
+        self.assertFalse(zero['gpu_receipts_present'])
+        asymmetric=(render_fixture(schema=5,eyes=(0,),main_draw_count=1,gpu_copied=1)+'\n'+
+                    render_fixture(schema=5,eyes=(1,),main_draw_count=1,gpu_copied=0))
+        self.assertEqual([d['gpuCopied'] for row in assess_render(asymmetric,SOURCE)['observations'] for d in row['main_draws']],[1,0])
+
+    def test_render_schema5_gpu_receipts_reject_malformed_inventory_and_metadata(self):
+        text=render_fixture(schema=5,main_draw_count=1)
+        lines=text.splitlines()
+        program=next(line for line in lines if 'mainDrawGpuWords ' in line and 'kind=program ' in line)
+        constants=next(line for line in lines if 'mainDrawGpuWords ' in line and 'kind=constants ' in line)
+        declaration=next(line for line in lines if 'mainDrawGpuWords ' in line and 'kind=declaration ' in line)
+        gpu=next(line for line in lines if line.startswith('Lab ride render mainDrawGpu '))
+        first=program.replace('words=7fc00001,00000000','words='+','.join(['00000000']*64))
+        last=program.replace('offset=0','offset=64').replace('words=7fc00001,00000000','words=7fc00001')
+        chunked=text.replace('programWords=2','programWords=65').replace(program,first+'\n'+last)
+        self.assertEqual(len(assess_render(chunked,SOURCE)['observations'][0]['main_draws'][0]['gpu_words']['program']),65)
+        changes=(
+            ('\n'.join(line for line in lines if line!=declaration),'truncated'),
+            (text+'\n'+program,'duplicate'),
+            (text.replace('kind=program offset=0','kind=program offset=1'),'offset'),
+            (text.replace(program,constants+'\n'+program),'family order'),
+            (text.replace('programWords=2','programWords=4097'),'program bound'),
+            (text.replace('constantRows=1','constantRows=0'),'constant bound'),
+            (text.replace('declarationElements=5','declarationElements=66'),'declaration bound'),
+            (text.replace('inputLayout=2','inputLayout=5'),'layout bound'),
+            (text.replace('positions=1,3600,12,1','positions=0,3600,12,1'),'vertex object'),
+            (text.replace('weights=1,124040,4,1','weights=9,124040,4,1'),'same vertex object'),
+            (text.replace('uv=1,150000,8,1','uv=1,150000,4,1'),'uv stride'),
+            (text.replace('vertexDesc=200000,0,1,100,0','vertexDesc=171927,0,1,100,0'),'vertex range'),
+            (text.replace('indexDesc=20000,0,1,101,0','indexDesc=19355,0,1,101,0'),'index range'),
+            (text.replace('vertexDesc=200000,0,1,100,0','vertexDesc=200000,1,1,100,0'),'vertex description'),
+            (text.replace('positions=133,0,3600','positions=133,0,3601'),'profile'),
+            (text.replace('base=0 minimum=0','base=1 minimum=0'),'topology'),
+            (text.replace('gpuCopied=1','gpuCopied=2'),'copied flag'),
+            (text.replace('buffersClaim=0','buffersClaim=1'),'false claim'),
+            (text.replace('00060000,08000506','00060000,08000507'),'declaration'),
+            (text.replace('words=7fc00001,00000000','words='+','.join(['00000000']*65)),'chunk size'),
+            (text.replace('hashes='+'a'*64,'hashes='+'A'*64),'hash case'),
+            (text.replace('mainDrawGpuWords schema=5 row=0 bank=1 eye=-1 ordinal=0 kind=program',
+                          'mainDrawGpuWords schema=5 row=0 bank=1 eye=-1 ordinal=1 kind=program'),'cross ordinal'),
+            (text.replace(gpu,'Lab ride render mainDrawGpu '+gpu.split(' ',4)[4].replace('ordinal=0','ordinal=1',1)),'GPU ordinal'),
+        )
+        for bad,label in changes:
+            with self.subTest(label=label),self.assertRaises(ValueError):assess_render(bad,SOURCE)
+        accepted='\n'.join(render_fixture(schema=5,row=i,bank=i+1,main_draw_count=8) for i in range(8))
+        self.assertEqual(sum(draw['gpuCopied'] for row in assess_render(accepted,SOURCE)['observations'] for draw in row['main_draws']),64)
+        with self.assertRaises(ValueError):assess_render(accepted+'\n'+render_fixture(schema=5,row=8,bank=9,main_draw_count=1),SOURCE)
+
+    def test_render_schema5_legacy_declaration_matches_native_selector(self):
+        text=render_fixture(schema=5,main_draw_count=1,input_layout=0)
+        old='00000000,02000500,00010000,02000501,00050000,08000505,00060000,08000506,00ff0000,11000000'
+        legacy='00000000,02000500,00050000,08000505,00060000,08000506,00030000,01000503,00ff0000,11000000'
+        text=text.replace(old,legacy)
+        self.assertTrue(assess_render(text,SOURCE)['gpu_receipts_present'])
+        for element in ('00100000,02000100','00070000,02000100','00010000,02000508'):
+            bait=text.replace('declarationElements=5','declarationElements=6').replace(legacy,legacy[:-17]+element+','+legacy[-17:])
+            with self.subTest(element=element),self.assertRaises(ValueError):assess_render(bait,SOURCE)
+
+    def test_render_schema5_maximum_program_constant_chunks(self):
+        text=render_fixture(schema=5,main_draw_count=1)
+        lines=[line for line in text.splitlines() if 'mainDrawGpuWords ' not in line]
+        text='\n'.join(lines).replace('programWords=2 constantRows=1','programWords=4096 constantRows=256')
+        prefix='Lab ride render mainDrawGpuWords schema=5 row=0 bank=1 eye=-1 ordinal=0 '
+        declaration=['00000000','02000500','00010000','02000501','00050000','08000505','00060000','08000506','00ff0000','11000000']
+        chunks=[]
+        for kind,raw in [('program',['7fc00001']*4096),('constants',['ffffffff']*1024),('declaration',declaration)]:
+            for offset in range(0,len(raw),64):chunks.append(prefix+f'kind={kind} offset={offset} words='+','.join(raw[offset:offset+64]))
+        full=text+'\n'+'\n'.join(chunks)
+        result=assess_render(full,SOURCE)['observations'][0]['main_draws'][0]
+        self.assertEqual(len(result['gpu_words']['program']),4096)
+        self.assertEqual(result['gpu_words']['constants'][-1],0xffffffff)
+        for bad in (full.replace('kind=program offset=64','kind=program offset=63'),
+                    full+'\n'+chunks[-1],text+'\n'+'\n'.join(chunks[:-1])):
+            with self.assertRaises(ValueError):assess_render(bad,SOURCE)
 
     def test_scalar_scope_and_nullable_association(self):
         result=assess(RECORD,SOURCE)

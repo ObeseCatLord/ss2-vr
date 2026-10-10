@@ -1,5 +1,29 @@
 # Mod journal
 
+## 2026-10-10 — actual vehicle GPU input evidence
+
+Added explicit vehicle policy at the existing buffer boundary, preserving weapon
+admission and increasing only shared index scratch. Existing probe references,
+locks, program copying and crypto now produce an optional schema5 receipt under
+actual occupied Main ownership. Pre/post inputs and Main bookends, release-tail
+checks and immutable normal-return publication govern it. Charged attempts cap
+GPU work at eight per eye/bank and64 per process, including failures.
+
+Astra design ADAPT/native source GO, effective local Astra/xhigh tags reverified,
+backend unattested. Four-product rebuild,82Debug/82assert-enabledRelease groups
+and28 relevant normal/-O compiled/artifact checks pass. Two initial source-check
+failures were stale selector/schema strings during reader work and are corrected.
+Source collector copies raw program/float constants and separate slice digests;
+GPU consumption, immutable content, grasp and steering remain unproved. No runtime,
+vehicle/input/game launch or staging operation occurred.
+
+Final consumer review approved the reader and found two lexical-checker bypasses:
+skipped budget charging and post-input comparison changed to OR. Both were
+reproduced in memory, fixed through exact direct/conjunctive expressions and
+rejected by added negative controls. Fresh Astra/xhigh bounded fix GO followed;
+native source/products stayed byte-identical.16reader and31idle/source cases pass
+normal/-O. The checker remains a finite regression gate, not general CFG proof.
+
 ## 2026-10-10 — occupied vehicle actual Main draw mapping
 
 Connected the existing render bank and GPU probe owner to a bounded multi-bone

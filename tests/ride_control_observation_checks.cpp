@@ -45,8 +45,50 @@ static void mainMappings() {
         assert(!rideMainDrawLinked(crossed,frame));
     }
 }
+static void vehicleRanges() {
+    const std::array<ScopeDeclarationElement,5> declaration{{{0,0,2,0,5,0},
+        {5,0,8,0,5,5},{6,0,8,0,5,6},{3,0,1,0,5,3},{255,0,17,0,0,0}}};
+    const std::array<ScopeSurfaceLayout,2> layouts{{
+        {2741,2806,{{{3600,0x85,0},{2520,0x87,0},{124040,0x80,0},{135004,0x80,0}}}},
+        {2464,2626,{{{3024,0x85,0},{1188,0x87,0},{166048,0x80,0},{175904,0x80,0}}}}}};
+    for(const auto &surface:layouts) {
+        const uint32_t uv=surface.channels[3].offset+uint32_t(surface.vertices)*4;
+        ScopeBufferInputs in{surface,{4,0,0,uint32_t(surface.vertices),surface.channels[1].offset/2,uint32_t(surface.triangles)},
+            {1,surface.channels[0].offset,12,1},{1,surface.channels[3].offset,4,1},
+            {1,surface.channels[2].offset,4,1},{1,uv,8,1},
+            {uv+uint32_t(surface.vertices)*8,0,1,100,0},{surface.channels[1].offset+uint32_t(surface.triangles)*6,0,1,101,0},2,false};
+        ScopeCopyRanges ranges;
+        assert(rideBufferRanges(in,declaration,ranges) && ranges.weightsActive);
+        assert(ranges.slices[1].size==uint32_t(surface.triangles)*6);
+        if(surface.triangles==2806)for(int id:{1,2,13})assert(!idleBufferRanges(in,declaration,ranges,nullptr,id));
+        for(unsigned fault=0;fault<10;++fault) {
+            auto bad=in;
+            if(fault==0)++bad.surface.vertices;
+            if(fault==1)++bad.draw.start;
+            if(fault==2)bad.draw.base=1;
+            if(fault==3)bad.positions.frequency=2;
+            if(fault==4)bad.weights.object=3;
+            if(fault==5)bad.index.size--;
+            if(fault==6)bad.vertex.size--;
+            if(fault==7)bad.softwarePositions=true;
+            if(fault==8)bad.vertex.pool=0;
+            if(fault==9)bad.localIndices.stride=8;
+            assert(!rideBufferRanges(bad,declaration,ranges) && !ranges.slices[0].size);
+        }
+        auto unknown=declaration;unknown[2].type=17;
+        assert(!rideBufferRanges(in,unknown,ranges)); // Main frame remains independent at caller.
+    }
+    uint32_t total=0;
+    for(unsigned bank=0;bank<8;++bank) {
+        uint32_t eye=0;
+        for(unsigned attempt=0;attempt<8;++attempt)assert(chargeRideGpuAttempt(eye,total,false));
+        assert(!chargeRideGpuAttempt(eye,total,false) && eye==8);
+    }
+    uint32_t next=0;assert(!chargeRideGpuAttempt(next,total,false) && total==64 && next==0);
+    total=0;assert(!chargeRideGpuAttempt(next,total,true) && !total && !next);
+}
 int main() {
-    mainMappings();
+    mainMappings();vehicleRanges();
     for(auto table:{0x2a8558u,0x2b8420u}) {
         auto row=fixture();assert(row.enter(123,456,7));
         row.copy({table,2,4,41,0,0}); // Null association tokens remain unassociated.
