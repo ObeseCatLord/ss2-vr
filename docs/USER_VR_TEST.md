@@ -124,7 +124,21 @@ right and both hands, smooth transfer, release, tracking loss and joystick
 fallback. Record vehicle/seat identity. Do not treat a road-wheel joint or a
 weapon-wheel action as physical driver steering. Teleport is outside scope.
 
+Optional native UI aid: if this pinned game build exposes the documented menu
+gadget grid (`men_bRenderGadgetGrid` and X/Y spacing controls), compare its visible
+lines with pointer selection across the panel. Use only the test profile, record
+prior values and restore them afterward. Grid availability or appearance is not
+a passing pointer test; visible selection must match the chosen native item.
+
 ## Multiplayer with other mod users
+
+Record the exact game/mod build and each test profile's network bandwidth and
+auto-aim options before connecting. The published native controls include
+`cli_iMaxBPS`/`cli_iMaxBPSOut`; availability and defaults vary by game build.
+Keep these variables consistent across the two host-role runs and retain the
+original profile. Do not change global network/security settings. An optional
+GameDig status query is availability evidence only and is not required to pass
+mixed desktop/VR gameplay acceptance.
 
 Use matching client/server products and a private session. Test listen-host local,
 remote client and dedicated-server roles. Observe both directions with another

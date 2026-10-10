@@ -1,5 +1,30 @@
 # Existing Serious Sam 2 tools — research, 2026-10-09
 
+## Bounded follow-up: secondary test aids
+
+A user-requested read-only subagent researched new tools while ID2 submission
+receipt/replay implementation continued. No additional verified current native
+SDK, binary animation/model inspector, save editor or mixed desktop/VR validator
+was found in that bounded search. This is not a universal absence claim.
+The integration owner independently checked the primary sources below. Local
+Astra/xhigh routing tags were verified by the owner; the helper could not inspect
+them itself, and independent backend attestation remains unavailable.
+
+| New lead | Verified author/publisher capability | Adoption decision |
+| --- | --- | --- |
+| Native menu grid | [Croteam notes](https://steamcommunity.com/games/204340/announcements/detail/511846967442148994) document `men_bRenderGadgetGrid` and X/Y grid spacing controls. | Optional visible placement/ray-selection comparison in user UI acceptance, only if the pinned build exposes it. No stereo or hit-test proof from the grid alone. |
+| Native network/profile controls | [Croteam notes](https://steamcommunity.com/games/204340/announcements/detail/520852898086650128) document custom BPS/profile application. | Record native bandwidth/auto-aim settings and exact game build during both mixed-mode host-role tests. Do not upgrade the protected installation or infer newer patch behavior. |
+| GameDig | [Maintainer mapping](https://github.com/gamedig/node-gamedig/blob/master/lib/games.js) lists `serioussam2`, GameSpy2, port25600. | Conditional server/map/player-count availability aid after one comparison with an owned server. Current Steam query compatibility untested; status cannot certify join, poses, hit results or convergence. No runtime dependency added. |
+| io_sedASCII | [Maintainer README](https://github.com/purifetchi/io_sedASCII) describes AMF import and AMF/ASF/AAF export; skeleton/animation import planned. | No new capability needed over the already evaluated binary importer; exact SS2 compatibility remains unknown. |
+| SeriousTexture notes | [Author's format description](https://gist.github.com/zturtleman/720d24ff3e36270fa3e47a23531746eb) uses an SS2 demo texture. | Optional reference for a concrete unsupported texture. Tentative fields and retail compatibility unknown; no new decoder justified. |
+
+The practical asset tools remain Editor2/Edit Data, the evaluated other1/Andrey
+parser and SE2 Macro fixture authoring. Live submission, camera, evaluated
+palette, grasp and native lifetime evidence still belongs to the existing
+collector. No download, install, editor/game/server launch or network test ran.
+Public research contained no private telemetry. See USER_VR_TEST.md for the two
+small native UI/network additions; broader testing remains user-operated.
+
 ## Current adoption decision — 2026-10-10
 
 A new bounded Astra/xhigh research sidecar checked online author/publisher

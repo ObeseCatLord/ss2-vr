@@ -1,5 +1,30 @@
 # Immersive steering: requirement and native evidence
 
+## Current production controls and helicopter coverage
+
+Production one-/two-hand Fighter/Saucer handle grabbing is now connected to
+successfully submitted native stereo geometry and the borrowed mode2 heading
+callback. See VEHICLE_GRIP_INTEGRATION_PLAN.md and NATIVE_HOVER_HEADING.md for
+contact, continuity/rearm, source/build proof and runtime limits. These controls
+are handles, not a literal steering wheel. The historical observer-only boundary
+below predates this source integration; wider actual controls remain required.
+
+The bounded Helicopter_Player investigation inspected its exact model, skeleton,
+mechanism, referenced animation set, cockpit-debris model and directly referencing
+puppet. Four LODs, all71 LOD0 connected components and cockpit cutaways were
+inspected; six CRC-checked resources fully parsed with the existing evaluated
+parser. Main plus five bones and nine animations did not establish a defensible
+driver stick/yoke/wheel/handgrip. The exterior nose weapon bracket is not admitted
+as a driver control. Seat is a null-model attachment, and cockpit debris belongs
+to destruction rather than a live control attachment.
+
+This is a finite negative identification, not proof that every possible control
+is absent. Thirty-two immediate references remain unopened (debris, textures,
+effects, sounds, material/shader and missile puppet); rider assets, world/loose
+composition, loaded resource identity and occupied-seat/runtime animation are
+uninspected. Exact resource/hash/reference inventories and private previews are
+preserved locally. No guessed offset/control or game/editor run was introduced.
+
 ## Current implementation boundary — 2026-10-10
 
 The existing default-off [render observer](RIDE_RENDER_OBSERVATION.md) now joins
