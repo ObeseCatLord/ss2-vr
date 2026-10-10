@@ -1,5 +1,15 @@
 # Mod journal
 
+## 2026-10-10 — preserve the owned game's actual Proton startup trace
+
+Fresh neutral SOURCE2 capture timed out before scene/preparation/host; actual
+D3D9 readiness passed, cleanup left no owned survivors/errors and retired the
+private display. Native shutdown was not observed; failed fixture preserved.
+Status helpers were replacing the shared app-id Proton log, obscuring startup.
+Their copied environment now sets only PROTON_LOG=0; game environment stays1.
+34runtime-evidence cases pass normal/-O. Tool-only correction, native b268d3e4...
+IPC11/wire7/all4products unchanged. No alignment/rendering completion claimed.
+
 ## 2026-10-10 — ID2 SOURCE2 raw projection observation
 
 Actual neutral gameplay showed SOURCE2 callbacks in both eyes where the old

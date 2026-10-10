@@ -1,5 +1,20 @@
 # Current source continuation
 
+## Current raw capture and startup logging — 2026-10-10
+
+Reviewed SOURCE2 adapter build b268d3e4... IPC11/wire7 passed all4product builds,
+82Debug/82assertRelease and game/server normal/-O bookend gates. One fresh capture
+then passed private D3D9 readiness but timed out before scene/preparation/host.
+No loaded reference was obtained; exact-owned cleanup left no survivors/errors
+and stopped the private display. Native shutdown was not observed.
+
+Observer-only PROTON_LOG=0 now preserves the actual game startup log that repeated
+status launches had overwritten. Bounded Astra source GO and34normal/-O consumer
+checks pass; native products unchanged. A fresh matched fixture is staged for
+the next neutral capture. Earlier fixtures and all original user files stay
+preserved. The latest private handoff records exact identities and live handles;
+do not rerun failed fixtures or count this timeout as matrix-adapter causation.
+
 ## Active capture authority and actual ID2 result — 2026-10-10
 
 The user's all-necessary-captures approval supersedes the pending ID2 permission

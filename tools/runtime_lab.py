@@ -442,7 +442,10 @@ def observer(cfg, env, command, token, output=None, timeout=20, deadline=None):
     before={i['pid'] for i in private_processes(cfg['observer'],token)}
     if deadline is None: deadline=time.monotonic()+timeout+4
     timeout=remaining(deadline,timeout)
-    process=subprocess.Popen(args,env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,start_new_session=True)
+    # Proton opens the same app-id log for every invocation. Status observers
+    # must not truncate the owned game's startup trace or mutate its environment.
+    observer_env=env.copy();observer_env['PROTON_LOG']='0'
+    process=subprocess.Popen(args,env=observer_env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,start_new_session=True)
     try:
         stdout,stderr=process.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:

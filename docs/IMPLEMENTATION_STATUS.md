@@ -1,5 +1,32 @@
 # Implementation status — 2026-10-10
 
+## Raw capture startup timeout; real game log preservation corrected
+
+One fresh neutral capture of the reviewed b268d3e4... build passed actual private
+D3D9 readiness but timed out before the native scene, preparation, host or matrix
+data. The native log stopped after CodecOGG module loading; the previous successful
+run continued through Shaders/ProcRender/Sam2Game. No loaded-scene or raw-reference
+acceptance is claimed. Native shutdown was not observed; exact-owned cleanup left
+no survivors/errors and retired the private display. The failed fixture is preserved.
+
+Both this failed run and the earlier successful run exposed a logging defect:
+status observers launched Proton with logging enabled, replacing the game's
+app-id log. Observer launches now copy the environment and disable only their
+Proton logging; original game logging, arguments and cleanup stay unchanged.
+Installed Proton's actual logging implementation and the captured final observer
+headers establish the cause.34runtime-evidence checks pass normal/-O, including
+unchanged game environment and observer arguments. This tool-only change leaves
+all4native product identities and b268d3e4.../IPC11/wire7 unchanged.
+
+Bounded Astra/xhigh source GO covers this logging correction; current default-role
+local tags verified, backend unattested. Debug/Release runtime-evidence consumer
+groups pass. It does not establish startup causation or a successful fresh run.
+
+Next is a fresh sealed capture retaining the actual game startup trace. The
+timeout does not by itself implicate the raw matrix adapter: its target scene
+and weapon invocations were not observed. Original installation/WIP/user files
+remain preserved; all-weapon alignment and full user acceptance are still open.
+
 ## ID2 SOURCE2 raw diagnostic connected; capture next
 
 The observed native SOURCE2 callbacks now use the existing installed bookends,

@@ -17,6 +17,21 @@ from build_contract import OBSERVER_FORMAT, OBSERVER_FIELDS, read_observer_layou
 
 HEAD={'p':[0,0,0],'q':[0,0,0,1]}
 
+class ObserverLogChecks(unittest.TestCase):
+    def test_observer_cannot_overwrite_game_proton_log(self):
+        from runtime_lab import observer
+        cfg={'proton':'private-proton','observer':'private-observer'}
+        env={'PROTON_LOG':'1','PROTON_LOG_DIR':'private-run','PRIVATE_MARKER':'owned'}
+        with patch('runtime_lab.private_processes',return_value=[]),patch('runtime_lab.subprocess.Popen') as spawn:
+            spawn.return_value.communicate.return_value=(b'',b'')
+            spawn.return_value.returncode=0
+            observer(cfg,env,'shutdown','owned-token')
+            sent=spawn.call_args.kwargs['env']
+            self.assertEqual(sent,{**env,'PROTON_LOG':'0'})
+            self.assertIsNot(sent,env)
+            self.assertEqual(env['PROTON_LOG'],'1')
+            self.assertEqual(spawn.call_args.args[0],['private-proton','runinprefix','private-observer','shutdown','owned-token'])
+
 class ObserverLayoutChecks(unittest.TestCase):
     def setUp(self):
         self.values=[1,0x32565253,11,272,440,352,33554928,83887888]
