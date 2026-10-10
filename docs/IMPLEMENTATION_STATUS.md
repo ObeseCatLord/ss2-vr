@@ -1,5 +1,25 @@
 # Implementation status — 2026-10-10
 
+## Actual neutral Auto Shotgun capture; reference gate still open
+
+The rebuilt observer successfully opened IPC11 in a fresh private capture.
+The exact Jungle scene hash was confirmed at native simulation; native ID2
+grant/equip/save completed,135distinct neutral complete stereo pairs were
+observed, and both1280x720eye images were captured with projection presentation.
+Native shutdown and private-display retirement completed with no cleanup errors
+or owned survivors. No firing/movement or actual headset/network test occurred.
+The private cheated save exists; its reload is not yet verified.
+
+All32copied palette-content draws match the characterized stock mesh variant;
+none qualifies as an independent projection reference. Each reports
+`projection-association-unavailable`; the raw producer probe has no pairs.
+Second-eye traces lack the animation-query/config receipt despite successful
+native indexed draws. These are actionable diagnostic results, not evidence
+that alignment, winning animation, GPU geometry or physical grasp is complete.
+Production alignment remains IDs1/13-only. A bounded Astra design review is
+examining the smallest current-draw resource/projection diagnostic boundary,
+without replacing native owners, rendering or animation.
+
 ## Capture authority resolved; stale observer rejected before launch
 
 The user explicitly permits all necessary captures, including private neutral

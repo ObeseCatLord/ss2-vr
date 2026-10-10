@@ -1832,3 +1832,19 @@ unattested.33runtime-evidence cases normal/-O,24display-owner cases, relevant
 Debug/Release CTest group and12actual compiled-PE mutations pass. Native source/
 products remain0047bd77/IPC11/wire7. Fresh exact capture is running; no alignment,
 GPU/grasp/native-release or full-goal acceptance is inferred from these checks.
+
+
+## 2026-10-10 — actual neutral ID2 evidence
+
+The rebuilt IPC11 observer attached successfully. A fresh isolated native run
+confirmed exact Jungle simulation, native ID2 grant/equip/save,135distinct neutral
+complete stereo pairs, captured both1280x720eyes with projection presentation,
+and clean native/display shutdown. Captures/save/logs stay private; save reload
+not verified. No firing/movement/device/network action.
+
+32copied palette-content draws uniquely match the characterized stock variant,
+but all lack projection association; zero qualified numerical references. Second
+eye animation-query/config receipt is absent. Preserve diagnostic rejection; no
+alignment/grasp/GPU/native-release acceptance. Requested bounded Astra design
+review of a current-draw metadata/raw-projection adapter; no new native change
+is implemented before its ownership/phase decision.
