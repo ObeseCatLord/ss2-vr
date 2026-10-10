@@ -4495,11 +4495,13 @@ bool copyIdleSubmissionPalette(const IdleWeaponTrace *wanted,IdlePaletteCopy &ou
         ScopeDrawBinding binding;IdleDrawIdentity identity;IdleWeaponTrace *trace=nullptr;
         if(!currentIdleDraw(binding,identity,trace)) {failed(1);return;}
         if(trace!=wanted || !trace || trace->nativeId!=2 || !trace->admitted || trace->binding!=identity) {failed(2);return;}
-        if(!trace->config.configuration) {failed(3);return;}
+        // A cached native draw need not repeat the Event observer. Its own two
+        // current native copies supply diagnostic identity; never seed Event history.
+        if(!trace->config.configuration && (trace->config.file || trace->config.resource!=-1)) {failed(3);return;}
         IdlePaletteCopy before,after;
         if(diagnostic)diagnostic->leg=1;
         if(!remote_render::copyIdlePalette(binding.modelInstance,before,diagnostic)) {failed(4);return;}
-        if(before.metadata.rootConfig!=trace->config) {failed(5);return;}
+        if(trace->config.configuration && before.metadata.rootConfig!=trace->config) {failed(5);return;}
         const uint32_t projection=remote_render::idlePaletteProjectionSequence(trace->projectionProbe,before);
         ScopeDrawBinding now;IdleDrawIdentity current;IdleWeaponTrace *same=nullptr;
         if(!currentIdleDraw(now,current,same)) {failed(6);return;}

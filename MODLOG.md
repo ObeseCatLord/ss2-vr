@@ -1,5 +1,45 @@
 # Mod journal
 
+## 2026-10-10 — observe each native draw without requiring a repeated event
+
+The ID2 diagnostic adapter now accepts configuration from its own current native
+draw bookends when event identity is entirely absent. It rejects malformed
+absence and still requires any observed event identity to match. It leaves the
+event trace untouched and retains the same native reads, model/draw/cache ownership,
+full before/after equality, successful original return and normal cleanup gates.
+The offline parser applies the same rule only to explicit ID2 diagnostics and
+retains palette-to-own-submission root/render identity. No production weapon
+reference, winning animation, grasp or SOURCE2 qualification is enabled.
+
+Astra design ADOPT and bounded patch GO; local Astra/xhigh routing verified,
+independent backend identity unavailable. All four products rebuilt with native
+source fingerprint011f29229dcba94b41ef1b814a6d86084e007d1d44a1f67d5d7022779641359b,
+IPC11/wire7. All82Debug/82assertion-enabledRelease groups and41reader/source
+regressions normal/optimized pass, together with native/compiled submission,
+projection, cleanup and artifact gates. Reassessing the previous actual capture
+is exactly unchanged. The next fresh neutral capture will test right-eye native
+copying; its success is not yet established.
+
+
+## 2026-10-10 — native draw-copy boundary observed in stereo gameplay
+
+A fresh isolated capture of the reviewed diagnostic reached exact Jungle and
+native Auto Shotgun grant/equip/save, recorded 130 complete neutral stereo pairs,
+and shut down its native processes/private display cleanly. Both 1280×720 world
+images were inspected; 602,558 of 921,600 pixels differ. Both guns and per-hand
+laser lines are visible. This adds no headset, head-motion, firing or multiplayer
+acceptance; save reload remains unverified.
+
+The new boundary receipts distinguish two paths. In the left eye, both hands'
+32 draw rows completed the native palette/API/content bookends. In the right eye,
+32 rows stopped before the native borrow because the event-derived trace
+configuration was absent. Earlier palette-callback cache mismatches therefore
+do not explain all draw-copy failures. The diagnostic collector still rejects
+both-eye reference readiness; no grasp/alignment/reference qualification is
+accepted. A bounded Astra senior review is selecting an adapter at the existing
+owned draw boundary, preserving cache/animation/resource requirements.
+
+
 ## 2026-10-10 — diagnostic boundary source implementation and storage cleanup
 
 The passive ID2 palette-copy diagnostic now reports the first returned failing

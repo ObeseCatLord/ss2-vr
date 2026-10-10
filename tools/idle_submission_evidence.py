@@ -112,9 +112,10 @@ def consume_palette(record,kind,f,expected_source):
                 any(not x for x in r['objects']) or not r['root'][0] or not r['render'][0]:
             raise ValueError('Palette row outside copied native/API bounds')
         m=original['metadata']
+        event_config=[record[k] for k in ('cfg','file','resource')]
         if m['keys'][:6]!=[r[k] for k in ('modelAddress','drawAddress','modelRecord','drawRecord','surface','instance')] or \
                 r['root']!=m['root'] or r['render']!=m['render'] or \
-                r['root']!=[record[k] for k in ('cfg','file','resource')]:
+                event_config!=[0,0,-1] and r['root']!=event_config:
             raise ValueError('Palette and original metadata identity disagreement')
         if (r['count']>1 and (m['keys'][8]!=-1 or m['keys'][7]!=0)) or (r['count']==1 and m['keys'][8]<0):
             raise ValueError('Palette count contradicts single-bone metadata')

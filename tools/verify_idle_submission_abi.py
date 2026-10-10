@@ -34,6 +34,10 @@ def source_checks(engine,gpu):
             'Palette receipt lost fresh raw-global bookends')
     require('diagnostic->wrapper!=99' in palette and 'diagnostic->wrapper=99;' in palette,
             'Palette unwind must remain unknown rather than a returned guard failure')
+    require('if(!trace->config.configuration&&(trace->config.file||trace->config.resource!=-1))' in palette and
+            'if(trace->config.configuration&&before.metadata.rootConfig!=trace->config)' in palette and
+            'trace->config=' not in palette,
+            'Diagnostic Event absence must be exact, retain present identity and never seed history')
     boundary=region(gpu,'static bool armPaletteBoundary(','static bool serializePaletteGeometry(')
     require('if(!paletteApiOwnerCurrent(d,owner,slot,api))returnfalse;' in boundary and
             'if(!receipt.kind){receipt={};receipt.phase=phase;}' in boundary and

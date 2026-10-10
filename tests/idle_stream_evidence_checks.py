@@ -139,6 +139,32 @@ def boundary_fixture(attempts=1,excluded=(),**changes):
     return text
 
 class Checks(unittest.TestCase):
+    def test_owned_id2_palette_can_copy_without_event_identity(self):
+        text=palette_fixture(content=True);first,_,rest=text.partition('\n')
+        missing=first.replace('cfg=20 file=30 resource=1','cfg=0 file=0 resource=-1')+'\n'+rest
+        result=assess(missing,SOURCE);r=result['rejected_or_missing_observations'][0]
+        self.assertEqual([r[k] for k in ('cfg','file','resource')],[0,0,-1])
+        self.assertEqual(r['submissions']['palette_copies']['rows'][2]['root'],[20,30,1])
+        self.assertEqual(r['stage'],3)
+        self.assertFalse(result['positive_grasp_verified']);self.assertFalse(result['alignment_accepted'])
+        for identity in ('cfg=0 file=30 resource=1','cfg=0 file=0 resource=0',
+                         'cfg=21 file=30 resource=1','cfg=20 file=0 resource=-1'):
+            with self.assertRaises(ValueError,msg=identity):assess(first.replace('cfg=20 file=30 resource=1',identity)+'\n'+rest,SOURCE)
+        row=next(line for line in missing.splitlines() if line.startswith('Lab idle paletteRow'))
+        with self.assertRaises(ValueError):assess(missing.replace(row,row.replace('root=20,30,1','root=21,30,1')),SOURCE)
+        for native in (1,13):
+            with self.assertRaises(ValueError):assess(missing.replace('nativeId=2',f'nativeId={native}'),SOURCE)
+
+    def test_missing_event_diagnostic_does_not_seed_or_ignore_present_config(self):
+        from verify_idle_submission_abi import source_checks
+        root=Path(__file__).resolve().parents[1];engine=(root/'src/game/engine.cpp').read_text();gpu=(root/'src/game/scope_gpu.cpp').read_text()
+        for old,new in [('trace->config.file || trace->config.resource!=-1','false'),
+                        ('if(trace->config.configuration && before.metadata.rootConfig!=trace->config)',
+                         'if(false && before.metadata.rootConfig!=trace->config)'),
+                        ('out=before;','trace->config=before.metadata.rootConfig;out=before;')]:
+            bad=engine.replace(old,new);self.assertNotEqual(engine,bad)
+            with self.assertRaises(ValueError):source_checks(bad,gpu)
+
     def test_boundary_unlinked_cache_is_unknown_and_not_a_reference(self):
         r=assess(boundary_fixture(),SOURCE)['rejected_or_missing_observations'][0]['submissions']
         b=r['palette_boundaries'];self.assertEqual(b['rows'][0]['reader'],14)
