@@ -7,7 +7,7 @@ import math
 from pathlib import Path
 import re
 import struct
-from idle_stream_evidence import consume as consume_stream_probe, validate as validate_stream_probe, declaration_layout, OBSERVED, NO_UV56, OBSERVED_MULTI_UV, PASSIVE_FIVE_ROW78
+from idle_stream_evidence import consume as consume_stream_probe, validate as validate_stream_probe, declaration_layout, validate_buffer_content, OBSERVED, NO_UV56, OBSERVED_MULTI_UV, PASSIVE_FIVE_ROW78
 from idle_submission_evidence import consume as consume_submission,validate as validate_submission,consume_palette
 from idle_projection_evidence import consume as consume_projection_probe, validate as validate_projection_probe, validate_association
 
@@ -55,7 +55,6 @@ def declaration_weights(rows):
 def validate_geometry(geometry,count,copy_layout=0,native_id=1):
     limits={1:(1490,1332),2:(3017,2673),13:(2904,2245)}
     if native_id not in limits:raise ValueError('Unsupported geometry native selector')
-    max_vertices,max_triangles=limits[native_id]
     if set(geometry)!=set(range(count)):raise ValueError('Missing geometry headers')
     draw_records=set()
     for g in geometry.values():
@@ -69,23 +68,10 @@ def validate_geometry(geometry,count,copy_layout=0,native_id=1):
         if not copy_layout and g['drawRecord'] in draw_records:raise ValueError('Repeated native draw identity')
         draw_records.add(g['drawRecord'])
         layout=g['data']['layout:0'];buffers=g['data']['buffers:0'];draw=g['data']['draw:0'];streams=g['data']['streams:0']
-        v,t=layout[:2]
-        if not 1<=v<=max_vertices or not 1<=t<=max_triangles or layout[3]!=0x85 or layout[6]!=0x87 or \
-           layout[9]!=0x80 or layout[12]!=0x80 or layout[4]>=255 or layout[7]>=255 or \
-           layout[10]!=layout[4] or layout[13]!=layout[4] or draw!=[4,0,0,v,layout[5]//2,t] or layout[5]%2:
-            raise ValueError('Unsupported declared geometry layout')
-        if buffers[1:5]!=[0,1,100,0] or buffers[6:10]!=[0,1,101,0]:raise ValueError('Unsupported buffer use')
-        if not streams[0] or streams[4]!=streams[0] or streams[12]!=streams[0] or not streams[16] or streams[17] or \
-           streams[1:4]!=[layout[2],12,1] or streams[5:8]!=[layout[11],4,1] or streams[14:16]!=[8,1] or \
-           (streams[8] and (streams[8]!=streams[0] or streams[9:12]!=[layout[8],4,1])):
-            raise ValueError('Unsupported stream identity/ranges')
-        input_layout,weights=declaration_layout([g['data']['declaration:'+str(i)] for i in range(g['declaration'])])
+        input_layout=validate_buffer_content(layout,buffers,draw,streams,
+            [g['data']['declaration:'+str(i)] for i in range(g['declaration'])],native_id)
         g['input_layout']=input_layout
         if input_layout in (2,3,4):g['auxiliary_channels']=['uv']
-        if bool(streams[8])!=weights:raise ValueError('Declaration/bound weight disagreement')
-        ranges=[(layout[2],v*12,buffers[0]),(layout[5],t*6,buffers[5]),
-                (layout[8],v*4,buffers[0]),(layout[11],v*4,buffers[0]),(streams[13],v*8,buffers[0])]
-        if any(off+size>capacity for off,size,capacity in ranges):raise ValueError('Geometry outside bound buffer')
 
 def assess(text,expected_source):
     if not re.fullmatch('[a-f0-9]{64}',expected_source):raise ValueError('Expected compiled source required')

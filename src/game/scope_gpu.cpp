@@ -196,7 +196,8 @@ static bool identity(IUnknown *object,IUnknown *&out,HRESULT *observed=nullptr) 
     return SUCCEEDED(result) && out;
 }
 static bool boundInputs(IDirect3DDevice9 *d,BoundInputs &b,const ScopeIndexedDraw &draw,bool idle=false,
-                        IdleWeaponTrace::InputFailure *diagnostic=nullptr,int idleNativeId=1) {
+                        IdleWeaponTrace::InputFailure *diagnostic=nullptr,int idleNativeId=1,
+                        const ScopeSurfaceLayout *copiedSurface=nullptr) {
     b.values = {}; b.count = MAXD3DDECLLENGTH+1;
     HRESULT result=S_OK;
     auto fail=[&](uint32_t step,uint32_t index=0) {
@@ -230,7 +231,7 @@ static bool boundInputs(IDirect3DDevice9 *d,BoundInputs &b,const ScopeIndexedDra
         noUV56?GeometryInputLayout::NoUV56:multiUV78?GeometryInputLayout::ObservedMultiUV78:
         noUV78?GeometryInputLayout::NoUV78:GeometryInputLayout::Legacy56;
     if(uses78 || noUV56)weights=true;
-    b.values.surface=idle?probe.idle.raster.layout:probe.raster.pose.layout;b.values.draw=draw;
+    b.values.surface=copiedSurface?*copiedSurface:(idle?probe.idle.raster.layout:probe.raster.pose.layout);b.values.draw=draw;
     ScopeStreamInput *streams[]{&b.values.positions,&b.values.localIndices,&b.values.uv,&b.values.weights};
     const UINT streamNumbers[]{0,uses78?7u:5u,noUV78?2u:3u,uses78?8u:6u};
     // NoUV78's declared FLOAT2 stream2 replaces stale undeclared stream3.
@@ -368,7 +369,20 @@ static bool serializePaletteGeometry(IdleWeaponTrace::PaletteApiPayload &p) {
     p.words=g.words;std::copy_n(g.program.begin(),g.words,p.program.begin());
     return true; // Copied scalar state only; retain both original binding owners.
 }
-static bool beginPaletteApi(IDirect3DDevice9 *d,IdleWeaponTrace *owner,unsigned slot,unsigned api,bool geometryAdmitted) {
+static bool collectPaletteContent(IDirect3DDevice9 *,IdleWeaponTrace *,unsigned,unsigned,const IdlePaletteCopy &);
+static bool paletteContentMatchesApi(const BoundInputs &b,const IdleWeaponTrace::StreamSnapshot &s) noexcept {
+    if(s.status!=IdleWeaponTrace::StreamSnapshot::Copied || b.count!=s.declarationCount ||
+       b.elements!=s.declaration || b.constantCount!=s.caps ||
+       uint32_t(reinterpret_cast<uintptr_t>(b.identity[5]))!=s.declarationObject ||
+       uint32_t(reinterpret_cast<uintptr_t>(b.identity[4]))!=s.indexObject ||
+       uint32_t(reinterpret_cast<uintptr_t>(b.identity[6]))!=s.shaderObject ||
+       std::array<ScopeStreamInput,3>{b.values.positions,b.values.localIndices,b.values.weights}!=s.streams)return false;
+    for(unsigned i=0;i<s.caps;++i)for(unsigned j=0;j<4;++j)
+        if(std::bit_cast<uint32_t>(b.constants[i][j])!=s.constants[i][j])return false;
+    return true;
+}
+static bool beginPaletteApi(IDirect3DDevice9 *d,IdleWeaponTrace *owner,unsigned slot,unsigned api,
+                            bool geometryAdmitted,bool contentEligible) {
     if(!paletteApiOwnerCurrent(d,owner,slot,api))return false;
     // Capability getters are outside the sampled interval. An admitted geometry
     // already performed them; do not add callbacks after its certification.
@@ -377,15 +391,24 @@ static bool beginPaletteApi(IDirect3DDevice9 *d,IdleWeaponTrace *owner,unsigned 
     if(!copyIdleSubmissionPalette(owner,before) || !paletteApiOwnerCurrent(d,owner,slot,api))return false;
     auto &p=owner->paletteApiPayloads[api];
     bool copied=false;
-    if(geometryAdmitted)copied=serializePaletteGeometry(p);
+    if(geometryAdmitted) {
+        copied=serializePaletteGeometry(p);
+        p.content=probe.idle.inputs;p.contentHashes=probe.idle.hashes;
+        p.contentCopied=copied;
+    }
     else {
         // Reuse the existing slots only when no geometry was certified.
         releaseBindings(probe.bindings[1]);releaseBindings(probe.bindings[2]);
         if(!paletteApiOwnerCurrent(d,owner,slot,api))return false;
+        if(contentEligible && before.count>1 && !probe.algorithm && !probe.hash)
+            p.contentCopied=collectPaletteContent(d,owner,slot,api,before);
+        // A failed unlock must stop before further getters or native bookends.
+        if(!scopeGpuForwardingAllowed() || !paletteApiOwnerCurrent(d,owner,slot,api))return false;
         copied=sampleIdleApi(d,probe.bindings[1],p.before,p.program,p.words,{},true,true);
     }
     if(!paletteApiOwnerCurrent(d,owner,slot,api))return false;
     p.beforeCopied=copied;
+    p.contentMatched=p.contentCopied && copied && paletteContentMatchesApi(probe.bindings[0],p.before);
     if(!copied || !copyIdleSubmissionPalette(owner,bookend) ||
        !paletteApiOwnerCurrent(d,owner,slot,api) || before!=bookend)return false;
     owner->submissions.before(slot,before.metadata,true);
@@ -574,6 +597,28 @@ static bool hashIdleSlices(const ScopeCopyRanges &ranges) {
     }
     return true;
 }
+// Existing buffer owners, five bounded copies and crypto owner; no affine admission.
+static bool collectPaletteContent(IDirect3DDevice9 *d,IdleWeaponTrace *owner,unsigned slot,unsigned api,
+                                  const IdlePaletteCopy &native) {
+    releaseBindings(probe.bindings[0]);
+    if(!scopeGpuForwardingAllowed() || !paletteApiOwnerCurrent(d,owner,slot,api))return false;
+    const auto draw=owner->submissions.rows[slot].draw;
+    auto &b=probe.bindings[0];ScopeCopyRanges ranges;
+    if(!boundInputs(d,b,draw,true,nullptr,2,&native.metadata.layout) ||
+       !paletteApiOwnerCurrent(d,owner,slot,api) ||
+       !idleBufferRanges(b.values,std::span(b.elements).first(b.count),ranges,nullptr,2))return false;
+    const std::array<std::span<uint8_t>,5> storage{probe.positions,probe.indices,probe.weights,probe.localIndices,probe.uv};
+    for(unsigned i=0;i<storage.size();++i) {
+        if(ranges.slices[i].size>storage[i].size() ||
+           !copySlice(i==1,ranges.slices[i],storage[i].first(ranges.slices[i].size)))return false;
+        if(!scopeGpuForwardingAllowed() || !paletteApiOwnerCurrent(d,owner,slot,api))return false;
+    }
+    // Hash only owned copies after every successful unlock; no retry of live crypto.
+    if(!scopeGpuForwardingAllowed() || probe.algorithm || probe.hash || !hashIdleSlices(ranges) ||
+       !paletteApiOwnerCurrent(d,owner,slot,api))return false;
+    auto &p=owner->paletteApiPayloads[api];p.content=b.values;p.contentHashes=probe.idle.hashes;
+    return true;
+}
 static bool sameInputs(const BoundInputs &a,const BoundInputs &b) {
     return a.values==b.values && a.count==b.count && a.elements==b.elements &&
         std::equal(std::begin(a.identity),std::end(a.identity),std::begin(b.identity)) &&
@@ -732,6 +777,8 @@ static HRESULT probeScopeDraw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base
         // so reentry during AddRef also rejects the outer observation.
         const bool idleCandidate=!probe.raster.pose.valid && currentIdleRaster(probe.idle.raster,probe.idleTrace);
         probe.idleNativeId=idleCandidate?probe.idleTrace->nativeId:-1;
+        // Exclude every prior scope/legacy collection attempt, even an early failure.
+        const bool paletteContentEligible=!admitted && !probe.raster.pose.valid && !idleCandidate;
         probe.device = d; d->AddRef();
         if (admitted) probe.transaction = scopeGpuTransactionBegin(d);
         if (admitted) {
@@ -801,7 +848,9 @@ static HRESULT probeScopeDraw(IDirect3DDevice9 *d,D3DPRIMITIVETYPE type,INT base
         if (!probe.split) {
             auto *const owner=probe.submissionOwner;
             const unsigned slot=probe.submissionSlot,api=probe.paletteApiSlot;
-            const bool paletteBefore=beginPaletteApi(d,owner,slot,api,idleAdmitted);
+            const bool paletteBefore=beginPaletteApi(d,owner,slot,api,idleAdmitted,paletteContentEligible);
+            // Before fallback metadata/native calls as well as the original draw.
+            if(!scopeGpuForwardingAllowed())return;
             if(!paletteBefore && owner && probe.submissionOwner==owner && probe.submissionSlot==slot &&
                owner->submissions.pending(slot)) {
                 IdleSubmissionMetadata before;

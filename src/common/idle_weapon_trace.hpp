@@ -304,6 +304,9 @@ struct IdleWeaponTrace {
         bool beforeCopied=false,afterCopied=false,matched=false;
         StreamSnapshot before;
         std::array<uint32_t,IdleGeometryCopy::MaxProgramWords> program{};
+        ScopeBufferInputs content{};
+        std::array<std::array<uint8_t,32>,5> contentHashes{};
+        bool contentCopied=false,contentMatched=false;
     };
     static constexpr unsigned MaxPaletteApiPayloads=IdlePaletteApiCapacity;
     static_assert(MaxPaletteApiPayloads==MaxDraws); // Reuse the capacity, not the geometry counter.
@@ -327,6 +330,15 @@ struct IdleWeaponTrace {
         return p.submissionSlot==submissionSlot && p.ordinal==r.ordinal && p.words>=2 &&
                p.words<=p.program.size() && p.beforeCopied && p.afterCopied && p.matched &&
                p.before.status==StreamSnapshot::Copied;
+    }
+    bool paletteContentPublishable(unsigned submissionSlot) const noexcept {
+        if(!paletteApiPublishable(submissionSlot))return false;
+        const auto &r=submissions.rows[submissionSlot];const auto &p=paletteApiPayloads[r.paletteApiSlot];
+        if(!p.contentCopied || !p.contentMatched || p.content.surface!=r.palette.metadata.layout || p.content.draw!=r.draw ||
+           p.before.indexObject!=p.content.indexObject ||
+           p.before.streams!=std::array<ScopeStreamInput,3>{p.content.positions,p.content.localIndices,p.content.weights})return false;
+        ScopeCopyRanges ranges;
+        return idleBufferRanges(p.content,std::span(p.before.declaration).first(p.before.declarationCount),ranges,nullptr,2);
     }
     IdleProjectionProbe projectionProbe{};
     // Select passive diagnostics from the immutable original rejection, never

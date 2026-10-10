@@ -31,7 +31,7 @@ def source_checks(engine,gpu):
     draw=region(gpu,'static HRESULT probeScopeDraw(','HRESULT scopeGpuDraw(')
     ordered(draw,['probe.submissionOwner=idleSubmissionOwner();',
                   'probe.submissionOwner->submissions.reserve(', 'probe.submissionOwner->reservePaletteApi(', 'd->AddRef();',
-                  'beginPaletteApi(d,owner,slot,api,idleAdmitted)', 'copyIdleSubmissionMetadata(owner,before)',
+                  'beginPaletteApi(d,owner,slot,api,idleAdmitted,paletteContentEligible)', 'copyIdleSubmissionMetadata(owner,before)',
                   'result=forward(d,type,base,minimum,vertices,start,primitives);',
                   'finishPaletteApi(d,owner,slot,api,paletteAfter)', 'copyIdleSubmissionMetadata(owner,after)',
                   'finishIdleStreamProbe(d,result)'])
@@ -39,16 +39,31 @@ def source_checks(engine,gpu):
     ordered(pre,['copyIdleSubmissionPalette(owner,before)','releaseBindings(probe.bindings[1]);',
                  'sampleIdleApi(d,probe.bindings[1],p.before,p.program,p.words,{},true,true)',
                  'copyIdleSubmissionPalette(owner,bookend)','owner->submissions.paletteBefore(slot,before,true);'])
-    require('if(geometryAdmitted)copied=serializePaletteGeometry(p);else{' in pre and
+    require('if(geometryAdmitted){copied=serializePaletteGeometry(p);' in pre and
             pre.index('nativeUiDeviceCurrent(d)')<pre.index('copyIdleSubmissionPalette(owner,before)'),
             'Companion disturbed certified geometry or queried device outside native/API bracket')
     guard=region(gpu,'static bool paletteApiOwnerCurrent(','static bool serializePaletteGeometry(')
     calls=re.findall(r'([A-Za-z_][A-Za-z_0-9]*)\(',guard.split('{',1)[1])
     require(set(calls)<= {'paletteApiOwnerCurrent','if','scopeGpuRoutingCurrent','graphicsResourceGeneration','pending'},
             'Palette scalar owner guard gained an unreviewed callback')
-    serialize=region(gpu,'static bool serializePaletteGeometry(','static bool beginPaletteApi(')
+    serialize=region(gpu,'static bool serializePaletteGeometry(','static bool collectPaletteContent(')
     require('releaseBindings(' not in serialize and 'sampleIdleApi(' not in serialize and '->' not in serialize,
             'Certified geometry serialization must retain references without foreign callbacks')
+    # Narrow lexical barriers supplement portable lock-ledger checks, not CFG proof.
+    require('constboolpaletteContentEligible=!admitted&&!probe.raster.pose.valid&&!idleCandidate;' in draw,
+            'Content retry must exclude prior scope/legacy attempts')
+    require('if(contentEligible&&before.count>1&&!probe.algorithm&&!probe.hash)' in pre and
+            'collectPaletteContent(d,owner,slot,api,before);if(!scopeGpuForwardingAllowed()||' in pre,
+            'Content attempt lost eligibility or inner lock barrier')
+    require('beginPaletteApi(d,owner,slot,api,idleAdmitted,paletteContentEligible);if(!scopeGpuForwardingAllowed())return;' in draw,
+            'Content sampling needs lock barrier before fallback/native forwarding')
+    content=region(gpu,'static bool collectPaletteContent(IDirect3DDevice9 *d,','static bool sameInputs(')
+    ordered(content,['releaseBindings(probe.bindings[0]);','boundInputs(d,b,draw,true,nullptr,2,&native.metadata.layout)',
+                     'copySlice(i==1,ranges.slices[i],storage[i].first(ranges.slices[i].size))',
+                     '!scopeGpuForwardingAllowed()||probe.algorithm||probe.hash||!hashIdleSlices(ranges)',
+                     'p.content=b.values;p.contentHashes=probe.idle.hashes;'])
+    require('paletteContentMatchesApi(probe.bindings[0],p.before)' in pre,
+            'Content copy lacks explicit canonical API correspondence')
     post=region(gpu,'static bool finishPaletteApi(','static bool idleStreamOwnerCurrent(')
     ordered(post,['copyIdleSubmissionPalette(owner,after)',
                   'sampleIdleApi(d,probe.bindings[2],snapshot,{},unusedWords,{},true,false)',
@@ -70,7 +85,7 @@ def source_checks(engine,gpu):
                    'emitIdleWeaponTrace(*idleStorage);','retireIdleSubmissionOwner(invocation.idle);',
                    'submissions.completeOuter(', 'emitIdlePaletteCompanions(*idleStorage);'])
     emitter=region(engine,'static void emitIdlePaletteCompanions(','static void emitIdleWeaponTrace(')
-    require('trace.paletteApiPublishable(n)' in emitter and 'alignment=0grasp=0' in emitter,
+    require('trace.paletteApiPublishable(n)' in emitter and 'trace.paletteContentPublishable(n)' in emitter and 'alignment=0grasp=0' in emitter,
             'Joined palette output lost its completion gate or claim limits')
     return {'source_order_checked':True,'joined_palette_source_checked':True,'geometry_cap_changed':False,
             'limits':['Checks the bounded current source form, not general CFG dominance.']}

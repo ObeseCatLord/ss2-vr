@@ -6,6 +6,50 @@ and the actual D3D9 shader, constants, declaration and stream bindings. It is
 separate from count-one affine geometry admission. It does not enable native
 multi-palette replay or weapon alignment.
 
+## Optional bound-content snapshot
+
+Schema2 now adds an optional pre-original bound-buffer snapshot: native surface,
+managed/static buffer descriptions, the position/local-index/weight/auxiliary-UV
+bindings and five SHA256 channel hashes. Count-one admitted geometry reuses its
+already certified copies without more getters. A rejected multi-mapping draw can
+use the existing five bounded copies only when no scope/legacy collection was
+attempted; live crypto handles prevent retry. Unsupported or failed copies leave
+content unknown and retain otherwise qualified palette diagnostics.
+
+The same three retained COM owner slots and existing lock/crypto cleanup are
+reused. A failed unlock stops before subsequent API/native sampling and is checked
+again before fallback metadata or original draw. Successful copies must match
+canonical declaration/index/shader identities, declarations, primary bindings and
+all raw constants. Existing native/API post-bookends, post-release validity and
+normal outer completion remain mandatory. No additional owner or pipeline exists.
+
+The existing offline collector accepts schema1 and schema2, requires exact optional
+array inventories, joins content to native surface/original draw/API bindings and
+uses the same content bounds as legacy geometry. The same candidate matcher checks
+both whole-buffer lengths, five ranges and five hashes. Palette matches are
+reported separately; they never contribute to affine geometry/replay coverage.
+These are copied bound-buffer snapshots, not proof of in-place immutability,
+GPU visibility, shader-index association, grasp, alignment or physical release.
+
+Astra/xhigh design and both native/consumer source reviews approved this slice.
+Current local routing was verified; independent backend attestation is unavailable.
+
+| Content review recommendation | Disposition |
+| --- | --- |
+| Stop inside sampling after uncertain unlock, and before fallback/draw | Adopted; both lock barriers added and source mutation checks reject removal. |
+| Exclude earlier failed legacy collection, not merely live crypto | Adopted; eligibility captured before any collection/AddRef and combined with null crypto. |
+| Compare full bindings and sampled API by meaning | Adopted; primary streams, canonical objects, declaration and raw constants checked explicitly. |
+| Reuse existing copies, owners and matcher | Adopted; no new acquisition owner, replay path or collector. |
+| Keep content distinct from rendering/pose proof | Adopted; separate results retain false replay/GPU/grasp/alignment claims. |
+
+All four products rebuilt with source fingerprint
+526ed4ff593dd670f562d92892f3207c1f8752abd6f3e49a76250bcd6c3109c9,
+IPC10/wire7.81Debug/81assert-enabledRelease groups,30normal/-O reader regressions,
+50normal/-O existing compiled/artifact/mutation reports and8joined-submission/
+cleanup reports passed. No game/editor/headset/firing/movement/vehicle/network
+run occurred. No package was staged or installed. Actual ID2 content acquisition,
+program/index association and alignment remain open.
+
 The existing submission owner reserves its ordinal before the first AddRef.
 At most ten API payload attempts are retained independently of the geometry
 copy counter; failed attempts consume capacity. The native palette stays in

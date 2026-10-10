@@ -97,6 +97,33 @@ int main() {
         assert(!t.paletteApiPublishable(0));
      }
      api=good;t.submissions.rows[0].paletteApiSlot=0;
+     const ScopeSurfaceLayout contentSurface{3017,2673,{{{0,0x85,0},{0,0x87,0},{36204,0x80,0},{48272,0x80,0}}}};
+     api.content.surface=contentSurface;api.content.draw=draw;
+     api.content.positions={100,0,12,1};api.content.weights={100,36204,4,1};
+     api.content.localIndices={100,48272,4,1};api.content.uv={100,60340,8,1};api.content.indexObject=101;
+     api.content.vertex={84476,0,1,100,0};api.content.index={16038,0,1,101,0};
+     api.contentCopied=api.contentMatched=true;
+     api.before.caps=4;api.before.indexObject=101;
+     api.before.streams={api.content.positions,api.content.localIndices,api.content.weights};
+     const std::array<ScopeDeclarationElement,5> contentDecl{{
+        {0,0,2,0,5,0},{1,0,2,0,5,1},{5,0,8,0,5,5},{6,0,8,0,5,6},{255,0,17,0,0,0}}};
+     api.before.declarationCount=5;std::copy(contentDecl.begin(),contentDecl.end(),api.before.declaration.begin());
+     t.submissions.rows[0].metadata.layout=contentSurface;
+     t.submissions.rows[0].palette.metadata.layout=contentSurface;
+     assert(t.paletteContentPublishable(0));
+     const auto contentGood=api;
+     for(unsigned failure=0;failure<14;++failure) {
+        api=contentGood;
+        if(failure==0)api.contentCopied=false;else if(failure==1)api.contentMatched=false;
+        else if(failure==2)api.content.draw.start=1;else if(failure==3)api.content.surface.vertices=3018;
+        else if(failure==4)api.content.indexObject=102;else if(failure==5)api.before.streams[1].offset++;
+        else if(failure==6)api.content.vertex.size--;else if(failure==7)api.content.index.size--;
+        else if(failure==8)api.content.vertex.usage=1;else if(failure==9)api.content.vertex.pool=0;
+        else if(failure==10)api.content.softwarePositions=true;else if(failure==11)api.content.uv.frequency=2;
+        else if(failure==12)api.content.surface.channels[0].format=0x84;else api.matched=false;
+        assert(!t.paletteContentPublishable(0));
+     }
+     api=contentGood;
      t.submissions.finalize(0,false,false,false);assert(!t.paletteApiPublishable(0)); // Release-time retirement.
      for(int id:{1,13}) {t=IdleWeaponTrace{};t.nativeId=id;
         const auto n=t.submissions.reserve(draw);

@@ -1,5 +1,13 @@
 # Research, 2026-10-01
 
+## Existing asset tools, 2026-10-09
+
+[Current tool research](EXISTING_SS2_TOOLS.md) identifies the official 2025 Edit
+Data and SE2+ Blender importer as candidates to reduce authored mesh/skeleton/
+animation work. Bundled editor/EditKit files exist locally; no editor was run.
+Keep authored content inspection separate from live native ownership/cache/API
+association. No current SS2 C++ SDK replacement was established.
+
 ## Verified installation
 Steam application 204340; Serious Engine 2 modules are PE32/i386. Installed archives include Patch_02_100_800000.gro. Do not infer current upstream version from archive filename. Installed fingerprints:
 

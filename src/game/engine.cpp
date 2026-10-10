@@ -4447,7 +4447,7 @@ bool idleRejectedRasterCurrent(const IdleRasterCopy &expected,const IdleWeaponTr
 static void emitIdlePaletteCompanions(const IdleWeaponTrace &trace) {
     if(trace.nativeId!=2)return;
     const auto &b=trace.binding;
-    log("Lab idle paletteSummary schema=1 request=%llu eye=%u hand=%u source=%.*s payloads=%u overflow=%u outerCompleted=%u alignment=0 grasp=0",
+    log("Lab idle paletteSummary schema=2 request=%llu eye=%u hand=%u source=%.*s payloads=%u overflow=%u outerCompleted=%u alignment=0 grasp=0",
         b.request,b.eye,b.hand,64,ss2vrBuildContract.sourceFingerprint.data(),trace.paletteApiCount,
         unsigned(trace.paletteApiOverflow),unsigned(trace.submissions.outerCompleted));
     for(unsigned n=0;n<trace.submissions.count;++n) {
@@ -4455,20 +4455,41 @@ static void emitIdlePaletteCompanions(const IdleWeaponTrace &trace) {
         const auto &row=trace.submissions.rows[n];const auto &p=row.palette;
         const auto &api=trace.paletteApiPayloads[row.paletteApiSlot];const auto &s=api.before;
         const auto &m=p.metadata;
-        log("Lab idle paletteRow schema=1 request=%llu input=%llu generation=%u owner=%u weapon=%u model=%u eye=%u hand=%u index=%u ordinal=%u api=%u modelAddress=%u drawAddress=%u modelRecord=%d drawRecord=%d instance=%u surface=%u root=%u,%u,%d render=%u,%u,%d evaluated=%u matrices=%u mapping=%u palette=%u first=%u count=%u mapCount=%u paletteCount=%u canonicalCount=%u modelCount=%u canonicalEqual=%u words=%u constants=%u declaration=%u objects=%u,%u,%u cleanupCertified=1 outerCurrent=1",
+        log("Lab idle paletteRow schema=2 request=%llu input=%llu generation=%u owner=%u weapon=%u model=%u eye=%u hand=%u index=%u ordinal=%u api=%u modelAddress=%u drawAddress=%u modelRecord=%d drawRecord=%d instance=%u surface=%u root=%u,%u,%d render=%u,%u,%d evaluated=%u matrices=%u mapping=%u palette=%u first=%u count=%u mapCount=%u paletteCount=%u canonicalCount=%u modelCount=%u canonicalEqual=%u words=%u constants=%u declaration=%u objects=%u,%u,%u contentCopied=%u cleanupCertified=1 outerCurrent=1",
             b.request,b.input,b.generation,b.owner,b.weapon,b.model,b.eye,b.hand,n,row.ordinal,row.paletteApiSlot,
             m.modelAddress,m.drawAddress,m.modelRecord,m.drawRecord,m.instance,m.surface,
             m.rootConfig.configuration,m.rootConfig.file,m.rootConfig.resource,
             m.renderConfig.configuration,m.renderConfig.file,m.renderConfig.resource,
             p.evaluated,p.matrices,p.mappingAddress,p.paletteAddress,p.first,p.count,p.mapCount,p.paletteCount,
             p.canonicalCount,p.modelCount,unsigned(p.paletteCopiesCanonical()),api.words,s.caps,s.declarationCount,
-            s.declarationObject,s.indexObject,s.shaderObject);
+            s.declarationObject,s.indexObject,s.shaderObject,unsigned(trace.paletteContentPublishable(n)));
         auto words=[&](const char *kind,unsigned item,unsigned chunk,std::span<const uint32_t> values) {
             char text[32*9]{};unsigned cursor=0;
             for(auto value:values)cursor+=unsigned(std::snprintf(text+cursor,sizeof(text)-cursor,"%s%08x",cursor?",":"",value));
             log("Lab idle paletteData request=%llu eye=%u hand=%u index=%u ordinal=%u kind=%s item=%u chunk=%u values=%s",
                 b.request,b.eye,b.hand,n,row.ordinal,kind,item,chunk,text);
         };
+        if(trace.paletteContentPublishable(n)) {
+            const auto &v=api.content;const auto &l=v.surface;
+            const std::array<uint32_t,14> layout{uint32_t(l.vertices),uint32_t(l.triangles),
+                l.channels[0].offset,l.channels[0].format,l.channels[0].buffer,
+                l.channels[1].offset,l.channels[1].format,l.channels[1].buffer,
+                l.channels[2].offset,l.channels[2].format,l.channels[2].buffer,
+                l.channels[3].offset,l.channels[3].format,l.channels[3].buffer};
+            words("contentSurface",0,0,layout);
+            const std::array<uint32_t,10> buffers{v.vertex.size,v.vertex.usage,v.vertex.pool,v.vertex.format,v.vertex.fvf,
+                v.index.size,v.index.usage,v.index.pool,v.index.format,v.index.fvf};
+            words("contentBuffers",0,0,buffers);
+            const std::array<uint32_t,18> streams{uint32_t(v.positions.object),v.positions.offset,v.positions.stride,v.positions.frequency,
+                uint32_t(v.localIndices.object),v.localIndices.offset,v.localIndices.stride,v.localIndices.frequency,
+                uint32_t(v.weights.object),v.weights.offset,v.weights.stride,v.weights.frequency,
+                uint32_t(v.uv.object),v.uv.offset,v.uv.stride,v.uv.frequency,uint32_t(v.indexObject),uint32_t(v.softwarePositions)};
+            words("contentStreams",0,0,streams);
+            for(unsigned i=0;i<api.contentHashes.size();++i) {
+                std::array<uint32_t,8> hash{};std::memcpy(hash.data(),api.contentHashes[i].data(),32);
+                words("contentHash",i,0,hash);
+            }
+        }
         words("world",0,0,p.world);
         const auto &d=row.draw;
         const std::array<uint32_t,6> draw{d.topology,uint32_t(d.base),d.minimum,d.vertices,d.start,d.primitives};

@@ -1,5 +1,15 @@
 # Mod journal
 
+## 2026-10-09 — optional multi-palette content copies and SS2 tools
+
+Joined native/API diagnostics can optionally hash existing bounded channel copies
+without affine admission, new owners or replay. Astra caught a lock-failure
+fallthrough; inner and outer barriers now precede all sampling/fallback/draw.
+Shared bounds/matcher preserve legacy behavior and separate copied-content results.
+All4products rebuilt;81Debug/81Release and58normal/-O gates pass,30reader cases.
+No runtime launch. Existing editor/Edit Data/Blender tools researched for private
+authored asset inspection; native instance/grasp/vehicle/MP completion stays open.
+
 ## 2026-10-09 — owned ride render observation and copied rigid inputs
 
 Optional ride observation now associates operator/renderable/model/Main cache

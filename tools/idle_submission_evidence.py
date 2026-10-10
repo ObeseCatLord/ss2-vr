@@ -1,5 +1,5 @@
-"""Strict bounded API metadata; never content, GPU visibility or a grasp proof."""
-from idle_stream_evidence import number,signed,words,declaration_layout
+"""Strict copied API/content diagnostics; never GPU visibility or a grasp proof."""
+from idle_stream_evidence import number,signed,words,declaration_layout,validate_buffer_content
 BASE={'request','eye','hand'}
 
 def values(raw,count,signed_indices=()):
@@ -71,12 +71,12 @@ def consume_palette(record,kind,f,expected_source):
     if submitted is None:raise ValueError('Copied palette without submission inventory')
     if kind=='paletteSummary':
         if set(f)!=BASE|{'schema','source','payloads','overflow','outerCompleted','alignment','grasp'} or \
-                f['schema']!='1' or f['source']!=expected_source or 'palette_copies' in submitted:
+                f['schema'] not in ('1','2') or f['source']!=expected_source or 'palette_copies' in submitted:
             raise ValueError('Copied palette summary schema/source/duplicate')
         p={k:number(f[k],10 if k=='payloads' else 1) for k in ('payloads','overflow','outerCompleted','alignment','grasp')}
         if p['alignment'] or p['grasp'] or p['payloads']!=min(submitted['count'],10) or \
                 p['overflow']!=int(submitted['count']>10):raise ValueError('Copied palette capacity/claim mismatch')
-        p.update(rows={},evidence_class='emitter-reported-native-api-copied-diagnostic',
+        p.update(schema=int(f['schema']),rows={},evidence_class='emitter-reported-native-api-copied-diagnostic',
                  source_provenance_authenticated=False,api_coverage_complete=False,
                  vertex_content_verified=False,shader_index_association_verified=False,
                  gpu_visibility_verified=False,positive_grasp_verified=False,alignment_accepted=False)
@@ -92,12 +92,13 @@ def consume_palette(record,kind,f,expected_source):
         scalars={'schema','index','ordinal','api','modelAddress','drawAddress','modelRecord','drawRecord','instance','surface',
                  'evaluated','matrices','mapping','palette','first','count','mapCount','paletteCount','canonicalCount','modelCount',
                  'canonicalEqual','words','constants','declaration','cleanupCertified','outerCurrent'}
-        if set(f)!=BASE|identity|scalars|{'root','render','objects'} or f['schema']!='1' or index in p['rows']:
+        if p['schema']==2:scalars.add('contentCopied')
+        if set(f)!=BASE|identity|scalars|{'root','render','objects'} or f['schema']!=str(p['schema']) or index in p['rows']:
             raise ValueError('Palette row schema/duplicate')
         if any(number(f[k],(1<<64)-1 if k=='input' else 0xffffffff)!=record[k] or not record[k] for k in identity):
             raise ValueError('Foreign palette invocation identity')
         if f['cleanupCertified']!='1' or f['outerCurrent']!='1':raise ValueError('Unqualified palette completion report')
-        r={k:number(f[k]) for k in scalars-{'schema'}}
+        r={k:number(f[k],1 if k=='contentCopied' else 0xffffffff) for k in scalars-{'schema'}}
         r.update(root=values(f['root'],3,(2,)),render=values(f['render'],3,(2,)),objects=values(f['objects'],3),data={})
         if r['api']!=index or not 1<=r['count']<=3 or not 1<=r['modelCount']<=2048 or \
                 not 0<r['modelRecord']<r['modelCount'] or r['drawRecord']>=8192 or \
@@ -123,6 +124,8 @@ def consume_palette(record,kind,f,expected_source):
     item=number(f['item']);chunk=number(f['chunk']);channel=f['kind']
     widths={'world':(1,12),'draw':(1,6),'mapping':(r['count'],5),'canonical':(r['count'],12),
             'palette':(r['count'],12),'stream':(3,4),'declaration':(r['declaration'],6),'constant':(r['constants'],4)}
+    if r.get('contentCopied'):
+        widths.update(contentSurface=(1,14),contentBuffers=(1,10),contentStreams=(1,18),contentHash=(5,8))
     if channel=='program':
         if item or chunk%32 or chunk>=r['words']:raise ValueError('Invalid palette program chunk')
         count=min(32,r['words']-chunk)
@@ -146,6 +149,9 @@ def validate_palette(record):
                            ('stream',3),('declaration',r['declaration']),('constant',r['constants'])]:
             wanted.update(f'{kind}:{i}:0' for i in range(count))
         wanted.update(f'program:0:{i}' for i in range(0,r['words'],32))
+        if r.get('contentCopied'):
+            wanted.update(f'{kind}:0:0' for kind in ('contentSurface','contentBuffers','contentStreams'))
+            wanted.update(f'contentHash:{i}:0' for i in range(5))
         if set(d)!=wanted:raise ValueError('Truncated copied palette/native/API arrays')
         original=submitted['rows'][index];m=original['metadata']
         if d['draw:0:0']!=[v&0xffffffff for v in original['draw']]:raise ValueError('Foreign original draw in palette data')
@@ -161,6 +167,16 @@ def validate_palette(record):
         layout,weighted=declaration_layout([d[f'declaration:{i}:0'] for i in range(r['declaration'])])
         if not weighted:raise ValueError('Palette API copy without selected weighted declaration')
         if any(not d[f'stream:{i}:0'][0] for i in range(3)):raise ValueError('Null retained palette stream identity')
+        if r.get('contentCopied'):
+            surface=d['contentSurface:0:0'];streams=d['contentStreams:0:0']
+            if surface!=m['layout'] or streams[16]!=r['objects'][1] or \
+                    any(streams[i*4:i*4+4]!=d[f'stream:{i}:0'] for i in range(3)):
+                raise ValueError('Copied content differs from native surface or API bindings')
+            validate_buffer_content(surface,d['contentBuffers:0:0'],d['draw:0:0'],streams,
+                [d[f'declaration:{i}:0'] for i in range(r['declaration'])],2)
+            r.update(content_snapshot_copied=True,content_evidence_class='pre-original-bound-buffer-copies',
+                     in_place_content_immutability_verified=False)
+            if layout in (2,3,4):r['auxiliary_channels']=['uv']
         r.update(input_layout=layout,stream_numbers=[0,7,8] if layout in (1,3,4) else [0,5,6],
                  completion_reported=True,shader_index_association_verified=False,
                  vertex_content_verified=False,alignment_accepted=False,positive_grasp_verified=False)

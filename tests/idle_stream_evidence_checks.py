@@ -71,7 +71,7 @@ def fixture(declaration=OBSERVED):
         lines=expanded
     return '\n'.join(lines)
 
-def palette_fixture(count=3,selected=2,attempts=3,declaration=NO_UV56,equal=True):
+def palette_fixture(count=3,selected=2,attempts=3,declaration=NO_UV56,equal=True,content=None):
     lines=[f'Lab idle draw schema=4 nativeId=2 copyLayout=1 rawGripValid=0 draws=0 source={SOURCE} ipc=10 wire=7 request=100 input=90 owner=1 weapon=2 model=3 generation=4 hand=1 eye=0 stage=3 cfg=20 file=30 resource=1 contributors=1 matrices=4 historicalBytes=0 grasp=0',
            'Lab idle rejection '+BASE+' reason=28 preceding=2 checks=0 state=47 callbacks=63',
            'Lab idle submissionSummary '+BASE+f' attempts={attempts} count={attempts} overflow=0 outerReturned=1 limit=64']
@@ -97,9 +97,69 @@ def palette_fixture(count=3,selected=2,attempts=3,declaration=NO_UV56,equal=True
     for i,e in enumerate(declaration):data('declaration',i,e)
     for i in range(4):data('constant',i,[0,0,0,0])
     data('program',0,[0xfffe0101,0xffff])
+    if content is not None:
+        lines=[line.replace('schema=1','schema=2') if 'paletteSummary' in line or 'paletteRow' in line else line for line in lines]
+        lines=[line.replace('cleanupCertified=1',f'contentCopied={int(content)} cleanupCertified=1') if 'paletteRow' in line else line for line in lines]
+        if content:
+            data('contentSurface',0,[3,1,0,133,0,0,135,0,48,128,0,36,128,0])
+            data('contentBuffers',0,[84,0,1,100,0,6,0,1,101,0])
+            data('contentStreams',0,[101,0,12,1,101,36,4,1,101,48,4,1,101,60,8,1,21,0])
+            for i in range(5):data('contentHash',i,[i+1]*8)
     return '\n'.join(lines)
 
 class Checks(unittest.TestCase):
+    def test_palette_content_snapshot_uses_shared_bounds_without_pose_admission(self):
+        for declaration in (NO_UV56,OBSERVED,OBSERVED_MULTI_UV,PASSIVE_FIVE_ROW78):
+            for present in (False,True):
+                with self.subTest(declaration=declaration,present=present):
+                    result=assess(palette_fixture(declaration=declaration,content=present),SOURCE)
+                    row=result['rejected_or_missing_observations'][0]['submissions']['palette_copies']['rows'][2]
+                    self.assertEqual(row.get('content_snapshot_copied',False),present)
+                    self.assertFalse(row['vertex_content_verified']);self.assertFalse(row['alignment_accepted'])
+                    self.assertFalse(result['copied_event_pose_observations'])
+    def test_palette_content_rejects_missing_crossed_unbounded_or_unclaimed_channels(self):
+        text=palette_fixture(content=True)
+        for old,new in [('contentCopied=1','contentCopied=0'),('contentCopied=1','contentCopied=2'),
+                        ('contentCopied=1 ',' '),('schema=2','schema=3'),
+                        ('kind=contentSurface item=0','kind=contentSurface item=1'),
+                        ('kind=contentHash item=4','kind=contentHash item=5'),
+                        ('kind=contentBuffers item=0 chunk=0 values=00000054','kind=contentBuffers item=0 chunk=0 values=00000053'),
+                        ('kind=contentStreams item=0 chunk=0 values=00000065','kind=contentStreams item=0 chunk=0 values=00000066'),
+                        ('00000015,00000000','00000016,00000000')]:
+            with self.subTest(old=old):
+                bad=text.replace(old,new);self.assertNotEqual(bad,text)
+                with self.assertRaises(ValueError):assess(bad,SOURCE)
+        for line in text.splitlines():
+            if 'kind=content' in line:
+                with self.assertRaises(ValueError):assess(text.replace(line+'\n','').removesuffix(line),SOURCE)
+                with self.assertRaises(ValueError):assess(text+'\n'+line,SOURCE)
+    def test_palette_content_match_keeps_actual_copy_evidence_separate(self):
+        from match_idle_geometry import match,CHANNELS
+        import struct
+        evidence=assess(palette_fixture(content=True),SOURCE)
+        ranges={name:{'offset':off,'size':size,'format':fmt,'buffer':0} for name,off,size,fmt in
+                [('positions',0,36,133),('indices',0,6,135),('weights',48,12,128),
+                 ('local_indices',36,12,128),('uv',60,24,132)]}
+        channel={'vertices':3,'triangles':1,'whole_vertex_buffer_bytes':84,'whole_index_buffer_bytes':6,
+                 'single_body_influence':False,'rigid_palette_id2':True,'mesh_object':1,'lod':0,
+                 'channel_ranges':ranges,'channel_sha256':{name:struct.pack('<8I',*([i+1]*8)).hex() for i,name in enumerate(CHANNELS)}}
+        candidates={'asset':{'asset_sha256':'b'*64,'candidate_native_id':2,'candidate_channels':[channel]}}
+        result=match(evidence,candidates);r=result['palette_content_matches'][0]
+        self.assertEqual(r['result'],'unique-copied-channel-match');self.assertEqual(r['auxiliary_channels'],['uv'])
+        self.assertEqual(result['matches'],[]);self.assertFalse(result['copied_channels_all_uniquely_matched'])
+        self.assertFalse(r['shader_replay_verified']);self.assertFalse(result['alignment_accepted'])
+        for key in ('whole_vertex_buffer_bytes','whole_index_buffer_bytes','vertices','triangles'):
+            bad=copy.deepcopy(candidates);bad['asset']['candidate_channels'][0][key]+=1
+            self.assertEqual(match(evidence,bad)['palette_content_matches'][0]['result'],'unmatched')
+        for name in CHANNELS:
+            for key in ('channel_ranges','channel_sha256'):
+                bad=copy.deepcopy(candidates);c=bad['asset']['candidate_channels'][0]
+                if key=='channel_ranges':c[key][name]['offset']+=1
+                else:c[key][name]='c'*64
+                self.assertEqual(match(evidence,bad)['palette_content_matches'][0]['result'],'unmatched')
+        duplicate=copy.deepcopy(candidates);duplicate['second']=copy.deepcopy(duplicate['asset'])
+        self.assertEqual(match(evidence,duplicate)['palette_content_matches'][0]['result'],'ambiguous')
+
     def test_joined_palette_reader_retains_owned_copies_and_gaps_without_alignment(self):
         for count in (1,2,3):
             for declaration in (NO_UV56,OBSERVED,OBSERVED_MULTI_UV,PASSIVE_FIVE_ROW78):
@@ -189,15 +249,22 @@ class Checks(unittest.TestCase):
                         ('paletteApiOwnerCurrent(d,owner,slot,api)', 'true'),
                         ('api>=IdleWeaponTrace::MaxPaletteApiPayloads ||',
                          'api>=IdleWeaponTrace::MaxPaletteApiPayloads || !nativeUiDeviceCurrent(d) ||'),
-                        ('if(geometryAdmitted)copied=serializePaletteGeometry(p);',
-                         'if(false)copied=serializePaletteGeometry(p);'),
+                        ('if(geometryAdmitted) {', 'if(false) {'),
                         ('!owner->paletteApiPayloads[api].matched', 'false'),
-                        ('program.size_bytes()', 'UINT32_MAX')]:
+                        ('program.size_bytes()', 'UINT32_MAX'),
+                        ('const bool paletteContentEligible=!admitted && !probe.raster.pose.valid && !idleCandidate;',
+                         'const bool paletteContentEligible=true;'),
+                        ('if(!scopeGpuForwardingAllowed())return;', 'if(false)return;'),
+                        ('if(!scopeGpuForwardingAllowed() || !paletteApiOwnerCurrent(d,owner,slot,api))return false;',
+                         'if(!paletteApiOwnerCurrent(d,owner,slot,api))return false;'),
+                        ('probe.algorithm || probe.hash || !hashIdleSlices(ranges)', '!hashIdleSlices(ranges)'),
+                        ('paletteContentMatchesApi(probe.bindings[0],p.before)', 'true')]:
             bad=gpu.replace(old,new);self.assertTrue(bad!=gpu,'GPU mutation did not change source: '+old)
             with self.assertRaises(ValueError):source_checks(engine,bad)
         for old,new in [('trace->nativeId!=2', 'trace->nativeId!=13'),
                         ('submissions.completeOuter(', 'submissions.ignoreOuter('),
                         ('trace.paletteApiPublishable(n)', 'true'),
+                        ('trace.paletteContentPublishable(n)', 'true'),
                         ('alignment=0 grasp=0', 'alignment=1 grasp=1')]:
             bad=engine.replace(old,new);self.assertTrue(bad!=engine,'Engine mutation did not change source: '+old)
             with self.assertRaises(ValueError):source_checks(bad,gpu)

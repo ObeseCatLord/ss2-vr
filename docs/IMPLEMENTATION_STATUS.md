@@ -1,5 +1,29 @@
 # Implementation status — 2026-10-09
 
+## Multi-palette content snapshot and existing-tool research
+
+Optional ID2 schema2 diagnostics now copy five bounded content hashes alongside
+native palette/API evidence through existing owners and cleanup. Shared offline
+bounds and candidate matching keep palette results separate from affine geometry
+or replay admission. Astra/xhigh design and native/consumer source GO follow two
+lock barriers and exclusion of prior failed collection attempts. Local routing
+verified; backend unattested. See [content evidence](ID2_PALETTE_COMPANION.md).
+
+All four products rebuilt at
+526ed4ff593dd670f562d92892f3207c1f8752abd6f3e49a76250bcd6c3109c9,
+IPC10/wire7.81Debug/81assert-enabledRelease groups,30normal/-O reader regressions
+and58normal/-O compiled/artifact/mutation reports pass. No runtime/editor launch,
+package installation or new alignment acceptance. ID2 fixture preparation/runtime
+scope remains separate from this source instrumentation.
+
+[Existing SS2 tools](EXISTING_SS2_TOOLS.md) records the verified official2025Edit
+Data, bundled editor plugins, author-documented SE2 Blender importer and resource
+packer. They may reduce authored asset work; fidelity/build/license checks and
+live instance/cache/native ownership evidence remain necessary. The protected
+installation was read only. Full weapon alignment, physical cockpit controls,
+multiplayer body/origin settlement and the full goal remain unfinished.
+
+
 ## Joined palette reader connected to the existing collector
 
 The existing submission reader now consumes bounded ID2 native/API companions
