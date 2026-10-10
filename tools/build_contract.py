@@ -11,6 +11,46 @@ FIELDS = ('schema', 'component', 'ipc_abi', 'multiplayer_wire_version',
           'input_bytes', 'request_bytes', 'ui_bytes', 'slot_bytes', 'shared_bytes',
           'version_major', 'version_minor', 'version_patch')
 COMPONENTS = {'game': (1, 0x14c), 'server': (2, 0x14c), 'host': (3, 0x8664)}
+OBSERVER_FORMAT = struct.Struct('<8I')
+OBSERVER_FIELDS = ('schema', 'magic', 'ipc_abi', 'input_bytes', 'request_bytes',
+                   'ui_bytes', 'slot_bytes', 'shared_bytes')
+
+
+def read_observer_layout(path):
+    """Read a GUI PE32 observer's layout without launching Wine or a game."""
+    with pefile.PE(str(path), max_symbol_exports=100000) as pe:
+        if (pe.FILE_HEADER.Machine != 0x14c or pe.OPTIONAL_HEADER.Magic != 0x10b or
+                pe.OPTIONAL_HEADER.Subsystem != 2):
+            raise ValueError('Runtime observer must be a GUI PE32 helper')
+        exports = getattr(pe, 'DIRECTORY_ENTRY_EXPORT', None)
+        matches = [e for e in exports.symbols if e.name == b'ss2vrObserverLayout'] if exports else []
+        if len(matches) != 1 or matches[0].forwarder:
+            raise ValueError('Runtime observer lacks its compiled IPC layout; rebuild the helper')
+        address = matches[0].address
+        section = pe.get_section_by_rva(address)
+        if (section is None or section.Characteristics & 0xa0000000 or
+                not section.Characteristics & 0x40000000 or
+                address < section.VirtualAddress or
+                address + OBSERVER_FORMAT.size > section.VirtualAddress + section.SizeOfRawData or
+                address + OBSERVER_FORMAT.size > section.VirtualAddress + section.Misc_VirtualSize):
+            raise ValueError('Runtime observer layout is not bounded read-only data')
+        data = pe.get_data(address, OBSERVER_FORMAT.size)
+        if len(data) != OBSERVER_FORMAT.size:
+            raise ValueError('Truncated runtime observer layout')
+        result = dict(zip(OBSERVER_FIELDS, OBSERVER_FORMAT.unpack(data)))
+    if result['schema'] != 1 or result['magic'] != 0x32565253:
+        raise ValueError('Unknown runtime observer layout')
+    if any(not result[key] for key in OBSERVER_FIELDS[2:]):
+        raise ValueError('Invalid zero runtime observer layout field')
+    return result
+
+
+def validate_observer_layout(path, product_contract):
+    actual = read_observer_layout(path)
+    for key in OBSERVER_FIELDS[2:]:
+        if actual[key] != product_contract[key]:
+            raise ValueError('Runtime observer IPC layout differs from installed products: ' + key)
+    return actual
 
 
 def source_contract(root):

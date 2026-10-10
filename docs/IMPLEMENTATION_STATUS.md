@@ -1,5 +1,33 @@
 # Implementation status — 2026-10-10
 
+## Capture authority resolved; stale observer rejected before launch
+
+The user explicitly permits all necessary captures, including private neutral
+weapon-reference preparation. Earlier pending ID2 authority entries below are
+historical. Preserve private-display/no-desktop-interference and no-firing/movement
+limits; broader gameplay and device/multiplayer acceptance remains user-operated.
+
+An authorized fresh private run exposed a stale observer: its compiled Channel
+checks were IPC10/shared83887840 while all installed products were IPC11/
+shared83887888. Actual D3D9 readiness passed, the expected native scene stream was
+opened and the OpenXR host initialized, but observer status3 stopped collection.
+This was not native geometry or gameplay acceptance. Owned cleanup had no
+survivors/errors; native shutdown was not observed. The failed fixture is preserved.
+
+The helper now exports its compiler-derived read-only layout. Preflight requires
+a unique bounded export in GUI PE32 read-only/non-executable data and compares
+ABI plus all five structure sizes with the matching installed products. Helper
+source and reader are added to the existing preparation tool seals. No production
+IPC/native source, rendering, physics or transport changed. Native fingerprint
+0047bd77db502e9a24addda7dbfdf3f9bbaed7df42ee8b7de78891582d1eaa9e remains current.
+
+Astra/xhigh scoped source GO, local current-turn tags verified/backend unattested;
+its PE32 optional-header check was adopted with a regression.33runtime-evidence
+checks pass normal/-O;24existing private-display checks and12actual compiled-PE
+mutation cases pass. The relevant Debug/Release CTest group passes. A fresh
+sealed fixture uses the rebuilt GUI observer; actual IPC opening and collected
+weapon-reference evidence remain required before alignment changes.
+
 ## Matched ID2 collector refreshed after continuity fixes
 
 A fresh V48 private package/fixture now matches native fingerprint

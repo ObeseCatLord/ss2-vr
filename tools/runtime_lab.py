@@ -533,7 +533,8 @@ def validate_idle_probe(cfg):
 
 IDLE_TOOLS=('runtime_lab.py','collect_idle_evidence.py','assess_idle_weapon.py','idle_stream_evidence.py','idle_submission_evidence.py','idle_projection_evidence.py','idle_native_reference.py','replay_idle_geometry.py',
             'measure_idle_reference.py','match_idle_geometry.py',
-            'private_display_lab.py','display_timing_probe.cpp','lab_window_focus.hpp','private_x11_windows.cpp')
+            'private_display_lab.py','display_timing_probe.cpp','lab_window_focus.hpp','private_x11_windows.cpp',
+            'build_contract.py','runtime_observer.cpp')
 IDLE_INVENTORIES=('game/Content/SeriousSam2/Config','game/Content/PlayerProfiles',
                   'prefix/pfx/drive_c/users')
 IDLE_FIXED_FILES=('game/Content/SeriousSam2/Sam2.ini','game/Bin/SS2VR/SS2VR.ini',
@@ -650,7 +651,7 @@ def validate(cfg):
     validate_display_probe(cfg,private)
     mode=cfg.get('renderer_mode','vr')
     if mode not in ('vr','stock'):raise ValueError('Unknown renderer comparison mode')
-    from build_contract import read_contract
+    from build_contract import read_contract, validate_observer_layout
     contracts={role:read_contract(lab/relative,role) for role,relative in
         {'game':'Bin/d3d9.dll','server':'Bin/SS2VRServer.dll','host':'Bin/SS2VR/ss2vr_host.exe'}.items()}
     reference={k:v for k,v in contracts['game'].items() if k!='component'}
@@ -703,6 +704,7 @@ def validate(cfg):
     cfg['verified_scene_providers']=providers
     for name in ('proton','monado_service','native_manifest','observer','pose_driver'):
         checked_file(cfg[name],cfg['fingerprints'][name])
+    validate_observer_layout(cfg['observer'], reference)
     if not 1 <= cfg['remote_port'] <= 65535 or cfg['monado_config'] != {'active':'remote','remote':{'version':0,'port':cfg['remote_port'],'view_count':2}}:
         raise ValueError('Exact private remote configuration required')
     allowed_environment={'P_OVERRIDE_ACTIVE_CONFIG','SDL_VIDEODRIVER','XRT_COMPOSITOR_FORCE_XCB',

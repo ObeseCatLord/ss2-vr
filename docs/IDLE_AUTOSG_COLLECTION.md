@@ -2,6 +2,13 @@
 
 ## Current collection path — 2026-10-10
 
+The user has now explicitly authorized all necessary captures, including verified
+private single-player grant/equip/save preparation. Earlier pending-authority
+statements in this document are historical. Use the owned private-display
+launcher rather than invoking the collector directly. Fresh fixtures require
+the current observer's compiled IPC-layout preflight and source-tool seals;
+preserve every attempted or superseded fixture.
+
 Own-submission camera receipt and bounded multi-palette CPU replay are now
 implemented; see ID2_PALETTE_COMPANION.md and the newest status. The existing
 collector reports copied content, qualified numerical references, and two-eye

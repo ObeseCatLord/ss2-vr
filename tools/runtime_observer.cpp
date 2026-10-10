@@ -12,6 +12,12 @@
 #include <vector>
 #include <string>
 using namespace ss2vr;
+// Private-lab metadata only. Read without executing the helper, so a sealed but
+// obsolete observer cannot pass preflight against a newer shared-memory layout.
+extern "C" __declspec(dllexport) const uint32_t ss2vrObserverLayout[8] = {
+    1, Magic, Abi, sizeof(Input), sizeof(Request), sizeof(Ui), sizeof(Slot), sizeof(Shared)
+};
+static_assert(sizeof(ss2vrObserverLayout) == 32);
 static void pose(FILE *f,const Pose &p) {
     std::fprintf(f,"{\"p\":[%.9g,%.9g,%.9g],\"q\":[%.9g,%.9g,%.9g,%.9g]}",
         p.p.x,p.p.y,p.p.z,p.q.x,p.q.y,p.q.z,p.q.w);

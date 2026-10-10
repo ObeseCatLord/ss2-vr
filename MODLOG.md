@@ -1812,3 +1812,23 @@ arm pulls and physical saw gestures, separating unintended input from native
 momentum and native release. Documentation-only; diff checks pass, native build
 fingerprint0047bd77/IPC11/wire7 remains unchanged. No runtime or new alignment
 acceptance. The existing ID2 observation dependency remains unresolved.
+
+
+## 2026-10-10 — capture approval and observer IPC11 readiness
+
+User approved all necessary captures, including private neutral grant/equip/save
+preparation. Persisted authority without removing private-display or no-firing/
+movement limits. First direct collector invocation lacked its display owner and
+rejected before runtime; attempt preserved. A fresh owned-display run passed
+D3D9 readiness and initialized the actual OpenXR host, but a stale IPC10 observer
+could not open the IPC11 channel. Expected native scene bytes were opened; no
+completed scene/geometry claim. Owned cleanup left no survivors/errors.
+
+Rebuilt the existing GUI observer with a read-only compiler-derived layout export;
+preflight now compares ABI and all structure sizes with installed products. Tool
+seals also include the observer source and contract reader. Astra/xhigh bounded
+source GO; adopted its PE32 magic check. Local current routing verified, backend
+unattested.33runtime-evidence cases normal/-O,24display-owner cases, relevant
+Debug/Release CTest group and12actual compiled-PE mutations pass. Native source/
+products remain0047bd77/IPC11/wire7. Fresh exact capture is running; no alignment,
+GPU/grasp/native-release or full-goal acceptance is inferred from these checks.

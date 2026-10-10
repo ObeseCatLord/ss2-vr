@@ -86,12 +86,14 @@ private SS2 window and send one guarded loading Enter down/up pair. Existing
 repeated private display/prerequisite checks are also authorized. Do not ask
 again for the same scope or revive exhausted historical one-capture limits.
 
-The user additionally authorized verified save editing or cheats to create an
-isolated sniper fixture after confirming no existing sniper save. This permits
-private single-player grant/equip/save preparation needed for neutral ID13
-collection. Verify the native route before use, preserve normal profiles/saves,
-and retain the private-window/no-desktop-interference and no-firing/movement
-limits. It does not authorize cheats in online sessions.
+The user subsequently stated: "I allow all captures you could need." This
+supersedes the pending Auto Shotgun capture question and extends necessary
+private neutral weapon-reference captures to other weapons, including verified
+single-player grant/equip/save preparation. The earlier sniper-specific authority
+is historical, not a current ID restriction. Verify each native route before use,
+preserve normal profiles/saves, and retain the private-window/no-desktop-interference
+and no-firing/movement limits. It does not authorize cheats in online sessions
+or replace user-operated firing, vehicle, headset or multiplayer acceptance.
 
 Use the reviewed isolated lab/prefix and per-process simulated Monado setup,
 fixed neutral poses/zero controls, exact products/settings/profiles/scene and

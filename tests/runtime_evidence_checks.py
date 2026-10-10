@@ -6,14 +6,67 @@ import json
 import tempfile
 from unittest.mock import patch
 from pathlib import Path
+from types import SimpleNamespace
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 from assess_runtime import (complete_pairs_for_pose,first_person_depth_probe,dual_topologies,
     DualPhaseEvidence,require_dual_capture,dual_weapon_events,successful_dual_fire)
 from runtime_lab import (native_grip_resource_receipts,validate_idle_probe,validate_idle_preparation,idle_probe_weapon,validate_sniper_destination,sniper_preparation_receipt,same_owned_native_game,
                          preparation_weapon,validate_fixture_destination,fixture_preparation_receipt,
                          idle_configuration_digest,IDLE_FIXED_FILES,IDLE_TOOLS)
+from build_contract import OBSERVER_FORMAT, OBSERVER_FIELDS, read_observer_layout, validate_observer_layout
 
 HEAD={'p':[0,0,0],'q':[0,0,0,1]}
+
+class ObserverLayoutChecks(unittest.TestCase):
+    def setUp(self):
+        self.values=[1,0x32565253,11,272,440,352,33554928,83887888]
+        self.export=SimpleNamespace(name=b'ss2vrObserverLayout',address=0x1000,forwarder=None)
+        self.section=SimpleNamespace(Characteristics=0x40000040,VirtualAddress=0x1000,
+                                     SizeOfRawData=32,Misc_VirtualSize=32)
+
+    def read(self,values=None,changes=None,contract=None):
+        values=self.values if values is None else values
+        pe=SimpleNamespace(FILE_HEADER=SimpleNamespace(Machine=0x14c),
+            OPTIONAL_HEADER=SimpleNamespace(Magic=0x10b,Subsystem=2),
+            DIRECTORY_ENTRY_EXPORT=SimpleNamespace(symbols=[self.export]),
+            get_section_by_rva=lambda _:self.section,
+            get_data=lambda *_:OBSERVER_FORMAT.pack(*values))
+        for name,value in (changes or {}).items():setattr(pe,name,value)
+        with patch('build_contract.pefile.PE') as factory:
+            factory.return_value.__enter__.return_value=pe
+            return read_observer_layout('private-observer.exe') if contract is None else \
+                validate_observer_layout('private-observer.exe',contract)
+
+    def test_old_layout_and_each_product_field_decline(self):
+        contract=dict(zip(OBSERVER_FIELDS,self.values))
+        self.assertEqual(self.read(contract=contract),contract)
+        for index in range(2,8):
+            values=self.values.copy();values[index]+=1
+            with self.subTest(field=OBSERVER_FIELDS[index]),self.assertRaises(ValueError):
+                self.read(values=values,contract=contract)
+        for index in range(8):
+            values=self.values.copy();values[index]=0
+            with self.subTest(zero=OBSERVER_FIELDS[index]),self.assertRaises(ValueError):self.read(values=values)
+
+    def test_missing_forwarded_duplicate_and_wrong_pe_decline(self):
+        for symbols in ([],[self.export,self.export],
+                        [SimpleNamespace(name=self.export.name,address=0x1000,forwarder=b'other.export')]):
+            with self.subTest(symbols=len(symbols)),self.assertRaises(ValueError):
+                self.read(changes={'DIRECTORY_ENTRY_EXPORT':SimpleNamespace(symbols=symbols)})
+        for change in ({'FILE_HEADER':SimpleNamespace(Machine=0x8664)},
+                       {'OPTIONAL_HEADER':SimpleNamespace(Magic=0x10b,Subsystem=3)},
+                       {'OPTIONAL_HEADER':SimpleNamespace(Magic=0x20b,Subsystem=2)},
+                       {'get_section_by_rva':lambda _:None},
+                       {'get_data':lambda *_:b'truncated'}):
+            with self.assertRaises(ValueError):self.read(changes=change)
+
+    def test_unbounded_writable_or_executable_export_declines(self):
+        for name,value in (('Characteristics',0xc0000040),('Characteristics',0x60000040),
+                           ('Characteristics',0x40),('VirtualAddress',0x1001),
+                           ('SizeOfRawData',31),('Misc_VirtualSize',31)):
+            before=getattr(self.section,name);setattr(self.section,name,value)
+            with self.subTest(name=name,value=value),self.assertRaises(ValueError):self.read()
+            setattr(self.section,name,before)
 
 class IdleProbeSelectionChecks(unittest.TestCase):
     def test_native_windows_pid_is_independent_of_linux_ownership(self):
