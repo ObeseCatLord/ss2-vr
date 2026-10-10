@@ -338,7 +338,7 @@ struct Calibration {
     uint64_t tickMs = 0;
     Vec3 nativeDisplacement;
     Vec3 nativeAlignment;
-    WeaponAlignmentBinding alignment;
+    WeaponAlignmentBinding modelBinding;
     bool alignmentApplied = false;
     // Private copied provenance only; never used as a production admission gate.
     uint64_t labSerial=0,labRequest=0,labInput=0;
@@ -754,14 +754,14 @@ static void saveAuthority(const Authority &value) {
 static bool bodyAnchor(void *player, Pose &pose) {
     return nativeTrackingAnchor(player, pose);
 }
-static bool captureWeaponAlignment(void *player,void *weapon,unsigned hand,bool placement,
+static bool captureWeaponModelBinding(void *player,void *weapon,unsigned hand,bool placement,
                                    WeaponAlignmentBinding &out,unsigned *failureStage=nullptr) {
     out={};
     if(failureStage)*failureStage=1;
     if(hand>=2 || !alignmentBorrowPhase(nativeWeaponRenderDepth,placement) ||
        simulationThread.load(std::memory_order_relaxed)!=GetCurrentThreadId() ||
        !nativeMainThread || !nativeMainThread() || !readableMemory(weapon,0xc0) ||
-       !weaponAlignmentSupported(primaryField(weapon,0xb4)))return false;
+       !weaponModelBindingSupported(primaryField(weapon,0xb4)))return false;
     if(failureStage)*failureStage=2;
     const uint32_t nativeId=primaryField(weapon,0xb4);
     const uint32_t owner=primaryField(weapon,0x28),model=primaryField(weapon,0x24);
@@ -777,7 +777,7 @@ static bool captureWeaponAlignment(void *player,void *weapon,unsigned hand,bool 
     if(failureStage)*failureStage=4;
     // No cached address is dereferenced. Resource-capable native getters must
     // be bracketed by fresh copies and equality at their owning call sites.
-    if(primaryField(weapon,0xb4)!=nativeId || !weaponAlignmentSupported(nativeId) || primaryField(weapon,0x28)!=owner ||
+    if(primaryField(weapon,0xb4)!=nativeId || !weaponModelBindingSupported(nativeId) || primaryField(weapon,0x28)!=owner ||
        primaryField(weapon,0x24)!=model || primaryField(weapon,0xbc)!=selector ||
        resolve(owner)!=player || resolve(handle)!=weapon || resolve(model)!=instance ||
        nativeHandle(player,int(hand))!=handle)return false;
@@ -813,18 +813,18 @@ static bool nativeWeaponReference(void *player, void *weapon, Pose &body, Pose &
     bool invalidCharge = false;
     const bool align=weaponAlignmentSupported(primaryField(weapon,0xb4));
     WeaponAlignmentBinding before,after;
-    if(align && !captureWeaponAlignment(player,weapon,hand,false,before))return false;
+    if(!captureWeaponModelBinding(player,weapon,hand,false,before))return false;
     if (!nativePlacementWithCharge(weapon, cameraMatrix, model, charge, invalidCharge) || invalidCharge)
         return false;
     matrixPose(&modelPose, model);
     if(!nativeRiderCurrent(player,rider) || !finite(modelPose))return false;
-    if(align && (!captureWeaponAlignment(player,weapon,hand,false,after) || before!=after))return false;
+    if(!captureWeaponModelBinding(player,weapon,hand,false,after) || before!=after)return false;
     const auto relative=compose(inverse(camera),modelPose);
     Vec3 correction;
     if(align && !alignmentDisplacement(after,relative.q,correction))return false;
     if (displacement) *displacement = rotate(relative.q, charge);
     if(alignment)*alignment=correction;
-    if(evidence && align)*evidence=after;
+    if(evidence)*evidence=after;
     return true;
 }
 static void suppressHandheld(network::PosePacket &pose) {
@@ -3634,9 +3634,9 @@ static Pose *shooting(void *w, Pose *out, PoseGet original, const Snapshot *snap
                     if (!currentWeaponSample(context.sample, peer, context.hand) || !isAlive(context.player))
                         return;
                     Pose body, camera, modelPose;
-                    Vec3 displacement,alignment;WeaponAlignmentBinding alignmentEvidence;
+                    Vec3 displacement,alignment;WeaponAlignmentBinding modelEvidence;
                     if (!nativeWeaponReference(context.player, w, body, camera, modelPose,
-                                                context.hand,&displacement,&alignment,&alignmentEvidence))
+                                                context.hand,&displacement,&alignment,&modelEvidence))
                         return;
                     if (resolve(context.owner) != context.player || resolve(context.handle) != w ||
                         nativeHandle(context.player, int(context.hand)) != context.handle ||
@@ -3646,11 +3646,10 @@ static Pose *shooting(void *w, Pose *out, PoseGet original, const Snapshot *snap
                     if (owner != context.owner ||
                         !currentWeaponSample(context.sample, multiplayer::authority(context.player), context.hand))
                         return;
-                    if(alignmentEvidence.weapon) {
-                        WeaponAlignmentBinding current;
-                        if(!captureWeaponAlignment(context.player,w,context.hand,false,current) ||
-                           current!=alignmentEvidence)return;
-                    } else if(weaponAlignmentSupported(primaryField(w,0xb4)))return;
+                    WeaponAlignmentBinding current;
+                    if(!captureWeaponModelBinding(context.player,w,context.hand,false,current) ||
+                       !weaponModelCalibrationMatches(modelEvidence,current,
+                           weaponAlignmentSupported(modelEvidence.nativeId)))return;
                     Pose grip = compose(body, context.sample.pose.grip[context.hand]);
                     const Pose target = retargetCalibratedMuzzle(
                         camera, *out, compose(inverse(camera), modelPose).p, grip,
@@ -3679,20 +3678,21 @@ static Pose *shooting(void *w, Pose *out, PoseGet original, const Snapshot *snap
                     now >= c.tickMs && now - c.tickMs <= 100;
                 const bool wantsAlignment=weaponAlignmentSupported(primaryField(w,0xb4));
                 diagnosticRejection=16;
-                if(wantsAlignment || c.alignmentApplied) {
+                if(calibrationAdmitted || wantsAlignment || c.alignmentApplied) {
                     WeaponAlignmentBinding binding;
                     bool attempted=false,captured=false;
                     unsigned failure=UINT_MAX;
-                    calibrationAdmitted=calibrationAdmitted && wantsAlignment && c.alignmentApplied &&
+                    calibrationAdmitted=calibrationAdmitted &&
                         ([&] { attempted=true;
-                            captured=captureWeaponAlignment(context.player,w,context.hand,false,binding,&failure);
-                            return captured; }()) && c.alignment==binding;
+                            captured=captureWeaponModelBinding(context.player,w,context.hand,false,binding,&failure);
+                            return captured; }()) &&
+                        weaponModelCalibrationMatches(c.modelBinding,binding,c.alignmentApplied);
                     uint64_t order;
                     if(laserTraceTicket(LaserTraceStage::Muzzle,order)) {
                         log("Lab laser muzzle schema=1 order=%llu input=%llu generation=%u owner=%u weapon=%u hand=%u now=%llu cacheValid=%u cacheWeapon=%u cacheTick=%llu alignment=%u wants=%u attempted=%u captured=%u failure=%u equal=%u admitted=%u renderDepth=%u",
                             order,s.input.sequence,s.generation,s.playerHandle,context.handle,context.hand,now,
                             unsigned(c.valid),c.handle,c.tickMs,unsigned(c.alignmentApplied),unsigned(wantsAlignment),
-                            unsigned(attempted),unsigned(captured),failure,unsigned(captured&&c.alignment==binding),
+                            unsigned(attempted),unsigned(captured),failure,unsigned(captured&&c.modelBinding==binding),
                             unsigned(calibrationAdmitted),nativeWeaponRenderDepth);
                         const auto emitBinding=[&](const char *kind,const WeaponAlignmentBinding &b) {
                             log("Lab laser binding schema=1 order=%llu kind=%s owner=%u weapon=%u model=%u instance=%u selector=%u hand=%u cfg=%u file=%u resource=%d stretch=%08x,%08x,%08x",
@@ -3700,12 +3700,12 @@ static Pose *shooting(void *w, Pose *out, PoseGet original, const Snapshot *snap
                                 b.file,b.resource,std::bit_cast<uint32_t>(b.baseStretch.x),
                                 std::bit_cast<uint32_t>(b.baseStretch.y),std::bit_cast<uint32_t>(b.baseStretch.z));
                         };
-                        emitBinding("cache",c.alignment);
+                        emitBinding("cache",c.modelBinding);
                         if(captured)emitBinding("current",binding);
                     }
                     if(!calibrationAdmitted) {
                         invalidateMatchingCalibration(s,context.hand,1);
-                        return; // Never certify a zero correction for known stock reference/ambiguous phase.
+                        return; // Never certify a cached model after a binding/reference change.
                     }
                 }
                 Pose target;
@@ -3718,10 +3718,10 @@ static Pose *shooting(void *w, Pose *out, PoseGet original, const Snapshot *snap
                 if (!finite(target) || !localWeaponCurrent(w, s, context.hand))
                     return;
                 diagnosticRejection=18;
-                if(c.alignmentApplied) {
+                if(calibrationAdmitted) {
                     WeaponAlignmentBinding current;
-                    if(!captureWeaponAlignment(context.player,w,context.hand,false,current) ||
-                       current!=c.alignment) {
+                    if(!captureWeaponModelBinding(context.player,w,context.hand,false,current) ||
+                       !weaponModelCalibrationMatches(c.modelBinding,current,c.alignmentApplied)) {
                         invalidateMatchingCalibration(s,context.hand,2);
                         return;
                     }
@@ -3730,14 +3730,14 @@ static Pose *shooting(void *w, Pose *out, PoseGet original, const Snapshot *snap
                 // binding and copied calibration. It does NOT assert that the
                 // earlier draw's animation transform is unchanged.
                 static std::atomic<bool> attachmentWitnessReported{false};
-                if(observeAttachment && c.alignmentApplied && c.alignment.nativeId==13 && c.labSerial &&
-                   attachmentReceipt.admitted(c.alignment.instance) &&
+                if(observeAttachment && c.alignmentApplied && c.modelBinding.nativeId==13 && c.labSerial &&
+                   attachmentReceipt.admitted(c.modelBinding.instance) &&
                    !attachmentWitnessReported.exchange(true,std::memory_order_relaxed)) {
                     const auto &a=attachmentReceipt;
                     log("Lab sniper attachment schema=1 input=%llu generation=%u owner=%u weapon=%u hand=%u nativeId=13 model=%u instance=%u ident=%u calls=%u result=%d calibrationSerial=%llu drawRequest=%llu drawInput=%llu drawEye=%d cacheAge=%llu cfg=%u file=%u resource=%d nativeReturn=%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g",
-                        s.input.sequence,s.generation,c.alignment.owner,c.alignment.weapon,context.hand,
-                        c.alignment.model,c.alignment.instance,a.ident,a.calls,a.result,c.labSerial,c.labRequest,
-                        c.labInput,c.labEye,now-c.tickMs,c.alignment.configuration,c.alignment.file,c.alignment.resource,
+                        s.input.sequence,s.generation,c.modelBinding.owner,c.modelBinding.weapon,context.hand,
+                        c.modelBinding.model,c.modelBinding.instance,a.ident,a.calls,a.result,c.labSerial,c.labRequest,
+                        c.labInput,c.labEye,now-c.tickMs,c.modelBinding.configuration,c.modelBinding.file,c.modelBinding.resource,
                         nativeReturned.p.x,nativeReturned.p.y,nativeReturned.p.z,nativeReturned.q.x,
                         nativeReturned.q.y,nativeReturned.q.z,nativeReturned.q.w);
                     const auto emitMatrix=[&](const char *kind,const Matrix34 &m) {
@@ -3753,7 +3753,7 @@ static Pose *shooting(void *w, Pose *out, PoseGet original, const Snapshot *snap
                 // One private neutral original-return observation. No native
                 // getter is added and the existing clamp/output is unchanged.
                 static std::atomic<bool> muzzleWitnessReported{false};
-                if(snapshot && context.hand==1 && c.alignmentApplied && c.alignment.nativeId==13 &&
+                if(snapshot && context.hand==1 && c.alignmentApplied && c.modelBinding.nativeId==13 &&
                    labSniperConfigured && labPreparation->sniperZoom && labOnlineIsolationInstalled() &&
                    primaryField(w,0xb0)==1 && !primaryField(w,0xd4) &&
                    !s.fire[0] && !s.fire[1] && s.input.trigger[0]==0 && s.input.trigger[1]==0 &&
@@ -3761,7 +3761,7 @@ static Pose *shooting(void *w, Pose *out, PoseGet original, const Snapshot *snap
                     const auto local=compose(inverse(nativeCamera),nativeReturned);
                     const auto v=local.p-(c.nativeModelLocal.p-c.nativeDisplacement)+c.nativeAlignment;
                     const auto radius=std::sqrt(dot(v,v));
-                    const auto &b=c.alignment;
+                    const auto &b=c.modelBinding;
                     log("Lab sniper muzzle witness schema=1 input=%llu generation=%u owner=%u weapon=%u hand=%u nativeId=%u model=%u instance=%u selector=%u cfg=%u file=%u resource=%d stretch=%.9g,%.9g,%.9g cacheAge=%llu nativeReturn=%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g camera=%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g modelLocal=%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g handPose=%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g charge=%.9g,%.9g,%.9g correction=%.9g,%.9g,%.9g vector=%.9g,%.9g,%.9g radius=%.9g bound=0.5 reachPreserved=%u target=%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g",
                         s.input.sequence,s.generation,b.owner,b.weapon,context.hand,b.nativeId,b.model,b.instance,b.selector,
                         b.configuration,b.file,b.resource,b.baseStretch.x,b.baseStretch.y,b.baseStretch.z,now-c.tickMs,
@@ -5078,9 +5078,9 @@ static int __fastcall weaponAbs(void *w, void *, const Matrix34 &view, Matrix34 
     const Input &tracking = eyeIndex >= 0 ? eyeRequest.input : s.input;
     if (h < 0 || !trackedWeaponSession(s)) return reject();
     const bool align=weaponAlignmentSupported(primaryField(w,0xb4));
-    WeaponAlignmentBinding alignmentBefore,alignmentAfter;
-    if(align && (caller!=weaponPlacementReturn ||
-                 !captureWeaponAlignment(s.player,w,unsigned(h),true,alignmentBefore))) {
+    WeaponAlignmentBinding modelBefore,modelAfter;
+    if(caller!=weaponPlacementReturn ||
+       !captureWeaponModelBinding(s.player,w,unsigned(h),true,modelBefore)) {
         invalidateMatchingCalibration(s,unsigned(h),3,caller);
         return reject();
     }
@@ -5115,7 +5115,7 @@ static int __fastcall weaponAbs(void *w, void *, const Matrix34 &view, Matrix34 
     const Quat offset = multiply(inverse(suppliedCamera.q), native.q);
     const Vec3 displacement = rotate(offset, charge);
     Vec3 alignment;
-    if(align && !alignmentDisplacement(alignmentBefore,offset,alignment)) {
+    if(align && !alignmentDisplacement(modelBefore,offset,alignment)) {
         invalidateMatchingCalibration(s,unsigned(h),5,caller);return reject();
     }
     const Pose target{normalize(multiply(hand.q, offset)), hand.p + rotate(hand.q, displacement+alignment)};
@@ -5139,8 +5139,8 @@ static int __fastcall weaponAbs(void *w, void *, const Matrix34 &view, Matrix34 
     }
     if (!localWeaponCurrent(w, s, unsigned(h)))
         return reject();
-    if(align && (!captureWeaponAlignment(s.player,w,unsigned(h),true,alignmentAfter) ||
-                 alignmentBefore!=alignmentAfter)) {
+    if(!captureWeaponModelBinding(s.player,w,unsigned(h),true,modelAfter) ||
+       modelBefore!=modelAfter) {
         invalidateMatchingCalibration(s,unsigned(h),7,caller);return reject();
     }
     AcquireSRWLockExclusive(&snapshotLock);
@@ -5153,7 +5153,7 @@ static int __fastcall weaponAbs(void *w, void *, const Matrix34 &view, Matrix34 
         const auto relative = calibrated ? compose(inverse(nativeCamera), flatPose) : Pose{};
         calibration[h] = {calibrated && finite(flatPose), s.handle[h], relative,
                           GetTickCount64(), calibrated ? rotate(relative.q, flatCharge) : Vec3{},
-                          alignment,alignmentAfter,align};
+                          alignment,modelAfter,align};
         if(labSniperConfigured && labPreparation->sniperZoom && eyeIndex>=0 && eyeIndex<2 && labCalibrationSerial!=UINT64_MAX) {
             auto &c=calibration[h];c.labSerial=++labCalibrationSerial;
             c.labRequest=eyeRequest.sequence;c.labInput=eyeRequest.input.sequence;c.labEye=eyeIndex;

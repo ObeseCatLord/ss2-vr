@@ -2004,3 +2004,33 @@ products rebuilt at6da93fba945c4ced74d4a47981d7d769be9574a6c83400ba2442127ddcb0d
 IPC11/wire7; both x86 muzzle native-unwind gates pass normally and under optimized
 Python, and compiled artifact contracts/layouts agree. No game, firing, headset or
 network test was launched for this change. User gameplay acceptance remains open.
+
+## 2026-10-10 — ordinary weapon calibration checks its current model binding
+
+All16used installed native weapon slots now retain model/configuration/resource
+and bit-exact stretch identity alongside their local calibration. Placement copies
+these values before and after the later flat calibration getter; the first native
+placement and camera calls precede this capture. Local muzzle conversion rechecks
+the complete binding before and after adaptation. Authority obtains/rechecks its
+own current binding. Cached instance addresses remain comparison tokens; current
+native model handles are resolved anew. A same-weapon model/configuration change
+cannot reuse the old calibration merely because it is younger than100ms.
+
+The existing typechecked read-only model reader, native-thread/render-depth,
+owner/unique-hand/selector and normal cleanup checks remain. Native grip correction
+still covers IDs1/13 only; other numerical offsets and native animation stay
+unchanged. Missing/expired ordinary calibration keeps the existing tracked-origin
+fallback and uncalibrated laser rejection. No native resource getter, renderer,
+protocol, combat timer or calibration manager was added.
+
+Astra design/candidate source GO adopted; local current Astra/xhigh routing verified,
+independent backend attestation unavailable. Production-predicate regressions cover
+all used slots, unused/unknown IDs, correction flags and in-place model/instance/
+configuration/resource/stretch changes. All82Debug/82assertion-enabledRelease groups
+pass. Allfourproducts rebuilt at
+c0bae37152f4b3d38129bf0392c2feed508e72df70420f0304553dff192eb990,
+IPC11/wire7; both x86 muzzle cleanup gates pass normally/optimized and compiled
+contracts/layouts agree. No game, firing or network probe ran. Ordinary headless
+model availability at authoritative nativeWeaponReference remains unverified;
+failed capture declines tracked fire admission. This is logical binding coherence,
+not winning-animation, anatomical grasp, general lifetime or gameplay acceptance.

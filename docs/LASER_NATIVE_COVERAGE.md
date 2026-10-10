@@ -1,5 +1,13 @@
 # Non-scoped handheld laser aiming
 
+## Current calibration coherence — 2026-10-10
+
+Calibrated native muzzle reach now remains native for ordinary weapons too.
+All16used native slots retain and recheck current model/configuration/resource/
+stretch identity; authored grip corrections remain IDs1/13. Earlier audit limits
+below are historical. No new other-weapon firing or headless acceptance is claimed.
+See IMPLEMENTATION_STATUS.md for exact build and remaining native model availability.
+
 Lasers are enabled by default. Both hands independently sample their current
 native weapon's shooting placement, validate ownership/equipment/tracking, and
 query a zero-radius native bullet ray. Its endpoint is the nearest eligible hit

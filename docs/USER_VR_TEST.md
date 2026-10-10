@@ -163,7 +163,11 @@ mixed desktop/VR gameplay acceptance.
 Use matching client/server products and a private session. Test listen-host local,
 remote client and dedicated-server roles. Observe both directions with another
 mod user: head/hands/weapons, body motion, supported dual wield, scopes, melee,
-vehicle seats and native hit results. Include physical head displacement mixed
+vehicle seats and native hit results. Include at least one ordinary gun
+(such as Auto SG) on the dedicated server: its native model reference must be
+available there, and shots must follow the correct hand with working ammo/cadence.
+A missing model/calibration admission must be recorded as a failure, not a pass.
+ Include physical head displacement mixed
 with joystick movement, walls/support movement, packet delay where available,
 death/respawn, reconnect and level changes. Remote body correction must not cause
 detached hands or reset local physical travel. For saw gestures, include a short swing followed immediately by stillness while

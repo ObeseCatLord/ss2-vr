@@ -50,6 +50,30 @@ int main() {
     }
     const WeaponAlignmentBinding retained{10,20,30,40,1,1,50,60,70,{1,1,1},1};
     assert(retained==retained);
+    // A same-weapon in-place model/resource replacement must invalidate the
+    // ordinary gun calibration too; an authored grip correction is not needed.
+    for (uint32_t id = 0; id < WeaponCount; ++id) {
+        auto cached=retained;cached.nativeId=id;
+        const bool corrected=weaponAlignmentSupported(id);
+        assert(weaponModelCalibrationMatches(cached,cached,corrected)==(id!=14));
+        assert(!weaponModelCalibrationMatches(cached,cached,!corrected));
+        for (unsigned change=0; change<5; ++change) {
+            auto live=cached;
+            switch(change) {
+                case 0: ++live.model;break;
+                case 1: ++live.instance;break;
+                case 2: ++live.configuration;break;
+                case 3: ++live.resource;break;
+                case 4: live.baseStretch.x=-live.baseStretch.x;break;
+            }
+            assert(!weaponModelCalibrationMatches(cached,live,corrected));
+        }
+    }
+    for (uint32_t id : {WeaponCount,UINT32_MAX}) {
+        auto unsupported=retained;unsupported.nativeId=id;
+        assert(!weaponModelBindingSupported(id));
+        assert(!weaponModelCalibrationMatches(unsupported,unsupported,false));
+    }
     auto changed=retained;
     for(unsigned field=0;field<13;++field) {
         changed=retained;

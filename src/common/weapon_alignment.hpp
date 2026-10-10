@@ -14,6 +14,11 @@ constexpr Vec3 Id13ModelHandleReference{0.f, .003122344828160041f, .006718217565
 constexpr bool weaponAlignmentSupported(uint32_t nativeId) {
     return nativeId==1 || nativeId==13;
 }
+// Binding freshness is independent of having an authored grip correction.
+// The installed native inventory has seventeen slots; slot fourteen is unused.
+constexpr bool weaponModelBindingSupported(uint32_t nativeId) {
+    return nativeId < WeaponCount && nativeId != 14;
+}
 inline bool weaponModelHandleReference(uint32_t nativeId,Vec3 &out) {
     out={};
     if(nativeId==1)out=Id1ModelHandleReference;
@@ -70,4 +75,10 @@ struct WeaponAlignmentBinding {
             std::memcmp(&baseStretch,&other.baseStretch,sizeof(Vec3))==0;
     }
 };
+inline bool weaponModelCalibrationMatches(const WeaponAlignmentBinding &retained,
+                                          const WeaponAlignmentBinding &current,
+                                          bool alignmentApplied) {
+    return weaponModelBindingSupported(retained.nativeId) &&
+           alignmentApplied == weaponAlignmentSupported(retained.nativeId) && retained == current;
+}
 } // namespace ss2vr
