@@ -169,6 +169,8 @@ def assess_render(text,expected_source):
     rows=list(copies.values());observed=expected_source if rows and all(r['schema']>=2 for r in rows) else None
     return {'schema':1,'observed_source_fingerprint':observed,'source_matches_expected':observed is not None,
             'observations':rows,'evidence_scope':'emitter-reported-completed-native-render-copies',
+            'canonical_matrix_role':'native-draw-palette-source',
+            'bone_placement_matrix_copied':False,'draw_palette_mapping_verified':False,
             'seat_frame_copies_present':any(r['seat_canonical_copied'] for r in rows),
             'source_provenance_authenticated':False,'operated_seat_authority_verified':False,
             'installed_resource_association_verified':False,'evaluated_control_frame_verified':False,

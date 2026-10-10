@@ -1,5 +1,35 @@
 # Current source continuation
 
+## Corrected vehicle matrix contract
+
+Pinned native DDE30 copies global canonical P directly into a draw palette slot.
+DB140 computes a bone placement as P times the native rigid inverse of the stored
+inverse bind for a nonnull definition. These are distinct contracts; earlier
+MainCanonical-as-bone-placement wording was wrong for nonidentity bind data.
+The ride assessor now labels the canonical role and explicitly denies a copied
+bone placement or verified live draw mapping. Emitted schema/raw words are unchanged.
+Use the actual SingleAffine draw palette for admitted authored Main-weighted
+vertices; do not apply another stored inverse bind. The postPalette adapter also
+prevents assuming unqualified final-draw equality from producer-copy identity.
+
+The existing native steering verifier now checks the pinned Engine route using
+41 instruction sites and the inversion import, with 44 instruction/ABI/import
+mutations rejected normal/-O. No new query, collector or native adapter is added.
+The next production edge is the existing SingleAffine current-draw association
+bound to occupied ride Main/resource/LOD and the actual indexed position,
+weights/local-index buffers plus position program/constants. Weapon ID range
+policy must not be borrowed for a vehicle surface. Grasp and input-time freshness
+remain unproved. See RIDE_RENDER_OBSERVATION.md.
+
+Astra/xhigh design ADAPT and final behavioral-tool/reader source GO; current local
+routing verified, backend unattested. Ten reader cases pass normal/-O and their
+registered Debug/Release groups pass. Final tests additionally cover schema3 labels;
+the final disposition table records the review without changing behavior. Current
+four-product hashes and contract remain exactly the combat checkpoint's
+f8eb2b3474a1bcf1c982d9e4fcae1b767d2b3420921f0d383a82ce6af3d8fc87,
+IPC10/wire7. This tools/docs-only change needs no native rebuild. No runtime,
+installation, package staging, firing, vehicle or network test was performed.
+
 ## Integrated observer gesture receipt fix
 
 Combat-only delivery 5a260c72 was integrated as ec6271f29c188757987af6d7b85da829e1d806d3
@@ -47,8 +77,8 @@ The external parser matched20 authored child descriptors across Fighter/Saucer;
 normal rendering omits their null-model Seat children. Native original query/TLS
 scaffolding and mandatory childWorld were therefore removed from the design.
 Actual grip geometry needs current mesh/palette/LOD/resource association, then
-input-interval/lifecycle/rearm integration. MainCanonical is a bone-frame basis,
-not direct proof of raw authored vertices or native inverse bind. Physical controls,
+input-interval/lifecycle/rearm integration. The copied MainCanonical is a native
+draw-palette source, with current draw mapping/content still unproved. Physical controls,
 full alignment, melee lifetime/release and authoritative MP settlement remain open;
 the full goal and user/device acceptance are unchanged.
 

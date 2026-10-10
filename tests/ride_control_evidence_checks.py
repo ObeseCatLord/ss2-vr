@@ -66,6 +66,9 @@ class Checks(unittest.TestCase):
                 self.assertEqual(r['source_matches_expected'],schema==2)
                 self.assertEqual(r['observed_source_fingerprint'],SOURCE if schema==2 else None)
                 self.assertEqual(r['seat_frame_copies_present'],schema==2)
+                self.assertEqual(r['canonical_matrix_role'],'native-draw-palette-source')
+                self.assertFalse(r['bone_placement_matrix_copied'])
+                self.assertFalse(r['draw_palette_mapping_verified'])
                 for key in ('source_provenance_authenticated','evaluated_control_frame_verified',
                             'operated_seat_authority_verified','physical_steering_verified'):
                     self.assertFalse(r[key])
@@ -108,6 +111,9 @@ class Checks(unittest.TestCase):
         text=render_fixture(schema=3)
         result=assess_render(text,SOURCE);copy=result['observations'][0]
         self.assertTrue(result['source_matches_expected'])
+        self.assertEqual(result['canonical_matrix_role'],'native-draw-palette-source')
+        self.assertFalse(result['bone_placement_matrix_copied'])
+        self.assertFalse(result['draw_palette_mapping_verified'])
         self.assertTrue(copy['attachment_mapping_copied'])
         self.assertEqual(copy['attachment_metadata']['parameter'],9)
         self.assertEqual(len(copy['raw_attachment_pose']['pose']),7)

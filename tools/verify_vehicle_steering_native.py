@@ -9,11 +9,92 @@ import capstone
 import pefile
 
 PIN = '5628b4ed30a966f10c8e8ea46bf0789257a35ea80127bacacebe28b1ce5303df'
+ENGINE_PIN = 'da6efc9f72637eb3b6f48eadca2107be89b09c00618b6e72d5d3632938a7d851'
 
 
 def require(condition, message):
     if not condition:
         raise ValueError(message)
+
+
+def verify_draw_palette_reference(pe):
+    """Finite native matrix-source check, not loaded grip or input admission.
+
+    DDE30 copies the canonical cache matrix directly into a draw palette slot.
+    DB140 obtains a bone placement by multiplying that canonical matrix by the
+    native rigid inverse of the definition's stored inverse bind. Those frames
+    differ for nonidentity bind data; this is not arbitrary affine inversion.
+    No native query, renderer or resource is executed by this verifier.
+    """
+    base = pe.OPTIONAL_HEADER.ImageBase
+    require(base == 0x10000000 and pe.FILE_HEADER.Machine == 0x14c,
+            'Unsupported Engine palette ABI')
+    imports = {i.address: (d.dll.lower(), i.name)
+               for d in pe.DIRECTORY_ENTRY_IMPORT for i in d.imports}
+    require(imports.get(0x102063a0) ==
+            (b'core.dll', b'?mthInvertRTM34f@SeriousEngine@@YA?AVMatrix34f@1@ABV21@@Z'),
+            'Native bone inverse-bind inversion import changed')
+    md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32)
+    decoded = {i.address - base: (i.mnemonic, i.op_str)
+               for start, size in ((0xdde30, 0x97), (0xdb140, 0x184))
+               for i in md.disasm(pe.get_data(start, size), base + start)}
+    expected = {
+        # Map entry's global NativeBone index -> actual canonical cache slot.
+        0xdde80: ('mov', 'eax, dword ptr [0x102eac94]'),
+        0xdde85: ('mov', 'ecx, dword ptr [0x102eac74]'),
+        0xdde8b: ('lea', 'edi, [ebx + eax]'),
+        0xdde8e: ('mov', 'eax, dword ptr [ecx + edx*8 + 4]'),
+        0xdde92: ('cmp', 'eax, -1'),
+        0xdde95: ('je', '0x100ddea9'),
+        0xdde97: ('lea', 'esi, [eax + eax*2]'),
+        0xdde9a: ('mov', 'eax, dword ptr [0x102eab68]'),
+        0xdde9f: ('mov', 'ecx, dword ptr [eax + 0x20]'),
+        0xddea2: ('shl', 'esi, 4'),
+        0xddea5: ('add', 'esi, ecx'),
+        0xddea7: ('jmp', '0x100ddeae'),
+        0xddea9: ('mov', 'esi, 0x102c8008'),
+        0xddeb2: ('mov', 'ecx, 0xc'),
+        0xddeb7: ('add', 'ebx, 0x30'),
+        0xddebc: ('rep movsd', 'dword ptr es:[edi], dword ptr [esi]'),
+        # Bone placement helper: P * inverse(definition + 0x48), not P alone.
+        0xdb149: ('mov', 'edx, dword ptr [0x102eac64]'),
+        0xdb150: ('lea', 'ecx, [eax + eax*4]'),
+        0xdb153: ('lea', 'esi, [eax + eax*2]'),
+        0xdb156: ('mov', 'eax, dword ptr [0x102eab68]'),
+        0xdb15b: ('lea', 'ecx, [edx + ecx*8]'),
+        0xdb15e: ('mov', 'edx, dword ptr [eax + 0x20]'),
+        0xdb161: ('mov', 'eax, dword ptr [ecx + 0x24]'),
+        0xdb164: ('shl', 'esi, 4'),
+        0xdb167: ('add', 'esi, edx'),
+        0xdb16c: ('je', '0x100db2b4'),
+        0xdb172: ('add', 'eax, 0x48'),
+        0xdb175: ('push', 'eax'),
+        0xdb179: ('push', 'ecx'),
+        0xdb17a: ('call', 'dword ptr [0x102063a0]'),
+        0xdb180: ('fld', 'dword ptr [eax]'),
+        0xdb182: ('fmul', 'dword ptr [esi]'),
+        0xdb187: ('fld', 'dword ptr [esi + 8]'),
+        0xdb18a: ('fmul', 'dword ptr [eax + 0x20]'),
+        0xdb18f: ('fld', 'dword ptr [esi + 4]'),
+        0xdb192: ('fmul', 'dword ptr [eax + 0x10]'),
+        0xdb197: ('fstp', 'dword ptr [ebp - 0x30]'),
+        0xdb1df: ('fadd', 'dword ptr [esi + 0xc]'),
+        0xdb2b7: ('mov', 'ecx, 0xc'),
+        0xdb2bc: ('rep movsd', 'dword ptr es:[edi], dword ptr [esi]'),
+        0xdb2c3: ('ret', ''),
+    }
+    for address, instruction in expected.items():
+        require(decoded.get(address) == instruction,
+                'Native palette reference changed at ' + hex(address))
+    return {'native_sha256': ENGINE_PIN, 'checked_instructions': len(expected),
+            'canonical_is_draw_palette_source': True,
+            'bone_placement_removes_stored_inverse_bind': True,
+            'global_bone_index_preserved': True,
+            'final_draw_palette_equality_verified': False,
+            'loaded_grip_geometry_associated': False,
+            'actual_draw_mapping_verified': False,
+            'sampling_query_authorized': False, 'runtime_executed': False,
+            'limits': 'finite pinned instruction/import check; no general CFG, loaded content, draw shader, grasp or input lifetime proof'}
 
 
 def verify_seat_attachment(pe):
@@ -100,6 +181,9 @@ def verify_seat_attachment(pe):
 def verify(game):
     data = (game / 'Bin/Sam2Game.dll').read_bytes()
     require(hashlib.sha256(data).hexdigest() == PIN, 'Unsupported Sam2Game build')
+    engine = (game / 'Bin/Engine.dll').read_bytes()
+    require(hashlib.sha256(engine).hexdigest() == ENGINE_PIN, 'Unsupported Engine build')
+    palette_reference = verify_draw_palette_reference(pefile.PE(data=engine, max_symbol_exports=100000))
     pe = pefile.PE(data=data, max_symbol_exports=100000)
     base = pe.OPTIONAL_HEADER.ImageBase
     require(base == 0x10000000 and pe.FILE_HEADER.Machine == 0x14c, 'Unsupported native ABI')
@@ -162,6 +246,7 @@ def verify(game):
     for address, instruction in expected.items():
         require(decoded.get(address) == instruction, 'Native steering seam changed at ' + hex(address))
     return {'native_sha256': PIN, 'checked_instructions': len(expected),
+            'draw_palette_reference': palette_reference,
             'seat_attachment': verify_seat_attachment(pe),
             'native_drive_input': 'raw move.x steering; raw move.z drive',
             'wheeled_target_selection': 'input sign selects zero or native joint limits',

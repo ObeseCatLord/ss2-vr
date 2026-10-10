@@ -195,8 +195,37 @@ instructions. Finite lexical checks are explicitly not general CFG/lifetime proo
 
 The physical-control critical path is actual grip geometry associated with the
 current resource, mesh/palette and applicable LOD, followed by a valid input-consumption
-interval and lifecycle/rearm handling. ModelWorld times MainCanonical is a bone-frame
-basis for verified Main-bone-local geometry; raw authored model vertices may need
-native inverse bind. Neither these matrices nor attachment metadata alone admit a
-physical grasp. Existing native body/view placement, mode-specific ClientAction and
-physics remain reusable. No vehicle/input/runtime test or controls activation occurred.
+interval and lifecycle/rearm handling. The copied canonical matrices are sources
+for the native draw palette, not ordinary bone-local placements. The pinned DDE30
+copies the selected global bone's twelve canonical words directly into its draw
+palette. For a nonnull definition, native DB140 instead forms a bone placement by
+multiplying canonical P by the native rigid inverse of the definition's stored
+inverse bind at +48hex. These frames differ when that stored matrix is nonidentity;
+the null-definition branch copies P unchanged. The rigid inversion import is not
+evidence of arbitrary affine inversion support.
+
+For an independently admitted one-hot Main-weighted vertex in the actual draw,
+the reusable rendering transform is ModelWorld times its selected draw palette.
+Multiplying the stored inverse bind into that palette again is not justified.
+A bone-local authored point requires its own bone-placement derivation; do not
+silently use it as an asset-space vertex. The render log does not establish the
+actual draw-map or loaded grip content, so the assessor explicitly labels the
+canonical role while keeping bone-placement-copy and draw-mapping claims false.
+The existing postPalette adapter can write the palette before observation;
+producer-copy identity therefore does not certify final-draw equality. Use the
+actual admitted draw palette, or prove equality within that same borrow.
+This corrects the earlier bone-frame description above. The existing native
+steering verifier checks the pinned Engine copy/inversion seams in addition to
+the Sam2Game control route; finite static checks do not certify a loaded draw,
+shader, geometry or grasp. Neither these matrices nor attachment metadata alone
+admit a physical grasp. Existing native body/view placement, mode-specific
+ClientAction and physics remain reusable. No vehicle/input/runtime test or
+controls activation occurred.
+
+| Matrix review recommendation | Disposition |
+| --- | --- |
+| Distinguish canonical draw source from bone placement | Adopted in the existing reader and current documentation. |
+| Avoid an additional bind transform for admitted authored vertices | Adapted: require the actual same-borrow draw palette and proven vertex/weight inputs. |
+| Do not infer final palette equality from DDE30 alone | Adopted; postPalette can modify the palette and equality remains unverified. |
+| Reuse SingleAffine and existing bounded buffer ownership | Adopted as the next production association boundary, with ride Main/resource/LOD checks. |
+| Add a new native query, collector or inactive grip helper | Rejected for this slice; existing draw/copy boundaries remain reusable. |

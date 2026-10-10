@@ -1,5 +1,28 @@
 # Implementation status — 2026-10-09
 
+## Vehicle matrix semantics corrected
+
+The copied canonical Main/Seat matrices are native draw-palette sources, not
+ordinary bone placements. The pinned native bone-placement helper removes the
+stored inverse bind using its rigid inversion import; the draw-palette producer
+copies canonical P directly. Existing observer/reader schemas and raw words are
+unchanged. The reader now explicitly denies bone-placement-copy and actual live
+draw-map verification. The actual admitted draw palette remains the reusable
+transform for proven Main-weighted authored vertices. Extra inverse-bind application
+or final-draw equality inferred from the producer is unsupported.
+
+The existing native verifier adds 41 Engine instruction sites/import identity;
+44 altered instruction/import/ABI controls reject normal/-O. This is bounded
+static evidence, not a new native query, GPU validation or physical grasp. Source
+rendering is unchanged and vehicle physical controls remain unimplemented pending
+the actual surface/resource/LOD/program association and input lifecycle.
+
+Astra/xhigh design ADAPT and source GO, local routing verified/backend unattested.
+Ten reader cases pass normal/-O and the registered Debug/Release groups pass.
+The four existing native products retain exact hashes and fingerprint
+f8eb2b3474a1bcf1c982d9e4fcae1b767d2b3420921f0d383a82ce6af3d8fc87,
+IPC10/wire7. No native source/CMake edit or rebuild, runtime, staging or installation.
+
 ## Observer gesture receipt context repair
 
 Integrated combat-only source ec6271f29c188757987af6d7b85da829e1d806d3 prevents a
@@ -37,8 +60,8 @@ The external parser matched20 authored child descriptors across Fighter/Saucer;
 normal rendering omits their null-model Seat children. Native original query/TLS
 scaffolding and mandatory childWorld were therefore removed from the design.
 Actual grip geometry needs current mesh/palette/LOD/resource association, then
-input-interval/lifecycle/rearm integration. MainCanonical is a bone-frame basis,
-not direct proof of raw authored vertices or native inverse bind. Physical controls,
+input-interval/lifecycle/rearm integration. The copied MainCanonical is a native
+draw-palette source, with current draw mapping/content still unproved. Physical controls,
 full alignment, melee lifetime/release and authoritative MP settlement remain open;
 the full goal and user/device acceptance are unchanged.
 

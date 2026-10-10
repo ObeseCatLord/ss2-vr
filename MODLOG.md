@@ -1,5 +1,17 @@
 # Mod journal
 
+## 2026-10-09 — native vehicle palette versus bone placement
+
+REA and independent pinned-byte inspection resolved a misleading MainCanonical
+frame description. DDE30 copies canonical P directly into the native draw palette;
+DB140 produces bone placement using P times native rigid inverse(stored inverse
+bind). Applying stored inverse bind again to an admitted authored vertex palette
+is unsupported. Existing reader labels were corrected without changing native
+emission, schema or raw matrices. Existing native verifier adds 41 Engine sites
+and import identity; 44 mutated instruction/ABI/import controls reject normal/-O.
+Actual draw equality, loaded grip surface/program and input lifetime remain open;
+no new native query/collector, controls, runtime or installation was introduced.
+
 ## 2026-10-09 — combat-only receipt integration and tools follow-up
 
 Applied the independently reviewed three-path combat delivery after exact

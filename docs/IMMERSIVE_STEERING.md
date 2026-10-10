@@ -4,6 +4,16 @@ Owner requirement, 2026-10-07: vehicles with steering wheels must support grabbi
 and turning the wheel with either hand or both. Hand transfer should not cause a
 steering jump. This feature is not implemented yet.
 
+Current matrix contract: the existing render observer copies canonical matrices
+that native DDE30 uses as draw-palette sources. Native bone placement removes
+stored inverse bind from canonical P, so canonical is not an ordinary bone-local
+frame. A physical-grip adapter should reuse the existing SingleAffine actual draw
+palette, bound to occupied ride Main/resource/LOD and proven current surface
+buffers/program, rather than a new attachment/bone query or an extra inverse bind.
+Optional declared seat metadata remains separate and is not a new grip gate.
+Earlier proposed-query notes below are historical; see the corrected current
+contract in [RIDE_RENDER_OBSERVATION.md](RIDE_RENDER_OBSERVATION.md).
+
 The [same-world render observation](RIDE_RENDER_OBSERVATION.md) now joins the
 current operated hover ride to its renderable, model and selected Main cache.
 It is passive/default-off and has not run in a vehicle. Installed controls,
