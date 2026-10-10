@@ -25,6 +25,16 @@ composition, loaded resource identity and occupied-seat/runtime animation are
 uninspected. Exact resource/hash/reference inventories and private previews are
 preserved locally. No guessed offset/control or game/editor run was introduced.
 
+A separate bounded default-rider check fully parsed the player parameter resource
+and all three stock SeriousSam model variants with the unchanged evaluated parser.
+Each model has20 declared hand-parented weapon attachment slots, all with null
+child configurations; no separate authored cockpit/control model was established
+by this route. Owned bytes/CRC/hashes, parser seals and complete cached decode
+equality passed normally and with Python optimization. This does not establish
+loaded precedence, occupied rider identity, dynamically attached models, rider
+mesh geometry or evaluated ride animations. Those limits remain separate from
+the already inspected helicopter model; no new physical control is admitted.
+
 ## Current implementation boundary — 2026-10-10
 
 The existing default-off [render observer](RIDE_RENDER_OBSERVATION.md) now joins
